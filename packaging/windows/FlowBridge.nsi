@@ -6,6 +6,13 @@ Unicode true
 !include "x64.nsh"
 !include "WinVer.nsh"
 
+; Host paths passed to File must use the makensis host separator.
+!ifdef NSIS_WIN32_MAKENSIS
+  !define HOST_SEP "\"
+!else
+  !define HOST_SEP "/"
+!endif
+
 !ifndef PAYLOAD_DIR
   !error "Specify -DPAYLOAD_DIR=/absolute/path/to/staged/payload"
 !endif
@@ -35,7 +42,7 @@ VIAddVersionKey /LANG=1033 "LegalCopyright" "FlowBridge contributors"
 !define MUI_LANGDLL_REGISTRY_KEY "Software\FlowBridge"
 !define MUI_LANGDLL_REGISTRY_VALUENAME "InstallerLanguage"
 !insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_LICENSE "${PAYLOAD_DIR}/LICENSE"
+!insertmacro MUI_PAGE_LICENSE "${PAYLOAD_DIR}${HOST_SEP}LICENSE"
 !define MUI_PAGE_CUSTOMFUNCTION_PRE DirectoryPre
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
@@ -98,18 +105,18 @@ Section "FlowBridge" SEC_MAIN
     StrCpy $INSTDIR "$ExistingInstallDir"
   ${EndIf}
   SetOutPath "$INSTDIR"
-  File "${PAYLOAD_DIR}/FlowBridge.exe"
-  File "${PAYLOAD_DIR}/flowbridge_ffi.dll"
-  File "${PAYLOAD_DIR}/flowbridge-cli.exe"
-  File "${PAYLOAD_DIR}/LICENSE"
-  File "${PAYLOAD_DIR}/README.txt"
+  File "${PAYLOAD_DIR}${HOST_SEP}FlowBridge.exe"
+  File "${PAYLOAD_DIR}${HOST_SEP}flowbridge_ffi.dll"
+  File "${PAYLOAD_DIR}${HOST_SEP}flowbridge-cli.exe"
+  File "${PAYLOAD_DIR}${HOST_SEP}LICENSE"
+  File "${PAYLOAD_DIR}${HOST_SEP}README.txt"
   SetOutPath "$INSTDIR\examples"
-  File "${PAYLOAD_DIR}/examples/*.json"
+  File "${PAYLOAD_DIR}${HOST_SEP}examples${HOST_SEP}*.json"
   SetOutPath "$INSTDIR\licenses"
-  File "${PAYLOAD_DIR}/licenses/nlohmann-json-LICENSE.MIT"
-  File "${PAYLOAD_DIR}/licenses/THIRD_PARTY_NOTICES.txt"
+  File "${PAYLOAD_DIR}${HOST_SEP}licenses${HOST_SEP}nlohmann-json-LICENSE.MIT"
+  File "${PAYLOAD_DIR}${HOST_SEP}licenses${HOST_SEP}THIRD_PARTY_NOTICES.txt"
   SetOutPath "$INSTDIR\resources"
-  File "${PAYLOAD_DIR}/resources/presets.json"
+  File "${PAYLOAD_DIR}${HOST_SEP}resources${HOST_SEP}presets.json"
   SetOutPath "$INSTDIR"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateDirectory "$SMPROGRAMS\FlowBridge"

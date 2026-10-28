@@ -270,7 +270,10 @@ async fn connect_addresses(
             .await
             .map_err(|e| io_error("TCP connect", e));
     };
-    prepared::connect(addresses, prepare, |socket, address| socket.connect(address)).await
+    prepared::connect(addresses, prepare, |socket, address| {
+        socket.connect(address)
+    })
+    .await
 }
 
 async fn connect_route_inner(

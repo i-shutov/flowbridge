@@ -26,5 +26,5 @@ if [[ "$architectures" == 'arm64 x86_64' ]]; then
   mkdir -p native/macos/lib/universal
   xcrun lipo -create native/macos/lib/arm64/libflowbridge_ffi.a native/macos/lib/x86_64/libflowbridge_ffi.a \
     -output native/macos/lib/universal/libflowbridge_ffi.a
-  xcrun lipo -verify_arch arm64 x86_64 native/macos/lib/universal/libflowbridge_ffi.a
+  xcrun lipo native/macos/lib/universal/libflowbridge_ffi.a -verify_arch arm64 x86_64
 fi

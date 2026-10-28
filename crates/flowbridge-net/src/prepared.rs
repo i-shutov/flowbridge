@@ -146,9 +146,8 @@ mod tests {
     #[tokio::test]
     async fn first_preparation_failure_never_dials() {
         let attempts = AtomicUsize::new(0);
-        let prepare = |_: &TcpSocket| {
-            Err(io::Error::new(io::ErrorKind::PermissionDenied, "denied"))
-        };
+        let prepare =
+            |_: &TcpSocket| Err(io::Error::new(io::ErrorKind::PermissionDenied, "denied"));
         let dial = |_: TcpSocket, _: SocketAddr| {
             attempts.fetch_add(1, Ordering::SeqCst);
             std::future::ready(Err(io::Error::other("unexpected dial")))

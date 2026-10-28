@@ -38,7 +38,7 @@ fi
 xcodebuild "${args[@]}" build
 app="$out/Build/Products/Release/FlowBridge.app"
 test -d "$app"
-xcrun lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/FlowBridge"
+xcrun lipo "$app/Contents/MacOS/FlowBridge" -verify_arch arm64 x86_64
 codesign --verify --deep --strict --verbose=2 "$app"
 if [[ "$mode" == native ]]; then
   extension="$app/Contents/Library/SystemExtensions/$FLOWBRIDGE_BUNDLE_ID.extension.systemextension"
