@@ -228,6 +228,9 @@ private struct Dashboard: View {
                 metric("Потоки", String((selectedSnapshot["connections"] as? [Any] ?? []).count), "arrow.up.arrow.down")
             }
             Text(ssh.message).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            Button("Сохранить диагностику…") {
+                DiagnosticsExporter.save(engine: selectedSnapshot, ssh: ["status":ssh.status])
+            }.help("Сохраняются только состояния и счётчики; ключи, адреса и сырые журналы исключены.")
             ConnectionTable(value: selectedSnapshot)
             DisclosureGroup("Журнал SSH и маршрутизации", isExpanded: $showLog) {
                 ScrollView {
