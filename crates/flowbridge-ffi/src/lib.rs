@@ -5,6 +5,7 @@ use std::ffi::{c_char, CStr, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 mod diagnostics;
+mod native_context;
 
 const MAX_INPUT_BYTES: usize = 1024 * 1024;
 
@@ -288,6 +289,7 @@ struct NativeStream {
     reading: AtomicBool,
     writing: AtomicBool,
     _lease: StreamLease,
+    native: Option<native_context::Lease>,
 }
 impl Drop for NativeStream {
     fn drop(&mut self) {
@@ -404,6 +406,14 @@ fn open_stream(
     flow: Flow,
     redirect_records: Option<Vec<u8>>,
 ) -> Result<Value, String> {
+    open_stream_managed(config, flow, redirect_records, None)
+}
+fn open_stream_managed(
+    config: Config,
+    flow: Flow,
+    redirect_records: Option<Vec<u8>>,
+    native: Option<Arc<native_context::Session>>,
+) -> Result<Value, String> {
     flow.destination.validate().map_err(|e| e.to_string())?;
     let decision = config.evaluate(&flow);
     if matches!(decision.action, Action::Block) {
@@ -411,57 +421,48 @@ fn open_stream(
     }
     let route = config.route(&decision.action).map_err(|e| e.to_string())?;
     let lease = StreamLease::reserve()?;
-    // A dedicated thread avoids nesting a runtime if an embedding caller
-    // already has Tokio entered on this thread. No registry lock crosses I/O.
-    let socket = std::thread::Builder::new()
-        .name("flowbridge-connect".into())
-        .spawn(move || -> Result<TcpStream, String> {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .map_err(|e| e.to_string())?;
+    let session = native.clone();
+    let (socket, admission) = std::thread::Builder::new().name("flowbridge-connect".into())
+        .spawn(move || -> Result<(TcpStream, Option<native_context::Lease>), String> {
+            let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|e|e.to_string())?;
             let result = runtime.block_on(async {
-                let stream = tokio::time::timeout(Duration::from_secs(30), async {
-                    let connect_timeout = Duration::from_millis(config.connect_timeout_ms);
-                    let handshake_timeout = Duration::from_millis(config.handshake_timeout_ms);
-                    if let Some(records) = redirect_records.as_deref() {
-                        let prepare =
-                            |socket: &tokio::net::TcpSocket| set_wfp_records(socket, records);
-                        flowbridge_net::connect_route_prepared(
-                            &flow.destination,
-                            &route,
-                            connect_timeout,
-                            handshake_timeout,
-                            config.listen,
-                            &prepare,
-                        )
-                        .await
-                    } else {
-                        flowbridge_net::connect_route_guarded(
-                            &flow.destination,
-                            &route,
-                            connect_timeout,
-                            handshake_timeout,
-                            config.listen,
-                        )
-                        .await
+                let work = async {
+                    let mut admission = if let Some(session) = &session { Some(session.admit(&route).await?) } else { None };
+                    if let Some(session) = &session { session.recheck(&route)?; }
+                    let stream = tokio::time::timeout(Duration::from_secs(30), async {
+                        let connect = Duration::from_millis(config.connect_timeout_ms);
+                        let handshake = Duration::from_millis(config.handshake_timeout_ms);
+                        if let Some(records) = redirect_records.as_deref() {
+                            let prepare = |socket: &tokio::net::TcpSocket| set_wfp_records(socket, records);
+                            flowbridge_net::connect_route_prepared(&flow.destination, &route, connect, handshake, config.listen, &prepare).await
+                        } else {
+                            flowbridge_net::connect_route_guarded(&flow.destination, &route, connect, handshake, config.listen).await
+                        }
+                    }).await.map_err(|_|"connection deadline exceeded".to_string())?.map_err(|e|e.to_string())?;
+                    if let Some(session) = &session { session.recheck(&route)?; }
+                    if let Some(admission) = &mut admission { admission.connected(); }
+                    Ok((stream.into_std().map_err(|e|e.to_string())?, admission))
+                };
+                if let Some(session) = &session {
+                    tokio::select! { biased;
+                        _ = session.cancelled() => Err("native capture stopped during connection".into()),
+                        result = work => result,
                     }
-                })
-                .await
-                .map_err(|_| "connection deadline exceeded".to_string())?
-                .map_err(|e| e.to_string())?;
-                stream.into_std().map_err(|e| e.to_string())
+                } else { work.await }
             });
-            runtime.shutdown_timeout(Duration::from_millis(50));
-            result
-        })
-        .map_err(|e| e.to_string())?
-        .join()
-        .map_err(|_| "connection worker panicked".to_string())??;
+            runtime.shutdown_timeout(Duration::from_millis(50)); result
+        }).map_err(|e|e.to_string())?.join().map_err(|_|"connection worker panicked".to_string())??;
     configure_native_socket(&socket).map_err(|e| e.to_string())?;
     socket.set_nodelay(true).map_err(|e| e.to_string())?;
     let id = handle()?;
-    locked(streams()).insert(
+    let mut registry = locked(streams());
+    if native
+        .as_ref()
+        .is_some_and(|s| s.stopped.load(Ordering::Acquire))
+    {
+        return Err("native capture stopped before stream registration".into());
+    }
+    registry.insert(
         id,
         Arc::new(NativeStream {
             socket,
@@ -469,6 +470,7 @@ fn open_stream(
             reading: AtomicBool::new(false),
             writing: AtomicBool::new(false),
             _lease: lease,
+            native: admission,
         }),
     );
     Ok(json!({"ok":true,"stream_id":id,"decision":decision}))
@@ -565,7 +567,11 @@ pub unsafe extern "C" fn fb_stream_read(id: u64, buffer: *mut u8, capacity: usiz
             return Ok(io_result(Err(error)));
         }
         let bytes = unsafe { std::slice::from_raw_parts_mut(buffer, capacity) };
-        Ok(io_result((&stream.socket).read(bytes)))
+        let result = (&stream.socket).read(bytes);
+        if let (Some(native), Ok(count)) = (&stream.native, &result) {
+            native.progress(false, *count);
+        }
+        Ok(io_result(result))
     }))
     .unwrap_or(Err(-1))
     .unwrap_or_else(|code| code)
@@ -593,7 +599,11 @@ pub unsafe extern "C" fn fb_stream_write(id: u64, buffer: *const u8, length: usi
             return Ok(io_result(Err(error)));
         }
         let bytes = unsafe { std::slice::from_raw_parts(buffer, length) };
-        Ok(io_result((&stream.socket).write(bytes)))
+        let result = (&stream.socket).write(bytes);
+        if let (Some(native), Ok(count)) = (&stream.native, &result) {
+            native.progress(true, *count);
+        }
+        Ok(io_result(result))
     }))
     .unwrap_or(Err(-1))
     .unwrap_or_else(|code| code)

@@ -224,6 +224,9 @@ def main(repetition=0):
             gate(True)
             round_trip(engine_port, target_port)
             passed('Actual OpenSSH authentication, strict enrolled host key, binary traffic and half-close')
+            from native_vertical_integration import actual_ssh
+            actual_ssh(abi, profile, endpoint, target_port)
+            passed('Native capture ABI: selected application -> real SSH -> target, without SOCKS ingress')
             old_pid = ready['pid']
             gate(False)
             os.kill(old_pid, signal.SIGKILL)

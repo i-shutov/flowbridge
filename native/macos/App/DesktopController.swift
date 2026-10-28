@@ -109,6 +109,8 @@ final class DesktopController: ObservableObject {
                         if !success && self.settings.integratedSSH { self.ssh.stop() }
                     }
                 } else {
+                    self.native.managedPort = self.settings.integratedSSH ? self.settings.localPort : nil
+                    self.native.upstreamReady = !self.settings.integratedSSH || self.ssh.state == "ready"
                     self.native.ports = self.settings.capturePorts; self.waitingForNative = true
                     self.native.start(profile); self.message = "Ожидаем подтверждение готовности macOS…"
                 }
@@ -125,6 +127,7 @@ final class DesktopController: ObservableObject {
         } catch { message = error.localizedDescription; busy = false }
     }
     private func tick() {
+        native.upstreamReady = !settings.integratedSSH || ssh.state == "ready"
         if ssh.state != previousSSHState {
             previousSSHState = ssh.state
             engine.setUpstreamGate(port: settings.integratedSSH ? settings.localPort : nil, ready: !settings.integratedSSH || ssh.state == "ready")

@@ -25,7 +25,7 @@ constexpr wchar_t ServiceName[]=L"FlowBridgeCapture";
 std::atomic<bool> stopping{false};
 SERVICE_STATUS_HANDLE statusHandle=nullptr;
 std::mutex statusLock, logLock;
-std::wstring profilePath;
+std::wstring profilePath, sshProfilePath;
 std::vector<std::wstring> bypassPaths;
 void log(const Json& event) noexcept {
     try { std::lock_guard<std::mutex> guard(logLock); auto line=event.dump()+"\n";
@@ -118,7 +118,7 @@ void relay(SOCKET socket,uint64_t id,uint64_t idleMs) {
     // Preserve upload after upstream half-close until its EOF/idle deadline.
     upload.join();
 }
-void handle(SOCKET raw,const std::string& config,uint64_t idleMs) noexcept {
+void handle(SOCKET raw,uint64_t nativeSession,uint64_t idleMs) noexcept {
     Socket socket(raw); FbRedirectContext context{};
     try {
         std::array<uint8_t,65536> records{}; uint32_t length=0;
@@ -133,7 +133,7 @@ void handle(SOCKET raw,const std::string& config,uint64_t idleMs) noexcept {
         Json flow={{"application",application},{"destination",{{"host",address},{"port",ntohs(context.destination_port_be)}}},{"resolved_ip",address}};
         // Core copies records and sets them on EVERY outbound socket before
         // connect, including direct routes and first proxy-hop retry sockets.
-        auto result=response(fb_stream_open_wfp_json(config.c_str(),flow.dump().c_str(),records.data(),length));
+        auto result=response(fb_native_stream_open_wfp_json(nativeSession,flow.dump().c_str(),records.data(),length));
         Stream stream{result.at("stream_id").get<uint64_t>()};
         if(stopping) return;
         u_long nonblocking=1;
@@ -157,6 +157,30 @@ SOCKET listener(int family,unsigned short& port) {
     u_long nonblocking=1; if(ioctlsocket(socket.value,FIONBIO,&nonblocking)) throw std::runtime_error("Listener mode failed");
     SOCKET result=socket.value; socket.value=INVALID_SOCKET; return result;
 }
+std::string readConfiguration(const std::wstring& path) {
+    std::ifstream input(std::filesystem::path(path),std::ios::binary);
+    if(!input || std::filesystem::file_size(path)>1024*1024) throw std::runtime_error("SSH profile unavailable or exceeds 1 MiB");
+    std::string value((std::istreambuf_iterator<char>(input)),{});
+    if(input.bad() || value.size()>1024*1024 || value.find('\0')!=std::string::npos) throw std::runtime_error("Invalid SSH profile file");
+    return value;
+}
+std::wstring wideUtf8(const std::string& value) {
+    int n=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,value.data(),static_cast<int>(value.size()),nullptr,0);
+    if(!n) throw std::runtime_error("Invalid SSH executable path");
+    std::wstring out(n,0);
+    MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,value.data(),static_cast<int>(value.size()),out.data(),n);
+    return out;
+}
+struct OwnedSSH {
+    uint64_t id=0;
+    ~OwnedSSH(){if(id)fb_ssh_destroy(id);}
+    Json snapshot(){return id?response(fb_ssh_snapshot_json(id)):Json::object();}
+};
+struct OwnedNative {
+    uint64_t id=0;
+    ~OwnedNative(){if(id)fb_native_destroy(id);}
+    void stop(){if(id){fb_native_destroy(id);id=0;}}
+};
 void run() {
     std::ifstream input(std::filesystem::path(profilePath),std::ios::binary);
     if(!input || std::filesystem::file_size(profilePath)>1024*1024) throw std::runtime_error("Profile unavailable or exceeds 1 MiB");
@@ -165,9 +189,32 @@ void run() {
     response(fb_validate_json(config.c_str()));
     auto j=Json::parse(config);
     auto idleMs=j.value("idle_timeout_ms",uint64_t(300000));
-    // Bounded resources: up to 32 workers plus one upload thread per active flow.
-    size_t max=std::min<size_t>(32,j.value("max_connections",size_t(32)));
+    // Beta uses bounded native workers. The shared Rust budget also counts
+    // opening/waiting flows and holds its permit until stream destruction.
+    size_t max=std::min<size_t>(128,j.value("max_connections",size_t(128)));
     if(!max) throw std::runtime_error("Zero maximum connections");
+    OwnedSSH ssh; OwnedNative native;
+    Json nativeOptions=Json::object();
+    if(!sshProfilePath.empty()) {
+        auto sshConfig=readConfiguration(sshProfilePath);
+        ssh.id=response(fb_ssh_create_json(sshConfig.c_str())).at("ssh_id").get<uint64_t>();
+        response(fb_ssh_start_json(ssh.id));
+        auto deadline=GetTickCount64()+45000;
+        Json status;
+        while(!stopping) {
+            status=ssh.snapshot().at("status");
+            auto state=status.value("state",std::string());
+            if(state=="ready")break;
+            if(state=="failed" || GetTickCount64()>=deadline)throw std::runtime_error("SSH failed to become ready; capture was not enabled");
+            Sleep(50);
+        }
+        if(stopping)return;
+        if(!status.contains("backend_path") || !status["backend_path"].is_string())throw std::runtime_error("SSH executable identity unavailable; refusing capture recursion risk");
+        bypassPaths.push_back(wideUtf8(status["backend_path"].get<std::string>()));
+        nativeOptions={{"managed_endpoint",{{"host","127.0.0.1"},{"port",status.at("local_port")}}},
+                       {"ready",true},{"ready_lease_ms",5000},{"pause_grace_ms",30000}};
+    }
+    native.id=response(fb_native_create_json(config.c_str(),nativeOptions.dump().c_str())).at("session_id").get<uint64_t>();
     WSADATA wsa{}; if(WSAStartup(MAKEWORD(2,2),&wsa)) throw std::runtime_error("Winsock startup failed");
     struct Cleanup {~Cleanup(){WSACleanup();}} cleanup;
     unsigned short p4=0,p6=0; Socket l4(listener(AF_INET,p4)),l6(listener(AF_INET6,p6));
@@ -179,13 +226,24 @@ void run() {
         for(size_t i=0;i<max;++i) workers.emplace_back([&]{
             for(;;) {SOCKET socket;
                 {std::unique_lock<std::mutex> guard(lock); cv.wait(guard,[&]{return ending || !queue.empty();}); if(ending) return; socket=queue.front();queue.pop_front();}
-                handle(socket,config,idleMs);
+                handle(socket,native.id,idleMs);
                 {std::lock_guard<std::mutex> guard(lock); --admitted;}
             }
         });
         if(!stopping) capture.start(p4,p6,bypassPaths);
         if(!stopping) {report(SERVICE_RUNNING); log({{"event","ready"},{"capture","tcp_ipv4_ipv6"},{"workers",max}});}
+        auto lastSnapshot=GetTickCount64();
         while(!stopping) {
+            if(ssh.id) {
+                auto observed=ssh.snapshot();
+                const auto state=observed.at("status").value("state",std::string());
+                auto gate=Json{{"ready",state=="ready"}}.dump();
+                response(fb_native_set_gate_json(native.id,gate.c_str()));
+            }
+            if(GetTickCount64()-lastSnapshot>=1000) {
+                auto report=response(fb_native_snapshot_json(native.id));
+                report["event"]="native_status";log(report);lastSnapshot=GetTickCount64();
+            }
             fd_set set; FD_ZERO(&set); FD_SET(l4.value,&set); FD_SET(l6.value,&set); timeval wait{0,200000};
             int n=select(0,&set,nullptr,nullptr,&wait); if(n==SOCKET_ERROR) throw std::runtime_error("Listener select failed");
             for(SOCKET listenSocket:{l4.value,l6.value}) if(FD_ISSET(listenSocket,&set)) {
@@ -195,8 +253,8 @@ void run() {
                 if(admitted>=max) closesocket(accepted); else {queue.push_back(accepted); ++admitted; cv.notify_one();}
             }
         }
-        capture.stop(); finish();
-    } catch(...) {stopping=true; capture.stop(); finish(); throw;}
+        capture.stop(); fb_native_destroy(native.id); finish(); native.id=0;
+    } catch(...) {stopping=true; capture.stop(); fb_native_destroy(native.id); finish(); native.id=0; throw;}
 }
 void WINAPI serviceMain(DWORD,wchar_t**) {
     statusHandle=RegisterServiceCtrlHandlerExW(ServiceName,control,nullptr);
@@ -214,10 +272,12 @@ int wmain(int argc,wchar_t** argv) {
             if(arg==L"--console") console=true;
             else if(arg==L"--service") service=true;
             else if(arg==L"--profile" && i+1<argc) profilePath=argv[++i];
+            else if(arg==L"--ssh-profile" && i+1<argc) sshProfilePath=argv[++i];
             else if(arg==L"--bypass" && i+1<argc) bypassPaths.emplace_back(argv[++i]);
-            else throw std::runtime_error("Usage: FlowBridgeCapture --console|--service --profile ABSOLUTE_PATH [--bypass ABSOLUTE_EXE_PATH]...");
+            else throw std::runtime_error("Usage: FlowBridgeCapture --console|--service --profile ABSOLUTE_PATH [--ssh-profile ABSOLUTE_PATH] [--bypass ABSOLUTE_EXE_PATH]...");
         }
         if(console==service || profilePath.empty() || !std::filesystem::path(profilePath).is_absolute()) throw std::runtime_error("Choose one run mode and an absolute administrator-controlled profile path");
+        if(!sshProfilePath.empty() && !std::filesystem::path(sshProfilePath).is_absolute())throw std::runtime_error("SSH profile path must be absolute");
         for(const auto& p:bypassPaths) if(!std::filesystem::path(p).is_absolute()) throw std::runtime_error("Bypass executable path must be absolute");
         wchar_t self[32768]{}; DWORD length=GetModuleFileNameW(nullptr,self,32768);
         if(!length || length>=32768) throw std::runtime_error("Service executable identity unavailable");

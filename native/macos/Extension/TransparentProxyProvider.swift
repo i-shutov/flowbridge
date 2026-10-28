@@ -8,6 +8,7 @@ import Darwin
 final class TransparentProxyProvider: NETransparentProxyProvider {
     private let lock = NSLock()
     private var profile = ""
+    private var coreSession: UInt64 = 0
     private var ready = false
     private var generation: UInt64 = 0
     private var sessionID: String?
@@ -61,6 +62,17 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
                 self.lock.lock()
                 guard self.generation == revision else { self.lock.unlock(); throw Bridge.error("Start cancelled") }
                 self.bypassSigningIDs = Set(proto.providerConfiguration?["bypassSigningIDs"] as? [String] ?? [])
+                let nativeOptions: [String: Any] = [
+                    "managed_endpoint": proto.providerConfiguration?["managedEndpoint"] ?? NSNull(),
+                    "ready": false, "ready_lease_ms": 5000, "pause_grace_ms": 30000]
+                self.lock.unlock()
+                let optionsJSON = try Bridge.text(nativeOptions)
+                let created = try source.withCString { c in try optionsJSON.withCString { o in
+                    try Bridge.consume(fb_native_create_json(c, o)) } }
+                guard let id = created["session_id"] as? NSNumber else { throw Bridge.error("Missing native session") }
+                self.lock.lock()
+                guard self.generation == revision else { self.lock.unlock(); fb_native_destroy(id.uint64Value); throw Bridge.error("Start cancelled") }
+                self.coreSession = id.uint64Value
                 self.profile = source; self.limit = min(config["max_connections"] as? Int ?? 256, 128)
                 self.idleSeconds = Double(config["idle_timeout_ms"] as? Int ?? 300000) / 1000
                 self.lock.unlock()
@@ -76,7 +88,9 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
         }
     }
     override func stopProxy(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
-        lock.lock(); ready = false; sessionID = nil; generation += 1; let all = Array(sessions.values); lock.unlock()
+        lock.lock(); ready = false; sessionID = nil; generation += 1; let all = Array(sessions.values)
+        let native = coreSession; coreSession = 0; lock.unlock()
+        fb_native_destroy(native)
         all.forEach { $0.cancel(Bridge.error("Capture stopped")) }
         // Cancellation marks all relays closed immediately; bounded Rust calls finish
         // on their worker queues. In-flight opens close their handle on completion.
@@ -85,7 +99,7 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
     override func handleNewFlow(_ flow: NEAppProxyFlow) -> Bool {
         guard let tcp = flow as? NEAppProxyTCPFlow else { return false } // UDP explicitly direct
         lock.lock(); let source = profile; let isReady = ready
-        let timeout = idleSeconds; let bypass = bypassSigningIDs; lock.unlock()
+        let timeout = idleSeconds; let bypass = bypassSigningIDs; let native = coreSession; lock.unlock()
         guard isReady else { reject(flow, "Provider not ready"); return true }
         guard let endpoint = tcp.remoteEndpoint as? NWHostEndpoint, let port = Int(endpoint.port) else {
             reject(flow, "Unknown TCP destination"); return true
@@ -109,7 +123,7 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
                 reject(flow, "Unknown source identity cannot be proxied while SSH transport exclusion is required"); return true
             }
             let id = UUID()
-            let relay = TCPRelay(id: id, flow: tcp, profile: source, flowJSON: flowJSON, idleSeconds: timeout,
+            let relay = TCPRelay(id: id, flow: tcp, nativeSession: native, flowJSON: flowJSON, idleSeconds: timeout,
                                  host: endpoint.hostname, port: port, application: signingID,
                                  route: type + ":" + (action["id"] as? String ?? "")) { [weak self] summary in
                 guard let self else { return }; self.lock.lock()
@@ -132,49 +146,55 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
         sequence += 1; events.append(["seq": sequence, "level": "info", "message": message])
         if events.count > 256 { events.removeFirst(events.count - 256) }
     }
+    private func snapshotData() throws -> Data {
+        lock.lock(); let all = Array(sessions.values); let history = recent; let log = events
+        let isReady = ready; let currentSession = sessionID; let native = coreSession; lock.unlock()
+        let core = (try? Bridge.consume(fb_native_snapshot_json(native))) ?? [:]
+        let value: [String: Any] = ["ready": isReady, "session_id": currentSession as Any? ?? NSNull(),
+            "connections": all.map { $0.snapshot() } + history, "events": log,
+            "status": core["status"] ?? [:], "managed_upstream": core["managed_upstream"] ?? NSNull()]
+        return try JSONSerialization.data(withJSONObject: value)
+    }
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)? = nil) {
-        if messageData != Data("snapshot".utf8) {
-            setupQueue.async {
-                do {
-                    guard messageData.count <= 1_048_576,
-                          let request = try JSONSerialization.jsonObject(with: messageData) as? [String: Any],
-                          request["command"] as? String == "apply_rules", let requestedSession = request["session_id"] as? String,
-                          let updated = request["profile"] as? String else {
-                        throw Bridge.error("Unsupported provider command")
-                    }
-                    // Fence queued messages before profile validation, including
-                    // a same-profile restart and an entirely new provider process.
-                    self.lock.lock(); let previous = self.profile
-                    let sessionMatches = self.ready && self.sessionID == requestedSession; self.lock.unlock()
-                    guard sessionMatches else { throw Bridge.error("Provider session changed or is not ready") }
-                    try Bridge.validate(updated)
-                    guard var old = try JSONSerialization.jsonObject(with: Data(previous.utf8)) as? [String: Any],
-                          var new = try JSONSerialization.jsonObject(with: Data(updated.utf8)) as? [String: Any] else { throw Bridge.error("Invalid profile object") }
-                    for key in ["rules", "default_action"] { old.removeValue(forKey: key); new.removeValue(forKey: key) }
-                    guard NSDictionary(dictionary: old).isEqual(to: new) else {
-                        throw Bridge.error("Live native Apply may change only rules and default action. Stop before changing transports.")
-                    }
+        setupQueue.async {
+            do {
+                if messageData == Data("snapshot".utf8) {
+                    completionHandler?(try self.snapshotData()); return
+                }
+                guard messageData.count <= 1_048_576,
+                      let request = try JSONSerialization.jsonObject(with: messageData) as? [String: Any],
+                      let command = request["command"] as? String,
+                      let expected = request["session_id"] as? String else { throw Bridge.error("Invalid provider command") }
+                self.lock.lock(); let native = self.coreSession
+                let matches = self.ready && self.sessionID == expected && native != 0; self.lock.unlock()
+                guard matches else { throw Bridge.error("Provider session changed or not ready") }
+                if command == "heartbeat" {
+                    guard let upstreamReady = request["upstream_ready"] as? Bool else { throw Bridge.error("Missing upstream readiness") }
+                    let gate = try Bridge.text(["ready":upstreamReady])
+                    _ = try gate.withCString { try Bridge.consume(fb_native_set_gate_json(native, $0)) }
+                    completionHandler?(try self.snapshotData())
+                } else if command == "apply_rules", let updated = request["profile"] as? String {
+                    _ = try updated.withCString { try Bridge.consume(fb_native_reload_json(native, $0)) }
                     self.lock.lock()
-                    guard self.ready, self.sessionID == requestedSession, self.profile == previous else { self.lock.unlock(); throw Bridge.error("Provider state changed") }
+                    guard self.ready, self.sessionID == expected, self.coreSession == native else {
+                        self.lock.unlock(); throw Bridge.error("Provider state changed")
+                    }
                     self.profile = updated; self.recordLocked("Application policy applied to new TCP flows")
                     self.lock.unlock()
-                    completionHandler?(try JSONSerialization.data(withJSONObject: ["ok": true, "session_id": requestedSession]))
-                } catch {
-                    completionHandler?(try? JSONSerialization.data(withJSONObject: ["ok": false, "error": error.localizedDescription]))
-                }
+                    completionHandler?(try JSONSerialization.data(withJSONObject:["ok":true,"session_id":expected]))
+                } else { throw Bridge.error("Unsupported provider command") }
+            } catch {
+                completionHandler?(try? JSONSerialization.data(withJSONObject:["ok":false,"error":error.localizedDescription]))
             }
-            return
         }
-        lock.lock(); let all = Array(sessions.values); let history = recent; let log = events; let isReady = ready; let currentSession = sessionID; lock.unlock()
-        let value: [String: Any] = ["ready": isReady, "session_id": currentSession as Any? ?? NSNull(), "connections": all.map { $0.snapshot() } + history, "events": log]
-        completionHandler?(try? JSONSerialization.data(withJSONObject: value))
     }
+
 }
 
 private final class TCPRelay {
     private let id: UUID
     private let flow: NEAppProxyTCPFlow
-    private let profile: String
+    private let nativeSession: UInt64
     private let flowJSON: String
     private let idleSeconds: Double
     private let completion: ([String: Any]) -> Void
@@ -189,9 +209,9 @@ private final class TCPRelay {
     private var timer: DispatchSourceTimer?
     private var row: [String: Any]
 
-    init(id: UUID, flow: NEAppProxyTCPFlow, profile: String, flowJSON: String, idleSeconds: Double,
+    init(id: UUID, flow: NEAppProxyTCPFlow, nativeSession: UInt64, flowJSON: String, idleSeconds: Double,
          host: String, port: Int, application: String, route: String, completion: @escaping ([String: Any]) -> Void) {
-        self.id = id; self.flow = flow; self.profile = profile; self.flowJSON = flowJSON
+        self.id = id; self.flow = flow; self.nativeSession = nativeSession; self.flowJSON = flowJSON
         self.idleSeconds = idleSeconds; self.completion = completion
         row = ["id": id.uuidString, "host": host, "port": port, "application": application.isEmpty ? "unknown" : application,
                "action": route, "state": "connecting", "bytes_up": UInt64(0), "bytes_down": UInt64(0)]
@@ -201,7 +221,7 @@ private final class TCPRelay {
     func start() {
         up.async {
             do {
-                let response = try self.profile.withCString { c in try self.flowJSON.withCString { f in try Bridge.consume(fb_stream_open_json(c, f)) } }
+                let response = try self.flowJSON.withCString { f in try Bridge.consume(fb_native_stream_open_json(self.nativeSession, f)) }
                 guard let number = response["stream_id"] as? NSNumber else { throw Bridge.error("No stream handle") }
                 let handle = number.uint64Value
                 self.lock.lock()

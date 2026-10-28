@@ -13,6 +13,8 @@ final class NativeController: NSObject, ObservableObject, OSSystemExtensionReque
     @Published var snapshot: [String: Any] = [:]
     @Published var ports = "80,443"
     var bypassSigningIDs: [String] = []
+    var managedPort: Int?
+    var upstreamReady = false
     private var manager: NETransparentProxyManager?
     private var pendingProfile: String?
     private var activation: OSSystemExtensionRequest?
@@ -94,6 +96,9 @@ final class NativeController: NSObject, ObservableObject, OSSystemExtensionReque
                     let proto = NETunnelProviderProtocol(); proto.providerBundleIdentifier = self.extensionID
                     proto.serverAddress = "FlowBridge TCP proxy"
                     proto.providerConfiguration = ["profile": profile, "capturePorts": try self.capturePorts(), "bypassSigningIDs": self.bypassSigningIDs]
+                    if let port = self.managedPort {
+                        proto.providerConfiguration?["managedEndpoint"] = ["host":"127.0.0.1","port":port]
+                    }
                     manager.protocolConfiguration = proto; manager.localizedDescription = "FlowBridge TCP capture"
                     manager.isEnabled = true; manager.isOnDemandEnabled = false
                     self.manager = manager
@@ -208,7 +213,12 @@ final class NativeController: NSObject, ObservableObject, OSSystemExtensionReque
         guard !pingOutstanding, let session = manager.connection as? NETunnelProviderSession else { return }
         pingOutstanding = true; pingSequence += 1; let sequence = pingSequence
         do {
-            try session.sendProviderMessage(Data("snapshot".utf8)) { [weak self] data in
+            let request: Data
+            if let expected = providerSessionID {
+                request = try JSONSerialization.data(withJSONObject:["command":"heartbeat","session_id":expected,
+                    "upstream_ready": managedPort == nil || upstreamReady])
+            } else { request = Data("snapshot".utf8) }
+            try session.sendProviderMessage(request) { [weak self] data in
                 DispatchQueue.main.async {
                     guard let self, self.pingSequence == sequence, !self.stopping, manager.connection.status == .connected else { return }; self.pingOutstanding = false
                     guard let data, let response = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -234,6 +244,8 @@ final class NativeController: ObservableObject {
     @Published var snapshot: [String: Any] = [:]
     @Published var ports = "80,443"
     var bypassSigningIDs: [String] = []
+    var managedPort: Int?
+    var upstreamReady = false
     func start(_ profile: String) {}
     func stop() {}
     func deactivate() {}
