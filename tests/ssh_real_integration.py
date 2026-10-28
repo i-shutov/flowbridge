@@ -187,7 +187,7 @@ def main(repetition=0):
                     return False
             until(listening, 10)
             settings = {'host': '127.0.0.1', 'port': ssh_port, 'user': getpass.getuser(),
-                        'local_port': socks_port, 'verbose_diagnostics': True, 'identity_file': str(root / 'client_key'),
+                        'local_port': socks_port, 'verbose_diagnostics': repetition % 2 == 1, 'identity_file': str(root / 'client_key'),
                         'known_hosts_file': str(known), 'server_alive_interval_secs': 1,
                         'server_alive_count_max': 2, 'health_check_interval_ms': 1000,
                         'health_check_timeout_ms': 3000, 'restart_initial_delay_ms': 300,
@@ -296,5 +296,5 @@ def main(repetition=0):
 
 
 if __name__ == '__main__':
-    for repetition in range(10):
+    for repetition in range(20):
         main(repetition)
