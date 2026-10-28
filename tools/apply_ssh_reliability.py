@@ -1,147 +1,64 @@
 from pathlib import Path
 
-def edit(path, old, new):
-    p=Path(path); s=p.read_text(encoding='utf-8')
-    if s.count(old)!=1: raise RuntimeError(f'{path}: match count {s.count(old)}')
+def edit(path,old,new):
+    p=Path(path);s=p.read_text(encoding='utf-8')
+    if s.count(old)!=1:raise RuntimeError(f'{path}: match count {s.count(old)}')
     p.write_text(s.replace(old,new),encoding='utf-8')
 
-p='crates/flowbridge-runtime/src/lib.rs'
-edit(p,'''    let upstream = match connect_route_guarded(
-        &target,
-        &route,
-        Duration::from_millis(config.connect_timeout_ms),
-        Duration::from_millis(config.handshake_timeout_ms),
-        config.listen,
-    )
-    .await
-    {''','''    // Retry only a managed, single-hop SOCKS5 establishment, before any
-    // application bytes or success reply have been sent. Never replay payload.
-    let may_retry = admission.is_some() && route.len() == 1
-        && matches!(route[0].kind, flowbridge_core::ProxyKind::Socks5);
-    let deadline = Instant::now() + Duration::from_millis(
-        config.connect_timeout_ms.saturating_add(config.handshake_timeout_ms));
-    let established = tokio::time::timeout_at(deadline, async {
-        for attempt in 0..2 {
-            if route.first().is_some_and(|p| upstream_gate.borrow().pauses(&p.endpoint)) {
-                return Err(NetError::InvalidConfig("managed upstream is paused"));
-            }
-            let result = connect_route_guarded(&target, &route,
-                Duration::from_millis(config.connect_timeout_ms),
-                Duration::from_millis(config.handshake_timeout_ms), config.listen).await;
-            let retryable = matches!(&result, Err(NetError::Io { stage, source })
-                if matches!(*stage, "SOCKS5 greeting" | "SOCKS5 CONNECT response")
-                    && matches!(source.kind(), io::ErrorKind::UnexpectedEof
-                        | io::ErrorKind::ConnectionReset | io::ErrorKind::ConnectionAborted));
-            if !may_retry || !retryable || attempt == 1 { return result; }
-            lock(&guard.state).event("warn", format!(
-                "connection {}: retrying initial managed SOCKS establishment (2/2); no application bytes sent", guard.id));
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
-        unreachable!("bounded establishment loop always returns")
-    }).await.unwrap_or(Err(NetError::Timeout { stage: "initial managed connection" }));
-    let upstream = match established {''')
-p='crates/flowbridge-runtime/tests/lifecycle.rs'
-s=Path(p).read_text(encoding='utf-8')
-s+=r'''
-
-fn receive_mock_socks(stream: &mut TcpStream) {
-    stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
-    let mut greeting = [0; 3];
-    stream.read_exact(&mut greeting).unwrap();
-    assert_eq!(greeting, [5, 1, 0]);
-    stream.write_all(&[5, 0]).unwrap();
-    let mut request = [0; 10];
-    stream.read_exact(&mut request).unwrap();
-    assert_eq!(&request[..4], &[5, 1, 0, 1]);
-}
-
-#[test]
-fn managed_establishment_retry_preserves_coalesced_payload_exactly_once() {
-    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
-    let config = proxied_profile(proxy.local_addr().unwrap());
-    let engine = Engine::new(config.clone()).unwrap();
-    engine.set_upstream_gate(Some(config.proxies[0].endpoint.clone()), true, 2000).unwrap();
-    engine.start().unwrap();
-    let server = thread::spawn(move || {
-        let (mut first, _) = proxy.accept().unwrap();
-        receive_mock_socks(&mut first);
-        first.set_read_timeout(Some(Duration::from_millis(100))).unwrap();
-        let mut buffer = [0; 16];
-        let error = first.read(&mut buffer).unwrap_err();
-        assert!(matches!(error.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut));
-        drop(first);
-        let (mut second, _) = proxy.accept().unwrap();
-        receive_mock_socks(&mut second);
-        second.write_all(&[5, 0, 0, 1, 0, 0, 0, 0, 0, 0]).unwrap();
-        let mut payload = Vec::new();
-        second.read_to_end(&mut payload).unwrap();
-        assert_eq!(payload, b"once");
-        second.write_all(b"accepted once").unwrap();
-    });
-    let mut client = connect(config.listen);
-    client.write_all(&[5, 1, 0]).unwrap();
-    let mut greeting = [0; 2]; client.read_exact(&mut greeting).unwrap();
-    assert_eq!(greeting, [5, 0]);
-    let mut request = vec![5, 1, 0, 1, 192, 0, 2, 1, 1, 187];
-    request.extend_from_slice(b"once");
-    client.write_all(&request).unwrap();
-    client.shutdown(Shutdown::Write).unwrap();
-    let mut reply = [0; 10]; client.read_exact(&mut reply).unwrap();
-    assert_eq!(reply[1], 0);
-    let mut result = Vec::new(); client.read_to_end(&mut result).unwrap();
-    assert_eq!(result, b"accepted once");
-    server.join().unwrap();
-    wait(|| engine.snapshot().status.active == 0);
-    assert_eq!(engine.snapshot().events.iter().filter(|e| e.message.contains("retrying initial")).count(), 1);
-    assert_eq!(engine.snapshot().status.bytes_up, 4);
-    engine.stop().unwrap();
-}
-
-#[test]
-fn managed_establishment_retries_at_most_once_and_never_retries_rejection() {
-    for mode in ["eof", "rejected", "auth", "unmanaged"] {
-        let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
-        let config = proxied_profile(proxy.local_addr().unwrap());
-        let engine = Engine::new(config.clone()).unwrap();
-        if mode != "unmanaged" {
-            engine.set_upstream_gate(Some(config.proxies[0].endpoint.clone()), true, 1000).unwrap();
-        }
-        engine.start().unwrap();
-        let server = thread::spawn(move || {
-            for _ in 0..if mode == "eof" { 2 } else { 1 } {
-                let (mut stream, _) = proxy.accept().unwrap();
-                if mode == "auth" {
-                    stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
-                    let mut greeting = [0; 3]; stream.read_exact(&mut greeting).unwrap();
-                    stream.write_all(&[5, 255]).unwrap();
-                } else {
-                    receive_mock_socks(&mut stream);
-                    if mode == "rejected" {
-                        stream.write_all(&[5, 2, 0, 1, 0, 0, 0, 0, 0, 0]).unwrap();
-                    }
-                }
-            }
-            thread::sleep(Duration::from_millis(200));
-            proxy.set_nonblocking(true).unwrap();
-            assert_eq!(proxy.accept().unwrap_err().kind(), std::io::ErrorKind::WouldBlock);
-        });
-        let (_, code) = socks(config.listen, "192.0.2.1:443".parse().unwrap());
-        assert_ne!(code, 0);
-        server.join().unwrap();
-        wait(|| engine.snapshot().status.active == 0);
-        assert_eq!(engine.snapshot().status.bytes_up, 0);
-        let count = engine.snapshot().events.iter().filter(|e| e.message.contains("retrying initial")).count();
-        assert_eq!(count, if mode == "eof" { 1 } else { 0 });
-        engine.stop().unwrap();
+p='crates/flowbridge-tunnel/src/lib.rs'
+edit(p,'if self.verbose_diagnostics { "DEBUG3" } else { "ERROR" }','if self.verbose_diagnostics { "DEBUG3" } else { "INFO" }')
+edit(p,'''    if let Some(fatal) = fatal {
+        s.fatal = Some(fatal.into());''','''    if lower.contains("timeout, server ") && lower.contains("not responding") {
+        s.status.diagnostic_code = Some("ssh_server_unresponsive".into());
+        s.status.last_error = Some("SSH server did not answer keepalive requests. Check the network, server load and keepalive budget; a local SOCKS greeting alone does not prove remote readiness.".into());
     }
-}
-'''
-Path(p).write_text(s,encoding='utf-8')
+    if let Some(fatal) = fatal {
+        s.fatal = Some(fatal.into());''')
+edit(p,'''        let error = s
+            .fatal
+            .clone()
+            .or(error)''','''        let diagnosed = s.status.diagnostic_code.as_deref()
+            .filter(|code| *code == "ssh_server_unresponsive")
+            .and(s.status.last_error.clone());
+        let error = s
+            .fatal
+            .clone()
+            .or(diagnosed)
+            .or(error)''')
+edit(p,'''            s.event("info", "starting managed OpenSSH dynamic forwarding");''','''            s.event("info", "starting managed OpenSSH dynamic forwarding");
+            if self.config.server_alive_interval_secs.saturating_mul(u64::from(self.config.server_alive_count_max)) < 10 {
+                s.event("warn", "SSH keepalive budget is below 10 seconds; server login or load delays can cause premature disconnects");
+            }''')
+edit(p,'    #[test]\n    fn strict_config_and_arguments_do_not_allow_shell_or_host_key_overrides()', '''    #[test]
+    fn keepalive_timeout_reason_is_actionable_and_info_logging_is_preserved() {
+        let supervisor = Supervisor::new(config()).unwrap();
+        stderr_line(&supervisor.state, b"Timeout, server synthetic.invalid not responding.");
+        let snapshot = supervisor.snapshot();
+        assert_eq!(snapshot.status.diagnostic_code.as_deref(), Some("ssh_server_unresponsive"));
+        assert!(snapshot.status.last_error.as_deref().unwrap().contains("keepalive"));
+        assert!(!snapshot.status.last_error.as_deref().unwrap().contains("synthetic.invalid"));
+        assert!(config().arguments().iter().any(|arg| arg == "LogLevel=INFO"));
+        assert_eq!(snapshot.status.resource_exhaustion_count, 0);
+    }
+
+    #[test]
+    fn strict_config_and_arguments_do_not_allow_shell_or_host_key_overrides()''')
+p='crates/flowbridge-ffi/src/diagnostics.rs'
+s=Path(p).read_text(encoding='utf-8')
+a='"ssh_health_unresponsive"'
+assert s.count(a)==1
+Path(p).write_text(s.replace(a,a+', "ssh_server_unresponsive"'),encoding='utf-8')
 p='tests/ssh_real_integration.py'
-edit(p,"            report['passed'] = True",'''            report['connection_establishment_retries'] = sum(
-                'retrying initial' in event['message']
-                for event in abi.call('fb_engine_snapshot_json', engine)['events'])
-            report['passed'] = True''')
+edit(p,"'server_alive_interval_secs': 1,", "'server_alive_interval_secs': 15,")
+edit(p,"'server_alive_count_max': 2,", "'server_alive_count_max': 3,")
+edit(p,"            supervisor = abi.call('fb_ssh_create_json', settings)['ssh_id']",'''            report['keepalive'] = {'interval_seconds': settings['server_alive_interval_secs'],
+                                   'count_max': settings['server_alive_count_max']}
+            supervisor = abi.call('fb_ssh_create_json', settings)['ssh_id']''')
+a="            capture_log = (args.output / 'capture.log').open('wb')"
+s=Path(p).read_text(encoding='utf-8');start=s.index(a);end=s.index("            known = root / 'known hosts'",start)
+block=s[start:end]
+s=s[:start]+"            if os.environ.get('FLOWBRIDGE_TEST_CAPTURE') == '1':\n"+''.join('    '+line+'\n' for line in block.splitlines())+s[end:]
+Path(p).write_text(s,encoding='utf-8')
 p=Path('docs/SSH_RELIABILITY.md')
-p.write_text(p.read_text()+'''\nAn intermittent early EOF in a live OpenSSH SOCKS establishment is now handled by at most one additional connection attempt for a managed single-hop SOCKS5 route. Recovery applies only to EOF/reset before any application byte or successful ingress reply, preserves the same admission permits and original combined connect/handshake deadline, rechecks the pause gate and records an event. No retry on authentication, explicit proxy rejection, malformed protocol, timeout, Direct/unmanaged/chain route, or after payload forwarding. The remote side may have seen an empty TCP open; application data is never replayed. This is a bounded recovery policy, not proof of the underlying OpenSSH EOF cause. Regression tests include already coalesced client payload and exact-once delivery.\n''')
-print('Bounded pre-payload establishment recovery and strict regression tests added')
+p.write_text(p.read_text()+'''\nQA found that the isolated test forced ServerAliveInterval=1 and ServerAliveCountMax=2. Packet capture showed a correct SOCKS request queued while the test sshd remained in PAM session setup, then the client exited 255 after roughly three seconds. OpenSSH logs its keepalive timeout at INFO, so the old ERROR setting hid the reason. Normal managed logging is now INFO (DEBUG3 is opt-in), the timeout receives an explicit diagnostic code preserved across child exit, and sub-ten-second keepalive budgets produce a warning. The real test now uses the product defaults 15/3; watchdog restart is still tested by killing the owned child, and no assertions are skipped. Optional packet capture is confined to disposable CI via FLOWBRIDGE_TEST_CAPTURE=1.\n''')
+print('Keepalive reason retained; normal INFO logging and production-default 15/3 integration settings applied')
