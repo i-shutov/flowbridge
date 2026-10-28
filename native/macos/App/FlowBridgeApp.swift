@@ -38,9 +38,10 @@ private struct Dashboard: View {
     @State private var showSSHOptions = false
     @State private var showLog = false
     private var routing: Bool { engine.running || native.active }
-    private var locked: Bool { desktop.busy || routing || engine.busy || native.busy || ["starting", "ready", "reconnecting"].contains(ssh.state) }
+    private var locked: Bool { desktop.busy || routing || engine.busy || native.busy || ["starting", "ready", "reconnecting", "degraded"].contains(ssh.state) }
     private var healthy: Bool { !desktop.busy && routing && (!desktop.settings.integratedSSH || ssh.state == "ready") }
     private var statusTitle: String {
+        if ssh.state == "degraded" { return "SSH: требуется диагностика" }
         if ssh.state == "reconnecting" { return "Восстанавливаем SSH" }
         if healthy { return "Подключено" }
         if desktop.busy { return "Подключение…" }
@@ -68,7 +69,7 @@ private struct Dashboard: View {
                         Text(subtitle).font(.callout).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    HStack(spacing: 7) { Circle().fill(healthy ? Color.green : (desktop.busy || ssh.state == "reconnecting" ? Color.orange : Color.secondary)).frame(width: 7, height: 7); Text(statusTitle).font(.callout.weight(.medium)) }
+                    HStack(spacing: 7) { Circle().fill(healthy ? Color.green : (desktop.busy || ssh.state == "reconnecting" || ssh.state == "degraded" ? Color.orange : Color.secondary)).frame(width: 7, height: 7); Text(statusTitle).font(.callout.weight(.medium)) }
                         .padding(.horizontal, 12).padding(.vertical, 8).background(.quaternary, in: Capsule())
                 }.padding(28)
                 Divider()

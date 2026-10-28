@@ -347,12 +347,15 @@ void exportNative(){captureSelections();if(selectedApps.empty())throw std::runti
 }
 void showSsh(const Json& ssh,bool waiting){
     if(ssh.is_null()){bool managed=SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1;tunnelReady=!managed;setText(GetDlgItem(window,SshHealth),managed?"Управляемый SSH не запущен":"SSH: используется внешний прокси");setText(GetDlgItem(window,SshSummary),managed?"SSH запустится после нажатия «Подключить». Ключ сервера должен быть заранее проверен.":"Внешний прокси управляется отдельно от FlowBridge.");return;}
-    auto status=ssh.at("status");auto state=status.value("state",std::string("stopped"));tunnelReady=state=="ready";std::string label=state=="ready"?"Готов":state=="starting"?"Запускается":state=="reconnecting"?"Восстанавливается":state=="failed"?"Требуется внимание":"Остановлен";
+    auto status=ssh.at("status");auto state=status.value("state",std::string("stopped"));tunnelReady=state=="ready";std::string label=state=="ready"?"Готов":state=="starting"?"Запускается":state=="reconnecting"?"Восстанавливается":state=="degraded"?"Перегрузка / диагностика":state=="failed"?"Требуется внимание":"Остановлен";
     std::string text="SSH: "+label+"  •  попытка "+std::to_string(status.value("attempt",uint64_t(0)))+"  •  перезапусков "+std::to_string(status.value("restarts",uint64_t(0)));
     if(status.contains("last_error")&&!status["last_error"].is_null())text+="\n"+status["last_error"].get<std::string>();
+    text+="\nОшибок ресурсов: "+std::to_string(status.value("resource_exhaustion_count",uint64_t(0)));
+    if(status.contains("backend_path")&&!status["backend_path"].is_null())text+=" · "+status["backend_path"].get<std::string>();
+    if(status.contains("backend_version")&&!status["backend_version"].is_null())text+=" · "+status["backend_version"].get<std::string>();
     setText(GetDlgItem(window,SshHealth),text);setText(GetDlgItem(window,SshSummary),text);
     if(waiting){setText(GetDlgItem(window,Badge),"●  Ожидание готовности SSH");setText(GetDlgItem(window,Status),"Сначала проверяется SSH/SOCKS5. Локальный движок запустится после подтверждения готовности.");}
-    if(engineRunning&&!tunnelReady){setText(GetDlgItem(window,Badge),"●  SSH восстанавливается · SOCKS ждёт upstream");}
+    if(engineRunning&&!tunnelReady){setText(GetDlgItem(window,Badge),state=="degraded"?"●  SSH перегружен / проверяется · новые соединения ждут":"●  SSH восстанавливается · SOCKS ждёт upstream");}
     std::string events=utf8(logEdit);for(const auto& event:ssh.value("events",Json::array()))events+="\r\n[SSH / "+event.value("level",std::string("info"))+"] "+event.value("message",std::string());if(events.size()>60000)events.erase(0,events.size()-60000);while(!events.empty()&&(static_cast<unsigned char>(events[0])&0xc0)==0x80)events.erase(0,1);setText(logEdit,events);
 }
 

@@ -32,6 +32,16 @@ jobs:
       - run: cargo test --locked --workspace
       - run: cargo build --locked --workspace
       - run: python tests/smoke.py
+      - name: Exercise shared SSH capacity under connection bursts
+        run: python tests/managed_capacity_integration.py --output build/verification/capacity/result.json
+      - name: Preserve admission-control evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: FlowBridge-capacity-${{ matrix.os }}
+          path: build/verification/capacity/
+          if-no-files-found: warn
+          retention-days: 14
       - name: Test actual SSH authentication, watchdog restart and host-key rejection
         if: matrix.os == 'ubuntu-24.04'
         run: |
