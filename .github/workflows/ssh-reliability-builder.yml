@@ -1,0 +1,59 @@
+name: SSH reliability source validation
+on:
+  push:
+    branches: ['work/ssh-reliability-build']
+    paths: ['tools/apply_ssh_reliability.py', '.github/workflows/ssh-reliability-builder.yml']
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Apply exact source changes and format
+        run: |
+          python3 tools/apply_ssh_reliability.py
+          cargo fmt --all
+          mkdir -p build/verification/reliability
+          git diff --check
+          git diff > build/verification/reliability/source.patch
+      - name: Save prepared source on the isolated working branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates native tests/ssh_real_integration.py docs/SSH_RELIABILITY.md
+          git commit -m 'feat(ssh): overload diagnostics, shared admission limits and bounded recovery'
+          git rev-parse HEAD | tee build/verification/reliability/source-sha.txt
+          git push origin HEAD:refs/heads/work/ssh-reliability-build
+      - name: Strict Rust validation
+        run: |
+          set -o pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets -- -D warnings 2>&1 | tee build/verification/reliability/clippy.log
+          cargo test --locked --workspace 2>&1 | tee build/verification/reliability/tests.log
+          cargo build --locked --workspace
+          python3 tests/smoke.py 2>&1 | tee build/verification/reliability/smoke.log
+      - name: Real isolated SSH integration
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --yes openssh-server
+          sudo install -d -m 0755 /run/sshd
+          export GITHUB_SHA=$(git rev-parse HEAD)
+          python3 tests/ssh_real_integration.py --library target/debug/libflowbridge_ffi.so --output build/verification/reliability/ssh
+      - name: Preserve evidence and exact prepared source
+        if: always()
+        run: |
+          mkdir -p build/verification/reliability
+          git archive --format=zip --prefix=flowbridge/ -o build/verification/reliability/prepared-source.zip HEAD
+      - uses: actions/upload-artifact@v7.0.0
+        if: always()
+        with:
+          name: FlowBridge-SSH-reliability-evidence
+          path: build/verification/reliability/
+          retention-days: 14
