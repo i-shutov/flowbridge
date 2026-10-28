@@ -81,6 +81,7 @@ targets:
         NetworkExtension:
           NEProviderClasses:
             com.apple.networkextension.app-proxy: $(PRODUCT_MODULE_NAME).TransparentProxyProvider
+            com.apple.networkextension.dns-proxy: $(PRODUCT_MODULE_NAME).DNSProxyProvider
           NEMachServiceName: '$(TeamIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)'
 schemes:
   FlowBridgeLocal:

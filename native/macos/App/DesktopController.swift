@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import SwiftUI
 
 final class DesktopController: ObservableObject {
@@ -76,11 +77,23 @@ final class DesktopController: ObservableObject {
         object["default_action"] = ["type": "direct"]
         let text = try Bridge.text(object); try Bridge.validate(text); return text
     }
+    private func literalIP(_ value: String) -> Bool {
+        var v4 = in_addr(); var v6 = in6_addr()
+        return value.withCString { inet_pton(AF_INET,$0,&v4) } == 1 || value.withCString { inet_pton(AF_INET6,$0,&v6) } == 1
+    }
     func start() {
         guard !busy, !engine.running, !native.active else { return }
         do {
             guard saveSettings() else { return }
             var profile = try configuredProfile()
+            native.remoteDNS = nil
+            let remoteDNS = settings.mode == 1 && (settings.remoteDNS ?? true)
+            if remoteDNS {
+                guard settings.integratedSSH else { throw Bridge.error("Системный DNS через SSH требует встроенного SSH-подключения.") }
+                guard literalIP(settings.sshHost) else { throw Bridge.error("Для DNS-режима этой беты укажите IP SSH-сервера, чтобы его повторное подключение не зависело от отключённого DNS-туннеля.") }
+                let resolver = settings.remoteDNSResolver ?? ""
+                guard resolver.isEmpty || literalIP(resolver) else { throw Bridge.error("Укажите IP DNS-сервера удалённой машины или оставьте поле пустым.") }
+            }
             var applicationProfile: String?
             if settings.mode == 1 {
                 guard native.available else { throw Bridge.error("Прозрачный режим недоступен: нужен подписанный и одобренный Network Extension.") }
@@ -120,7 +133,26 @@ final class DesktopController: ObservableObject {
                 message = "Проверяем SSH и локальный SOCKS…"
                 ssh.start(settings) { success in
                     guard self.revision == version else { return }
-                    if success { self.engine.setUpstreamGate(port: self.settings.localPort, ready: true); launch() }
+                    if success {
+                        self.engine.setUpstreamGate(port:self.settings.localPort,ready:true)
+                        let useResolver: (String) -> Void = { resolver in
+                            guard self.revision == version else { return }
+                            self.native.remoteDNS = ["resolver":["host":resolver,"port":53],"timeout_ms":5000]
+                            launch()
+                        }
+                        if !remoteDNS { launch() }
+                        else if let resolver = self.settings.remoteDNSResolver, !resolver.isEmpty { useResolver(resolver) }
+                        else {
+                            self.message = "Читаем DNS-настройки удалённого SSH-сервера…"
+                            self.ssh.discoverDNS { result in
+                                guard self.revision == version else { return }
+                                switch result {
+                                case .success(let servers): useResolver(servers[0])
+                                case .failure(let error): self.stop { _ in self.message = "DNS не запущен: " + error.localizedDescription }
+                                }
+                            }
+                        }
+                    }
                     else { self.busy = false; self.message = self.ssh.message }
                 }
             } else { engine.setUpstreamGate(port: nil, ready: true); launch() }

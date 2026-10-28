@@ -16,6 +16,7 @@ struct Options {
     ready_lease_ms: u64,
     pause_grace_ms: u64,
     limits: Limits,
+    dns: Option<super::native_dns::Options>,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -25,6 +26,7 @@ impl Default for Options {
             ready_lease_ms: 5000,
             pause_grace_ms: 30000,
             limits: Limits::default(),
+            dns: None,
         }
     }
 }
@@ -37,6 +39,7 @@ struct Gate {
 pub(super) struct Session {
     pub id: u64,
     config: Mutex<Config>,
+    dns_server: Mutex<Option<super::native_dns::Server>>,
     options: Options,
     budget: Option<Arc<Budget>>,
     gate: watch::Sender<Gate>,
@@ -54,7 +57,7 @@ fn sessions() -> &'static Mutex<HashMap<u64, Arc<Session>>> {
     static REGISTRY: OnceLock<Mutex<HashMap<u64, Arc<Session>>>> = OnceLock::new();
     REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
 }
-fn session(id: u64) -> Result<Arc<Session>, String> {
+pub(super) fn session(id: u64) -> Result<Arc<Session>, String> {
     locked(sessions())
         .get(&id)
         .cloned()
@@ -94,6 +97,19 @@ impl Session {
         } else {
             None
         };
+        if let Some(dns) = &options.dns {
+            dns.validate()?;
+            let endpoint = options
+                .managed_endpoint
+                .as_ref()
+                .ok_or("Remote DNS requires a managed SSH endpoint")?;
+            if !config.proxies.iter().any(|p| {
+                normalized(&p.endpoint) == normalized(endpoint)
+                    && matches!(p.kind, flowbridge_core::ProxyKind::Socks5)
+            }) {
+                return Err("Remote DNS requires the managed SOCKS5 SSH route".into());
+            }
+        }
         let max_flows = config.max_connections.min(1024);
         let (gate, _) = watch::channel(Gate {
             ready: options.ready,
@@ -103,6 +119,7 @@ impl Session {
         Ok(Arc::new(Self {
             id,
             config: Mutex::new(config),
+            dns_server: Mutex::new(None),
             options,
             budget,
             gate,
@@ -116,6 +133,84 @@ impl Session {
             bytes_up: AtomicU64::new(0),
             bytes_down: AtomicU64::new(0),
         }))
+    }
+    pub async fn dns_query(self: &Arc<Self>, query: Vec<u8>) -> Result<Vec<u8>, String> {
+        super::native_dns::validate_query(&query)?;
+        let dns = self
+            .options
+            .dns
+            .clone()
+            .ok_or("Remote DNS is disabled in this native session")?;
+        let config = self.config()?;
+        let endpoint = self
+            .options
+            .managed_endpoint
+            .as_ref()
+            .ok_or("Managed DNS route is unavailable")?;
+        let proxy = config
+            .proxies
+            .iter()
+            .find(|p| {
+                normalized(&p.endpoint) == normalized(endpoint)
+                    && matches!(p.kind, flowbridge_core::ProxyKind::Socks5)
+            })
+            .cloned()
+            .ok_or("Managed DNS route is absent")?;
+        let work = async {
+            let route = vec![proxy];
+            let mut lease = self.admit(&route).await?;
+            self.recheck(&route)?;
+            let stream = flowbridge_net::connect_route_guarded(
+                &dns.resolver,
+                &route,
+                Duration::from_millis(config.connect_timeout_ms),
+                Duration::from_millis(config.handshake_timeout_ms),
+                config.listen,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+            self.recheck(&route)?;
+            lease.connected();
+            let answer = super::native_dns::exchange(stream, &query).await?;
+            lease.progress(true, query.len() + 2);
+            lease.progress(false, answer.len() + 2);
+            Ok::<_, String>(answer)
+        };
+        tokio::select! { biased;
+            _ = self.cancelled() => Err("Native DNS stopped".into()),
+            result = tokio::time::timeout(Duration::from_millis(dns.timeout_ms),work) =>
+                result.map_err(|_| "Remote DNS deadline expired; local fallback disabled".to_string())?
+        }
+    }
+    pub fn dns_exchange(self: &Arc<Self>, query: Vec<u8>) -> Result<Vec<u8>, String> {
+        let session = self.clone();
+        std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| e.to_string())?;
+            runtime.block_on(session.dns_query(query))
+        })
+        .join()
+        .map_err(|_| "Native DNS worker panicked".to_string())?
+    }
+    pub fn start_dns(self: &Arc<Self>, listen: std::net::SocketAddr) -> Result<Value, String> {
+        if self.options.dns.is_none() || self.stopped.load(Ordering::Acquire) {
+            return Err("Native DNS is disabled or the session stopped".into());
+        }
+        let mut slot = locked(&self.dns_server);
+        if slot.is_some() {
+            return Err("Native DNS listener is already running".into());
+        }
+        let server = super::native_dns::Server::start(self.clone(), listen)?;
+        let result =
+            json!({"ok":true,"listen":server.listen.to_string(),"system_dns_modified":false});
+        *slot = Some(server);
+        Ok(result)
+    }
+    pub fn stop_dns(&self) {
+        let server = locked(&self.dns_server).take();
+        drop(server);
     }
     pub fn config(&self) -> Result<Config, String> {
         if self.stopped.load(Ordering::Acquire) {
@@ -376,6 +471,7 @@ pub extern "C" fn fb_native_destroy(id: u64) {
         };
         session.stopped.store(true, Ordering::Release);
         session.cancel.send_replace(true);
+        session.stop_dns();
         let ids: Vec<u64> = locked(streams())
             .iter()
             .filter_map(|(id, stream)| {

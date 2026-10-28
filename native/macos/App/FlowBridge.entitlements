@@ -3,5 +3,5 @@
 <plist version="1.0"><dict>
   <key>com.apple.developer.system-extension.install</key><true/>
   <key>com.apple.developer.networking.networkextension</key>
-  <array><string>app-proxy-provider-systemextension</string></array>
+  <array><string>app-proxy-provider-systemextension</string><string>dns-proxy-systemextension</string></array>
 </dict></plist>

@@ -62,9 +62,10 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
                 self.lock.lock()
                 guard self.generation == revision else { self.lock.unlock(); throw Bridge.error("Start cancelled") }
                 self.bypassSigningIDs = Set(proto.providerConfiguration?["bypassSigningIDs"] as? [String] ?? [])
-                let nativeOptions: [String: Any] = [
+                var nativeOptions: [String: Any] = [
                     "managed_endpoint": proto.providerConfiguration?["managedEndpoint"] ?? NSNull(),
                     "ready": false, "ready_lease_ms": 5000, "pause_grace_ms": 30000]
+                if let dns = proto.providerConfiguration?["remoteDNS"] as? [String: Any] { nativeOptions["dns"] = dns }
                 self.lock.unlock()
                 let optionsJSON = try Bridge.text(nativeOptions)
                 let created = try source.withCString { c in try optionsJSON.withCString { o in
@@ -80,8 +81,14 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
                     self.lock.lock()
                     let cancelled = self.generation != revision
                     self.ready = error == nil && !cancelled
-                    if self.ready { self.recordLocked("TCP capture ready; UDP/DNS direct. Upstream and loopback destinations excluded.") }
+                    if self.ready, let sessionID = self.sessionID {
+                        SharedNativeSession.shared.publish(id:sessionID,handle:id.uint64Value,
+                            dns:proto.providerConfiguration?["remoteDNS"] != nil)
+                        self.recordLocked("TCP capture ready; DNS activation is confirmed separately.")
+                    }
+                    if error != nil && self.coreSession == id.uint64Value { self.coreSession = 0 }
                     self.lock.unlock()
+                    if error != nil || cancelled { fb_native_destroy(id.uint64Value) }
                     completionHandler(error ?? (cancelled ? Bridge.error("Start cancelled") : nil))
                 }
             } catch { completionHandler(error) }
@@ -90,6 +97,7 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
     override func stopProxy(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
         lock.lock(); ready = false; sessionID = nil; generation += 1; let all = Array(sessions.values)
         let native = coreSession; coreSession = 0; lock.unlock()
+        SharedNativeSession.shared.revoke(handle:native)
         fb_native_destroy(native)
         all.forEach { $0.cancel(Bridge.error("Capture stopped")) }
         // Cancellation marks all relays closed immediately; bounded Rust calls finish
@@ -152,7 +160,8 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
         let core = (try? Bridge.consume(fb_native_snapshot_json(native))) ?? [:]
         let value: [String: Any] = ["ready": isReady, "session_id": currentSession as Any? ?? NSNull(),
             "connections": all.map { $0.snapshot() } + history, "events": log,
-            "status": core["status"] ?? [:], "managed_upstream": core["managed_upstream"] ?? NSNull()]
+            "status": core["status"] ?? [:], "managed_upstream": core["managed_upstream"] ?? NSNull(),
+            "dns": SharedNativeSession.shared.snapshot(handle:native)]
         return try JSONSerialization.data(withJSONObject: value)
     }
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)? = nil) {

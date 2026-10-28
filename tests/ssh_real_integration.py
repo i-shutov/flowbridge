@@ -227,6 +227,9 @@ def main(repetition=0):
             from native_vertical_integration import actual_ssh
             actual_ssh(abi, profile, endpoint, target_port)
             passed('Native capture ABI: selected application -> real SSH -> target, without SOCKS ingress')
+            from native_dns_integration import actual_ssh as actual_dns
+            actual_dns(abi, profile, endpoint, supervisor)
+            passed('Native DNS: resolver discovery and UDP/TCP queries through actual SSH')
             old_pid = ready['pid']
             gate(False)
             os.kill(old_pid, signal.SIGKILL)

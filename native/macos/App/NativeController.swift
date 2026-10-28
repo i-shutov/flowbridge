@@ -15,7 +15,13 @@ final class NativeController: NSObject, ObservableObject, OSSystemExtensionReque
     var bypassSigningIDs: [String] = []
     var managedPort: Int?
     var upstreamReady = false
+    var remoteDNS: [String: Any]?
     private var manager: NETransparentProxyManager?
+    private var ownsSession = false
+    private var dnsRequested: String?
+    private var dnsStopComplete = true
+    private var dnsStopError: Error?
+    private lazy var dnsController = DNSController(identifier:extensionID)
     private var pendingProfile: String?
     private var activation: OSSystemExtensionRequest?
     private var timer: Timer?
@@ -69,12 +75,22 @@ final class NativeController: NSObject, ObservableObject, OSSystemExtensionReque
               (extEnt["com.apple.developer.networking.networkextension"] as? [String])?.contains("app-proxy-provider-systemextension") == true else {
             throw Bridge.error("Required system extension / Network Extension entitlements missing")
         }
+        if remoteDNS != nil {
+            guard (appEnt["com.apple.developer.networking.networkextension"] as? [String])?.contains("dns-proxy-systemextension") == true,
+                  (extEnt["com.apple.developer.networking.networkextension"] as? [String])?.contains("dns-proxy-systemextension") == true else {
+                throw Bridge.error("Подпись приложения и расширения должна разрешать DNS Proxy")
+            }
+        }
     }
     func start(_ profile: String) {
         guard available, !busy else { return }
+        if manager?.connection.status == .connected && !ownsSession {
+            message = "Обнаружен ранее запущенный перехват. Сначала нажмите Остановить; его SSH-сеанс не принадлежит этому запуску."; return
+        }
         do { try Bridge.validate(profile); try verifyEmbedded(); _ = try capturePorts() }
         catch { message = error.localizedDescription; return }
         operation += 1; providerSessionID = nil; busy = true; active = false; stopping = false; pendingProfile = profile
+        ownsSession = true; dnsRequested = nil; dnsStopError = nil
         message = "Requesting extension activation; macOS may require approval in System Settings."
         let request = OSSystemExtensionRequest.activationRequest(forExtensionWithIdentifier: extensionID, queue: .main)
         request.delegate = self; activation = request
@@ -99,6 +115,7 @@ final class NativeController: NSObject, ObservableObject, OSSystemExtensionReque
                     if let port = self.managedPort {
                         proto.providerConfiguration?["managedEndpoint"] = ["host":"127.0.0.1","port":port]
                     }
+                    if let dns = self.remoteDNS { proto.providerConfiguration?["remoteDNS"] = dns }
                     manager.protocolConfiguration = proto; manager.localizedDescription = "FlowBridge TCP capture"
                     manager.isEnabled = true; manager.isOnDemandEnabled = false
                     self.manager = manager
@@ -130,15 +147,22 @@ final class NativeController: NSObject, ObservableObject, OSSystemExtensionReque
     func stop() {
         operation += 1; activation = nil; providerSessionID = nil
         pendingProfile = nil; active = false; busy = false; stopping = true
-        pingSequence += 1; pingOutstanding = false
-        manager?.connection.stopVPNTunnel(); message = "Stopping TCP capture."
+        pingSequence += 1; pingOutstanding = false; ownsSession = false; dnsRequested = nil
+        dnsStopComplete = false; dnsStopError = nil; let revision = operation
+        dnsController.disable { error in
+            guard self.operation == revision else { return }
+            self.dnsStopComplete = true; self.dnsStopError = error
+            if let error { self.message = "Не удалось отключить DNS: " + error.localizedDescription }
+        }
+        manager?.connection.stopVPNTunnel(); message = "Останавливаем TCP-перехват и DNS."
     }
     func stopAndWait(completion: @escaping (Bool) -> Void) {
         stop(); let revision = operation
         func check(_ remaining: Int) {
             guard self.operation == revision else { completion(false); return }
             let status = self.manager?.connection.status
-            if status == nil || status == .disconnected || status == .invalid { completion(true); return }
+            if self.dnsStopComplete && self.dnsStopError != nil { completion(false); return }
+            if self.dnsStopComplete && (status == nil || status == .disconnected || status == .invalid) { completion(true); return }
             guard remaining > 0 else { self.message = "Capture stop has not been confirmed; SSH remains running."; completion(false); return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { check(remaining - 1) }
         }
@@ -173,14 +197,15 @@ final class NativeController: NSObject, ObservableObject, OSSystemExtensionReque
         } catch { message = error.localizedDescription; completion(false) }
     }
     func deactivate() {
-        stop(); busy = true
-        let revision = operation
-        // Disable the saved configuration before removing the extension.
-        guard let manager else { submitDeactivation(); return }
-        manager.isEnabled = false
-        manager.saveToPreferences { [weak self] error in
-            DispatchQueue.main.async {
-                guard let self, self.operation == revision else { return }; if let error { self.fail(error); return }; self.submitDeactivation()
+        stopAndWait { success in
+            guard success else { return }; self.busy = true
+            guard let manager = self.manager else { self.submitDeactivation(); return }
+            let revision = self.operation; manager.isEnabled = false
+            manager.saveToPreferences { error in
+                DispatchQueue.main.async {
+                    guard self.operation == revision else { return }
+                    if let error { self.fail(error) } else { self.submitDeactivation() }
+                }
             }
         }
     }
@@ -189,8 +214,7 @@ final class NativeController: NSObject, ObservableObject, OSSystemExtensionReque
         request.delegate = self; activation = request; OSSystemExtensionManager.shared.submitRequest(request)
     }
     private func fail(_ error: Error) {
-        manager?.connection.stopVPNTunnel(); stopping = true; providerSessionID = nil
-        busy = false; active = false; pendingProfile = nil; message = error.localizedDescription
+        stop(); busy = false; active = false; pendingProfile = nil; message = error.localizedDescription
     }
     func requestNeedsUserApproval(_ request: OSSystemExtensionRequest) { guard request === activation else { return }; message = "Approval required in macOS System Settings. Capture is not active." }
     func request(_ request: OSSystemExtensionRequest, didFailWithError error: Error) { guard request === activation else { return }; activation = nil; fail(error) }
@@ -205,6 +229,10 @@ final class NativeController: NSObject, ObservableObject, OSSystemExtensionReque
                  withExtension ext: OSSystemExtensionProperties) -> OSSystemExtensionRequest.ReplacementAction { .replace }
     private func poll() {
         guard let manager, !stopping else { return }
+        guard ownsSession else {
+            if manager.connection.status == .connected { message = "Существует другой сеанс перехвата: сначала остановите его." }
+            return
+        }
         guard manager.connection.status == .connected else {
             if active { message = "TCP capture disconnected." }
             active = false; providerSessionID = nil
@@ -224,8 +252,22 @@ final class NativeController: NSObject, ObservableObject, OSSystemExtensionReque
                     guard let data, let response = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                           response["ready"] as? Bool == true, let observedSession = response["session_id"] as? String,
                           !observedSession.isEmpty else { self.providerSessionID = nil; self.active = false; self.busy = true; self.message = "Provider readiness not confirmed. Stop capture to cancel."; return }
-                    self.providerSessionID = observedSession; self.snapshot = response; self.active = true; self.busy = false
-                    self.message = "TCP capture active on configured ports. UDP and system DNS remain direct."
+                    self.providerSessionID = observedSession; self.snapshot = response
+                    if self.remoteDNS != nil {
+                        if self.dnsRequested != observedSession {
+                            self.dnsRequested = observedSession; let revision = self.operation
+                            self.dnsController.enable(session:observedSession) { error in
+                                guard self.operation == revision, !self.stopping else { return }
+                                if let error { self.fail(error) }
+                            }
+                        }
+                        let dns = response["dns"] as? [String:Any] ?? [:]
+                        guard dns["active"] as? Bool == true else {
+                            self.active = false; self.busy = true; self.message = "Ожидаем подтверждение системного DNS-провайдера…"; return
+                        }
+                    }
+                    self.active = true; self.busy = false
+                    self.message = self.remoteDNS == nil ? "TCP-перехват готов. Системный DNS не перехватывается." : "TCP и системный DNS через SSH готовы. Собственный DoH/DoT приложений не перехватывается."
                 }
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
@@ -246,6 +288,7 @@ final class NativeController: ObservableObject {
     var bypassSigningIDs: [String] = []
     var managedPort: Int?
     var upstreamReady = false
+    var remoteDNS: [String: Any]?
     func start(_ profile: String) {}
     func stop() {}
     func deactivate() {}
