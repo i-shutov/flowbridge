@@ -1,0 +1,38 @@
+{
+  "environment": "Wine64 on Linux; not native Windows or kernel validation",
+  "prefix": "/tmp/flowbridge-installer-v02-w1wgek8a/prefix",
+  "installer": "/tmp/flowbridge-installer-v02-w1wgek8a/setup.exe",
+  "passed": true,
+  "checks": [
+    {
+      "name": "Final installer matches manifest",
+      "passed": true,
+      "sha256": "6e073a4cf59e657fc95044c065ecaadea754da49f7c868d328f1506eeea95943",
+      "bytes": 2523895
+    },
+    {
+      "name": "Silent install: payload hashes, registry, uninstaller and three Start menu shortcuts",
+      "passed": true,
+      "payload_files": 11
+    },
+    {
+      "name": "Installed CLI capabilities and actual profile validation",
+      "passed": true
+    },
+    {
+      "name": "Installed GUI: real traffic, Apply/Start/Stop, metrics, edits, native export and clean exit",
+      "passed": true,
+      "screenshot": "/tmp/flowbridge-installer-v02-w1wgek8a/logs/windows-installer-gui.bmp"
+    },
+    {
+      "name": "Upgrade stays in registered directory despite different /D; profile and unrelated file preserved",
+      "passed": true
+    },
+    {
+      "name": "Actual uninstall removes payload, shortcuts and registration; unrelated file and GUI profile retained",
+      "passed": true,
+      "retained_profile": "/tmp/flowbridge-installer-v02-w1wgek8a/prefix/drive_c/users/root/AppData/Local/FlowBridge/profile.json",
+      "profile_sha256": "f004f21c2a28088a12ce270503f52dc9366cffcf77512c3e2f9bc0cdbc9d13c9"
+    }
+  ]
+}

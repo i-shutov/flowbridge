@@ -1,0 +1,11 @@
+[package]
+name = "flowbridge-net"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+flowbridge-core = { path = "../flowbridge-core" }
+tokio.workspace = true
+thiserror.workspace = true
+base64.workspace = true

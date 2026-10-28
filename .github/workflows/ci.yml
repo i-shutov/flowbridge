@@ -1,0 +1,70 @@
+name: rust-and-native-applications
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  rust:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - run: cargo test --locked --workspace
+      - run: cargo build --locked --workspace
+      - run: python tests/smoke.py
+  windows-application:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: cargo build --locked --release -p flowbridge-ffi -p flowbridge-cli
+      - run: cmake -S native/windows -B build/windows -A x64 -DFLOWBRIDGE_BUILD_NATIVE_TESTS=ON -DFLOWBRIDGE_FFI_LIBRARY="$env:GITHUB_WORKSPACE/target/release/flowbridge_ffi.dll.lib"
+      - run: cmake --build build/windows --config Release
+      - shell: pwsh
+        run: |
+          Copy-Item target/release/flowbridge_ffi.dll build/windows/Release/
+          New-Item -ItemType Directory -Force build/windows/Release/resources
+          Copy-Item resources/presets.json build/windows/Release/resources/
+          & ./build/windows/Release/FlowBridgeNativeSmoke.exe "$env:GITHUB_WORKSPACE/build/windows/Release/FlowBridge.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - run: choco install nsis --yes --no-progress
+      - run: python packaging/windows/build-installer.py --skip-build
+      - uses: actions/upload-artifact@v7.0.0
+        with:
+          name: FlowBridge-windows-x64
+          path: |
+            ${{ github.workspace }}/../artifacts/FlowBridge-*-windows-x64-setup.exe
+            ${{ github.workspace }}/../artifacts/FlowBridge-*-windows-x64-setup.exe.sha256
+          if-no-files-found: error
+          retention-days: 14
+  macos-application:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: dtolnay/rust-toolchain@stable
+      - run: brew install xcodegen
+      - run: bash packaging/macos/build-pkg.sh local
+      - uses: actions/upload-artifact@v7.0.0
+        with:
+          name: FlowBridge-macos-universal-local
+          path: build/macos/local/packages/*.pkg
+          if-no-files-found: error
+          retention-days: 14
+      - working-directory: native/macos
+        run: |
+          xcodebuild -project FlowBridge.xcodeproj -scheme FlowBridge -configuration Debug ARCHS="$(uname -m)" CODE_SIGNING_ALLOWED=NO build
+  # Native extension compile is not signing, activation or an interception test.
+  # This workflow is prepared, but is not evidence that external runners ran.

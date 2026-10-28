@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "listen": "127.0.0.1:1081",
+  "proxies": [
+    { "id": "ssh", "kind": "socks5", "endpoint": { "host": "127.0.0.1", "port": 1080 }, "username": null, "password_env": null },
+    { "id": "corporate", "kind": "http_connect", "endpoint": { "host": "proxy.example.invalid", "port": 3128 }, "username": "replace-me", "password_env": "FLOWBRIDGE_PROXY_PASSWORD" }
+  ],
+  "chains": [{ "id": "two-hop", "proxies": ["ssh", "corporate"] }],
+  "rules": [],
+  "default_action": { "type": "chain", "id": "two-hop" },
+  "connect_timeout_ms": 10000,
+  "handshake_timeout_ms": 10000,
+  "idle_timeout_ms": 300000,
+  "max_connections": 512
+}

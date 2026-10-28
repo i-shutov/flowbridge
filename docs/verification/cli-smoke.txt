@@ -1,0 +1,13 @@
+test_application_rules_cannot_silently_run_in_socks_mode (__main__.Smoke.test_application_rules_cannot_silently_run_in_socks_mode) ... ok
+test_block_rule_never_opens_target (__main__.Smoke.test_block_rule_never_opens_target) ... ok
+test_direct_binary_transfer_and_half_close (__main__.Smoke.test_direct_binary_transfer_and_half_close) ... ok
+test_examples_validate_and_capabilities_are_honest (__main__.Smoke.test_examples_validate_and_capabilities_are_honest) ... ok
+test_failed_proxy_never_falls_back_to_direct (__main__.Smoke.test_failed_proxy_never_falls_back_to_direct) ... ok
+test_hostname_reaches_upstream_without_local_dns (__main__.Smoke.test_hostname_reaches_upstream_without_local_dns) ... ok
+test_proxied_loopback_target_is_remote_not_our_listener (__main__.Smoke.test_proxied_loopback_target_is_remote_not_our_listener) ... ok
+test_udp_and_recursion_rejected (__main__.Smoke.test_udp_and_recursion_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.744s
+
+OK

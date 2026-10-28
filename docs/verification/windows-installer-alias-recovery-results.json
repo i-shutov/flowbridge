@@ -1,0 +1,41 @@
+{
+  "environment": "Wine64 on Linux; not native Windows or kernel validation",
+  "prefix": "/workspace/scratch/78d80ff877dc/installer-wine",
+  "installer": "/workspace/scratch/78d80ff877dc/artifacts/FlowBridge-0.2.0-windows-x64-setup.exe",
+  "passed": true,
+  "checks": [
+    {
+      "name": "Final installer matches manifest",
+      "passed": true,
+      "sha256": "6e073a4cf59e657fc95044c065ecaadea754da49f7c868d328f1506eeea95943",
+      "bytes": 2523895
+    },
+    {
+      "name": "Silent install: payload hashes, registry, uninstaller and three Start menu shortcuts",
+      "passed": true,
+      "payload_files": 11
+    },
+    {
+      "name": "Installed CLI capabilities and actual profile validation",
+      "passed": true
+    },
+    {
+      "name": "Installed GUI: real traffic, Apply/Start/Stop, metrics, edits, native export and clean exit",
+      "passed": true,
+      "screenshot": "docs/verification/windows-installer-gui.bmp"
+    },
+    {
+      "name": "Upgrade stays in registered directory despite different /D; profile and unrelated file preserved",
+      "passed": true
+    },
+    {
+      "name": "Actual uninstall removes payload, shortcuts and registration; unrelated file and GUI profile retained",
+      "passed": true,
+      "retained_profile": "/workspace/scratch/78d80ff877dc/installer-wine/drive_c/users/root/AppData/Local/FlowBridge/profile.json",
+      "profile_sha256": "57a11a867ef9ea0b9db0f0ab72ed266c4eed11b7e068b96606ed95a8f611f527"
+    }
+  ],
+  "notes": [
+    "Uninstall was retried separately using the canonical C: Windows path; see windows-installer-canonical-uninstall.txt. Initial Unix-path alias did not complete under Wine. A clean canonical-path roundtrip follows."
+  ]
+}

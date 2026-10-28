@@ -1,0 +1,136 @@
+PASS Final installer matches manifest
+RUN /usr/lib/wine/wine64 reg.exe add HKCU\Software\Wine /v Version /t REG_SZ /d win10 /f
+wine: failed to open L"C:\\windows\\syswow64\\rundll32.exe": c0000135
+wine: configuration in L"/workspace/scratch/78d80ff877dc/installer-wine" has been updated.
+reg: The operation completed successfully
+
+EXIT 0
+RUN /usr/lib/wine/wine64 reg.exe query HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\FlowBridge /reg:64
+reg: Unable to find the specified registry key
+
+EXIT 1
+RUN /usr/lib/wine/wine64 reg.exe query HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\FlowBridge /reg:32
+reg: Unable to find the specified registry key
+
+EXIT 1
+RUN /usr/lib/wine/wine64 /workspace/scratch/78d80ff877dc/artifacts/FlowBridge-0.2.0-windows-x64-setup.exe /S /D=C:\FlowBridgeSmokeInstall
+
+EXIT 0
+RUN /usr/lib/wine/wine64 reg.exe query HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\FlowBridge /reg:64
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\FlowBridge
+    DisplayIcon    REG_SZ    C:\FlowBridgeSmokeInstall\FlowBridge.exe
+    DisplayName    REG_SZ    FlowBridge
+    DisplayVersion    REG_SZ    0.2.0
+    InstallLocation    REG_SZ    C:\FlowBridgeSmokeInstall
+    NoModify    REG_DWORD    0x1
+    NoRepair    REG_DWORD    0x1
+    Publisher    REG_SZ    FlowBridge contributors
+    QuietUninstallString    REG_SZ    "C:\FlowBridgeSmokeInstall\Uninstall.exe" /S
+    UninstallString    REG_SZ    "C:\FlowBridgeSmokeInstall\Uninstall.exe"
+
+
+EXIT 0
+RUN /usr/lib/wine/wine64 reg.exe query HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\FlowBridge /reg:32
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\FlowBridge
+    DisplayIcon    REG_SZ    C:\FlowBridgeSmokeInstall\FlowBridge.exe
+    DisplayName    REG_SZ    FlowBridge
+    DisplayVersion    REG_SZ    0.2.0
+    InstallLocation    REG_SZ    C:\FlowBridgeSmokeInstall
+    NoModify    REG_DWORD    0x1
+    NoRepair    REG_DWORD    0x1
+    Publisher    REG_SZ    FlowBridge contributors
+    QuietUninstallString    REG_SZ    "C:\FlowBridgeSmokeInstall\Uninstall.exe" /S
+    UninstallString    REG_SZ    "C:\FlowBridgeSmokeInstall\Uninstall.exe"
+
+
+EXIT 0
+RUN /usr/lib/wine/wine64 reg.exe query HKCU\Software\FlowBridge /reg:64
+
+HKEY_CURRENT_USER\Software\FlowBridge
+    InstallDir    REG_SZ    C:\FlowBridgeSmokeInstall
+
+
+EXIT 0
+RUN /usr/lib/wine/wine64 reg.exe query HKCU\Software\FlowBridge /reg:32
+
+HKEY_CURRENT_USER\Software\FlowBridge
+    InstallDir    REG_SZ    C:\FlowBridgeSmokeInstall
+
+
+EXIT 0
+PASS Silent install: payload hashes, registry, uninstaller and three Start menu shortcuts
+RUN /usr/lib/wine/wine64 /workspace/scratch/78d80ff877dc/installer-wine/drive_c/FlowBridgeSmokeInstall/flowbridge-cli.exe capabilities
+{
+  "authenticated_process_identity_in_socks_mode": false,
+  "bounded_live_metrics": true,
+  "hot_reload": true,
+  "mode": "explicit_loopback_socks5",
+  "native_ui": "engine_control_and_live_connections",
+  "policy_explanation": true,
+  "proxy_chains": true,
+  "quic": false,
+  "remote_target_dns_when_hostname_supplied": true,
+  "system_dns_interception": false,
+  "system_kill_switch": false,
+  "tcp": true,
+  "tls_to_proxy": false,
+  "transparent_interception": false,
+  "udp": false,
+  "upstream_protocols": [
+    "socks5",
+    "socks4a",
+    "http_connect"
+  ],
+  "version": "0.2.0"
+}
+
+EXIT 0
+RUN /usr/lib/wine/wine64 /workspace/scratch/78d80ff877dc/installer-wine/drive_c/FlowBridgeSmokeInstall/flowbridge-cli.exe validate --config C:\FlowBridgeSmokeInstall\examples\direct.json
+{
+  "chains": 0,
+  "explicit_socks_compatible": true,
+  "ok": true,
+  "proxies": 0,
+  "rules": 0,
+  "version": 1
+}
+
+EXIT 0
+PASS Installed CLI capabilities and actual profile validation
+RUN /usr/lib/wine/wine64 /workspace/scratch/78d80ff877dc/flowbridge/build/windows-gnu/FlowBridgeNativeSmoke.exe C:\FlowBridgeSmokeInstall\FlowBridge.exe /workspace/scratch/78d80ff877dc/flowbridge/docs/verification/windows-installer-gui.bmp
+PASS Windows DLL: traffic, binary payload, half-close, metrics, reload rollback, restart
+PASS native template export: basenames, deduplication, selected unknown hosts via proxy, other apps Direct, optional Block
+PASS Win32 GUI: native pages, SSH editor, Apply, SOCKS4a, preserved edits, Start, real traffic, table, Stop, bounded discovery, presets, clean exit
+
+EXIT 0
+PASS Installed GUI: real traffic, Apply/Start/Stop, metrics, edits, native export and clean exit
+RUN /usr/lib/wine/wine64 /workspace/scratch/78d80ff877dc/artifacts/FlowBridge-0.2.0-windows-x64-setup.exe /S /D=C:\FlowBridgeMustNotMove
+
+EXIT 0
+RUN /usr/lib/wine/wine64 reg.exe query HKCU\Software\FlowBridge /reg:64
+
+HKEY_CURRENT_USER\Software\FlowBridge
+    InstallDir    REG_SZ    C:\FlowBridgeSmokeInstall
+
+
+EXIT 0
+RUN /usr/lib/wine/wine64 reg.exe query HKCU\Software\FlowBridge /reg:32
+
+HKEY_CURRENT_USER\Software\FlowBridge
+    InstallDir    REG_SZ    C:\FlowBridgeSmokeInstall
+
+
+EXIT 0
+PASS Upgrade stays in registered directory despite different /D; profile and unrelated file preserved
+RUN /usr/lib/wine/wine64 /workspace/scratch/78d80ff877dc/installer-wine/drive_c/FlowBridgeSmokeInstall/Uninstall.exe /S
+
+EXIT 0
+Traceback (most recent call last):
+  File "/workspace/scratch/78d80ff877dc/flowbridge/tests/windows_installer_smoke.py", line 132, in main
+    wait_until(lambda: not (install / "FlowBridge.exe").exists() and not (install / "Uninstall.exe").exists(), "uninstaller completion")
+  File "/workspace/scratch/78d80ff877dc/flowbridge/tests/windows_installer_smoke.py", line 92, in wait_until
+    raise RuntimeError("Timed out: " + description)
+RuntimeError: Timed out: uninstaller completion
+

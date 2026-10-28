@@ -1,0 +1,14 @@
+/target/
+/dist/
+/build/
+*.log
+.DS_Store
+.env
+*.pfx
+*.p12
+native/**/build/
+native/**/.build/
+native/**/DerivedData/
+native/macos/lib/
+native/macos/*.xcodeproj/
+

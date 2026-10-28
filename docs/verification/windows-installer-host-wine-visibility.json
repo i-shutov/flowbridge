@@ -1,0 +1,34 @@
+{
+  "host_before": [
+    "FlowBridge.exe",
+    "LICENSE",
+    "README.txt",
+    "Uninstall.exe",
+    "examples",
+    "flowbridge-cli.exe",
+    "flowbridge_ffi.dll",
+    "keep-me.txt",
+    "licenses",
+    "resources"
+  ],
+  "windows_files": {
+    "exit": 0,
+    "output": "Volume in drive C has no label.\r\nVolume Serial Number is 4300-0000\r\n\r\nDirectory of C:\\FlowBridgeSmokeInstall\r\n\r\n10/28/2026  06:44 AM    <DIR>          .\r\n10/28/2026  06:45 AM    <DIR>          ..\r\n10/28/2026  06:46 AM    <DIR>          examples\r\n10/28/2026  06:36 AM         3,708,470 FlowBridge.exe\r\n10/28/2026  06:35 AM         2,906,252 flowbridge_ffi.dll\r\n10/28/2026  06:30 AM         3,019,861 flowbridge-cli.exe\r\n10/28/2026  06:46 AM                42 keep-me.txt\r\n10/28/2026  06:04 AM               816 LICENSE\r\n10/28/2026  06:46 AM    <DIR>          licenses\r\n10/28/2026  06:35 AM            10,197 README.txt\r\n10/28/2026  06:46 AM    <DIR>          resources\r\n10/28/2026  06:46 AM           131,135 Uninstall.exe\r\n       7 files                9,776,773 bytes\r\n       5 directories      9,805,336,576 bytes free\r\n\r\n"
+  },
+  "windows_registration": {
+    "exit": 1,
+    "output": "reg: Unable to find the specified registry key\r\n"
+  },
+  "host_after": [
+    "FlowBridge.exe",
+    "LICENSE",
+    "README.txt",
+    "Uninstall.exe",
+    "examples",
+    "flowbridge-cli.exe",
+    "flowbridge_ffi.dll",
+    "keep-me.txt",
+    "licenses",
+    "resources"
+  ]
+}

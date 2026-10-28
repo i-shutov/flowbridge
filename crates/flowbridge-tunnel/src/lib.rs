@@ -1,0 +1,1249 @@
+//! Managed OpenSSH dynamic forwarding. No shell, password storage, terminal or
+//! implicit host-key enrollment. Unix callers must explicitly stop: abrupt parent
+//! process death can leave OpenSSH running. Windows uses a kill-on-close job.
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::VecDeque,
+    io::{self, Read, Write},
+    net::{SocketAddr, TcpListener, TcpStream},
+    process::{Child, ChildStderr, Command, Stdio},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Condvar, Mutex, MutexGuard,
+    },
+    thread,
+    time::{Duration, Instant},
+};
+
+const MAX_EVENTS: usize = 256;
+const MAX_STDERR_LINES: usize = 32;
+const MAX_LINE: usize = 2048;
+#[derive(Debug, thiserror::Error)]
+#[error("{0}")]
+pub struct TunnelError(pub String);
+impl From<io::Error> for TunnelError {
+    fn from(e: io::Error) -> Self {
+        Self(e.to_string())
+    }
+}
+fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Config {
+    pub host: String,
+    pub user: String,
+    pub port: u16,
+    pub local_port: u16,
+    pub identity_file: Option<String>,
+    pub known_hosts_file: Option<String>,
+    pub compression: bool,
+    pub server_alive_interval_secs: u64,
+    pub server_alive_count_max: u32,
+    pub connect_timeout_secs: u64,
+    pub health_check_interval_ms: u64,
+    pub health_check_timeout_ms: u64,
+    pub startup_timeout_ms: u64,
+    pub restart_initial_delay_ms: u64,
+    pub restart_max_delay_ms: u64,
+    pub max_restarts: u64,
+}
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            host: String::new(),
+            user: String::new(),
+            port: 22,
+            local_port: 1080,
+            identity_file: None,
+            known_hosts_file: None,
+            compression: false,
+            server_alive_interval_secs: 15,
+            server_alive_count_max: 3,
+            connect_timeout_secs: 10,
+            health_check_interval_ms: 1000,
+            health_check_timeout_ms: 1000,
+            startup_timeout_ms: 15000,
+            restart_initial_delay_ms: 1000,
+            restart_max_delay_ms: 30000,
+            max_restarts: 0,
+        }
+    }
+}
+impl Config {
+    pub fn from_json(text: &str) -> Result<Self, TunnelError> {
+        if text.len() > 65536 {
+            return Err(TunnelError("SSH configuration exceeds64KiB".into()));
+        }
+        let config: Self = serde_json::from_str(text).map_err(|e| TunnelError(e.to_string()))?;
+        config.validate()?;
+        Ok(config)
+    }
+    pub fn validate(&self) -> Result<(), TunnelError> {
+        if self.host.is_empty()
+            || self.host.len() > 253
+            || self.host.starts_with('-')
+            || !self
+                .host
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b".-:_[]%".contains(&b))
+        {
+            return Err(TunnelError(
+                "SSH host must be an ASCII hostname or IP without whitespace, options, or a URI"
+                    .into(),
+            ));
+        }
+        if self.user.is_empty()
+            || self.user.len() > 128
+            || self.user.starts_with('-')
+            || !self
+                .user
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+        {
+            return Err(TunnelError(
+                "SSH user must contain1..128 ASCII letters, digits, dots, underscores or hyphens"
+                    .into(),
+            ));
+        }
+        if self.port == 0 || self.local_port == 0 {
+            return Err(TunnelError(
+                "SSH and local SOCKS ports must be nonzero".into(),
+            ));
+        }
+        for path in [&self.identity_file, &self.known_hosts_file]
+            .into_iter()
+            .flatten()
+        {
+            if path.is_empty()
+                || path.len() > 4096
+                || path.chars().any(char::is_control)
+                || path.contains('"')
+            {
+                return Err(TunnelError(
+                    "SSH file paths must be bounded and contain no controls or quotes".into(),
+                ));
+            }
+        }
+        for (name, value, min, max) in [
+            (
+                "server_alive_interval_secs",
+                self.server_alive_interval_secs,
+                1,
+                3600,
+            ),
+            (
+                "server_alive_count_max",
+                u64::from(self.server_alive_count_max),
+                1,
+                100,
+            ),
+            ("connect_timeout_secs", self.connect_timeout_secs, 1, 120),
+            (
+                "health_check_interval_ms",
+                self.health_check_interval_ms,
+                100,
+                60000,
+            ),
+            (
+                "health_check_timeout_ms",
+                self.health_check_timeout_ms,
+                100,
+                10000,
+            ),
+            ("startup_timeout_ms", self.startup_timeout_ms, 1000, 120000),
+            (
+                "restart_initial_delay_ms",
+                self.restart_initial_delay_ms,
+                100,
+                60000,
+            ),
+            (
+                "restart_max_delay_ms",
+                self.restart_max_delay_ms,
+                self.restart_initial_delay_ms,
+                300000,
+            ),
+            ("max_restarts", self.max_restarts, 0, 100000),
+        ] {
+            if value < min || value > max {
+                return Err(TunnelError(format!("{name} must be between{min} and{max}")));
+            }
+        }
+        Ok(())
+    }
+    /// Arguments are passed directly to OpenSSH; no command shell is involved.
+    pub fn arguments(&self) -> Vec<String> {
+        let mut args = vec![
+            "-F".into(),
+            "none".into(),
+            "-N".into(),
+            "-T".into(),
+            "-n".into(),
+            "-a".into(),
+            "-x".into(),
+            "-D".into(),
+            format!("127.0.0.1:{}", self.local_port),
+            "-p".into(),
+            self.port.to_string(),
+            "-l".into(),
+            self.user.clone(),
+        ];
+        for option in [
+            "BatchMode=yes".into(),
+            "StrictHostKeyChecking=yes".into(),
+            "ExitOnForwardFailure=yes".into(),
+            "PreferredAuthentications=publickey".into(),
+            "PasswordAuthentication=no".into(),
+            "KbdInteractiveAuthentication=no".into(),
+            "ControlMaster=no".into(),
+            "ControlPath=none".into(),
+            format!("ServerAliveInterval={}", self.server_alive_interval_secs),
+            format!("ServerAliveCountMax={}", self.server_alive_count_max),
+            format!("ConnectTimeout={}", self.connect_timeout_secs),
+            "ConnectionAttempts=1".into(),
+            "LogLevel=ERROR".into(),
+            format!(
+                "Compression={}",
+                if self.compression { "yes" } else { "no" }
+            ),
+        ] {
+            args.push("-o".into());
+            args.push(option);
+        }
+        if let Some(path) = &self.identity_file {
+            args.extend(["-i".into(), path.clone()]);
+        }
+        if let Some(path) = &self.known_hosts_file {
+            // -o values still use OpenSSH configuration grammar even though
+            // Command avoids the shell. Quote spaces and protect backslashes.
+            let path = if cfg!(windows) {
+                path.replace('\\', "/")
+            } else {
+                path.replace('\\', "\\\\")
+            };
+            args.extend(["-o".into(), format!("UserKnownHostsFile=\"{path}\"")]);
+        }
+        args.push(self.host.clone());
+        args
+    }
+}
+#[derive(Debug, Clone, Serialize)]
+pub struct Status {
+    pub state: String,
+    pub pid: Option<u32>,
+    pub local_port: u16,
+    pub restarts: u64,
+    pub attempt: u64,
+    pub last_error: Option<String>,
+    pub next_retry_ms: u64,
+    pub parent_exit_cleanup: &'static str,
+}
+#[derive(Debug, Clone, Serialize)]
+pub struct Event {
+    pub seq: u64,
+    pub level: String,
+    pub message: String,
+}
+#[derive(Debug, Clone, Serialize)]
+pub struct Snapshot {
+    pub status: Status,
+    pub events: Vec<Event>,
+    pub stderr: Vec<String>,
+}
+struct State {
+    status: Status,
+    events: VecDeque<Event>,
+    stderr: VecDeque<String>,
+    next_seq: u64,
+    fatal: Option<String>,
+}
+impl State {
+    fn event(&mut self, level: &str, message: impl Into<String>) {
+        if self.events.len() == MAX_EVENTS {
+            self.events.pop_front();
+        }
+        let seq = self.next_seq;
+        self.next_seq = self.next_seq.saturating_add(1);
+        self.events.push_back(Event {
+            seq,
+            level: level.into(),
+            message: message.into(),
+        });
+    }
+    fn failed(&mut self, error: impl Into<String>) {
+        let error = error.into();
+        self.status.state = "failed".into();
+        self.status.pid = None;
+        self.status.next_retry_ms = 0;
+        self.status.last_error = Some(error.clone());
+        self.event("error", error);
+    }
+}
+struct Control {
+    stop: AtomicBool,
+    mutex: Mutex<bool>,
+    changed: Condvar,
+}
+impl Control {
+    fn new() -> Self {
+        Self {
+            stop: AtomicBool::new(false),
+            mutex: Mutex::new(false),
+            changed: Condvar::new(),
+        }
+    }
+    fn cancelled(&self) -> bool {
+        self.stop.load(Ordering::Acquire)
+    }
+    fn cancel(&self) {
+        self.stop.store(true, Ordering::Release);
+        *lock(&self.mutex) = true;
+        self.changed.notify_all();
+    }
+    fn wait(&self, duration: Duration) -> bool {
+        let guard = lock(&self.mutex);
+        let _ = self
+            .changed
+            .wait_timeout_while(guard, duration, |stopped| !*stopped)
+            .unwrap_or_else(|e| e.into_inner());
+        self.cancelled()
+    }
+}
+type Launcher = Arc<dyn Fn(&Config) -> io::Result<Command> + Send + Sync>;
+struct Running {
+    control: Arc<Control>,
+    thread: thread::JoinHandle<()>,
+}
+pub struct Supervisor {
+    config: Config,
+    state: Arc<Mutex<State>>,
+    operation: Mutex<()>,
+    running: Mutex<Option<Running>>,
+    launcher: Launcher,
+}
+impl Supervisor {
+    pub fn new(config: Config) -> Result<Self, TunnelError> {
+        Self::with_launcher(
+            config,
+            Arc::new(|config| {
+                // Native macOS capture exempts the observed code-signing ID of
+                // this exact system client; PATH lookup could select a different
+                // binary and invalidate that loop-prevention rule.
+                let executable = if cfg!(target_os = "macos") {
+                    "/usr/bin/ssh"
+                } else {
+                    "ssh"
+                };
+                let mut command = Command::new(executable);
+                command.args(config.arguments());
+                Ok(command)
+            }),
+        )
+    }
+    fn with_launcher(config: Config, launcher: Launcher) -> Result<Self, TunnelError> {
+        config.validate()?;
+        let status = Status {
+            state: "stopped".into(),
+            pid: None,
+            local_port: config.local_port,
+            restarts: 0,
+            attempt: 0,
+            last_error: None,
+            next_retry_ms: 0,
+            parent_exit_cleanup: if cfg!(windows) {
+                "windows_job_object"
+            } else {
+                "explicit_stop_only"
+            },
+        };
+        Ok(Self {
+            config,
+            state: Arc::new(Mutex::new(State {
+                status,
+                events: VecDeque::new(),
+                stderr: VecDeque::new(),
+                next_seq: 1,
+                fatal: None,
+            })),
+            operation: Mutex::new(()),
+            running: Mutex::new(None),
+            launcher,
+        })
+    }
+    pub fn from_json(text: &str) -> Result<Self, TunnelError> {
+        Self::new(Config::from_json(text)?)
+    }
+    pub fn snapshot(&self) -> Snapshot {
+        let s = lock(&self.state);
+        Snapshot {
+            status: s.status.clone(),
+            events: s.events.iter().cloned().collect(),
+            stderr: s.stderr.iter().cloned().collect(),
+        }
+    }
+    pub fn start(&self) -> Result<Snapshot, TunnelError> {
+        let _operation = lock(&self.operation);
+        {
+            let s = lock(&self.state);
+            if matches!(
+                s.status.state.as_str(),
+                "starting" | "ready" | "reconnecting"
+            ) {
+                drop(s);
+                return Ok(self.snapshot());
+            }
+        }
+        if let Some(previous) = lock(&self.running).take() {
+            previous.control.cancel();
+            let _ = previous.thread.join();
+        }
+        {
+            let mut s = lock(&self.state);
+            s.status.state = "starting".into();
+            s.status.pid = None;
+            s.status.attempt = 0;
+            s.status.restarts = 0;
+            s.status.last_error = None;
+            s.status.next_retry_ms = 0;
+            s.fatal = None;
+            s.event("info", "starting managed OpenSSH dynamic forwarding");
+        }
+        let config = self.config.clone();
+        let state = self.state.clone();
+        let control = Arc::new(Control::new());
+        let task_control = control.clone();
+        let launcher = self.launcher.clone();
+        let worker = thread::Builder::new()
+            .name("flowbridge-ssh".into())
+            .spawn(move || {
+                let failure_state = state.clone();
+                if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    supervise(config, state, task_control, launcher)
+                }))
+                .is_err()
+                {
+                    lock(&failure_state).failed("SSH supervisor worker panicked");
+                }
+            });
+        match worker {
+            Ok(worker) => {
+                *lock(&self.running) = Some(Running {
+                    control,
+                    thread: worker,
+                })
+            }
+            Err(error) => {
+                lock(&self.state).failed(format!("could not launch SSH supervisor: {error}"));
+                return Err(error.into());
+            }
+        }
+        Ok(self.snapshot())
+    }
+    pub fn stop(&self) -> Result<Snapshot, TunnelError> {
+        let _operation = lock(&self.operation);
+        if let Some(worker) = lock(&self.running).take() {
+            worker.control.cancel();
+            if worker.thread.join().is_err() {
+                lock(&self.state).failed("SSH supervisor panicked");
+                return Err(TunnelError("SSH supervisor panicked".into()));
+            }
+        }
+        {
+            let mut s = lock(&self.state);
+            s.status.state = "stopped".into();
+            s.status.pid = None;
+            s.status.next_retry_ms = 0;
+            s.status.last_error = None;
+            s.event("info", "managed SSH stopped; restart disabled");
+        }
+        Ok(self.snapshot())
+    }
+}
+impl Drop for Supervisor {
+    fn drop(&mut self) {
+        let _ = self.stop();
+    }
+}
+
+fn stderr_line(state: &Arc<Mutex<State>>, bytes: &[u8]) {
+    let mut text = String::from_utf8_lossy(bytes)
+        .chars()
+        .filter(|c| !c.is_control() || *c == '\t')
+        .take(MAX_LINE)
+        .collect::<String>();
+    if text.len() > MAX_LINE {
+        let mut boundary = MAX_LINE;
+        while !text.is_char_boundary(boundary) {
+            boundary -= 1;
+        }
+        text.truncate(boundary);
+    }
+    if text.is_empty() {
+        return;
+    }
+    let lower = text.to_ascii_lowercase();
+    let fatal = if lower.contains("host key verification failed")
+        || lower.contains("remote host identification has changed")
+        || lower.contains("strict checking")
+    {
+        Some("SSH host key is missing or changed. Verify the server fingerprint through a trusted channel, then enroll it in the selected known_hosts file (or ~/.ssh/known_hosts) before starting again.")
+    } else if lower.contains("permission denied (")
+        || lower.contains("no supported authentication methods")
+    {
+        Some("SSH public-key authentication failed. Select an enrolled identity file or load its key into the SSH agent; password prompts are disabled.")
+    } else {
+        None
+    };
+    let mut s = lock(state);
+    if let Some(fatal) = fatal {
+        s.fatal = Some(fatal.into());
+        s.status.last_error = Some(fatal.into());
+    }
+    if s.stderr.len() == MAX_STDERR_LINES {
+        s.stderr.pop_front();
+    }
+    s.stderr.push_back(text.clone());
+    s.event("warn", format!("ssh: {text}"));
+}
+#[cfg(unix)]
+fn prepare_stderr(pipe: &ChildStderr) -> io::Result<()> {
+    use std::os::fd::AsRawFd;
+    let fd = pipe.as_raw_fd();
+    // Only this reader owns the read end. Nonblocking mode bounds cancellation
+    // even when a descendant retains the child's inherited write end.
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+#[cfg(windows)]
+fn prepare_stderr(_pipe: &ChildStderr) -> io::Result<()> {
+    Ok(())
+}
+#[cfg(unix)]
+fn read_stderr(pipe: &mut ChildStderr, buffer: &mut [u8]) -> io::Result<usize> {
+    pipe.read(buffer)
+}
+#[cfg(windows)]
+fn read_stderr(pipe: &mut ChildStderr, buffer: &mut [u8]) -> io::Result<usize> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::System::Pipes::PeekNamedPipe;
+    let mut available = 0;
+    if unsafe {
+        PeekNamedPipe(
+            pipe.as_raw_handle(),
+            std::ptr::null_mut(),
+            0,
+            std::ptr::null_mut(),
+            &mut available,
+            std::ptr::null_mut(),
+        )
+    } == 0
+    {
+        return Err(io::Error::last_os_error());
+    }
+    if available == 0 {
+        return Err(io::ErrorKind::WouldBlock.into());
+    }
+    // This is the only pipe reader; bytes observed by Peek remain available.
+    let length = buffer.len().min(available as usize);
+    pipe.read(&mut buffer[..length])
+}
+fn capture_stderr(mut pipe: ChildStderr, state: Arc<Mutex<State>>, cancel: Arc<AtomicBool>) {
+    let mut chunk = [0u8; 1024];
+    let mut line = Vec::with_capacity(MAX_LINE);
+    let mut final_bytes = 0;
+    loop {
+        let cancelled = cancel.load(Ordering::Acquire);
+        // Preserve final authentication/host-key errors already in the pipe,
+        // but never let a still-writing descendant postpone Stop indefinitely.
+        if cancelled && final_bytes >= 65536 {
+            break;
+        }
+        match read_stderr(&mut pipe, &mut chunk) {
+            Ok(0) => break,
+            Ok(n) => {
+                if cancelled {
+                    final_bytes += n;
+                }
+                for &byte in &chunk[..n] {
+                    if byte == b'\n' || line.len() == MAX_LINE {
+                        stderr_line(&state, &line);
+                        line.clear();
+                    }
+                    if byte != b'\n' {
+                        line.push(byte);
+                    }
+                }
+            }
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                if cancelled {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(20));
+            }
+            Err(_) => break,
+        }
+    }
+    if !line.is_empty() {
+        stderr_line(&state, &line);
+    }
+}
+fn health(config: &Config, control: &Control, max_deadline: Instant) -> bool {
+    let deadline =
+        (Instant::now() + Duration::from_millis(config.health_check_timeout_ms)).min(max_deadline);
+    let address = SocketAddr::from(([127, 0, 0, 1], config.local_port));
+    while Instant::now() < deadline && !control.cancelled() {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        let slice = remaining.min(Duration::from_millis(100));
+        if slice.is_zero() {
+            break;
+        }
+        if let Ok(mut stream) = TcpStream::connect_timeout(&address, slice) {
+            let result = (|| -> io::Result<bool> {
+                stream.set_read_timeout(Some(slice))?;
+                stream.set_write_timeout(Some(slice))?;
+                stream.write_all(&[5, 1, 0])?;
+                let mut response = [0; 2];
+                stream.read_exact(&mut response)?;
+                Ok(response == [5, 0])
+            })();
+            if matches!(result, Ok(true)) {
+                return !control.cancelled();
+            }
+            // Always discard a failed health socket; Windows timeout state is
+            // indeterminate and must never be reused.
+        }
+        if control.wait(Duration::from_millis(20)) {
+            break;
+        }
+    }
+    false
+}
+
+#[cfg(windows)]
+struct Job(usize);
+#[cfg(windows)]
+impl Job {
+    fn attach(child: &Child) -> io::Result<Self> {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::{
+            Foundation::CloseHandle,
+            System::JobObjects::{
+                AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+                SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+                JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+            },
+        };
+        let handle = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+        if handle.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { std::mem::zeroed() };
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if unsafe {
+            SetInformationJobObject(
+                handle,
+                JobObjectExtendedLimitInformation,
+                (&info as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+                std::mem::size_of_val(&info) as u32,
+            )
+        } == 0
+            || unsafe { AssignProcessToJobObject(handle, child.as_raw_handle()) } == 0
+        {
+            let error = io::Error::last_os_error();
+            unsafe { CloseHandle(handle) };
+            return Err(error);
+        }
+        Ok(Self(handle as usize))
+    }
+}
+#[cfg(windows)]
+impl Drop for Job {
+    fn drop(&mut self) {
+        unsafe { windows_sys::Win32::Foundation::CloseHandle(self.0 as _) };
+    }
+}
+struct ChildGuard {
+    child: Child,
+    #[cfg(windows)]
+    job: Option<Job>,
+}
+impl ChildGuard {
+    fn spawn(mut command: Command) -> io::Result<Self> {
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .env("LC_ALL", "C")
+            .env("SSH_ASKPASS_REQUIRE", "never");
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x0800_0000);
+        }
+        #[allow(unused_mut)] // Windows job-assignment failure must terminate it.
+        let mut child = command.spawn()?;
+        #[cfg(windows)]
+        let job = match Job::attach(&child) {
+            Ok(job) => job,
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(error);
+            }
+        };
+        Ok(Self {
+            child,
+            #[cfg(windows)]
+            job: Some(job),
+        })
+    }
+    fn terminate(&mut self) {
+        // Kill all processes in our own job before waiting for diagnostics:
+        // descendants can otherwise keep stderr open after ssh has exited.
+        #[cfg(windows)]
+        drop(self.job.take());
+        if !matches!(self.child.try_wait(), Ok(Some(_))) {
+            let _ = self.child.kill();
+        }
+        let _ = self.child.wait();
+    }
+}
+impl Drop for ChildGuard {
+    fn drop(&mut self) {
+        self.terminate();
+    }
+}
+fn supervise(config: Config, state: Arc<Mutex<State>>, control: Arc<Control>, launcher: Launcher) {
+    // Refuse an existing service rather than falsely identifying its SOCKS reply
+    // as readiness for our own child. OpenSSH also uses ExitOnForwardFailure.
+    match TcpListener::bind(("127.0.0.1", config.local_port)) {
+        Ok(probe) => drop(probe),
+        Err(error) => {
+            lock(&state).failed(format!(
+                "local SOCKS port {} is unavailable: {error}; choose a free port",
+                config.local_port
+            ));
+            return;
+        }
+    }
+    let mut failures = 0u32;
+    while !control.cancelled() {
+        {
+            let mut s = lock(&state);
+            s.status.attempt = s.status.attempt.saturating_add(1);
+            s.status.next_retry_ms = 0;
+            s.fatal = None;
+        }
+        let mut child = match launcher(&config).and_then(ChildGuard::spawn) {
+            Ok(child) => child,
+            Err(error) => {
+                lock(&state).failed(format!("could not start OpenSSH: {error}. Install the OpenSSH client and make ssh available on PATH."));
+                return;
+            }
+        };
+        {
+            let mut s = lock(&state);
+            s.status.pid = Some(child.child.id());
+            s.event(
+                "info",
+                format!("OpenSSH child {} launched", child.child.id()),
+            );
+        }
+        let output_cancel = Arc::new(AtomicBool::new(false));
+        let output = if let Some(pipe) = child.child.stderr.take() {
+            if let Err(error) = prepare_stderr(&pipe) {
+                child.terminate();
+                lock(&state).failed(format!("could not prepare SSH diagnostics: {error}"));
+                return;
+            }
+            match thread::Builder::new()
+                .name("flowbridge-ssh-stderr".into())
+                .spawn({
+                    let state = state.clone();
+                    let cancel = output_cancel.clone();
+                    move || capture_stderr(pipe, state, cancel)
+                }) {
+                Ok(worker) => Some(worker),
+                Err(error) => {
+                    child.terminate();
+                    lock(&state).failed(format!("could not capture SSH diagnostics: {error}"));
+                    return;
+                }
+            }
+        } else {
+            None
+        };
+        let started = Instant::now();
+        let mut was_ready = false;
+        let mut next_check = Instant::now();
+        let error = loop {
+            if control.cancelled() {
+                break None;
+            }
+            match child.child.try_wait() {
+                Ok(Some(exit)) => break Some(format!("OpenSSH exited with {exit}")),
+                Err(error) => break Some(format!("could not inspect SSH child: {error}")),
+                Ok(None) => {}
+            }
+            if Instant::now() >= next_check {
+                let health_deadline = if was_ready {
+                    Instant::now() + Duration::from_millis(config.health_check_timeout_ms)
+                } else {
+                    started + Duration::from_millis(config.startup_timeout_ms)
+                };
+                let healthy = health(&config, &control, health_deadline);
+                if control.cancelled() {
+                    break None;
+                }
+                if healthy && matches!(child.child.try_wait(), Ok(None)) {
+                    if !was_ready {
+                        let mut s = lock(&state);
+                        s.status.state = "ready".into();
+                        s.status.last_error = None;
+                        s.event("info","OpenSSH is alive and local SOCKS5 greeting is ready; existing TCP sessions do not survive a later SSH restart");
+                        was_ready = true;
+                        failures = 0;
+                    }
+                } else if was_ready {
+                    break Some("local SOCKS health check failed".into());
+                } else if started.elapsed() >= Duration::from_millis(config.startup_timeout_ms) {
+                    break Some("SSH startup deadline expired before SOCKS readiness".into());
+                }
+                next_check =
+                    Instant::now() + Duration::from_millis(config.health_check_interval_ms);
+            }
+            if control.wait(Duration::from_millis(25)) {
+                break None;
+            }
+        };
+        child.terminate();
+        output_cancel.store(true, Ordering::Release);
+        if let Some(output) = output {
+            let _ = output.join();
+        }
+        drop(child);
+        {
+            lock(&state).status.pid = None;
+        }
+        if control.cancelled() {
+            break;
+        }
+        let mut s = lock(&state);
+        let error = s
+            .fatal
+            .clone()
+            .or(error)
+            .unwrap_or_else(|| "SSH stopped unexpectedly".into());
+        if s.fatal.is_some()
+            || (config.max_restarts > 0 && s.status.restarts >= config.max_restarts)
+        {
+            s.failed(error);
+            return;
+        }
+        let delay = config
+            .restart_initial_delay_ms
+            .saturating_mul(1u64 << failures.min(20))
+            .min(config.restart_max_delay_ms);
+        failures = failures.saturating_add(1);
+        s.status.state = "reconnecting".into();
+        s.status.last_error = Some(error.clone());
+        s.status.next_retry_ms = delay;
+        s.event("warn", format!("{error}; restarting in {delay}ms"));
+        drop(s);
+        if control.wait(Duration::from_millis(delay)) {
+            break;
+        }
+        let mut s = lock(&state);
+        s.status.restarts = s.status.restarts.saturating_add(1);
+    }
+    let mut s = lock(&state);
+    s.status.state = "stopped".into();
+    s.status.pid = None;
+    s.status.next_retry_ms = 0;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::AtomicUsize;
+    fn config() -> Config {
+        // Keep listener ports below the platform's client ephemeral range:
+        // health probes in parallel tests otherwise can consume a just-released
+        // temporary listener port before its fake child binds it.
+        static NEXT: AtomicUsize = AtomicUsize::new(18000);
+        let local_port = loop {
+            let port = NEXT.fetch_add(1, Ordering::SeqCst) as u16;
+            if TcpListener::bind(("127.0.0.1", port)).is_ok() {
+                break port;
+            }
+        };
+        Config {
+            host: "server.example".into(),
+            user: "alice".into(),
+            local_port,
+            health_check_interval_ms: 100,
+            health_check_timeout_ms: 100,
+            startup_timeout_ms: 1000,
+            restart_initial_delay_ms: 100,
+            restart_max_delay_ms: 200,
+            max_restarts: 2,
+            ..Config::default()
+        }
+    }
+    fn command(config: &Config, mode: &str) -> Command {
+        let mut command = Command::new(std::env::current_exe().unwrap());
+        command
+            .args(["--exact", "tests::fake_child_entry", "--nocapture"])
+            .env("FLOWBRIDGE_FAKE_SSH_MODE", mode)
+            .env("FLOWBRIDGE_FAKE_SSH_PORT", config.local_port.to_string());
+        command
+    }
+    fn supervisor(config: Config, mode: &'static str) -> Supervisor {
+        Supervisor::with_launcher(config, Arc::new(move |config| Ok(command(config, mode))))
+            .unwrap()
+    }
+    fn wait(supervisor: &Supervisor, mut check: impl FnMut(&Snapshot) -> bool) -> Snapshot {
+        let deadline = Instant::now() + Duration::from_secs(6);
+        loop {
+            let snapshot = supervisor.snapshot();
+            if check(&snapshot) {
+                return snapshot;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "state did not settle: {snapshot:?}"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+    #[test]
+    fn fake_child_entry() {
+        let Ok(mode) = std::env::var("FLOWBRIDGE_FAKE_SSH_MODE") else {
+            return;
+        };
+        if mode == "held_stderr" {
+            eprintln!("descendant diagnostic writer is alive");
+            thread::sleep(Duration::from_millis(1500));
+            return;
+        }
+        if mode == "descendant_stderr" {
+            // The grandchild inherits only this fake child's diagnostic pipe.
+            // It outlives its parent without involving any unrelated process.
+            let mut descendant = Command::new(std::env::current_exe().unwrap());
+            descendant
+                .args(["--exact", "tests::fake_child_entry", "--nocapture"])
+                .env("FLOWBRIDGE_FAKE_SSH_MODE", "held_stderr")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::inherit());
+            // Intentionally outlive this fake parent: the regression requires
+            // an inherited writer after parent exit. It exits in 1.5 seconds.
+            #[allow(clippy::zombie_processes)]
+            let _child = descendant.spawn().unwrap();
+            thread::sleep(Duration::from_millis(200));
+            return;
+        }
+        if mode == "hostkey" {
+            eprintln!("Host key verification failed.");
+            std::process::exit(255);
+        }
+        if mode == "auth" {
+            eprintln!("alice@server: Permission denied (publickey).");
+            std::process::exit(255);
+        }
+        if mode == "exit" {
+            eprintln!("network connection closed");
+            std::process::exit(75);
+        }
+        if mode == "sleep" {
+            thread::sleep(Duration::from_secs(30));
+            return;
+        }
+        if mode == "spam" {
+            for _ in 0..600 {
+                eprintln!("{}", "diagnostic".repeat(300));
+            }
+        }
+        let port: u16 = std::env::var("FLOWBRIDGE_FAKE_SSH_PORT")
+            .unwrap()
+            .parse()
+            .unwrap();
+        let listener = TcpListener::bind(("127.0.0.1", port)).unwrap();
+        let mut count = 0;
+        for accepted in listener.incoming() {
+            let mut stream = accepted.unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(1)))
+                .unwrap();
+            let mut greeting = [0; 3];
+            if stream.read_exact(&mut greeting).is_err() {
+                continue;
+            }
+            assert_eq!(greeting, [5, 1, 0]);
+            count += 1;
+            if mode == "ready_then_stall" && count > 2 {
+                let _ = stream.write_all(&[5, 255]);
+            } else {
+                let _ = stream.write_all(&[5, 0]);
+            }
+            // Health sockets close after reading the greeting. Wait for that
+            // EOF so the mock server does not accumulate listener-port TIME_WAIT
+            // entries; real OpenSSH also configures server socket reuse.
+            let mut eof = [0u8; 1];
+            let _ = stream.read(&mut eof);
+            if mode == "exit_after_ready" && count >= 3 {
+                std::process::exit(76);
+            }
+        }
+    }
+    #[test]
+    fn strict_config_and_arguments_do_not_allow_shell_or_host_key_overrides() {
+        let config=Config::from_json(r#"{"host":"server.example","user":"alice","identity_file":"/keys/with space/key","known_hosts_file":"/keys/known hosts","compression":true}"#).unwrap();
+        assert_eq!(config.port, 22);
+        assert_eq!(config.local_port, 1080);
+        assert_eq!(config.max_restarts, 0);
+        let args = config.arguments();
+        for option in [
+            "StrictHostKeyChecking=yes",
+            "BatchMode=yes",
+            "ExitOnForwardFailure=yes",
+            "PreferredAuthentications=publickey",
+            "PasswordAuthentication=no",
+            "ServerAliveInterval=15",
+            "ServerAliveCountMax=3",
+            "Compression=yes",
+        ] {
+            assert!(args.iter().any(|arg| arg == option));
+        }
+        assert!(args.windows(2).any(|pair| pair == ["-F", "none"]));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-i", "/keys/with space/key"]));
+        assert!(args
+            .iter()
+            .any(|arg| arg == "UserKnownHostsFile=\"/keys/known hosts\""));
+        assert_eq!(args.last().unwrap(), "server.example");
+        for text in [
+            r#"{"host":"server","user":"alice","password":"secret"}"#,
+            r#"{"host":"-oProxyCommand=x","user":"alice"}"#,
+            r#"{"host":"server;touch /tmp/x","user":"alice"}"#,
+            r#"{"host":"server","user":"user\nmalformed"}"#,
+            r#"{"host":"server","user":"alice","local_port":0}"#,
+            r#"{"host":"server","user":"alice","restart_initial_delay_ms":5000,"restart_max_delay_ms":100}"#,
+        ] {
+            assert!(Config::from_json(text).is_err(), "must reject {text}");
+        }
+    }
+    #[test]
+    fn readiness_requires_child_and_socks_and_stop_reaps_without_restart() {
+        let config = config();
+        let port = config.local_port;
+        let supervisor = supervisor(config, "healthy");
+        let start = supervisor.start().unwrap();
+        assert!(matches!(start.status.state.as_str(), "starting" | "ready"));
+        let ready = wait(&supervisor, |s| s.status.state == "ready");
+        assert_eq!(ready.status.attempt, 1);
+        assert_eq!(ready.status.restarts, 0);
+        let pid = ready.status.pid.unwrap();
+        let started = Instant::now();
+        assert_eq!(supervisor.stop().unwrap().status.state, "stopped");
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert!(TcpListener::bind(("127.0.0.1", port)).is_ok());
+        thread::sleep(Duration::from_millis(250));
+        assert_eq!(supervisor.snapshot().status.attempt, 1);
+        #[cfg(target_os = "linux")]
+        assert!(
+            !std::path::Path::new(&format!("/proc/{pid}")).exists(),
+            "child must be reaped"
+        );
+        #[cfg(not(target_os = "linux"))]
+        let _ = pid;
+    }
+    #[test]
+    fn dead_child_reconnects_and_new_child_becomes_ready() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let count = calls.clone();
+        let supervisor = Supervisor::with_launcher(
+            config(),
+            Arc::new(move |config| {
+                let mode = if count.fetch_add(1, Ordering::SeqCst) == 0 {
+                    "exit_after_ready"
+                } else {
+                    "healthy"
+                };
+                Ok(command(config, mode))
+            }),
+        )
+        .unwrap();
+        supervisor.start().unwrap();
+        let first = wait(&supervisor, |s| {
+            s.status.state == "ready" && s.status.attempt == 1
+        });
+        let second = wait(&supervisor, |s| {
+            s.status.state == "ready" && s.status.attempt == 2
+        });
+        assert_ne!(first.status.pid, second.status.pid);
+        assert_eq!(second.status.restarts, 1);
+        assert!(second
+            .events
+            .iter()
+            .any(|event| event.message.contains("restarting in")));
+        supervisor.stop().unwrap();
+    }
+    #[test]
+    fn alive_child_with_failed_socks_health_is_restarted() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let count = calls.clone();
+        let supervisor = Supervisor::with_launcher(
+            config(),
+            Arc::new(move |config| {
+                let mode = if count.fetch_add(1, Ordering::SeqCst) == 0 {
+                    "ready_then_stall"
+                } else {
+                    "healthy"
+                };
+                Ok(command(config, mode))
+            }),
+        )
+        .unwrap();
+        supervisor.start().unwrap();
+        wait(&supervisor, |s| {
+            s.status.state == "ready" && s.status.attempt == 1
+        });
+        let recovered = wait(&supervisor, |s| {
+            s.status.state == "ready" && s.status.attempt == 2
+        });
+        assert!(recovered
+            .events
+            .iter()
+            .any(|event| event.message.contains("SOCKS health check failed")));
+        supervisor.stop().unwrap();
+    }
+    #[test]
+    fn startup_never_claims_ready_for_an_alive_child_without_socks() {
+        let mut config = config();
+        config.restart_initial_delay_ms = 2000;
+        config.restart_max_delay_ms = 2000;
+        let supervisor = supervisor(config, "sleep");
+        supervisor.start().unwrap();
+        let reconnect = wait(&supervisor, |s| s.status.state == "reconnecting");
+        assert!(reconnect
+            .status
+            .last_error
+            .unwrap()
+            .contains("startup deadline"));
+        assert!(!reconnect
+            .events
+            .iter()
+            .any(|event| event.message.contains("greeting is ready")));
+        supervisor.stop().unwrap();
+    }
+    #[test]
+    fn restart_backoff_is_exponential_bounded_and_attempt_limit_is_enforced() {
+        let supervisor = supervisor(config(), "exit");
+        supervisor.start().unwrap();
+        let failed = wait(&supervisor, |s| s.status.state == "failed");
+        assert_eq!(failed.status.attempt, 3, "{failed:?}");
+        assert_eq!(failed.status.restarts, 2);
+        assert!(failed
+            .events
+            .iter()
+            .any(|event| event.message.ends_with("100ms")));
+        assert!(failed
+            .events
+            .iter()
+            .any(|event| event.message.ends_with("200ms")));
+        supervisor.stop().unwrap();
+    }
+    #[test]
+    fn explicit_stop_interrupts_backoff_and_prevents_any_more_children() {
+        let mut config = config();
+        config.restart_initial_delay_ms = 5000;
+        config.restart_max_delay_ms = 5000;
+        let supervisor = supervisor(config, "exit");
+        supervisor.start().unwrap();
+        wait(&supervisor, |s| s.status.state == "reconnecting");
+        let started = Instant::now();
+        supervisor.stop().unwrap();
+        assert!(started.elapsed() < Duration::from_secs(1));
+        thread::sleep(Duration::from_millis(250));
+        let stopped = supervisor.snapshot();
+        assert_eq!(stopped.status.state, "stopped");
+        assert_eq!(stopped.status.attempt, 1);
+    }
+    #[test]
+    fn stop_does_not_wait_for_a_descendant_holding_stderr_open() {
+        let supervisor = supervisor(config(), "descendant_stderr");
+        supervisor.start().unwrap();
+        wait(&supervisor, |s| {
+            s.stderr
+                .iter()
+                .any(|line| line.contains("descendant diagnostic writer is alive"))
+        });
+        let started = Instant::now();
+        let stopped = supervisor.stop().unwrap();
+        assert!(
+            started.elapsed() < Duration::from_millis(750),
+            "Stop waited for an inherited diagnostic writer"
+        );
+        assert_eq!(stopped.status.state, "stopped");
+        assert_eq!(stopped.status.pid, None);
+    }
+    #[test]
+    fn host_key_and_public_key_errors_are_actionable_and_do_not_retry() {
+        for mode in ["hostkey", "auth"] {
+            let supervisor = supervisor(config(), mode);
+            supervisor.start().unwrap();
+            let failed = wait(&supervisor, |s| s.status.state == "failed");
+            assert_eq!(failed.status.attempt, 1);
+            assert_eq!(failed.status.restarts, 0);
+            let error = failed.status.last_error.unwrap();
+            assert!(error.contains(if mode == "hostkey" {
+                "fingerprint"
+            } else {
+                "SSH agent"
+            }));
+            supervisor.stop().unwrap();
+        }
+    }
+    #[test]
+    fn occupied_local_port_fails_before_any_child_is_launched() {
+        let config = config();
+        let _occupied = TcpListener::bind(("127.0.0.1", config.local_port)).unwrap();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let count = calls.clone();
+        let supervisor = Supervisor::with_launcher(
+            config,
+            Arc::new(move |config| {
+                count.fetch_add(1, Ordering::SeqCst);
+                Ok(command(config, "healthy"))
+            }),
+        )
+        .unwrap();
+        supervisor.start().unwrap();
+        let failed = wait(&supervisor, |s| s.status.state == "failed");
+        assert!(failed
+            .status
+            .last_error
+            .unwrap()
+            .contains("choose a free port"));
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        supervisor.stop().unwrap();
+    }
+    #[test]
+    fn child_stderr_and_events_are_bounded_even_for_oversized_lines() {
+        let supervisor = supervisor(config(), "spam");
+        supervisor.start().unwrap();
+        let ready = wait(&supervisor, |s| s.status.state == "ready");
+        assert!(ready.stderr.len() <= MAX_STDERR_LINES);
+        assert!(ready.stderr.iter().all(|line| line.len() <= MAX_LINE));
+        assert_eq!(ready.events.len(), MAX_EVENTS);
+        supervisor.stop().unwrap();
+    }
+}
