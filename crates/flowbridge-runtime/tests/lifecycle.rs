@@ -406,6 +406,27 @@ fn active_record_and_live_metrics_survive_more_than_512_finished_flows() {
         .any(|c| c.id == id && c.error.as_deref() == Some("connection cancelled")));
 }
 
+fn accept_before_deadline(listener: &TcpListener) -> (TcpStream, std::net::SocketAddr) {
+    listener.set_nonblocking(true).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        match listener.accept() {
+            Ok((stream, address)) => {
+                stream.set_nonblocking(false).unwrap();
+                return (stream, address);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                assert!(
+                    Instant::now() < deadline,
+                    "expected proxy connection before deadline"
+                );
+                thread::sleep(Duration::from_millis(5));
+            }
+            Err(error) => panic!("mock proxy accept failed: {error}"),
+        }
+    }
+}
+
 fn receive_mock_socks(stream: &mut TcpStream) {
     stream
         .set_read_timeout(Some(Duration::from_secs(3)))
@@ -429,7 +450,7 @@ fn managed_establishment_retry_preserves_coalesced_payload_exactly_once() {
         .unwrap();
     engine.start().unwrap();
     let server = thread::spawn(move || {
-        let (mut first, _) = proxy.accept().unwrap();
+        let (mut first, _) = accept_before_deadline(&proxy);
         receive_mock_socks(&mut first);
         first
             .set_read_timeout(Some(Duration::from_millis(100)))
@@ -441,7 +462,7 @@ fn managed_establishment_retry_preserves_coalesced_payload_exactly_once() {
             std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
         ));
         drop(first);
-        let (mut second, _) = proxy.accept().unwrap();
+        let (mut second, _) = accept_before_deadline(&proxy);
         receive_mock_socks(&mut second);
         second.write_all(&[5, 0, 0, 1, 0, 0, 0, 0, 0, 0]).unwrap();
         let mut payload = Vec::new();
@@ -493,7 +514,7 @@ fn managed_establishment_retries_at_most_once_and_never_retries_rejection() {
         engine.start().unwrap();
         let server = thread::spawn(move || {
             for _ in 0..if mode == "eof" { 2 } else { 1 } {
-                let (mut stream, _) = proxy.accept().unwrap();
+                let (mut stream, _) = accept_before_deadline(&proxy);
                 if mode == "auth" {
                     stream
                         .set_read_timeout(Some(Duration::from_secs(3)))

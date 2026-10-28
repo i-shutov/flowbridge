@@ -599,7 +599,8 @@ async fn handle(
                 .connect_timeout_ms
                 .saturating_add(config.handshake_timeout_ms),
         );
-    let established = tokio::time::timeout_at(deadline, async {
+    let established = if may_retry {
+        tokio::time::timeout_at(deadline, async {
         for attempt in 0..2 {
             if route.first().is_some_and(|p| upstream_gate.borrow().pauses(&p.endpoint)) {
                 return Err(NetError::InvalidConfig("managed upstream is paused"));
@@ -617,7 +618,18 @@ async fn handle(
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
         unreachable!("bounded establishment loop always returns")
-    }).await.unwrap_or(Err(NetError::Timeout { stage: "initial managed connection" }));
+    }).await.unwrap_or(Err(NetError::Timeout { stage: "initial managed connection" }))
+    } else {
+        // Non-managed routes retain their original per-hop timeout semantics.
+        connect_route_guarded(
+            &target,
+            &route,
+            Duration::from_millis(config.connect_timeout_ms),
+            Duration::from_millis(config.handshake_timeout_ms),
+            config.listen,
+        )
+        .await
+    };
     let upstream = match established {
         Ok(v) => v,
         Err(e) => {
