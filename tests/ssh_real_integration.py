@@ -159,12 +159,13 @@ def main(repetition=0):
                                 '-f', str(root / key)], check=True, timeout=15)
             ssh_port, socks_port, engine_port = free_port(), free_port(), free_port()
             require(len({ssh_port, socks_port, engine_port, target_port}) == 4, 'Port collision')
-            capture_log = (args.output / 'capture.log').open('wb')
-            capture = subprocess.Popen(['sudo', '-n', 'tcpdump', '-i', 'lo', '-nn', '-s', '256', '-U',
-                '-w', str((args.output / 'socks.pcap').resolve()), 'tcp', 'port', str(socks_port)],
-                stdout=capture_log, stderr=subprocess.STDOUT, start_new_session=True)
-            time.sleep(0.2)
-            require(capture.poll() is None, 'SOCKS packet capture did not start')
+            if os.environ.get('FLOWBRIDGE_TEST_CAPTURE') == '1':
+                capture_log = (args.output / 'capture.log').open('wb')
+                capture = subprocess.Popen(['sudo', '-n', 'tcpdump', '-i', 'lo', '-nn', '-s', '256', '-U',
+                    '-w', str((args.output / 'socks.pcap').resolve()), 'tcp', 'port', str(socks_port)],
+                    stdout=capture_log, stderr=subprocess.STDOUT, start_new_session=True)
+                time.sleep(0.2)
+                require(capture.poll() is None, 'SOCKS packet capture did not start')
             known = root / 'known hosts'
             known.write_text(f'[127.0.0.1]:{ssh_port} ' + (root / 'host_key.pub').read_text())
             config = root / 'sshd_config'
@@ -194,10 +195,12 @@ def main(repetition=0):
             until(listening, 10)
             settings = {'host': '127.0.0.1', 'port': ssh_port, 'user': getpass.getuser(),
                         'local_port': socks_port, 'verbose_diagnostics': False, 'identity_file': str(root / 'client_key'),
-                        'known_hosts_file': str(known), 'server_alive_interval_secs': 1,
-                        'server_alive_count_max': 2, 'health_check_interval_ms': 1000,
+                        'known_hosts_file': str(known), 'server_alive_interval_secs': 15,
+                        'server_alive_count_max': 3, 'health_check_interval_ms': 1000,
                         'health_check_timeout_ms': 3000, 'restart_initial_delay_ms': 300,
                         'restart_max_delay_ms': 1000, 'startup_timeout_ms': 8000, 'max_restarts': 4}
+            report['keepalive'] = {'interval_seconds': settings['server_alive_interval_secs'],
+                                   'count_max': settings['server_alive_count_max']}
             supervisor = abi.call('fb_ssh_create_json', settings)['ssh_id']
             abi.call('fb_ssh_start_json', supervisor)
 

@@ -41,7 +41,11 @@ pub(super) fn report(request: &Value) -> Value {
     );
     ssh_summary["diagnostic_code"] = choice(
         &ssh["diagnostic_code"],
-        &["ssh_resource_exhausted", "ssh_health_unresponsive"],
+        &[
+            "ssh_resource_exhausted",
+            "ssh_health_unresponsive",
+            "ssh_server_unresponsive",
+        ],
     );
     // Record only the program's version token, never a path or arbitrary stderr.
     ssh_summary["backend_version"] = ssh["backend_version"]
