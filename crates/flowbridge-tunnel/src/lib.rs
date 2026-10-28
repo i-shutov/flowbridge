@@ -186,6 +186,22 @@ impl Config {
         }
         Ok(())
     }
+    fn dns_discovery_arguments(&self) -> Vec<String> {
+        let mut source = self.arguments().into_iter();
+        let mut args = Vec::new();
+        while let Some(arg) = source.next() {
+            if arg == "-N" {
+                continue;
+            }
+            if arg == "-D" {
+                source.next();
+                continue;
+            }
+            args.push(arg);
+        }
+        args.push("printf 'FLOWBRIDGE_DNS_BEGIN\\n' >&2; cat /etc/resolv.conf >&2; printf '\\nFLOWBRIDGE_DNS_END\\n' >&2".into());
+        args
+    }
     /// Arguments are passed directly to OpenSSH; no command shell is involved.
     pub fn arguments(&self) -> Vec<String> {
         let mut args = vec![
@@ -407,6 +423,65 @@ impl Supervisor {
     }
     pub fn from_json(text: &str) -> Result<Self, TunnelError> {
         Self::new(Config::from_json(text)?)
+    }
+    /// Read the remote POSIX resolver configuration through authenticated SSH.
+    /// This is a fixed read-only command, not a shell command supplied by the UI.
+    pub fn remote_dns_servers(&self) -> Result<Vec<String>, TunnelError> {
+        let snapshot = self.snapshot();
+        if snapshot.status.state != "ready" {
+            return Err(TunnelError("SSH must be ready before DNS discovery".into()));
+        }
+        let executable = snapshot
+            .status
+            .backend_path
+            .ok_or_else(|| TunnelError("SSH executable is unknown".into()))?;
+        let control = lock(&self.running)
+            .as_ref()
+            .map(|worker| worker.control.clone())
+            .ok_or_else(|| TunnelError("SSH is stopped".into()))?;
+        let mut command = Command::new(executable);
+        command.args(self.config.dns_discovery_arguments());
+        let mut child = ChildGuard::spawn(command)?;
+        let mut pipe = child
+            .child
+            .stderr
+            .take()
+            .ok_or_else(|| TunnelError("DNS discovery output unavailable".into()))?;
+        prepare_stderr(&pipe)?;
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut output = Vec::new();
+        let mut chunk = [0; 1024];
+        loop {
+            if control.cancelled() {
+                return Err(TunnelError("DNS discovery cancelled".into()));
+            }
+            if Instant::now() >= deadline {
+                return Err(TunnelError("Remote DNS discovery timed out".into()));
+            }
+            match read_stderr(&mut pipe, &mut chunk) {
+                Ok(0) => break,
+                Ok(n) => {
+                    output.extend_from_slice(&chunk[..n]);
+                    if output.len() > 32768 {
+                        return Err(TunnelError(
+                            "Remote DNS configuration exceeds 32 KiB".into(),
+                        ));
+                    }
+                }
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    if matches!(child.child.try_wait(), Ok(Some(_))) {
+                        break;
+                    }
+                    control.wait(Duration::from_millis(20));
+                }
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) if e.kind() == io::ErrorKind::BrokenPipe => break,
+                Err(e) => return Err(e.into()),
+            }
+        }
+        let result = parse_resolvers(&String::from_utf8_lossy(&output));
+        child.terminate();
+        result
     }
     pub fn snapshot(&self) -> Snapshot {
         let s = lock(&self.state);
@@ -800,6 +875,40 @@ impl Drop for ChildGuard {
     fn drop(&mut self) {
         self.terminate();
     }
+}
+fn parse_resolvers(output: &str) -> Result<Vec<String>, TunnelError> {
+    let data = output.split_once("FLOWBRIDGE_DNS_BEGIN\n")
+        .and_then(|(_,tail)| tail.split_once("FLOWBRIDGE_DNS_END"))
+        .map(|(data,_)|data).ok_or_else(|| TunnelError("Remote host did not return a POSIX resolver file; configure its DNS resolver IP explicitly".into()))?;
+    let mut result = Vec::new();
+    for line in data.lines() {
+        let mut words = line.split_whitespace();
+        if words.next() != Some("nameserver") {
+            continue;
+        }
+        let Some(ip) = words
+            .next()
+            .and_then(|v| v.parse::<std::net::IpAddr>().ok())
+        else {
+            continue;
+        };
+        if ip.is_unspecified() || ip.is_multicast() {
+            continue;
+        }
+        let address = ip.to_string();
+        if !result.contains(&address) {
+            result.push(address);
+        }
+        if result.len() == 3 {
+            break;
+        }
+    }
+    if result.is_empty() {
+        return Err(TunnelError(
+            "No supported IP DNS resolvers in remote /etc/resolv.conf".into(),
+        ));
+    }
+    Ok(result)
 }
 fn resolve_ssh() -> io::Result<std::path::PathBuf> {
     if cfg!(target_os = "macos") {
@@ -1272,6 +1381,23 @@ mod tests {
         assert_eq!(snapshot.status.resource_exhaustion_count, 0);
     }
 
+    #[test]
+    fn remote_dns_discovery_is_fixed_bounded_and_keeps_strict_ssh_options() {
+        let args = config().dns_discovery_arguments();
+        assert!(!args.iter().any(|v| v == "-D" || v == "-N"));
+        assert!(args.iter().any(|v| v == "StrictHostKeyChecking=yes"));
+        assert!(args.last().unwrap().contains("cat /etc/resolv.conf"));
+        let response="untrusted banner nameserver 192.0.2.2\nFLOWBRIDGE_DNS_BEGIN\nnameserver 127.0.0.53\nnameserver ::1\nnameserver 127.0.0.53\nFLOWBRIDGE_DNS_END\n";
+        assert_eq!(
+            parse_resolvers(response).unwrap(),
+            vec!["127.0.0.53", "::1"]
+        );
+        assert!(parse_resolvers("nameserver 127.0.0.53").is_err());
+        assert!(
+            parse_resolvers("FLOWBRIDGE_DNS_BEGIN\nnameserver 0.0.0.0\nFLOWBRIDGE_DNS_END")
+                .is_err()
+        );
+    }
     #[test]
     fn strict_config_and_arguments_do_not_allow_shell_or_host_key_overrides() {
         let config=Config::from_json(r#"{"host":"server.example","user":"alice","identity_file":"/keys/with space/key","known_hosts_file":"/keys/known hosts","compression":true}"#).unwrap();
