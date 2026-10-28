@@ -1,5 +1,6 @@
 Unicode true
-Target amd64-unicode
+; Use the standard x86 Unicode NSIS bootstrapper for the x64 payload.
+; Official Windows NSIS packages do not ship amd64 stubs.
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 !include "x64.nsh"
@@ -74,6 +75,7 @@ Function .onInit
     Abort
   ${EndIf}
   SetShellVarContext current
+  SetRegView 64
   ReadRegStr $ExistingInstallDir HKCU "Software\FlowBridge" "InstallDir"
   ${If} $ExistingInstallDir != ""
     StrCpy $INSTDIR "$ExistingInstallDir"
@@ -83,6 +85,7 @@ Function .onInit
 FunctionEnd
 Function un.onInit
   SetShellVarContext current
+  SetRegView 64
   !insertmacro MUI_UNGETLANGUAGE
   !insertmacro CheckRunning
 FunctionEnd

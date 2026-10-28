@@ -3,7 +3,8 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 mode="${1:-local}"
 if [[ "$(uname -s)" != Darwin ]]; then
-  echo 'This build requires macOS, full Xcode, XcodeGen, Rust and Apple SDKs.' >&2; exit 1
+  echo 'This build requires macOS, full Xcode, XcodeGen, Rust and Apple SDKs.' >&2
+  exit 1
 fi
 command -v xcodegen >/dev/null
 xcodebuild -version
@@ -16,7 +17,7 @@ case "$mode" in
     ;;
   *) echo 'Usage: build-app.sh [local|native]' >&2; exit 2 ;;
 esac
-"$root/native/macos/build-core.sh" universal
+bash "$root/native/macos/build-core.sh" universal
 cd "$root/native/macos"
 xcodegen generate --spec project.yml
 out="${FLOWBRIDGE_BUILD_DIR:-$root/build/macos/$mode}"
@@ -26,8 +27,6 @@ if [[ "$mode" == local ]]; then
   args+=(CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual CODE_SIGNING_ALLOWED=YES)
 else
   args+=("DEVELOPMENT_TEAM=$DEVELOPMENT_TEAM" "FLOWBRIDGE_BUNDLE_ID=$FLOWBRIDGE_BUNDLE_ID")
-  # Automatic development signing is the default. Xcode account/profiles must
-  # already be configured. Opt in explicitly to downloading provisioning assets.
   if [[ "${ALLOW_PROVISIONING_UPDATES:-0}" == 1 ]]; then args+=(-allowProvisioningUpdates); fi
   if [[ -n "${FLOWBRIDGE_APP_PROFILE:-}" || -n "${FLOWBRIDGE_EXTENSION_PROFILE:-}" ]]; then
     : "${FLOWBRIDGE_APP_PROFILE:?Provide both installed provisioning profile names}"

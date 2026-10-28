@@ -3,7 +3,7 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 mode="${1:-local}"
 case "$mode" in local|native) ;; *) echo 'Usage: build-pkg.sh [local|native]' >&2; exit 2 ;; esac
-"$root/packaging/macos/build-app.sh" "$mode"
+bash "$root/packaging/macos/build-app.sh" "$mode"
 out="${FLOWBRIDGE_BUILD_DIR:-$root/build/macos/$mode}"
 app="$out/Build/Products/Release/FlowBridge.app"
 work="$(mktemp -d "${TMPDIR:-/tmp}/flowbridge-package.XXXXXX")"
