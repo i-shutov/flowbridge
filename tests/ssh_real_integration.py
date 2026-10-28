@@ -141,7 +141,7 @@ def main(repetition=0):
     report = {'commit': os.environ.get('GITHUB_SHA'), 'passed': False, 'checks': [],
               'existing_tcp_preserved': False}
     supervisor = bad_supervisor = engine = 0
-    daemon = None
+    daemon = capture = None
     echo = Server(('127.0.0.1', 0), Echo)
     threading.Thread(target=echo.serve_forever, daemon=True).start()
     target_port = echo.server_address[1]
@@ -159,6 +159,12 @@ def main(repetition=0):
                                 '-f', str(root / key)], check=True, timeout=15)
             ssh_port, socks_port, engine_port = free_port(), free_port(), free_port()
             require(len({ssh_port, socks_port, engine_port, target_port}) == 4, 'Port collision')
+            capture_log = (args.output / 'capture.log').open('wb')
+            capture = subprocess.Popen(['sudo', '-n', 'tcpdump', '-i', 'lo', '-nn', '-s', '256', '-U',
+                '-w', str((args.output / 'socks.pcap').resolve()), 'tcp', 'port', str(socks_port)],
+                stdout=capture_log, stderr=subprocess.STDOUT, start_new_session=True)
+            time.sleep(0.2)
+            require(capture.poll() is None, 'SOCKS packet capture did not start')
             known = root / 'known hosts'
             known.write_text(f'[127.0.0.1]:{ssh_port} ' + (root / 'host_key.pub').read_text())
             config = root / 'sshd_config'
@@ -187,7 +193,7 @@ def main(repetition=0):
                     return False
             until(listening, 10)
             settings = {'host': '127.0.0.1', 'port': ssh_port, 'user': getpass.getuser(),
-                        'local_port': socks_port, 'verbose_diagnostics': repetition % 2 == 1, 'identity_file': str(root / 'client_key'),
+                        'local_port': socks_port, 'verbose_diagnostics': False, 'identity_file': str(root / 'client_key'),
                         'known_hosts_file': str(known), 'server_alive_interval_secs': 1,
                         'server_alive_count_max': 2, 'health_check_interval_ms': 1000,
                         'health_check_timeout_ms': 3000, 'restart_initial_delay_ms': 300,
@@ -289,6 +295,15 @@ def main(repetition=0):
                     subprocess.run(['sudo', '-n', 'kill', '-KILL', '--', f'-{daemon.pid}'],
                                    timeout=10, check=False)
                     daemon.wait(timeout=10)
+            if capture:
+                subprocess.run(['sudo', '-n', 'kill', '-INT', '--', f'-{capture.pid}'],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10, check=False)
+                capture.wait(timeout=10)
+                capture_log.close()
+                with (args.output / 'socks-wire.txt').open('wb') as wire:
+                    subprocess.run(['sudo', '-n', 'tcpdump', '-nn', '-tttt', '-XX', '-r',
+                        str((args.output / 'socks.pcap').resolve())], stdout=wire,
+                        stderr=subprocess.STDOUT, timeout=10, check=False)
             server_log.close()
             echo.shutdown()
             echo.server_close()
