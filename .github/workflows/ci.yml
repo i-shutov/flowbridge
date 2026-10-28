@@ -27,6 +27,21 @@ jobs:
       - run: cargo test --locked --workspace
       - run: cargo build --locked --workspace
       - run: python tests/smoke.py
+      - name: Archive exact source revision
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          mkdir -p artifacts
+          git archive --format=zip --prefix=flowbridge/ -o "artifacts/flowbridge-source-${GITHUB_SHA}.zip" HEAD
+          sha256sum artifacts/flowbridge-source-*.zip > artifacts/source-SHA256SUMS.txt
+      - uses: actions/upload-artifact@v7.0.0
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          name: FlowBridge-exact-source
+          path: |
+            artifacts/flowbridge-source-*.zip
+            artifacts/source-SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
   windows-application:
     runs-on: windows-latest
     steps:
@@ -47,6 +62,19 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - run: choco install nsis --yes --no-progress
       - run: python packaging/windows/build-installer.py --skip-build
+      - name: Reject dependencies on a separately installed Visual C++ runtime
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $dumpbin = & $vswhere -latest -products '*' -find 'VC\Tools\MSVC\**\bin\Hostx64\x64\dumpbin.exe' | Select-Object -First 1
+          if (-not $dumpbin) { throw 'dumpbin not found' }
+          New-Item -ItemType Directory -Force build/verification/windows | Out-Null
+          foreach ($file in Get-ChildItem build/payload -File | Where-Object { $_.Extension -in '.exe','.dll' }) {
+            $text = & $dumpbin /dependents $file.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Cannot inspect $($file.Name)" }
+            $text | Set-Content "build/verification/windows/$($file.Name).imports.txt"
+            if (($text -join "`n") -match '(?i)(vcruntime|msvcp|concrt)\d+[^\s]*\.dll') { throw "Unexpected VC runtime dependency in $($file.Name)" }
+          }
       - name: Install, run, upgrade and uninstall on Windows
         run: python tests/windows_installer_native.py --manifest docs/verification/windows-package.json --harness build/windows/Release/FlowBridgeNativeSmoke.exe --output build/verification/windows
       - uses: actions/upload-artifact@v7.0.0
@@ -75,16 +103,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
       - run: brew install xcodegen
       - run: bash packaging/macos/build-pkg.sh local
+      - name: Install, launch and upgrade the actual macOS package
+        run: python tests/macos_installer_native.py --package-dir build/macos/local/packages --output build/verification/macos
       - uses: actions/upload-artifact@v7.0.0
         with:
           name: FlowBridge-macos-universal-local
           path: build/macos/local/packages/*.pkg
           if-no-files-found: error
           retention-days: 14
+      - name: Publish macOS installation evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: FlowBridge-macos-verification
+          path: build/verification/macos/
+          if-no-files-found: warn
+          retention-days: 14
       - working-directory: native/macos
         run: |
           xcodebuild -project FlowBridge.xcodeproj -scheme FlowBridge -configuration Debug ARCHS="$(uname -m)" CODE_SIGNING_ALLOWED=NO build
   # Native extension compile is not signing, activation or an interception test.
-  # Per-run logs and artifacts, not source comments, are verification evidence.
