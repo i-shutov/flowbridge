@@ -26,11 +26,11 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          $root = $env:GITHUB_WORKSPACE
+          $project = "$root\native\windows\wfp\driver\FlowBridgeWfp.vcxproj"
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $msbuild = & $vswhere -latest -products '*' -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
-          if (-not $msbuild) { throw 'MSBuild was not found' }
-          # NuGet acquisition does not install the WDK tools into the machine PATH.
-          # Discover the pinned package tools instead of relying on a global WDK.
+          $msbuild = & $vswhere -latest -products '*' -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\amd64\MSBuild.exe' | Select-Object -First 1
+          if (-not $msbuild) { throw '64-bit MSBuild was not found' }
           $packages = (Resolve-Path native/windows/wfp/driver/packages).Path
           $toolDirs = @()
           $stampPath = $null
@@ -43,10 +43,19 @@ jobs:
             $toolDirs += $tool.DirectoryName
             if ($name -eq 'stampinf.exe') { $stampPath = $tool.DirectoryName + '\' }
           }
+          $verifyDll = Get-ChildItem -Path $packages -Filter InfVerif.dll -Recurse -File | Where-Object { $_.FullName -match '\\x64\\' } | Select-Object -First 1
+          if (-not $verifyDll) { throw 'Pinned WDK is missing the x64 InfVerif runtime' }
+          $runtimeRoot = $verifyDll.Directory.Parent.FullName
+          Write-Host "InfVerif native runtime root: $runtimeRoot"
           $env:PATH = (($toolDirs | Select-Object -Unique) -join ';') + ';' + $env:PATH
-          New-Item -ItemType Directory -Force build/wfp-driver | Out-Null
-          & $msbuild native/windows/wfp/driver/FlowBridgeWfp.vcxproj /m /t:Build /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off "/p:StampInfToolPath=$stampPath" "/p:OutDir=$env:GITHUB_WORKSPACE\build\wfp-driver\" /bl:build/wfp-driver-build.binlog
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force "$root\build\wfp-driver" | Out-Null
+          # WDK's managed task loads x64/InfVerif.dll relative to its runtime root.
+          # Use the real NuGet tool layout, without disabling INF verification.
+          Push-Location $runtimeRoot
+          try {
+            & $msbuild $project /m /t:Build /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off "/p:StampInfToolPath=$stampPath" "/p:OutDir=$root\build\wfp-driver\" "/bl:$root\build\wfp-driver-build.binlog"
+            if ($LASTEXITCODE -ne 0) { throw "WDK build failed: $LASTEXITCODE" }
+          } finally { Pop-Location }
           if (-not (Test-Path build/wfp-driver/FlowBridgeWfp.sys)) { throw 'Driver binary was not produced' }
           Get-FileHash build/wfp-driver/FlowBridgeWfp.sys -Algorithm SHA256 | Format-List
       - name: Upload unsigned development driver

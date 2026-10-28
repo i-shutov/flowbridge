@@ -27,13 +27,15 @@
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
-      <PreprocessorDefinitions>_WIN32_WINNT=0x0A00;NTDDI_VERSION=0x0A000008;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- NDIS types used by fwpsk.h, as in Microsoft's WFPSampler project. -->
+      <PreprocessorDefinitions>NDIS630=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ForcedIncludeFiles>$(MSBuildThisFileDirectory)wdk_headers.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
       <AdditionalIncludeDirectories>..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <BufferSecurityCheck>true</BufferSecurityCheck>
     </ClCompile>
     <Link><AdditionalDependencies>Fwpkclnt.lib;Wdmsec.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
   </ItemDefinitionGroup>
   <ItemGroup><ClCompile Include="driver.c" /><Inf Include="FlowBridgeWfp.inf" /></ItemGroup>
-  <ItemGroup><ClInclude Include="..\control.h" /><ClInclude Include="..\redirect_context.h" /></ItemGroup>
+  <ItemGroup><ClInclude Include="wdk_headers.h" /><ClInclude Include="..\control.h" /><ClInclude Include="..\redirect_context.h" /></ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
