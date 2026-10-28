@@ -6,7 +6,7 @@ def edit(path,old,new):
     p.write_text(s.replace(old,new),encoding='utf-8')
 
 p='crates/flowbridge-tunnel/src/lib.rs'
-edit(p,'if self.verbose_diagnostics { "DEBUG3" } else { "ERROR" }','if self.verbose_diagnostics { "DEBUG3" } else { "INFO" }')
+edit(p,'"ERROR"','"INFO"')
 edit(p,'''    if let Some(fatal) = fatal {
         s.fatal = Some(fatal.into());''','''    if lower.contains("timeout, server ") && lower.contains("not responding") {
         s.status.diagnostic_code = Some("ssh_server_unresponsive".into());
@@ -44,9 +44,7 @@ edit(p,'    #[test]\n    fn strict_config_and_arguments_do_not_allow_shell_or_ho
     #[test]
     fn strict_config_and_arguments_do_not_allow_shell_or_host_key_overrides()''')
 p='crates/flowbridge-ffi/src/diagnostics.rs'
-s=Path(p).read_text(encoding='utf-8')
-a='"ssh_health_unresponsive"'
-assert s.count(a)==1
+s=Path(p).read_text(encoding='utf-8');a='"ssh_health_unresponsive"';assert s.count(a)==1
 Path(p).write_text(s.replace(a,a+', "ssh_server_unresponsive"'),encoding='utf-8')
 p='tests/ssh_real_integration.py'
 edit(p,"'server_alive_interval_secs': 1,", "'server_alive_interval_secs': 15,")
@@ -55,8 +53,7 @@ edit(p,"            supervisor = abi.call('fb_ssh_create_json', settings)['ssh_i
                                    'count_max': settings['server_alive_count_max']}
             supervisor = abi.call('fb_ssh_create_json', settings)['ssh_id']''')
 a="            capture_log = (args.output / 'capture.log').open('wb')"
-s=Path(p).read_text(encoding='utf-8');start=s.index(a);end=s.index("            known = root / 'known hosts'",start)
-block=s[start:end]
+s=Path(p).read_text(encoding='utf-8');start=s.index(a);end=s.index("            known = root / 'known hosts'",start);block=s[start:end]
 s=s[:start]+"            if os.environ.get('FLOWBRIDGE_TEST_CAPTURE') == '1':\n"+''.join('    '+line+'\n' for line in block.splitlines())+s[end:]
 Path(p).write_text(s,encoding='utf-8')
 p=Path('docs/SSH_RELIABILITY.md')
