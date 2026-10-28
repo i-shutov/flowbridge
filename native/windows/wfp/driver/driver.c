@@ -69,7 +69,7 @@ static void NTAPI FbClassify(const FWPS_INCOMING_VALUES0* values,
     while (chars && ((UINT16*)app->data)[chars-1] == 0) --chars;
     if (!chars || chars >= FB_PROCESS_PATH_CHARS) { FbBlock(out); return; }
     for (i = 0; i < chars; ++i) if (((UINT16*)app->data)[i] < 32) { FbBlock(out); return; }
-#pragma warning(suppress:4996) /* WFP requires pool allocation, Windows 10 19041+ */
+#pragma warning(suppress:4996) /* Retain compatibility with older Windows 10 kernels. */
     context = ExAllocatePoolWithTag(NonPagedPoolNx, sizeof(*context), FB_POOL_TAG);
     if (!context) { FbBlock(out); return; }
     RtlZeroMemory(context, sizeof(*context));
@@ -78,7 +78,8 @@ static void NTAPI FbClassify(const FWPS_INCOMING_VALUES0* values,
     context->flow_id = (UINT64)InterlockedIncrement64(&gFlowId);
     context->process_path_chars = (UINT16)chars;
     RtlCopyMemory(context->process_path, app->data, chars * sizeof(UINT16));
-    status = FwpsAcquireClassifyHandle0(classifyContext, 0, &classifyHandle);
+    /* The API takes an opaque non-const pointer although classifyFn receives const. */
+    status = FwpsAcquireClassifyHandle0((void*)classifyContext, 0, &classifyHandle);
     if (!NT_SUCCESS(status)) { ExFreePoolWithTag(context, FB_POOL_TAG); FbBlock(out); return; }
     status = FwpsAcquireWritableLayerDataPointer0(classifyHandle, filter->filterId, 0, (PVOID*)&request, out);
     if (!NT_SUCCESS(status)) { ExFreePoolWithTag(context, FB_POOL_TAG); FwpsReleaseClassifyHandle0(classifyHandle); FbBlock(out); return; }

@@ -1,10 +1,9 @@
 #pragma once
-/* WDK headers intentionally use anonymous unions. Keep the diagnostic change
- * scoped to system headers; FlowBridge code is still compiled with /W4 /WX.
- * This matches the header boundary used by Microsoft's WFPSampler. */
+/* WDK headers intentionally use anonymous unions and aligned structures.
+ * Scope their diagnostics exactly as Microsoft's WFPSampler does. */
 #pragma warning(push)
-#pragma warning(disable:4201)
-#include <ntddk.h>
+#pragma warning(disable:4201 4324)
+#include <ntifs.h>
 #include <wdmsec.h>
 #include <ndis.h>
 #include <fwpsk.h>

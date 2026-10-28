@@ -1,5 +1,10 @@
 name: rust-and-native-applications
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    paths-ignore: ['native/windows/wfp/driver/**', '.github/workflows/windows-driver.yml', 'docs/**']
+  pull_request:
+    paths-ignore: ['native/windows/wfp/driver/**', '.github/workflows/windows-driver.yml', 'docs/**']
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -12,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-24.04, windows-2025, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7.0.1
@@ -27,14 +32,28 @@ jobs:
       - run: cargo test --locked --workspace
       - run: cargo build --locked --workspace
       - run: python tests/smoke.py
+      - name: Test actual SSH authentication, watchdog restart and host-key rejection
+        if: matrix.os == 'ubuntu-24.04'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --yes openssh-server
+          sudo install -d -m 0755 /run/sshd
+          python tests/ssh_real_integration.py --library target/debug/libflowbridge_ffi.so --output build/verification/ssh
+      - uses: actions/upload-artifact@v7.0.0
+        if: always() && matrix.os == 'ubuntu-24.04'
+        with:
+          name: FlowBridge-real-SSH-verification
+          path: build/verification/ssh/
+          if-no-files-found: warn
+          retention-days: 14
       - name: Archive exact source revision
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-24.04'
         run: |
           mkdir -p artifacts
           git archive --format=zip --prefix=flowbridge/ -o "artifacts/flowbridge-source-${GITHUB_SHA}.zip" HEAD
           sha256sum artifacts/flowbridge-source-*.zip > artifacts/source-SHA256SUMS.txt
       - uses: actions/upload-artifact@v7.0.0
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-24.04'
         with:
           name: FlowBridge-exact-source
           path: |
@@ -43,7 +62,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   windows-application:
-    runs-on: windows-latest
+    runs-on: windows-2025
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: dtolnay/rust-toolchain@stable
@@ -99,7 +118,7 @@ jobs:
         run: cmake -S native/windows/wfp -B build/windows-capture -A x64 -DFLOWBRIDGE_FFI_LIBRARY="$env:GITHUB_WORKSPACE/target/release/flowbridge_ffi.dll.lib"
       - run: cmake --build build/windows-capture --config Release
   macos-application:
-    runs-on: macos-latest
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: dtolnay/rust-toolchain@stable
