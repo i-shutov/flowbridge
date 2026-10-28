@@ -139,7 +139,15 @@ private struct Dashboard: View {
                             .font(.caption).foregroundStyle(.secondary)
                     } else {
                         TextField("TCP-порты для перехвата", text: $desktop.settings.capturePorts)
-                        Text(native.available ? "Нужно одобрение macOS. UDP, QUIC, DNS, остальные порты и исключённые адреса идут напрямую." : native.message)
+                        Toggle("Разрешать DNS на удалённом SSH-сервере", isOn:Binding(
+                            get:{desktop.settings.remoteDNS ?? true},set:{desktop.settings.remoteDNS = $0}))
+                        if desktop.settings.remoteDNS ?? true {
+                            TextField("Удалённый DNS IP · пусто = авто",text:Binding(
+                                get:{desktop.settings.remoteDNSResolver ?? ""},set:{desktop.settings.remoteDNSResolver = $0}))
+                            Text("Меняется обработка стандартного DNS всей системы, не только выбранных приложений. Внутренние домены должны разрешаться на SSH-сервере. При сбое локального обхода нет. Собственный DoH/DoT не перехватывается.")
+                                .font(.caption).foregroundStyle(.orange)
+                        }
+                        Text(native.available ? "Нужно одобрение macOS. TCP — на выбранных портах; DNS управляется отдельной галочкой. UDP/QUIC и остальные порты пока не перехватываются." : native.message)
                             .font(.caption).foregroundStyle(native.available ? Color.secondary : Color.orange)
                     }
                 } header: { Label("Маршрутизация", systemImage: "point.3.connected.trianglepath.dotted") }
@@ -150,7 +158,7 @@ private struct Dashboard: View {
                         .font(.callout).foregroundStyle(ssh.state == "ready" ? Color.green : Color.secondary)
                     Text(desktop.settings.mode == 0
                          ? "При обрыве SSH локальный адрес остаётся прежним; новые проксируемые подключения ждут восстановления до 30 секунд. Уже открытые TCP-сессии могут оборваться."
-                         : "Watchdog восстанавливает SSH для новых подключений. В native-режиме ожидание новых потоков во время обрыва не реализовано; текущие TCP-сессии могут оборваться.")
+                         : "Watchdog восстанавливает SSH; новые потоки ждут в ограниченной очереди. Уже открытые TCP-сессии при разрыве SSH могут оборваться.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 HStack {

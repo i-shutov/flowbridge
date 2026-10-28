@@ -156,6 +156,10 @@ pub(super) fn validate_query(query: &[u8]) -> Result<(), String> {
 #[serde(deny_unknown_fields)]
 struct Request {
     query: Vec<u8>,
+    #[serde(default)]
+    udp: bool,
+    #[serde(default)]
+    reply_on_failure: bool,
 }
 /// Send a DNS wire query through the configured SSH SOCKS endpoint, over TCP.
 /// Does not modify OS DNS settings or claim that OS DNS capture is enabled.
@@ -171,8 +175,19 @@ pub unsafe extern "C" fn fb_native_dns_exchange_json(
             serde_json::from_str(unsafe { input(request_json) }?).map_err(|e| e.to_string())?;
         validate_query(&request.query)?;
         let session = native_context::session(id)?;
-        let answer = session.dns_exchange(request.query)?;
-        Ok(json!({"ok":true,"response":answer,"transport":"ssh_socks5_tcp","local_fallback":false}))
+        let result = session.dns_exchange(request.query.clone());
+        let failed = result.is_err();
+        let mut answer = match result {
+            Ok(answer) => answer,
+            Err(_) if request.reply_on_failure => failure(&request.query),
+            Err(error) => return Err(error),
+        };
+        if request.udp && answer.len() > 512 {
+            answer = minimal_reply(&request.query, word(&answer, 2)? | 0x0200);
+        }
+        Ok(
+            json!({"ok":true,"response":answer,"transport":"ssh_socks5_tcp","local_fallback":false,"resolution_failed":failed}),
+        )
     })
 }
 /// This listener is loopback-only and never changes machine-wide DNS settings.
