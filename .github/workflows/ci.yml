@@ -32,6 +32,16 @@ jobs:
       - run: cargo test --locked --workspace
       - run: cargo build --locked --workspace
       - run: python tests/smoke.py
+      - name: Native capture session vertical integration
+        run: python tests/native_vertical_integration.py --output build/verification/native/session.json
+      - name: Preserve native-session evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: FlowBridge-native-session-${{ matrix.os }}
+          path: build/verification/native/
+          if-no-files-found: warn
+          retention-days: 14
       - name: Exercise shared SSH capacity under connection bursts
         run: python tests/managed_capacity_integration.py --output build/verification/capacity/result.json
       - name: Preserve admission-control evidence
