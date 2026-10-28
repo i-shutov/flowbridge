@@ -2,6 +2,11 @@ name: rust-and-native-applications
 on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  PYTHONUTF8: '1'
 jobs:
   rust:
     strategy:
@@ -42,14 +47,29 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - run: choco install nsis --yes --no-progress
       - run: python packaging/windows/build-installer.py --skip-build
+      - name: Install, run, upgrade and uninstall on Windows
+        run: python tests/windows_installer_native.py --manifest docs/verification/windows-package.json --harness build/windows/Release/FlowBridgeNativeSmoke.exe --output build/verification/windows
       - uses: actions/upload-artifact@v7.0.0
         with:
           name: FlowBridge-windows-x64
           path: |
-            ${{ github.workspace }}/../artifacts/FlowBridge-*-windows-x64-setup.exe
-            ${{ github.workspace }}/../artifacts/FlowBridge-*-windows-x64-setup.exe.sha256
+            artifacts/FlowBridge-*-windows-x64-setup.exe
+            artifacts/FlowBridge-*-windows-x64-setup.exe.sha256
           if-no-files-found: error
           retention-days: 14
+      - name: Publish installer verification evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: FlowBridge-windows-verification
+          path: |
+            build/verification/windows/
+            docs/verification/windows-package.json
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Build native WFP capture service
+        run: cmake -S native/windows/wfp -B build/windows-capture -A x64 -DFLOWBRIDGE_FFI_LIBRARY="$env:GITHUB_WORKSPACE/target/release/flowbridge_ffi.dll.lib"
+      - run: cmake --build build/windows-capture --config Release
   macos-application:
     runs-on: macos-latest
     steps:
@@ -67,4 +87,4 @@ jobs:
         run: |
           xcodebuild -project FlowBridge.xcodeproj -scheme FlowBridge -configuration Debug ARCHS="$(uname -m)" CODE_SIGNING_ALLOWED=NO build
   # Native extension compile is not signing, activation or an interception test.
-  # This workflow is prepared, but is not evidence that external runners ran.
+  # Per-run logs and artifacts, not source comments, are verification evidence.

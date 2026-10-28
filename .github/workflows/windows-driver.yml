@@ -1,0 +1,55 @@
+name: windows-wfp-driver
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'native/windows/wfp/**'
+      - '.github/workflows/windows-driver.yml'
+  pull_request:
+    paths:
+      - 'native/windows/wfp/**'
+      - '.github/workflows/windows-driver.yml'
+permissions:
+  contents: read
+concurrency:
+  group: wfp-driver-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  wdk-build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Restore pinned Microsoft WDK and SDK
+        run: nuget restore native/windows/wfp/driver/packages.config -PackagesDirectory native/windows/wfp/driver/packages -NonInteractive
+      - name: Compile WFP callout with WDK and validate driver package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $msbuild = & $vswhere -latest -products '*' -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
+          if (-not $msbuild) { throw 'MSBuild was not found' }
+          New-Item -ItemType Directory -Force build/wfp-driver | Out-Null
+          & $msbuild native/windows/wfp/driver/FlowBridgeWfp.vcxproj /m /t:Build /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off "/p:OutDir=$env:GITHUB_WORKSPACE\build\wfp-driver\" /bl:build/wfp-driver-build.binlog
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path build/wfp-driver/FlowBridgeWfp.sys)) { throw 'Driver binary was not produced' }
+          Get-FileHash build/wfp-driver/FlowBridgeWfp.sys -Algorithm SHA256 | Format-List
+      - name: Upload unsigned development driver
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: FlowBridge-WFP-UNSIGNED-DEVELOPMENT
+          path: |
+            build/wfp-driver/
+            native/windows/wfp/driver/DEVELOPMENT-ONLY.md
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload WDK diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: FlowBridge-WFP-build-log
+          path: build/wfp-driver-build.binlog
+          if-no-files-found: warn
+          retention-days: 14
+# Compilation is NOT kernel activation, signed distribution, or a traffic test.
+# Never install or start an unsigned kernel driver on a hosted runner.

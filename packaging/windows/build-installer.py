@@ -81,7 +81,7 @@ def main():
             check_pe64(destination)
         entries.append({"path": relative, "bytes": destination.stat().st_size,
                         "sha256": hashlib.sha256(destination.read_bytes()).hexdigest()})
-    output = ROOT.parent / "artifacts"
+    output = ROOT / "artifacts"
     output.mkdir(exist_ok=True)
     installer = output / f"FlowBridge-{VERSION}-windows-x64-setup.exe"
     nsis = shutil.which("makensis")
