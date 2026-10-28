@@ -39,6 +39,7 @@ pub struct Config {
     pub identity_file: Option<String>,
     pub known_hosts_file: Option<String>,
     pub compression: bool,
+    pub verbose_diagnostics: bool,
     pub server_alive_interval_secs: u64,
     pub server_alive_count_max: u32,
     pub connect_timeout_secs: u64,
@@ -61,6 +62,7 @@ impl Default for Config {
             identity_file: None,
             known_hosts_file: None,
             compression: false,
+            verbose_diagnostics: false,
             server_alive_interval_secs: 15,
             server_alive_count_max: 3,
             connect_timeout_secs: 10,
@@ -214,7 +216,14 @@ impl Config {
             format!("ServerAliveCountMax={}", self.server_alive_count_max),
             format!("ConnectTimeout={}", self.connect_timeout_secs),
             "ConnectionAttempts=1".into(),
-            "LogLevel=ERROR".into(),
+            format!(
+                "LogLevel={}",
+                if self.verbose_diagnostics {
+                    "DEBUG3"
+                } else {
+                    "INFO"
+                }
+            ),
             format!(
                 "Compression={}",
                 if self.compression { "yes" } else { "no" }
@@ -438,6 +447,14 @@ impl Supervisor {
             s.status.diagnostic_code = None;
             s.status.health_failures = 0;
             s.event("info", "starting managed OpenSSH dynamic forwarding");
+            if self
+                .config
+                .server_alive_interval_secs
+                .saturating_mul(u64::from(self.config.server_alive_count_max))
+                < 10
+            {
+                s.event("warn", "SSH keepalive budget is below 10 seconds; server login or load delays can cause premature disconnects");
+            }
         }
         let config = self.config.clone();
         let state = self.state.clone();
@@ -557,6 +574,10 @@ fn stderr_line(state: &Arc<Mutex<State>>, bytes: &[u8]) {
             "error",
             format!("SSH resource exhaustion ({total} occurrences): {text}"),
         );
+    }
+    if lower.contains("timeout, server ") && lower.contains("not responding") {
+        s.status.diagnostic_code = Some("ssh_server_unresponsive".into());
+        s.status.last_error = Some("SSH server did not answer keepalive requests. Check the network, server load and keepalive budget; a local SOCKS greeting alone does not prove remote readiness.".into());
     }
     if let Some(fatal) = fatal {
         s.fatal = Some(fatal.into());
@@ -1000,9 +1021,16 @@ fn supervise(config: Config, state: Arc<Mutex<State>>, control: Arc<Control>, la
             break;
         }
         let mut s = lock(&state);
+        let diagnosed = s
+            .status
+            .diagnostic_code
+            .as_deref()
+            .filter(|code| *code == "ssh_server_unresponsive")
+            .and(s.status.last_error.clone());
         let error = s
             .fatal
             .clone()
+            .or(diagnosed)
             .or(error)
             .unwrap_or_else(|| "SSH stopped unexpectedly".into());
         if s.fatal.is_some()
@@ -1211,6 +1239,37 @@ mod tests {
         let started = Instant::now();
         assert_eq!(supervisor.stop().unwrap().status.state, "stopped");
         assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn keepalive_timeout_reason_is_actionable_and_info_logging_is_preserved() {
+        let supervisor = Supervisor::new(config()).unwrap();
+        stderr_line(
+            &supervisor.state,
+            b"Timeout, server synthetic.invalid not responding.",
+        );
+        let snapshot = supervisor.snapshot();
+        assert_eq!(
+            snapshot.status.diagnostic_code.as_deref(),
+            Some("ssh_server_unresponsive")
+        );
+        assert!(snapshot
+            .status
+            .last_error
+            .as_deref()
+            .unwrap()
+            .contains("keepalive"));
+        assert!(!snapshot
+            .status
+            .last_error
+            .as_deref()
+            .unwrap()
+            .contains("synthetic.invalid"));
+        assert!(config()
+            .arguments()
+            .iter()
+            .any(|arg| arg == "LogLevel=INFO"));
+        assert_eq!(snapshot.status.resource_exhaustion_count, 0);
     }
 
     #[test]

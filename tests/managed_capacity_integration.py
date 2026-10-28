@@ -4,6 +4,7 @@ Not a measurement of any real OpenSSH backend's capacity.
 """
 import argparse
 import concurrent.futures
+import ctypes
 import json
 from pathlib import Path
 import socket
@@ -60,6 +61,36 @@ def connect(port):
         client.close()
         raise
 
+def check_diagnostics(abi):
+    function = abi.lib.fb_diagnostic_report_json
+    function.argtypes = [ctypes.c_char_p]
+    function.restype = ctypes.c_void_p
+    request = {
+        'engine': {'status': {'active': 4, 'listen': 'PRIVATE_LISTENER'},
+                   'connections': [{'host': 'PRIVATE_HOST'}],
+                   'events': [{'message': 'PRIVATE_EVENT'}],
+                   'managed_upstream': {'queued': 2, 'limits': {'max_flows': 128}}},
+        'ssh': {'status': {'state': 'degraded', 'diagnostic_code': 'ssh_resource_exhausted',
+                           'resource_exhaustion_count': 27, 'backend_path': 'PRIVATE_PATH',
+                           'last_error': 'PRIVATE_ERROR', 'backend_version': 'OpenSSH_9.9p1, SSL'},
+                'stderr': ['PRIVATE_STDERR']},
+        'identity_file': 'PRIVATE_KEY',
+    }
+    for _ in range(32):
+        answer = abi.call('fb_diagnostic_report_json', request)['report']
+        require('PRIVATE_' not in json.dumps(answer), 'Diagnostic report leaked private fixture data')
+        require(answer['engine']['active'] == 4, 'Diagnostic counter lost')
+        require(answer['ssh']['resource_exhaustion_count'] == 27, 'Resource diagnostic lost')
+        require(answer['managed_upstream']['limits']['max_flows'] == 128, 'Admission limits lost')
+        require(answer['coverage']['os_descriptor_count_measured'] is False, 'Invented OS measurement')
+    for invalid in [None, b'not json', b'\xff']:
+        pointer = function(invalid)
+        require(pointer, 'Null error response')
+        try:
+            require(json.loads(ctypes.string_at(pointer))['ok'] is False, 'Invalid report input accepted')
+        finally:
+            abi.lib.fb_string_free(pointer)
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
@@ -75,6 +106,8 @@ def main():
     endpoint = {'host': '127.0.0.1', 'port': server.server_address[1]}
     limits = {'max_flows': 4, 'max_opening': 2, 'max_queued': 8, 'wait_timeout_ms': 150}
     try:
+        check_diagnostics(abi)
+        report['checks'].append('Diagnostic C ABI export redacts private fields, preserves counters and rejects invalid input')
         for _ in range(2):
             port = free_port()
             require(port not in ports and port != endpoint['port'], 'Ephemeral port collision')

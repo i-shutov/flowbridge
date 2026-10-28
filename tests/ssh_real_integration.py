@@ -128,19 +128,20 @@ def round_trip(proxy_port, target_port):
         require(client.recv(1) == b'', 'Half-close did not finish')
 
 
-def main():
+def main(repetition=0):
     require(sys.platform.startswith('linux') and os.environ.get('GITHUB_ACTIONS') == 'true',
             'Run only on a disposable Linux GitHub Actions runner')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--library', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
+    args.output = args.output / f"iteration-{repetition + 1:02d}"
     abi = ABI(args.library)
     args.output.mkdir(parents=True, exist_ok=True)
     report = {'commit': os.environ.get('GITHUB_SHA'), 'passed': False, 'checks': [],
               'existing_tcp_preserved': False}
     supervisor = bad_supervisor = engine = 0
-    daemon = None
+    daemon = capture = None
     echo = Server(('127.0.0.1', 0), Echo)
     threading.Thread(target=echo.serve_forever, daemon=True).start()
     target_port = echo.server_address[1]
@@ -158,6 +159,13 @@ def main():
                                 '-f', str(root / key)], check=True, timeout=15)
             ssh_port, socks_port, engine_port = free_port(), free_port(), free_port()
             require(len({ssh_port, socks_port, engine_port, target_port}) == 4, 'Port collision')
+            if os.environ.get('FLOWBRIDGE_TEST_CAPTURE') == '1':
+                capture_log = (args.output / 'capture.log').open('wb')
+                capture = subprocess.Popen(['sudo', '-n', 'tcpdump', '-i', 'lo', '-nn', '-s', '256', '-U',
+                    '-w', str((args.output / 'socks.pcap').resolve()), 'tcp', 'port', str(socks_port)],
+                    stdout=capture_log, stderr=subprocess.STDOUT, start_new_session=True)
+                time.sleep(0.2)
+                require(capture.poll() is None, 'SOCKS packet capture did not start')
             known = root / 'known hosts'
             known.write_text(f'[127.0.0.1]:{ssh_port} ' + (root / 'host_key.pub').read_text())
             config = root / 'sshd_config'
@@ -169,7 +177,7 @@ def main():
                 'PasswordAuthentication no', 'KbdInteractiveAuthentication no',
                 'PubkeyAuthentication yes', 'UsePAM yes', 'StrictModes no',
                 'AllowTcpForwarding local', 'PermitOpen any', 'GatewayPorts no',
-                'X11Forwarding no', 'AllowAgentForwarding no', 'LogLevel VERBOSE',
+                'X11Forwarding no', 'AllowAgentForwarding no', 'LogLevel DEBUG3',
             ]) + '\n')
             subprocess.run(['sudo', '-n', '/usr/sbin/sshd', '-t', '-f', str(config)],
                            check=True, timeout=15)
@@ -186,11 +194,13 @@ def main():
                     return False
             until(listening, 10)
             settings = {'host': '127.0.0.1', 'port': ssh_port, 'user': getpass.getuser(),
-                        'local_port': socks_port, 'identity_file': str(root / 'client_key'),
-                        'known_hosts_file': str(known), 'server_alive_interval_secs': 1,
-                        'server_alive_count_max': 2, 'health_check_interval_ms': 1000,
+                        'local_port': socks_port, 'verbose_diagnostics': False, 'identity_file': str(root / 'client_key'),
+                        'known_hosts_file': str(known), 'server_alive_interval_secs': 15,
+                        'server_alive_count_max': 3, 'health_check_interval_ms': 1000,
                         'health_check_timeout_ms': 3000, 'restart_initial_delay_ms': 300,
                         'restart_max_delay_ms': 1000, 'startup_timeout_ms': 8000, 'max_restarts': 4}
+            report['keepalive'] = {'interval_seconds': settings['server_alive_interval_secs'],
+                                   'count_max': settings['server_alive_count_max']}
             supervisor = abi.call('fb_ssh_create_json', settings)['ssh_id']
             abi.call('fb_ssh_start_json', supervisor)
 
@@ -260,6 +270,9 @@ def main():
             rejection = until(rejected, 15)
             require(rejection['restarts'] == 0, 'Permanent host-key failure was retried')
             passed('Missing enrolled host key is rejected permanently; no automatic insecure enrollment')
+            report['connection_establishment_retries'] = sum(
+                'retrying initial' in event['message']
+                for event in abi.call('fb_engine_snapshot_json', engine)['events'])
             report['passed'] = True
         except Exception as error:
             report['error'] = str(error)
@@ -288,6 +301,15 @@ def main():
                     subprocess.run(['sudo', '-n', 'kill', '-KILL', '--', f'-{daemon.pid}'],
                                    timeout=10, check=False)
                     daemon.wait(timeout=10)
+            if capture:
+                subprocess.run(['sudo', '-n', 'kill', '-INT', '--', f'-{capture.pid}'],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10, check=False)
+                capture.wait(timeout=10)
+                capture_log.close()
+                with (args.output / 'socks-wire.txt').open('wb') as wire:
+                    subprocess.run(['sudo', '-n', 'tcpdump', '-nn', '-tttt', '-XX', '-r',
+                        str((args.output / 'socks.pcap').resolve())], stdout=wire,
+                        stderr=subprocess.STDOUT, timeout=10, check=False)
             server_log.close()
             echo.shutdown()
             echo.server_close()
@@ -295,4 +317,5 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    for repetition in range(20):
+        main(repetition)

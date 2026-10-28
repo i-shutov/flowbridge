@@ -10,6 +10,9 @@ extern "C" {
  * fb_string_free. Errors are {"ok":false,"error":"..."}. Handles are checked,
  * process-local uint64 registry IDs, never pointers. Unknown destroy/close is safe.
  * All engine control and stream open calls belong on a worker queue. */
+/* Offline, allowlist-redacted report from {engine:<snapshot>,ssh:<snapshot>}.
+ * Contains no raw logs, profile, keys, paths or destination names. */
+char *fb_diagnostic_report_json(const char *snapshot_json);
 char *fb_validate_json(const char *config_json);
 char *fb_evaluate_json(const char *config_json, const char *flow_json);
 void fb_string_free(char *value);
