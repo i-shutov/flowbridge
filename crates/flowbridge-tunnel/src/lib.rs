@@ -974,7 +974,7 @@ fn supervise(config: Config, state: Arc<Mutex<State>>, control: Arc<Control>, la
                     s.status.last_error =
                         Some("SOCKS health probe failed; confirming before restarting SSH".into());
                     if s.status.health_failures >= config.health_failure_threshold {
-                        break Some("consecutive local SOCKS health checks failed".into());
+                        break Some("local SOCKS health check failed repeatedly".into());
                     }
                 } else if started.elapsed() >= Duration::from_millis(config.startup_timeout_ms) {
                     break Some("SSH startup deadline expired before SOCKS readiness".into());
