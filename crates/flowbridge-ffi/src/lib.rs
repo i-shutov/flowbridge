@@ -222,7 +222,7 @@ pub extern "C" fn fb_engine_snapshot_json(id: u64) -> *mut c_char {
         with_engine(id, |engine| {
             let snapshot = engine.snapshot();
             Ok(
-                json!({"ok":true,"status":snapshot.status,"connections":snapshot.connections,"events":snapshot.events}),
+                json!({"ok":true,"status":snapshot.status,"connections":snapshot.connections,"events":snapshot.events,"managed_upstream":snapshot.managed_upstream}),
             )
         })
     })
@@ -888,6 +888,8 @@ struct GateInput {
     ready: bool,
     #[serde(default = "default_gate_grace")]
     grace_ms: u64,
+    #[serde(default)]
+    limits: flowbridge_runtime::admission::Limits,
 }
 fn default_gate_grace() -> u64 {
     30000
@@ -904,7 +906,7 @@ pub unsafe extern "C" fn fb_engine_set_upstream_gate_json(
             serde_json::from_str(unsafe { input(gate_json) }?).map_err(|e| e.to_string())?;
         with_engine(id, |engine| {
             Ok(
-                json!({"ok":true,"status":engine.set_upstream_gate(gate.endpoint,gate.ready,gate.grace_ms).map_err(|e|e.to_string())?}),
+                json!({"ok":true,"status":engine.set_upstream_gate_with_limits(gate.endpoint,gate.ready,gate.grace_ms,gate.limits).map_err(|e|e.to_string())?}),
             )
         })
     })

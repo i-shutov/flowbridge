@@ -110,9 +110,13 @@ final class SSHController: ObservableObject {
         guard let value = response["status"] as? [String: Any] else { return }
         status = value; state = value["state"] as? String ?? "failed"
         events = response["events"] as? [[String: Any]] ?? events
-        let descriptions = ["starting": "Подключение SSH…", "ready": "SSH готов", "reconnecting": "SSH переподключается", "failed": "Ошибка SSH", "stopped": "SSH остановлен"]
+        let descriptions = ["starting": "Подключение SSH…", "ready": "SSH готов", "reconnecting": "SSH переподключается", "degraded": "SSH: перегрузка или проверка доступности", "failed": "Ошибка SSH", "stopped": "SSH остановлен"]
         message = descriptions[state] ?? state
         if let error = value["last_error"] as? String, !error.isEmpty { message += ": " + error }
+        if let count = value["resource_exhaustion_count"] as? NSNumber, count.uint64Value > 0 {
+            message += " · ошибок ресурсов: \(count)"
+        }
+        if let backend = value["backend_version"] as? String { message += " · " + backend }
         if state == "ready" || state == "failed" || state == "stopped" {
             let callback = pending; pending = nil; callback?(state == "ready")
         }
