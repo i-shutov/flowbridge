@@ -1,0 +1,65 @@
+name: Native capture session vertical validation
+on:
+  push:
+    branches: ['work/beta-native-vertical']
+    paths: ['tools/**', '.github/workflows/native-vertical-builder.yml']
+permissions:
+  contents: write
+concurrency:
+  group: native-preparation
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Apply and format exact source patch
+        run: |
+          python3 tools/apply_native_vertical.py
+          cargo fmt --all
+          git diff --check
+          mkdir -p build/verification/native
+          git diff > build/verification/native/source.patch
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates native tests
+          git commit -m 'feat(native): share SSH readiness and admission across capture streams'
+          git rev-parse HEAD | tee build/verification/native/source-sha.txt
+          git push origin HEAD:refs/heads/work/beta-native-vertical
+      - name: Compile, lint and unit-test
+        run: |
+          set -o pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets -- -D warnings 2>&1 | tee build/verification/native/clippy.log
+          cargo test --locked --workspace 2>&1 | tee build/verification/native/tests.log
+          cargo build --locked --workspace
+      - name: Native session, explicit SOCKS and capacity tests
+        run: |
+          set -o pipefail
+          python3 tests/smoke.py 2>&1 | tee build/verification/native/smoke.log
+          python3 tests/managed_capacity_integration.py --output build/verification/native/capacity.json
+          python3 tests/native_vertical_integration.py --output build/verification/native/session.json
+      - name: Selected native flow through actual isolated SSH
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --yes openssh-server
+          sudo install -d -m 0755 /run/sshd
+          export GITHUB_SHA=$(git rev-parse HEAD)
+          python3 tests/ssh_real_integration.py --library target/debug/libflowbridge_ffi.so --output build/verification/native/ssh
+      - name: Preserve exact prepared source
+        if: always()
+        run: |
+          mkdir -p build/verification/native
+          git archive --format=zip --prefix=flowbridge/ -o build/verification/native/prepared-source.zip HEAD
+      - uses: actions/upload-artifact@v7.0.0
+        if: always()
+        with:
+          name: FlowBridge-native-session-evidence
+          path: build/verification/native/
+          retention-days: 14
