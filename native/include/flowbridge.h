@@ -35,6 +35,21 @@ char *fb_engine_snapshot_json(uint64_t engine_id);
 char *fb_engine_set_upstream_gate_json(uint64_t engine_id, const char *gate_json);
 void fb_engine_destroy(uint64_t engine_id);
 
+/* Native capture session: caller attests application identity. Upstream readiness
+ * expires without heartbeats (default 5 seconds); only new managed flows wait.
+ * Options: managed_endpoint|null, ready=false, ready_lease_ms=5000,
+ * pause_grace_ms=30000, limits={max_flows:128,max_opening:16,max_queued:64,wait_timeout_ms:10000}.
+ * Does not install a driver, start SSH, or change any machine-wide DNS setting.
+ * destroy cancels pending opens and shuts down all this session's streams. */
+char *fb_native_create_json(const char *config_json, const char *options_json);
+char *fb_native_set_gate_json(uint64_t session_id, const char *gate_json);
+char *fb_native_reload_json(uint64_t session_id, const char *config_json);
+char *fb_native_snapshot_json(uint64_t session_id);
+char *fb_native_stream_open_json(uint64_t session_id, const char *flow_json);
+char *fb_native_stream_open_wfp_json(uint64_t session_id, const char *flow_json,
+                                   const uint8_t *records, size_t length);
+void fb_native_destroy(uint64_t session_id);
+
 /* Stream open applies supplied flow policy and connects Direct/Proxy/Chain,
  * refusing Block. A native capture provider supplies application identity.
  * Connect + all proxy handshakes have a total 30-second deadline.

@@ -54,7 +54,7 @@ pub struct Snapshot {
     pub queued: usize,
     pub rejected: u64,
 }
-pub(crate) struct Budget {
+pub struct Budget {
     limits: Limits,
     active: Arc<Semaphore>,
     opening: Arc<Semaphore>,
@@ -71,7 +71,7 @@ impl Budget {
             limits,
         }
     }
-    pub(crate) fn shared(endpoint: &Endpoint, limits: Limits) -> Result<Arc<Self>, String> {
+    pub fn shared(endpoint: &Endpoint, limits: Limits) -> Result<Arc<Self>, String> {
         limits.validate()?;
         let ip: IpAddr = endpoint
             .host
@@ -101,7 +101,7 @@ impl Budget {
         registry.insert(key, Arc::downgrade(&budget));
         Ok(budget)
     }
-    pub(crate) fn snapshot(&self) -> Snapshot {
+    pub fn snapshot(&self) -> Snapshot {
         Snapshot {
             limits: self.limits.clone(),
             active_including_opening: self.limits.max_flows - self.active.available_permits(),
@@ -110,7 +110,7 @@ impl Budget {
             rejected: self.rejected.load(Ordering::Relaxed),
         }
     }
-    pub(crate) fn enqueue(self: &Arc<Self>) -> Result<Waiter, String> {
+    pub fn enqueue(self: &Arc<Self>) -> Result<Waiter, String> {
         match self.queued.clone().try_acquire_owned() {
             Ok(permit) => Ok(Waiter {
                 budget: self.clone(),
@@ -124,23 +124,23 @@ impl Budget {
         }
     }
 }
-pub(crate) struct Waiter {
+pub struct Waiter {
     budget: Arc<Budget>,
     _queued: OwnedSemaphorePermit,
-    pub(crate) deadline: Instant,
+    pub deadline: Instant,
 }
-pub(crate) struct Admission {
+pub struct Admission {
     _budget: Arc<Budget>,
     _active: OwnedSemaphorePermit,
     opening: Option<OwnedSemaphorePermit>,
 }
 impl Admission {
-    pub(crate) fn connected(&mut self) {
+    pub fn connected(&mut self) {
         self.opening.take();
     }
 }
 impl Waiter {
-    pub(crate) async fn admit(self) -> Result<Admission, String> {
+    pub async fn admit(self) -> Result<Admission, String> {
         let result = tokio::time::timeout_at(self.deadline, async {
             let active = self
                 .budget
