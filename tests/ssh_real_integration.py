@@ -128,13 +128,14 @@ def round_trip(proxy_port, target_port):
         require(client.recv(1) == b'', 'Half-close did not finish')
 
 
-def main():
+def main(repetition=0):
     require(sys.platform.startswith('linux') and os.environ.get('GITHUB_ACTIONS') == 'true',
             'Run only on a disposable Linux GitHub Actions runner')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--library', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
+    args.output = args.output / f"iteration-{repetition + 1:02d}"
     abi = ABI(args.library)
     args.output.mkdir(parents=True, exist_ok=True)
     report = {'commit': os.environ.get('GITHUB_SHA'), 'passed': False, 'checks': [],
@@ -169,7 +170,7 @@ def main():
                 'PasswordAuthentication no', 'KbdInteractiveAuthentication no',
                 'PubkeyAuthentication yes', 'UsePAM yes', 'StrictModes no',
                 'AllowTcpForwarding local', 'PermitOpen any', 'GatewayPorts no',
-                'X11Forwarding no', 'AllowAgentForwarding no', 'LogLevel VERBOSE',
+                'X11Forwarding no', 'AllowAgentForwarding no', 'LogLevel DEBUG3',
             ]) + '\n')
             subprocess.run(['sudo', '-n', '/usr/sbin/sshd', '-t', '-f', str(config)],
                            check=True, timeout=15)
@@ -186,7 +187,7 @@ def main():
                     return False
             until(listening, 10)
             settings = {'host': '127.0.0.1', 'port': ssh_port, 'user': getpass.getuser(),
-                        'local_port': socks_port, 'identity_file': str(root / 'client_key'),
+                        'local_port': socks_port, 'verbose_diagnostics': True, 'identity_file': str(root / 'client_key'),
                         'known_hosts_file': str(known), 'server_alive_interval_secs': 1,
                         'server_alive_count_max': 2, 'health_check_interval_ms': 1000,
                         'health_check_timeout_ms': 3000, 'restart_initial_delay_ms': 300,
@@ -295,4 +296,5 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    for repetition in range(10):
+        main(repetition)

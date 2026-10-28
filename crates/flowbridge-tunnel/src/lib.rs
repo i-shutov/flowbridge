@@ -39,6 +39,7 @@ pub struct Config {
     pub identity_file: Option<String>,
     pub known_hosts_file: Option<String>,
     pub compression: bool,
+    pub verbose_diagnostics: bool,
     pub server_alive_interval_secs: u64,
     pub server_alive_count_max: u32,
     pub connect_timeout_secs: u64,
@@ -61,6 +62,7 @@ impl Default for Config {
             identity_file: None,
             known_hosts_file: None,
             compression: false,
+            verbose_diagnostics: false,
             server_alive_interval_secs: 15,
             server_alive_count_max: 3,
             connect_timeout_secs: 10,
@@ -214,7 +216,14 @@ impl Config {
             format!("ServerAliveCountMax={}", self.server_alive_count_max),
             format!("ConnectTimeout={}", self.connect_timeout_secs),
             "ConnectionAttempts=1".into(),
-            "LogLevel=ERROR".into(),
+            format!(
+                "LogLevel={}",
+                if self.verbose_diagnostics {
+                    "DEBUG3"
+                } else {
+                    "ERROR"
+                }
+            ),
             format!(
                 "Compression={}",
                 if self.compression { "yes" } else { "no" }
