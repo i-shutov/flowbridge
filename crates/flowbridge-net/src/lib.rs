@@ -644,8 +644,13 @@ pub async fn accept_socks5(
     {
         return Err(NetError::NonLoopbackIngress);
     }
-    match time::timeout(timeout, accept_socks5_inner(stream)).await {
-        Ok(result) => result,
+    let deadline = Instant::now() + timeout;
+    match time::timeout_at(deadline, accept_socks5_inner(stream)).await {
+        Ok(Ok(endpoint)) => Ok(endpoint),
+        Ok(Err(error)) => {
+            finish_failed_ingress(stream, deadline).await;
+            Err(error)
+        }
         Err(_) => {
             // A fixed-size best-effort reply must not extend the handshake deadline.
             let _ = stream.try_write(&[5, 1, 0, 1, 0, 0, 0, 0, 0, 0]);
@@ -654,6 +659,29 @@ pub async fn accept_socks5(
             })
         }
     }
+}
+
+// A failed request can leave its address/port (or pipelined bytes) unread.
+// Dropping that socket immediately can reset TCP on Windows and discard the
+// rejection reply. Half-close writes, then drain only a bounded amount of input.
+// This never extends the original handshake deadline, resolves DNS, or dials.
+async fn finish_failed_ingress(stream: &mut TcpStream, handshake_deadline: Instant) {
+    let deadline = handshake_deadline.min(Instant::now() + Duration::from_millis(100));
+    let _ = time::timeout_at(deadline, async {
+        stream.shutdown().await?;
+        let mut buffer = [0; 512];
+        let mut remaining = 4096;
+        while remaining > 0 {
+            let capacity = remaining.min(buffer.len());
+            let count = stream.read(&mut buffer[..capacity]).await?;
+            if count == 0 {
+                break;
+            }
+            remaining -= count;
+        }
+        Ok::<(), io::Error>(())
+    })
+    .await;
 }
 
 async fn accept_socks5_inner(stream: &mut TcpStream) -> Result<Endpoint, NetError> {
