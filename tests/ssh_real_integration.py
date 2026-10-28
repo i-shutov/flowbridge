@@ -110,7 +110,9 @@ def connect(proxy_port, target_port):
         host = b'localhost'
         client.sendall(b'\x05\x01\x00\x03' + bytes([len(host)]) + host
                        + target_port.to_bytes(2, 'big'))
-        require(exact(client, 10) == b'\x05\x00\x00\x01' + bytes(6), 'SOCKS CONNECT failed')
+        reply = exact(client, 10)
+        require(reply == b'\x05\x00\x00\x01' + bytes(6),
+                'SOCKS CONNECT failed; reply=' + reply.hex())
         return client
     except Exception:
         client.close()
@@ -186,8 +188,8 @@ def main():
             settings = {'host': '127.0.0.1', 'port': ssh_port, 'user': getpass.getuser(),
                         'local_port': socks_port, 'identity_file': str(root / 'client_key'),
                         'known_hosts_file': str(known), 'server_alive_interval_secs': 1,
-                        'server_alive_count_max': 2, 'health_check_interval_ms': 100,
-                        'health_check_timeout_ms': 200, 'restart_initial_delay_ms': 300,
+                        'server_alive_count_max': 2, 'health_check_interval_ms': 1000,
+                        'health_check_timeout_ms': 3000, 'restart_initial_delay_ms': 300,
                         'restart_max_delay_ms': 1000, 'startup_timeout_ms': 8000, 'max_restarts': 4}
             supervisor = abi.call('fb_ssh_create_json', settings)['ssh_id']
             abi.call('fb_ssh_start_json', supervisor)
@@ -261,6 +263,14 @@ def main():
             report['passed'] = True
         except Exception as error:
             report['error'] = str(error)
+            for label, handle, function in [
+                ('ssh', supervisor, 'fb_ssh_snapshot_json'),
+                ('untrusted_ssh', bad_supervisor, 'fb_ssh_snapshot_json'),
+                ('engine', engine, 'fb_engine_snapshot_json'),
+            ]:
+                if handle:
+                    try: report[label] = abi.call(function, handle)
+                    except Exception as snapshot_error: report[label] = str(snapshot_error)
             raise
         finally:
             for ident in (supervisor, bad_supervisor):

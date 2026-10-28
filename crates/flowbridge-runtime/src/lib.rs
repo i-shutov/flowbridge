@@ -1,5 +1,6 @@
 //! Reusable native application engine. All control methods are synchronous and
 //! may be called from a UI worker or a Tokio task: networking owns its own thread.
+pub mod admission;
 use flowbridge_core::{Action, Config, Endpoint, Flow};
 use flowbridge_net::{accept_socks5, connect_route_guarded, reply_socks5, NetError};
 use serde::Serialize;
@@ -84,6 +85,7 @@ pub struct Event {
 #[derive(Debug, Clone, Serialize)]
 pub struct Snapshot {
     pub status: Status,
+    pub managed_upstream: Option<admission::Snapshot>,
     pub connections: Vec<Connection>,
     pub events: Vec<Event>,
 }
@@ -119,14 +121,24 @@ struct UpstreamGate {
     endpoint: Option<Endpoint>,
     ready: bool,
     grace: Duration,
+    budget: Option<Arc<admission::Budget>>,
 }
 impl UpstreamGate {
-    fn pauses(&self, first_hop: &Endpoint) -> bool {
-        !self.ready
-            && self.endpoint.as_ref().is_some_and(|endpoint| {
-                endpoint.port == first_hop.port
-                    && endpoint.host.parse::<IpAddr>().ok() == first_hop.host.parse::<IpAddr>().ok()
+    fn matches(&self, first_hop: &Endpoint) -> bool {
+        fn normalized(host: &str) -> Option<IpAddr> {
+            host.parse::<IpAddr>().ok().map(|ip| match ip {
+                IpAddr::V6(v6) => v6.to_ipv4_mapped().map(IpAddr::V4).unwrap_or(ip),
+                _ => ip,
             })
+        }
+        self.endpoint.as_ref().is_some_and(|endpoint| {
+            endpoint.port == first_hop.port
+                && normalized(&endpoint.host).is_some()
+                && normalized(&endpoint.host) == normalized(&first_hop.host)
+        })
+    }
+    fn pauses(&self, first_hop: &Endpoint) -> bool {
+        !self.ready && self.matches(first_hop)
     }
 }
 /// A stopped engine can be started again. Configuration generations are captured
@@ -169,6 +181,7 @@ impl Engine {
                 endpoint: None,
                 ready: true,
                 grace: Duration::ZERO,
+                budget: None,
             })
             .0,
         })
@@ -180,6 +193,12 @@ impl Engine {
         let s = lock(&self.state);
         Snapshot {
             status: s.status.clone(),
+            managed_upstream: self
+                .upstream_gate
+                .borrow()
+                .budget
+                .as_ref()
+                .map(|b| b.snapshot()),
             connections: s.connections.values().cloned().collect(),
             events: s.events.iter().cloned().collect(),
         }
@@ -189,9 +208,18 @@ impl Engine {
     /// Block decisions remain immediate. Clearing the endpoint releases waiters.
     pub fn set_upstream_gate(
         &self,
+        endpoint: Option<Endpoint>,
+        ready: bool,
+        grace_ms: u64,
+    ) -> Result<Status, RuntimeError> {
+        self.set_upstream_gate_with_limits(endpoint, ready, grace_ms, admission::Limits::default())
+    }
+    pub fn set_upstream_gate_with_limits(
+        &self,
         mut endpoint: Option<Endpoint>,
         ready: bool,
         grace_ms: u64,
+        limits: admission::Limits,
     ) -> Result<Status, RuntimeError> {
         if grace_ms > 120_000 {
             return Err(RuntimeError(
@@ -218,10 +246,16 @@ impl Engine {
             }
             endpoint.host = ip.to_string();
         }
+        let budget = endpoint
+            .as_ref()
+            .map(|e| admission::Budget::shared(e, limits))
+            .transpose()
+            .map_err(RuntimeError)?;
         self.upstream_gate.send_replace(UpstreamGate {
             endpoint,
             ready,
             grace: Duration::from_millis(grace_ms),
+            budget,
         });
         Ok(lock(&self.state).status.clone())
     }
@@ -488,8 +522,20 @@ async fn handle(
         return Err("blocked by policy".into());
     }
     let route = config.route(&decision.action).map_err(|e| e.to_string())?;
+    let mut waiter = None;
     if let Some(first) = route.first() {
         let initial = upstream_gate.borrow().clone();
+        if initial.matches(&first.endpoint) {
+            if let Some(budget) = &initial.budget {
+                match budget.enqueue() {
+                    Ok(value) => waiter = Some(value),
+                    Err(error) => {
+                        let _ = reply_socks5(&mut client, 1).await;
+                        return Err(error);
+                    }
+                }
+            }
+        }
         if initial.pauses(&first.endpoint) {
             {
                 let mut state = lock(&guard.state);
@@ -497,7 +543,11 @@ async fn handle(
                     connection.state = "waiting_for_tunnel".into();
                 }
             }
-            let deadline = Instant::now() + initial.grace;
+            let deadline = waiter
+                .as_ref()
+                .map(|w| w.deadline)
+                .unwrap_or(Instant::now() + initial.grace)
+                .min(Instant::now() + initial.grace);
             loop {
                 if !upstream_gate.borrow().pauses(&first.endpoint) {
                     break;
@@ -516,6 +566,27 @@ async fn handle(
                 connection.state = "connecting".into();
             }
         }
+    }
+    let mut admission = if let Some(waiter) = waiter {
+        if let Some(connection) = lock(&guard.state).connections.get_mut(&guard.id) {
+            connection.state = "waiting_for_capacity".into();
+        }
+        match waiter.admit().await {
+            Ok(value) => Some(value),
+            Err(error) => {
+                let _ = reply_socks5(&mut client, 1).await;
+                return Err(error);
+            }
+        }
+    } else {
+        None
+    };
+    let paused = route
+        .first()
+        .is_some_and(|first| upstream_gate.borrow().pauses(&first.endpoint));
+    if paused {
+        let _ = reply_socks5(&mut client, 1).await;
+        return Err("managed SSH became unavailable while awaiting capacity".into());
     }
     let upstream = match connect_route_guarded(
         &target,
@@ -537,6 +608,9 @@ async fn handle(
             return Err(e.to_string());
         }
     };
+    if let Some(admission) = &mut admission {
+        admission.connected();
+    }
     reply_socks5(&mut client, 0)
         .await
         .map_err(|e| e.to_string())?;

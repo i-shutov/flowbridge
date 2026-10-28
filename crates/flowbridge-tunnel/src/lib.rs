@@ -44,6 +44,8 @@ pub struct Config {
     pub connect_timeout_secs: u64,
     pub health_check_interval_ms: u64,
     pub health_check_timeout_ms: u64,
+    pub health_failure_threshold: u32,
+    pub overload_quiet_ms: u64,
     pub startup_timeout_ms: u64,
     pub restart_initial_delay_ms: u64,
     pub restart_max_delay_ms: u64,
@@ -64,6 +66,8 @@ impl Default for Config {
             connect_timeout_secs: 10,
             health_check_interval_ms: 1000,
             health_check_timeout_ms: 1000,
+            health_failure_threshold: 3,
+            overload_quiet_ms: 5000,
             startup_timeout_ms: 15000,
             restart_initial_delay_ms: 1000,
             restart_max_delay_ms: 30000,
@@ -152,6 +156,13 @@ impl Config {
                 100,
                 10000,
             ),
+            (
+                "health_failure_threshold",
+                u64::from(self.health_failure_threshold),
+                1,
+                20,
+            ),
+            ("overload_quiet_ms", self.overload_quiet_ms, 100, 300000),
             ("startup_timeout_ms", self.startup_timeout_ms, 1000, 120000),
             (
                 "restart_initial_delay_ms",
@@ -239,6 +250,12 @@ pub struct Status {
     pub last_error: Option<String>,
     pub next_retry_ms: u64,
     pub parent_exit_cleanup: &'static str,
+    pub backend_path: Option<String>,
+    pub backend_version: Option<String>,
+    pub diagnostic_code: Option<String>,
+    pub resource_exhaustion_count: u64,
+    pub last_resource_error_unix_ms: Option<u64>,
+    pub health_failures: u32,
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct Event {
@@ -258,6 +275,9 @@ struct State {
     stderr: VecDeque<String>,
     next_seq: u64,
     fatal: Option<String>,
+    last_resource_error: Option<Instant>,
+    last_resource_event: Option<Instant>,
+    recovery_checks: u32,
 }
 impl State {
     fn event(&mut self, level: &str, message: impl Into<String>) {
@@ -331,12 +351,7 @@ impl Supervisor {
                 // Native macOS capture exempts the observed code-signing ID of
                 // this exact system client; PATH lookup could select a different
                 // binary and invalidate that loop-prevention rule.
-                let executable = if cfg!(target_os = "macos") {
-                    "/usr/bin/ssh"
-                } else {
-                    "ssh"
-                };
-                let mut command = Command::new(executable);
+                let mut command = Command::new(resolve_ssh()?);
                 command.args(config.arguments());
                 Ok(command)
             }),
@@ -352,6 +367,12 @@ impl Supervisor {
             attempt: 0,
             last_error: None,
             next_retry_ms: 0,
+            backend_path: None,
+            backend_version: None,
+            diagnostic_code: None,
+            resource_exhaustion_count: 0,
+            last_resource_error_unix_ms: None,
+            health_failures: 0,
             parent_exit_cleanup: if cfg!(windows) {
                 "windows_job_object"
             } else {
@@ -366,6 +387,9 @@ impl Supervisor {
                 stderr: VecDeque::new(),
                 next_seq: 1,
                 fatal: None,
+                last_resource_error: None,
+                last_resource_event: None,
+                recovery_checks: 0,
             })),
             operation: Mutex::new(()),
             running: Mutex::new(None),
@@ -389,7 +413,7 @@ impl Supervisor {
             let s = lock(&self.state);
             if matches!(
                 s.status.state.as_str(),
-                "starting" | "ready" | "reconnecting"
+                "starting" | "ready" | "reconnecting" | "degraded"
             ) {
                 drop(s);
                 return Ok(self.snapshot());
@@ -408,6 +432,11 @@ impl Supervisor {
             s.status.last_error = None;
             s.status.next_retry_ms = 0;
             s.fatal = None;
+            s.last_resource_error = None;
+            s.last_resource_event = None;
+            s.recovery_checks = 0;
+            s.status.diagnostic_code = None;
+            s.status.health_failures = 0;
             s.event("info", "starting managed OpenSSH dynamic forwarding");
         }
         let config = self.config.clone();
@@ -456,6 +485,10 @@ impl Supervisor {
             s.status.pid = None;
             s.status.next_retry_ms = 0;
             s.status.last_error = None;
+            s.status.diagnostic_code = None;
+            s.status.health_failures = 0;
+            s.last_resource_error = None;
+            s.recovery_checks = 0;
             s.event("info", "managed SSH stopped; restart disabled");
         }
         Ok(self.snapshot())
@@ -497,6 +530,34 @@ fn stderr_line(state: &Arc<Mutex<State>>, bytes: &[u8]) {
         None
     };
     let mut s = lock(state);
+    if lower.contains("too many open files") || lower.contains("no buffer space available") {
+        let now = Instant::now();
+        s.status.resource_exhaustion_count = s.status.resource_exhaustion_count.saturating_add(1);
+        s.status.last_resource_error_unix_ms = Some(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis()
+                .min(u128::from(u64::MAX)) as u64,
+        );
+        s.status.diagnostic_code = Some("ssh_resource_exhausted".into());
+        s.status.state = "degraded".into();
+        s.status.last_error = Some("SSH resources exhausted: new connections paused; existing streams retained. Reduce concurrency or select a tested backend. No automatic restart while overloaded.".into());
+        s.last_resource_error = Some(now);
+        s.recovery_checks = 0;
+        // Count every occurrence; bound repetitive diagnostics independently.
+        if s.last_resource_event
+            .is_some_and(|last| last.elapsed() < Duration::from_secs(1))
+        {
+            return;
+        }
+        s.last_resource_event = Some(now);
+        let total = s.status.resource_exhaustion_count;
+        s.event(
+            "error",
+            format!("SSH resource exhaustion ({total} occurrences): {text}"),
+        );
+    }
     if let Some(fatal) = fatal {
         s.fatal = Some(fatal.into());
         s.status.last_error = Some(fatal.into());
@@ -719,6 +780,58 @@ impl Drop for ChildGuard {
         self.terminate();
     }
 }
+fn resolve_ssh() -> io::Result<std::path::PathBuf> {
+    if cfg!(target_os = "macos") {
+        return std::fs::canonicalize("/usr/bin/ssh");
+    }
+    let name = if cfg!(windows) { "ssh.exe" } else { "ssh" };
+    for directory in std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()) {
+        if !directory.is_absolute() {
+            continue;
+        }
+        let path = directory.join(name);
+        if path.is_file() {
+            return std::fs::canonicalize(path);
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::NotFound,
+        "OpenSSH was not found in an absolute PATH directory",
+    ))
+}
+
+fn backend_version(executable: &std::ffi::OsStr, control: &Control) -> Option<String> {
+    let mut command = Command::new(executable);
+    command.arg("-V");
+    let mut child = ChildGuard::spawn(command).ok()?;
+    let mut pipe = child.child.stderr.take()?;
+    prepare_stderr(&pipe).ok()?;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut output = Vec::new();
+    let mut chunk = [0u8; 512];
+    while !control.cancelled() && Instant::now() < deadline && output.len() < 4096 {
+        match read_stderr(&mut pipe, &mut chunk) {
+            Ok(0) => break,
+            Ok(n) => output.extend_from_slice(&chunk[..n]),
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                if matches!(child.child.try_wait(), Ok(Some(_))) {
+                    break;
+                }
+                if control.wait(Duration::from_millis(20)) {
+                    break;
+                }
+            }
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(_) => break,
+        }
+    }
+    child.terminate();
+    String::from_utf8_lossy(&output)
+        .lines()
+        .find(|line| line.starts_with("OpenSSH_"))
+        .map(|line| line.chars().filter(|c| !c.is_control()).take(256).collect())
+}
+
 fn supervise(config: Config, state: Arc<Mutex<State>>, control: Arc<Control>, launcher: Launcher) {
     // Refuse an existing service rather than falsely identifying its SOCKS reply
     // as readiness for our own child. OpenSSH also uses ExitOnForwardFailure.
@@ -740,7 +853,27 @@ fn supervise(config: Config, state: Arc<Mutex<State>>, control: Arc<Control>, la
             s.status.next_retry_ms = 0;
             s.fatal = None;
         }
-        let mut child = match launcher(&config).and_then(ChildGuard::spawn) {
+        let launched = launcher(&config).and_then(|command| {
+            let executable = command.get_program().to_owned();
+            let version = backend_version(&executable, &control);
+            {
+                let mut s = lock(&state);
+                s.status.backend_path = Some(executable.to_string_lossy().into_owned());
+                s.status.backend_version = version;
+                s.status.health_failures = 0;
+                s.status.diagnostic_code = None;
+                s.last_resource_error = None;
+                s.recovery_checks = 0;
+            }
+            if control.cancelled() {
+                return Err(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "SSH start cancelled",
+                ));
+            }
+            ChildGuard::spawn(command)
+        });
+        let mut child = match launched {
             Ok(child) => child,
             Err(error) => {
                 lock(&state).failed(format!("could not start OpenSSH: {error}. Install the OpenSSH client and make ssh available on PATH."));
@@ -801,20 +934,52 @@ fn supervise(config: Config, state: Arc<Mutex<State>>, control: Arc<Control>, la
                 if control.cancelled() {
                     break None;
                 }
+                let mut s = lock(&state);
                 if healthy && matches!(child.child.try_wait(), Ok(None)) {
-                    if !was_ready {
-                        let mut s = lock(&state);
+                    s.status.health_failures = 0;
+                    let overload_recent = s.last_resource_error.is_some_and(|last| {
+                        last.elapsed() < Duration::from_millis(config.overload_quiet_ms)
+                    });
+                    if s.last_resource_error.is_some() {
+                        if overload_recent {
+                            s.recovery_checks = 0;
+                        } else {
+                            s.recovery_checks = s.recovery_checks.saturating_add(1);
+                        }
+                    }
+                    if s.last_resource_error.is_some() && s.recovery_checks < 2 {
+                        s.status.state = "degraded".into();
+                    } else {
+                        if s.status.state != "ready" {
+                            s.event("info", "SSH local SOCKS greeting ready; destination reachability is checked per connection, not by this probe");
+                        }
+                        s.last_resource_error = None;
+                        s.recovery_checks = 0;
                         s.status.state = "ready".into();
                         s.status.last_error = None;
-                        s.event("info","OpenSSH is alive and local SOCKS5 greeting is ready; existing TCP sessions do not survive a later SSH restart");
-                        was_ready = true;
-                        failures = 0;
+                        s.status.diagnostic_code = None;
                     }
+                    was_ready = true;
+                    failures = 0;
+                } else if s.last_resource_error.is_some() {
+                    // Do not destroy existing streams merely because an overloaded
+                    // but live process cannot accept another health connection.
+                    s.status.state = "degraded".into();
+                    s.status.health_failures = s.status.health_failures.saturating_add(1);
+                    s.recovery_checks = 0;
                 } else if was_ready {
-                    break Some("local SOCKS health check failed".into());
+                    s.status.health_failures = s.status.health_failures.saturating_add(1);
+                    s.status.state = "degraded".into();
+                    s.status.diagnostic_code = Some("ssh_health_unresponsive".into());
+                    s.status.last_error =
+                        Some("SOCKS health probe failed; confirming before restarting SSH".into());
+                    if s.status.health_failures >= config.health_failure_threshold {
+                        break Some("consecutive local SOCKS health checks failed".into());
+                    }
                 } else if started.elapsed() >= Duration::from_millis(config.startup_timeout_ms) {
                     break Some("SSH startup deadline expired before SOCKS readiness".into());
                 }
+                drop(s);
                 next_check =
                     Instant::now() + Duration::from_millis(config.health_check_interval_ms);
             }
@@ -1002,6 +1167,52 @@ mod tests {
             }
         }
     }
+    #[test]
+    fn overload_is_reported_coalesced_and_recovers_without_restarting() {
+        let mut cfg = config();
+        cfg.overload_quiet_ms = 300;
+        let supervisor = supervisor(cfg, "ready");
+        supervisor.start().unwrap();
+        let ready = wait(&supervisor, |s| s.status.state == "ready");
+        for _ in 0..10000 {
+            stderr_line(&supervisor.state, b"accept: Too many open files");
+        }
+        let overloaded = supervisor.snapshot();
+        assert_eq!(overloaded.status.state, "degraded");
+        assert_eq!(
+            overloaded.status.diagnostic_code.as_deref(),
+            Some("ssh_resource_exhausted")
+        );
+        assert_eq!(overloaded.status.resource_exhaustion_count, 10000);
+        assert!(overloaded.events.len() < 20);
+        assert_eq!(supervisor.start().unwrap().status.pid, ready.status.pid);
+        let recovered = wait(&supervisor, |s| s.status.state == "ready");
+        assert_eq!(recovered.status.pid, ready.status.pid);
+        assert_eq!(recovered.status.restarts, 0);
+        assert_eq!(recovered.status.resource_exhaustion_count, 10000);
+        assert!(recovered.status.last_resource_error_unix_ms.is_some());
+        supervisor.stop().unwrap();
+    }
+
+    #[test]
+    fn overloaded_live_child_is_not_killed_when_health_probes_fail() {
+        let mut cfg = config();
+        cfg.overload_quiet_ms = 100;
+        let supervisor = supervisor(cfg, "ready_then_stall");
+        supervisor.start().unwrap();
+        let ready = wait(&supervisor, |s| s.status.state == "ready");
+        stderr_line(&supervisor.state, b"accept: Too many open files");
+        thread::sleep(Duration::from_millis(900));
+        let degraded = supervisor.snapshot();
+        assert_eq!(degraded.status.state, "degraded");
+        assert_eq!(degraded.status.pid, ready.status.pid);
+        assert_eq!(degraded.status.restarts, 0);
+        assert!(degraded.status.health_failures >= 1);
+        let started = Instant::now();
+        assert_eq!(supervisor.stop().unwrap().status.state, "stopped");
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
     #[test]
     fn strict_config_and_arguments_do_not_allow_shell_or_host_key_overrides() {
         let config=Config::from_json(r#"{"host":"server.example","user":"alice","identity_file":"/keys/with space/key","known_hosts_file":"/keys/known hosts","compression":true}"#).unwrap();
