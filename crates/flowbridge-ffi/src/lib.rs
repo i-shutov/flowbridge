@@ -222,7 +222,7 @@ pub extern "C" fn fb_engine_snapshot_json(id: u64) -> *mut c_char {
         with_engine(id, |engine| {
             let snapshot = engine.snapshot();
             Ok(
-                json!({"ok":true,"status":snapshot.status,"connections":snapshot.connections,"events":snapshot.events}),
+                json!({"ok":true,"status":snapshot.status,"connections":snapshot.connections,"events":snapshot.events,"managed_upstream":snapshot.managed_upstream}),
             )
         })
     })
