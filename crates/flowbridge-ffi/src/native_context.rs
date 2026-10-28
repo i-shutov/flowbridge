@@ -160,7 +160,7 @@ impl Session {
             let route = vec![proxy];
             let mut lease = self.admit(&route).await?;
             self.recheck(&route)?;
-            let stream = connect_route_guarded(
+            let stream = flowbridge_net::connect_route_guarded(
                 &dns.resolver,
                 &route,
                 Duration::from_millis(config.connect_timeout_ms),

@@ -2,6 +2,7 @@
 use super::*;
 use flowbridge_core::Endpoint;
 use serde::Deserialize;
+use std::io;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[derive(Clone, Deserialize)]
