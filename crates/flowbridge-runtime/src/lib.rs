@@ -588,15 +588,37 @@ async fn handle(
         let _ = reply_socks5(&mut client, 1).await;
         return Err("managed SSH became unavailable while awaiting capacity".into());
     }
-    let upstream = match connect_route_guarded(
-        &target,
-        &route,
-        Duration::from_millis(config.connect_timeout_ms),
-        Duration::from_millis(config.handshake_timeout_ms),
-        config.listen,
-    )
-    .await
-    {
+    // Retry only a managed, single-hop SOCKS5 establishment, before any
+    // application bytes or success reply have been sent. Never replay payload.
+    let may_retry = admission.is_some()
+        && route.len() == 1
+        && matches!(route[0].kind, flowbridge_core::ProxyKind::Socks5);
+    let deadline = Instant::now()
+        + Duration::from_millis(
+            config
+                .connect_timeout_ms
+                .saturating_add(config.handshake_timeout_ms),
+        );
+    let established = tokio::time::timeout_at(deadline, async {
+        for attempt in 0..2 {
+            if route.first().is_some_and(|p| upstream_gate.borrow().pauses(&p.endpoint)) {
+                return Err(NetError::InvalidConfig("managed upstream is paused"));
+            }
+            let result = connect_route_guarded(&target, &route,
+                Duration::from_millis(config.connect_timeout_ms),
+                Duration::from_millis(config.handshake_timeout_ms), config.listen).await;
+            let retryable = matches!(&result, Err(NetError::Io { stage, source })
+                if matches!(*stage, "SOCKS5 greeting" | "SOCKS5 CONNECT response")
+                    && matches!(source.kind(), io::ErrorKind::UnexpectedEof
+                        | io::ErrorKind::ConnectionReset | io::ErrorKind::ConnectionAborted));
+            if !may_retry || !retryable || attempt == 1 { return result; }
+            lock(&guard.state).event("warn", format!(
+                "connection {}: retrying initial managed SOCKS establishment (2/2); no application bytes sent", guard.id));
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        unreachable!("bounded establishment loop always returns")
+    }).await.unwrap_or(Err(NetError::Timeout { stage: "initial managed connection" }));
+    let upstream = match established {
         Ok(v) => v,
         Err(e) => {
             let code = if matches!(&e, NetError::RecursiveListener) {

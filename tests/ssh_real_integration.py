@@ -267,6 +267,9 @@ def main(repetition=0):
             rejection = until(rejected, 15)
             require(rejection['restarts'] == 0, 'Permanent host-key failure was retried')
             passed('Missing enrolled host key is rejected permanently; no automatic insecure enrollment')
+            report['connection_establishment_retries'] = sum(
+                'retrying initial' in event['message']
+                for event in abi.call('fb_engine_snapshot_json', engine)['events'])
             report['passed'] = True
         except Exception as error:
             report['error'] = str(error)
