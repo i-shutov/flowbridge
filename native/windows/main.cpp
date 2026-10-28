@@ -24,7 +24,7 @@ using Json = nlohmann::json;
 namespace {
 constexpr size_t MaxBytes = 1024 * 1024;
 constexpr UINT Completed = WM_APP + 1;
-enum { Start=100, Stop, Apply, Open, Save, Proxy, Host, Port, Protocol, Config, Connections, Log, Status, Mode, QuickLabel, ConfigLabel, ConnectionsLabel, LogLabel, NavDashboard=200, NavConnection, NavApps, NavAdvanced, Theme=204, PageTitle=205, PageSubtitle=206, Badge=207, Metrics=208, DashboardHelp=209, SshHealth=210, ManagedMode=230, SshHost=231, SshPort=232, SshUser=233, KeyPath=234, KnownHosts=235, LocalPort=236, Compression=237, Keepalive=238, KeepaliveCount=239, SaveDesktop=240, BrowseKey=241, BrowseKnown=242, SshHelp=243, ConnectionSummary=244, Discover=260, AppsTable=261, PresetAI=262, PresetWeb=263, PresetBoth=264, BrowseApp=265, ExportNative=266, BlockOthers=267, AppsHelp=268, AppsSummary=269, ScanStatus=270, SshTitle=271, SshSummary=272, RetryInitial=245, RetryMax=246, Banner=280 };
+enum { Start=100, Stop, Apply, Open, Save, Proxy, Host, Port, Protocol, Config, Connections, Log, Status, Mode, QuickLabel, ConfigLabel, ConnectionsLabel, LogLabel, NavDashboard=200, NavConnection, NavApps, NavAdvanced, Theme=204, PageTitle=205, PageSubtitle=206, Badge=207, Metrics=208, DashboardHelp=209, SshHealth=210, ManagedMode=230, SshHost=231, SshPort=232, SshUser=233, KeyPath=234, KnownHosts=235, LocalPort=236, Compression=237, Keepalive=238, KeepaliveCount=239, SaveDesktop=240, BrowseKey=241, BrowseKnown=242, SshHelp=243, ConnectionSummary=244, Discover=260, AppsTable=261, PresetAI=262, PresetWeb=263, PresetBoth=264, BrowseApp=265, ExportNative=266, BlockOthers=267, AppsHelp=268, AppsSummary=269, ScanStatus=270, SshTitle=271, SshSummary=272, RetryInitial=245, RetryMax=246, Banner=280, ExportDiagnostics=281 };
 constexpr int DiscoverCommand=900, PollCommand=999;
 std::map<int,int> pages; // -1 global; 0 dashboard; 1 connection; 2 applications; 3 advanced
 int activePage=0;
@@ -44,6 +44,7 @@ bool busy=false, closing=false, filling=false, quickDirty=false;
 std::string localLog, workerError;
 std::string selectedProxyId;
 Json draft;
+Json latestEngineSnapshot=Json::object(),latestSshSnapshot=Json::object();
 const char* initialConfig = R"({"version":1,"listen":"127.0.0.1:1081","proxies":[{"id":"ssh","kind":"socks5","endpoint":{"host":"127.0.0.1","port":1080},"username":null,"password_env":null}],"chains":[],"rules":[],"default_action":{"type":"proxy","id":"ssh"},"connect_timeout_ms":10000,"handshake_timeout_ms":10000,"idle_timeout_ms":300000,"max_connections":512})";
 std::wstring wide(const std::string& s) {
     if (s.empty()) return {};
@@ -270,6 +271,7 @@ std::wstring display(const Json& j,const char* name) {
     return wide(text);
 }
 void showSnapshot(const Json& snap) {
+    latestEngineSnapshot=snap;
     if(snap.is_null()) return;
     const auto& status=snap.at("status"); bool running=status.value("running",false); engineRunning=running;
     auto text=std::string(running?"Подключено":"Остановлено")+" | SOCKS5: "+status.value("listen",std::string(""))+" | Активно: "+std::to_string(status.value("active",0))+" | Всего: "+std::to_string(status.value("accepted",0))+" | Ошибок: "+std::to_string(status.value("failed",0));
@@ -337,6 +339,16 @@ void choosePreset(const std::string& preset){captureSelections();selectedPreset=
 std::filesystem::path chooseFile(const wchar_t* filter,bool saving,const wchar_t* extension=L"json"){
     wchar_t path[32768]{};OPENFILENAMEW info{};info.lStructSize=sizeof(info);info.hwndOwner=window;info.lpstrFilter=filter;info.lpstrFile=path;info.nMaxFile=32768;info.lpstrDefExt=extension;info.Flags=OFN_EXPLORER|OFN_NOCHANGEDIR|(saving?OFN_OVERWRITEPROMPT:OFN_FILEMUSTEXIST);if(!(saving?GetSaveFileNameW(&info):GetOpenFileNameW(&info)))return {};return path;
 }
+void exportDiagnostics(){
+    auto engine=latestEngineSnapshot.is_object()?latestEngineSnapshot:Json::object();
+    auto ssh=latestSshSnapshot.is_object()?latestSshSnapshot:Json::object();
+    auto request=Json{{"engine",{{"status",engine.value("status",Json::object())},{"managed_upstream",engine.value("managed_upstream",Json())}}},{"ssh",{{"status",ssh.value("status",Json::object())}}}}.dump();
+    auto report=response(fb_diagnostic_report_json(request.c_str())).at("report");
+    auto path=chooseFile(L"Диагностический JSON\0*.json\0",true);
+    if(path.empty())return;
+    writeFile(path,report.dump(2));
+    note("Диагностический отчёт сохранён: без ключей, адресов, путей и сырых журналов.");
+}
 void browseApplication(){auto path=chooseFile(L"Приложения Windows\0*.exe\0",false,L"exe");if(path.empty())return;
     auto text=discovery::utf8(path.wstring());auto found=std::find_if(discovered.begin(),discovered.end(),[&](const discovery::App& a){return a.path==text;});if(found==discovered.end())discovered.push_back({"manual",discovery::utf8(path.stem().wstring()),text,"Выбрано вручную",100});selectedApps.insert(text);refreshApps();saveDesktop();
 }
@@ -346,6 +358,7 @@ void exportNative(){captureSelections();if(selectedApps.empty())throw std::runti
     response(fb_validate_json(config.dump().c_str()));auto path=chooseFile(L"Нативный профиль JSON\0*.json\0",true);if(path.empty())return;writeFile(path,config.dump(2));saveDesktop();note("Нативный профиль экспортирован. В этом пакете захват недоступен; локальный SOCKS не фильтрует приложения.");
 }
 void showSsh(const Json& ssh,bool waiting){
+    latestSshSnapshot=ssh;
     if(ssh.is_null()){bool managed=SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1;tunnelReady=!managed;setText(GetDlgItem(window,SshHealth),managed?"Управляемый SSH не запущен":"SSH: используется внешний прокси");setText(GetDlgItem(window,SshSummary),managed?"SSH запустится после нажатия «Подключить». Ключ сервера должен быть заранее проверен.":"Внешний прокси управляется отдельно от FlowBridge.");return;}
     auto status=ssh.at("status");auto state=status.value("state",std::string("stopped"));tunnelReady=state=="ready";std::string label=state=="ready"?"Готов":state=="starting"?"Запускается":state=="reconnecting"?"Восстанавливается":state=="degraded"?"Перегрузка / диагностика":state=="failed"?"Требуется внимание":"Остановлен";
     std::string text="SSH: "+label+"  •  попытка "+std::to_string(status.value("attempt",uint64_t(0)))+"  •  перезапусков "+std::to_string(status.value("restarts",uint64_t(0)));
@@ -367,7 +380,7 @@ HWND control(const wchar_t* cls,const wchar_t* label,DWORD style,int id,DWORD ex
 void layout(){RECT r{};GetClientRect(window,&r);int width=static_cast<int>(r.right),height=static_cast<int>(r.bottom),x=236,w=width-x-28;
     auto move=[](int id,int x,int y,int w,int h){MoveWindow(GetDlgItem(window,id),x,y,w,h,TRUE);};
     for(int id=NavDashboard;id<=NavAdvanced;++id)move(id,16,140+(id-NavDashboard)*54,180,44);
-    move(Theme,16,height-74,180,42);
+    move(Theme,16,height-74,180,42);move(ExportDiagnostics,16,height-126,180,42);
     move(Banner,x,108,w,19);move(PageTitle,x,30,w-330,36);move(PageSubtitle,x,78,w,25);move(Start,width-322,29,160,42);move(Stop,width-150,29,122,42);
     move(Badge,x+24,152,w-48,34);move(Status,x+24,200,w-48,30);move(Mode,x+24,244,w-48,28);move(Metrics,x+24,321,w-48,24);
     move(SshTitle,x+24,397,w-48,22);move(SshHealth,x+24,427,w-48,48);move(ConnectionsLabel,x,500,w,24);move(Connections,x,534,w,std::max(140,height-590));move(DashboardHelp,x,height-36,w,24);
@@ -390,6 +403,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         auto label=[&](const wchar_t* text,int id,int page){return add(L"STATIC",text,0,id,page);};
         label(L"",PageTitle,-1);label(L"",PageSubtitle,-1);label(L"",Banner,-1);SendMessageW(GetDlgItem(h,Banner),WM_SETFONT,reinterpret_cast<WPARAM>(smallFont),TRUE);SendMessageW(GetDlgItem(h,PageTitle),WM_SETFONT,reinterpret_cast<WPARAM>(titleFont),TRUE);
         add(L"BUTTON",L"Обзор",WS_TABSTOP,NavDashboard,-1);add(L"BUTTON",L"Подключение",WS_TABSTOP,NavConnection,-1);add(L"BUTTON",L"Приложения",WS_TABSTOP,NavApps,-1);add(L"BUTTON",L"Журнал и JSON",WS_TABSTOP,NavAdvanced,-1);add(L"BUTTON",L"Сменить тему",WS_TABSTOP,Theme,-1);
+        add(L"BUTTON",L"Диагностика…",WS_TABSTOP,ExportDiagnostics,-1);
         add(L"BUTTON",L"Подключить",WS_TABSTOP,Start,-1);add(L"BUTTON",L"Остановить",WS_TABSTOP,Stop,-1);
         label(L"●  Не подключено",Badge,0);SendMessageW(GetDlgItem(h,Badge),WM_SETFONT,reinterpret_cast<WPARAM>(headingFont),TRUE);
         label(L"Остановлено. Выберите подключение и нажмите «Подключить».",Status,0);
@@ -449,6 +463,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
             if(event==BN_CLICKED&&!closing){
                 if(id>=NavDashboard&&id<=NavAdvanced)switchPage(id-NavDashboard);
                 else if(id==Theme){dark=!dark;applyTheme();try{saveDesktop();}catch(const std::exception& e){note(e.what());}}
+                else if(id==ExportDiagnostics){exportDiagnostics();}
                 else if(!busy){
                     if(id==Start||id==Apply||id==SaveDesktop){workerError.clear();auto value=commandConfiguration();auto settings=desktopSettings();validateDesktop(settings);if(settings.value("managed_ssh",false))validateManagedRoute(value,settings["ssh"]);dispatch(id==Start?Start:Apply,std::move(value),std::move(settings));}
                     else if(id==Stop){workerError.clear();dispatch(Stop);}

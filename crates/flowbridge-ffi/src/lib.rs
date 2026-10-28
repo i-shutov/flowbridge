@@ -4,6 +4,8 @@ use serde_json::{json, Value};
 use std::ffi::{c_char, CStr, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
+mod diagnostics;
+
 const MAX_INPUT_BYTES: usize = 1024 * 1024;
 
 unsafe fn input<'a>(pointer: *const c_char) -> Result<&'a str, String> {
@@ -32,6 +34,19 @@ fn guarded(work: impl FnOnce() -> Result<Value, String>) -> *mut c_char {
         Err(_) => json!({"ok": false, "error": "internal FlowBridge panic"}),
     };
     output(result)
+}
+
+/// Produce a redacted, offline report from cached UI snapshots.
+///
+/// # Safety
+/// `snapshot_json` must reference a live NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn fb_diagnostic_report_json(snapshot_json: *const c_char) -> *mut c_char {
+    guarded(|| {
+        let request: Value =
+            serde_json::from_str(unsafe { input(snapshot_json) }?).map_err(|e| e.to_string())?;
+        Ok(json!({"ok":true,"report":diagnostics::report(&request)}))
+    })
 }
 
 /// Validate a profile. Returns an owned JSON string, released with `fb_string_free`.
