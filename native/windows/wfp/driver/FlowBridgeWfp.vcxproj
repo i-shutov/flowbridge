@@ -37,5 +37,9 @@
   </ItemDefinitionGroup>
   <ItemGroup><ClCompile Include="driver.c" /><Inf Include="FlowBridgeWfp.inf" /></ItemGroup>
   <ItemGroup><ClInclude Include="wdk_headers.h" /><ClInclude Include="..\control.h" /><ClInclude Include="..\redirect_context.h" /></ItemGroup>
+  <ItemGroup>
+    <!-- Inf2Cat validates files in the package directory, not just OutDir. -->
+    <FilesToPackage Include="$(TargetPath)" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

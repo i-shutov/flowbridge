@@ -1,4 +1,7 @@
 #pragma once
+/* This user-mode API owns its integer type dependency. The shared wire headers
+ * deliberately do not include the CRT because they are also used by WDK. */
+#include <stdint.h>
 #include <winsock2.h>
 #include "redirect_context.h"
 #ifdef __cplusplus
