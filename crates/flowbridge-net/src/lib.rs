@@ -21,6 +21,8 @@ use tokio::{
     time::{self, Instant},
 };
 
+mod prepared;
+
 const MAX_HEADER_BYTES: usize = 16 * 1024;
 const MAX_HEADER_LINE: usize = 4096;
 const MAX_CHAIN_HOPS: usize = 16;
@@ -268,21 +270,7 @@ async fn connect_addresses(
             .await
             .map_err(|e| io_error("TCP connect", e));
     };
-    let mut last_error = io::Error::new(io::ErrorKind::AddrNotAvailable, "no resolved addresses");
-    for address in addresses {
-        let socket = if address.is_ipv4() {
-            TcpSocket::new_v4()
-        } else {
-            TcpSocket::new_v6()
-        }
-        .map_err(|e| io_error("socket creation", e))?;
-        prepare(&socket).map_err(|e| io_error("native pre-connect preparation", e))?;
-        match socket.connect(*address).await {
-            Ok(stream) => return Ok(stream),
-            Err(error) => last_error = error,
-        }
-    }
-    Err(io_error("TCP connect", last_error))
+    prepared::connect(addresses, prepare, |socket, address| socket.connect(address)).await
 }
 
 async fn connect_route_inner(
@@ -874,87 +862,5 @@ mod guarded_address_tests {
             "[::ffff:192.0.2.10]:1080".parse().unwrap(),
         ];
         assert!(vet_first_hop(&addresses, listener).is_ok());
-    }
-}
-
-#[cfg(test)]
-mod prepared_address_tests {
-    use super::*;
-    use std::sync::{
-        atomic::{AtomicUsize, Ordering},
-        Mutex,
-    };
-
-    #[tokio::test]
-    async fn every_address_retry_has_a_fresh_prepared_socket() {
-        let refused = TcpSocket::new_v4().unwrap();
-        refused.bind("127.0.0.1:0".parse().unwrap()).unwrap();
-        let refused_address = refused.local_addr().unwrap();
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        listener.set_nonblocking(true).unwrap();
-        let reachable = listener.local_addr().unwrap();
-        let prepared_ports = Mutex::new(Vec::new());
-        let prepare = |socket: &TcpSocket| {
-            socket.bind("127.0.0.1:0".parse().unwrap())?;
-            prepared_ports
-                .lock()
-                .unwrap()
-                .push(socket.local_addr()?.port());
-            socket.set_nodelay(true)
-        };
-        let stream = time::timeout(
-            Duration::from_secs(2),
-            connect_addresses(&[refused_address, reachable], Some(&prepare)),
-        )
-        .await
-        .unwrap()
-        .unwrap();
-        let (_, peer) = listener.accept().unwrap();
-        let ports = prepared_ports.lock().unwrap();
-        assert_eq!(ports.len(), 2);
-        assert_eq!(peer.port(), ports[1]);
-        assert_eq!(stream.local_addr().unwrap().port(), ports[1]);
-        assert!(stream.nodelay().unwrap());
-    }
-
-    #[tokio::test]
-    async fn preparation_failure_on_retry_aborts_before_that_connect_or_later_addresses() {
-        let refused = TcpSocket::new_v4().unwrap();
-        refused.bind("127.0.0.1:0".parse().unwrap()).unwrap();
-        let refused_address = refused.local_addr().unwrap();
-        let first = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let second = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        first.set_nonblocking(true).unwrap();
-        second.set_nonblocking(true).unwrap();
-        let addresses = [
-            refused_address,
-            first.local_addr().unwrap(),
-            second.local_addr().unwrap(),
-        ];
-        let calls = AtomicUsize::new(0);
-        let prepare = |_: &TcpSocket| {
-            if calls.fetch_add(1, Ordering::SeqCst) == 0 {
-                Ok(())
-            } else {
-                Err(io::Error::new(
-                    io::ErrorKind::PermissionDenied,
-                    "records rejected",
-                ))
-            }
-        };
-        let error = time::timeout(
-            Duration::from_secs(2),
-            connect_addresses(&addresses, Some(&prepare)),
-        )
-        .await
-        .unwrap()
-        .unwrap_err();
-        assert!(
-            matches!(error,NetError::Io{stage:"native pre-connect preparation",source} if source.kind()==io::ErrorKind::PermissionDenied)
-        );
-        assert_eq!(calls.load(Ordering::SeqCst), 2);
-        for listener in [first, second] {
-            assert!(matches!(listener.accept(),Err(e) if e.kind()==io::ErrorKind::WouldBlock));
-        }
     }
 }
