@@ -110,7 +110,11 @@ preserves both reports even on a failed assertion. A missing driver is a
 
 Record the exact commit SHA, OS build and driver signature/version, the two
 JSON reports, WFP filter state after normal/abrupt cleanup, and manual
-operator observations. Do not close `#1` unless these reports are actually
+operator observations. Each JSON report embeds SHA-256 values for its exact
+helper and probe binaries; the GUI-owner report additionally hashes the
+Rust FFI DLL. Compare these with the workflow's checked-out commit and
+the installed test-driver package/signing evidence. A SHA-256 digest is
+provenance metadata, not proof that a driver has a trusted signature. Do not close `#1` unless these reports are actually
 produced **on the authorized VM**, reviewed, and residual leak/installer
 acceptance gates are satisfied.
 
