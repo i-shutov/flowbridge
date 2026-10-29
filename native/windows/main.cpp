@@ -373,6 +373,8 @@ void applyTheme(){
 void updateVisibility(){
     bool managed=SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1;
     for(const auto& pair:pages){bool visible=pair.second<0||pair.second==activePage;
+        if(pair.second==11)visible=activePage==1&&!managed;
+        if(pair.second==12)visible=activePage==1&&managed;
         if(pair.first>=Proxy&&pair.first<=Protocol)visible=activePage==1&&!managed;
         if(pair.first>=SshHost&&pair.first<=KeepaliveCount)visible=activePage==1&&managed;
         if(pair.first==BrowseKey||pair.first==BrowseKnown||pair.first==RetryInitial||pair.first==RetryMax)visible=activePage==1&&managed;
@@ -419,7 +421,7 @@ void exportNative(){captureSelections();if(selectedApps.empty())throw std::runti
 }
 void showSsh(const Json& ssh,bool waiting){
     latestSshSnapshot=ssh;
-    if(ssh.is_null()){bool managed=SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1;tunnelReady=!managed;setText(GetDlgItem(window,SshHealth),managed?"Управляемый SSH не запущен":"SSH: используется внешний прокси");setText(GetDlgItem(window,SshSummary),managed?"SSH запустится после нажатия «Подключить». Ключ сервера должен быть заранее проверен.":"Внешний прокси управляется отдельно от FlowBridge.");return;}
+    if(ssh.is_null()||ssh.empty()){bool managed=SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1;tunnelReady=!managed;setText(GetDlgItem(window,SshHealth),managed?"Управляемый SSH не запущен":"SSH: используется внешний прокси");setText(GetDlgItem(window,SshSummary),managed?"SSH запустится после нажатия «Подключить». Ключ сервера должен быть заранее проверен.":"Внешний прокси управляется отдельно от FlowBridge.");return;}
     auto status=ssh.at("status");auto state=status.value("state",std::string("stopped"));tunnelReady=state=="ready";std::string label=state=="ready"?"Готов":state=="starting"?"Запускается":state=="reconnecting"?"Восстанавливается":state=="degraded"?"Перегрузка / диагностика":state=="failed"?"Требуется внимание":"Остановлен";
     std::string text="SSH: "+label+"  •  попытка "+std::to_string(status.value("attempt",uint64_t(0)))+"  •  перезапусков "+std::to_string(status.value("restarts",uint64_t(0)));
     if(status.contains("last_error")&&!status["last_error"].is_null())text+="\n"+status["last_error"].get<std::string>();
@@ -539,7 +541,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
             if((id==Host||id==Port)&&event==EN_CHANGE&&!filling)quickDirty=true;
             if(id==Protocol&&event==CBN_SELCHANGE&&!filling)quickDirty=true;
             if(id==Proxy&&event==CBN_SELCHANGE)selectedProxy();
-            if(id==ManagedMode&&event==CBN_SELCHANGE){updateVisibility();layout();InvalidateRect(h,nullptr,TRUE);}
+            if(id==ManagedMode&&event==CBN_SELCHANGE){updateVisibility();layout();showSsh(latestSshSnapshot,false);InvalidateRect(h,nullptr,TRUE);}
             if(event==BN_CLICKED&&!closing){
                 if(id>=NavDashboard&&id<=NavAdvanced)switchPage(id-NavDashboard);
                 else if(id==Theme){dark=!dark;applyTheme();try{saveDesktop();}catch(const std::exception& e){note(e.what());}}

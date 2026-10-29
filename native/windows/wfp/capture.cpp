@@ -51,7 +51,10 @@ void Capture::start(unsigned short p4, unsigned short p6, const std::vector<std:
     if (bypass.size()>16) throw std::runtime_error("At most sixteen bypass executable paths");
     try {
         driver_=CreateFileW(FB_WFP_DEVICE,GENERIC_READ|GENERIC_WRITE,0,nullptr,OPEN_EXISTING,0,nullptr);
-        if (driver_==INVALID_HANDLE_VALUE) check(GetLastError(),"Open signed WFP driver");
+        if(driver_==INVALID_HANDLE_VALUE) {
+        DWORD error=GetLastError();
+        throw std::runtime_error("Native interception unavailable: FlowBridgeWfp kernel driver is not loaded or access was refused (Windows error "+std::to_string(error)+"). This candidate does not install a driver. Use an authorized internal test machine with the matching signed driver. DNS and capture settings have not been enabled.");
+    }
         FbWfpStatus status{}; DWORD count=0;
         if (!DeviceIoControl(driver_,FB_IOCTL_QUERY,nullptr,0,&status,sizeof(status),&count,nullptr)) check(GetLastError(),"Query driver ABI");
         if (count!=sizeof(status) || status.size!=sizeof(status) || status.version!=FB_WFP_ABI || status.service_pid!=GetCurrentProcessId())

@@ -114,6 +114,11 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
         click(window,201);need(IsWindowVisible(GetDlgItem(window,hostId)),"connection page did not show existing proxy controls");
         SendMessageW(GetDlgItem(window,modeId),CB_SETCURSEL,1,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(modeId,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,modeId)));
         need(IsWindowVisible(GetDlgItem(window,231))&&!IsWindowVisible(GetDlgItem(window,hostId)),"managed SSH mode visibility failed");
+        for(int id:{2010,2011,2012,2013,2014,2015,2016,2017,2019,2020,243}){
+            HWND label=GetDlgItem(window,id);
+            need(IsWindowVisible(label)&&GetWindowTextLengthW(label)>0,"SSH field label or explanation is missing");
+        }
+        need(!IsWindowVisible(GetDlgItem(window,2000)),"External proxy label leaked into SSH layout");
         SendMessageW(GetDlgItem(window,modeId),CB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(modeId,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,modeId)));
         click(window,203);need(IsWindowVisible(GetDlgItem(window,editorId)),"advanced page did not show full profile");
         unsigned short port=unusedPort(); auto profile=config(port);
