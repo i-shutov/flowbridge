@@ -567,13 +567,29 @@ void startNativeCapture(){
         if(actual.value("listen",std::string())!=base.at("listen").get<std::string>())
             throw std::runtime_error("Изменён локальный SOCKS-порт. Сначала примените новый профиль и дождитесь готовности.");
         const auto sshStatus=latestSshSnapshot.value("status",Json::object());
-        if(sshStatus.value("state",std::string())!="ready"||
-           !sshStatus.contains("backend_path")||!sshStatus["backend_path"].is_string())
-            throw std::runtime_error("Не получен проверенный путь пользовательского OpenSSH; перехват не запускается.");
-        const auto sshExe=wide(sshStatus["backend_path"].get<std::string>());
-        if(!std::filesystem::path(sshExe).is_absolute()||!std::filesystem::is_regular_file(sshExe))
-            throw std::runtime_error("Исполняемый файл пользовательского SSH не найден.");
-        bypass.push_back(sshExe); // prevent selected ssh.exe from looping into capture
+        if(sshStatus.value("state",std::string())!="ready")
+            throw std::runtime_error("Нет готового пользовательского SSH-процесса.");
+        // Each independent backend must be excluded by its actual verified
+        // executable path: never elevate or re-intercept a user's ssh.exe.
+        std::set<std::wstring> excluded;
+        const auto workers=latestSshSnapshot.value("workers",Json::array());
+        if(!workers.empty()) {
+            for(const auto& worker:workers) {
+                if(worker.value("state",std::string())!="ready")continue;
+                if(!worker.contains("backend_path")||!worker["backend_path"].is_string())
+                    throw std::runtime_error("Готовый SSH-процесс не предоставил проверенный путь exe.");
+                excluded.insert(wide(worker["backend_path"].get<std::string>()));
+            }
+        } else if(sshStatus.contains("backend_path")&&sshStatus["backend_path"].is_string()) {
+            excluded.insert(wide(sshStatus["backend_path"].get<std::string>()));
+        }
+        if(excluded.empty())
+            throw std::runtime_error("Нет ни одного готового проверенного OpenSSH exe.");
+        for(const auto& sshExe:excluded) {
+            if(!std::filesystem::path(sshExe).is_absolute()||!std::filesystem::is_regular_file(sshExe))
+                throw std::runtime_error("Исполняемый файл пользовательского SSH не найден.");
+            bypass.push_back(sshExe);
+        }
         base=native_profile::viaUserOwnedSsh(std::move(base),selected);
     } else {
         if(engineRunning||pendingStart)
@@ -615,9 +631,21 @@ void showSsh(const Json& ssh,bool waiting){
     latestSshSnapshot=ssh;
     if(ssh.is_null()){bool managed=SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1;tunnelReady=!managed;setText(GetDlgItem(window,SshHealth),managed?"Управляемый SSH не запущен":"SSH: используется внешний прокси");setText(GetDlgItem(window,SshSummary),managed?"SSH запустится после нажатия «Подключить». Ключ сервера должен быть заранее проверен.":"Внешний прокси управляется отдельно от FlowBridge.");return;}
     auto status=ssh.at("status");auto state=status.value("state",std::string("stopped"));tunnelReady=state=="ready";std::string label=state=="ready"?"Готов":state=="starting"?"Запускается":state=="reconnecting"?"Восстанавливается":state=="degraded"?"Перегрузка / диагностика":state=="failed"?"Требуется внимание":"Остановлен";
-    std::string text="SSH: "+label+"  •  попытка "+std::to_string(status.value("attempt",uint64_t(0)))+"  •  перезапусков "+std::to_string(status.value("restarts",uint64_t(0)));
+    const int workers=status.value("worker_count",1);
+    const int ready=status.value("ready_workers",state=="ready"?1:0);
+    std::string text="SSH "+std::to_string(ready)+"/"+std::to_string(workers)+" • "+label+
+        " • перезапусков "+std::to_string(status.value("restarts",uint64_t(0)));
     if(status.contains("last_error")&&!status["last_error"].is_null())text+="\n"+status["last_error"].get<std::string>();
-    text+="\nОшибок ресурсов: "+std::to_string(status.value("resource_exhaustion_count",uint64_t(0)));
+    uint64_t aggregateErrors=0;
+    for(const auto& worker:ssh.value("workers",Json::array()))
+        aggregateErrors+=worker.value("resource_exhaustion_count",uint64_t(0));
+    text+="\nОшибок ресурсов: "+std::to_string(workers>1?aggregateErrors:status.value("resource_exhaustion_count",uint64_t(0)));
+    if(workers>1) {
+        text+=" | порты: ";
+        for(const auto& worker:ssh.value("workers",Json::array()))
+            text+=std::to_string(worker.value("local_port",0))+
+                (worker.value("state",std::string())=="ready"?"✓ ":"× ");
+    }
     if(status.contains("backend_path")&&!status["backend_path"].is_null())text+=" · "+status["backend_path"].get<std::string>();
     if(status.contains("backend_version")&&!status["backend_version"].is_null())text+=" · "+status["backend_version"].get<std::string>();
     setText(GetDlgItem(window,SshHealth),text);setText(GetDlgItem(window,SshSummary),text);
