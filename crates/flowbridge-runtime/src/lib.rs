@@ -10,7 +10,10 @@ use std::{
     io,
     net::IpAddr,
     pin::Pin,
-    sync::{atomic::{AtomicU64, Ordering}, Arc, Mutex, MutexGuard},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex, MutexGuard,
+    },
     task::{Context, Poll},
     thread,
     time::Duration,
@@ -207,7 +210,12 @@ impl Engine {
                 .budget
                 .as_ref()
                 .map(|b| b.snapshot()),
-            managed_pool: self.upstream_gate.borrow().pool.as_ref().map(|p| p.snapshot()),
+            managed_pool: self
+                .upstream_gate
+                .borrow()
+                .pool
+                .as_ref()
+                .map(|p| p.snapshot()),
             connections: s.connections.values().cloned().collect(),
             events: s.events.iter().cloned().collect(),
         }
@@ -280,13 +288,16 @@ impl Engine {
         limits: admission::Limits,
         aggregate_max_flows: usize,
     ) -> Result<Status, RuntimeError> {
-        let pool = Arc::new(pool::Pool::new(primary, workers, limits, aggregate_max_flows)
-            .map_err(RuntimeError)?);
+        let pool = Arc::new(
+            pool::Pool::new(primary, workers, limits, aggregate_max_flows).map_err(RuntimeError)?,
+        );
         let config = lock(&self.state).config.clone();
-        if !config.proxies.iter().any(|p|
-            matches!(p.kind, flowbridge_core::ProxyKind::Socks5)
-                && pool.matches(&p.endpoint)) {
-            return Err(RuntimeError("SSH pool primary must be an existing SOCKS5 proxy in this profile".into()));
+        if !config.proxies.iter().any(|p| {
+            matches!(p.kind, flowbridge_core::ProxyKind::Socks5) && pool.matches(&p.endpoint)
+        }) {
+            return Err(RuntimeError(
+                "SSH pool primary must be an existing SOCKS5 proxy in this profile".into(),
+            ));
         }
         let ready = pool.has_ready();
         self.upstream_gate.send_replace(UpstreamGate {
@@ -589,13 +600,21 @@ async fn handle(
                 connection.worker_port = Some(selection.endpoint.port);
             }
             Some(selection)
-        } else { None }
-    } else { None };
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     let mut waiter = None;
     if let Some(first) = route.first() {
         let initial = upstream_gate.borrow().clone();
         if selected.is_some() || initial.matches(&first.endpoint) {
-            if let Some(budget) = selected.as_ref().map(|worker| &worker.budget).or(initial.budget.as_ref()) {
+            if let Some(budget) = selected
+                .as_ref()
+                .map(|worker| &worker.budget)
+                .or(initial.budget.as_ref())
+            {
                 match budget.enqueue() {
                     Ok(value) => waiter = Some(value),
                     Err(error) => {
@@ -653,9 +672,15 @@ async fn handle(
         None
     };
     let paused = if let Some(selected) = &selected {
-        !upstream_gate.borrow().pool.as_ref().is_some_and(|pool| pool.is_ready(&selected.endpoint))
+        !upstream_gate
+            .borrow()
+            .pool
+            .as_ref()
+            .is_some_and(|pool| pool.is_ready(&selected.endpoint))
     } else {
-        route.first().is_some_and(|first| upstream_gate.borrow().pauses(&first.endpoint))
+        route
+            .first()
+            .is_some_and(|first| upstream_gate.borrow().pauses(&first.endpoint))
     };
     if paused {
         let _ = reply_socks5(&mut client, 1).await;
