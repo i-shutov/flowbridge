@@ -99,6 +99,21 @@ static void nativeTemplateTest(){
     auto routed=result(fb_evaluate_json(exported.dump().c_str(),flow.dump().c_str()));need(routed["decision"]["action"]["type"]=="proxy","selected app unknown domain escaped proxy");
     flow["application"]="other.exe";auto other=result(fb_evaluate_json(exported.dump().c_str(),flow.dump().c_str()));need(other["decision"]["action"]["type"]=="direct","unselected app did not use Direct");
     auto blocked=native_profile::build(profile,{"C:\\Apps\\Claude.exe"},"ssh",true);need(blocked["default_action"]["type"]=="block","explicit block-other option missing");
+    auto dnsPolicy=exported;dnsPolicy["remote_dns_via_ssh"]=false;
+    result(fb_validate_json(dnsPolicy.dump().c_str()));
+    flow["application"]="claude.exe";flow["destination"]["host"]="uncached.example";
+    auto denied=result(fb_evaluate_json(dnsPolicy.dump().c_str(),flow.dump().c_str()));
+    need(denied["decision"]["action"]["type"]=="block",
+         "Unchecked SSH DNS mode let a hostname reach proxy or DIRECT");
+    flow["destination"]["host"]="192.0.2.10";
+    auto literal=result(fb_evaluate_json(dnsPolicy.dump().c_str(),flow.dump().c_str()));
+    need(literal["decision"]["action"]["type"]=="proxy",
+         "Unchecked SSH DNS mode incorrectly blocked numeric IP traffic");
+    dnsPolicy["remote_dns_via_ssh"]="false";
+    char* invalidDns=fb_validate_json(dnsPolicy.dump().c_str());
+    need(invalidDns!=nullptr,"Invalid DNS policy returned null");
+    const auto invalidAnswer=Json::parse(invalidDns);fb_string_free(invalidDns);
+    need(invalidAnswer.value("ok",true)==false,"String DNS preference unexpectedly accepted");
     std::puts("PASS native template export: basenames, deduplication, selected unknown hosts via proxy, other apps Direct, optional Block");
 }
 static void nativeGuiListenerOwnerTest() {
@@ -280,6 +295,11 @@ static void assertCompactLayout(HWND window,const wchar_t* screenshot) {
          "Managed SSH labels or help disappeared when switching modes");
     const auto sshHelp=inside(243);
     const auto save=inside(240);
+    const auto dnsToggle=inside(285);
+    need(IsWindowVisible(GetDlgItem(window,285)),
+         "Remote SSH DNS control was not shown for managed SSH");
+    need(dnsToggle.right+8<=save.left,
+         "Remote SSH DNS checkbox overlaps Save button at compact size");
     inside(246); // Last managed-SSH timeout field
     need(sshHelp.bottom+6<=save.top,"Managed SSH form overlaps Save button");
     evidence(L"ssh");
@@ -331,6 +351,27 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
         click(window,201);need(IsWindowVisible(GetDlgItem(window,hostId)),"connection page did not show existing proxy controls");
         SendMessageW(GetDlgItem(window,modeId),CB_SETCURSEL,1,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(modeId,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,modeId)));
         need(IsWindowVisible(GetDlgItem(window,231))&&!IsWindowVisible(GetDlgItem(window,hostId)),"managed SSH mode visibility failed");
+        need(IsWindowVisible(GetDlgItem(window,285))&&
+             SendMessageW(GetDlgItem(window,285),BM_GETCHECK,0,0)==BST_CHECKED,
+             "Remote SSH DNS checkbox is not checked by default");
+        edit(GetDlgItem(window,231),"test.example");
+        edit(GetDlgItem(window,233),"testuser");
+        wchar_t appData[32768]{};
+        const DWORD appDataChars=GetEnvironmentVariableW(L"LOCALAPPDATA",appData,32768);
+        need(appDataChars>0&&appDataChars<32768,"LOCALAPPDATA is unavailable");
+        const auto desktopFile=std::filesystem::path(appData)/L"FlowBridge"/L"desktop-settings.json";
+        auto savedDns=[&] {
+            std::ifstream in(desktopFile,std::ios::binary);
+            need(in.good(),"Desktop settings were not persisted");
+            Json saved=Json::parse(in);
+            return saved.value("remote_dns_via_ssh",true);
+        };
+        SendMessageW(GetDlgItem(window,285),BM_SETCHECK,BST_UNCHECKED,0);
+        click(window,285);
+        need(!savedDns(),"Unchecked remote DNS was not saved to desktop profile");
+        SendMessageW(GetDlgItem(window,285),BM_SETCHECK,BST_CHECKED,0);
+        click(window,285);
+        need(savedDns(),"Checked remote DNS was not restored in desktop profile");
         SendMessageW(GetDlgItem(window,modeId),CB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(modeId,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,modeId)));
         click(window,203);need(IsWindowVisible(GetDlgItem(window,editorId)),"advanced page did not show full profile");
         unsigned short port=unusedPort(); auto profile=config(port);
