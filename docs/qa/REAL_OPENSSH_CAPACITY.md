@@ -102,3 +102,40 @@ This is **not a Windows OpenSSH FD ceiling acceptance**. It adds independent
 Linux process-resource evidence without claiming Windows process handles equal
 internal OpenSSH Win32 `select()` slots. The Windows backend and 10k-churn
 manual gates from above remain required.
+
+
+## Operator-only Windows local OpenSSH baseline script
+
+`tests/windows_openssh_capacity_vm.py` is a **new manual Windows VM probe**,
+not a successful execution claim. It requires `FLOWBRIDGE_SSH_VM=1`, a
+reviewed absolute `ssh.exe`, pre-enrolled disposable test identity and pinned
+`known_hosts`, and a separately prepared isolated sshd **bound to the
+same VM's 127.0.0.1**. It starts its own SSH `-D` transport with strict
+host key checks, BatchMode and ControlMaster disabled. It never modifies
+system DNS, firewall, WFP drivers or system service configuration.
+
+Example, **only after the VM operator prepares loopback sshd**:
+
+```powershell
+$env:FLOWBRIDGE_SSH_VM = "1"
+python tests/windows_openssh_capacity_vm.py `
+  --ssh "C:\Windows\System32\OpenSSH\ssh.exe" `
+  --identity "C:\VM-Test\id_ed25519" `
+  --known-hosts "C:\VM-Test\known_hosts" `
+  --user "flowbridge_qa" --ssh-port 22 --held 128 `
+  --output "build\verification\windows-ssh\baseline.json"
+```
+
+The probe records exact binary SHA-256 (without publishing private paths),
+actual OpenSSH version, the independently spawned process PID, successfully
+held channel counts at request tiers 64/128/192/256/512 (capped by the explicit
+`--held` ceiling), binary echo integrity and **Windows OS process HANDLE
+count** at baseline/load/release. It deliberately does **not** equate Windows
+HANDLE count to internal OpenSSH FD slots, assert backend capacity based on
+the request count, or claim shared FlowBridge per-worker admission. Operators
+must inspect this report and repeat with appropriate held limits and another
+approved backend if desired. No automatic execution on hosted CI occurs;
+the hosted matrix only syntax-checks the script.
+
+This is a useful precondition check, not completion of #7: production
+FlowBridge-managed SSH and WFP capture are not part of the bare backend probe.
