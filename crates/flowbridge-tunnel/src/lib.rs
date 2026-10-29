@@ -138,13 +138,25 @@ impl Config {
         }
         if let Some(path) = &self.ssh_executable {
             let executable = std::path::Path::new(path);
+            // Rust canonicalize on Windows uses the local drive device prefix
+            // \\?\C:\... . Distinguish this explicitly from a UNC
+            // \\server\share or \\?\UNC\server\share path; the old
+            // prefix-only test rejected our own canonical absolute local exe.
+            let local_extended_drive = cfg!(windows)
+                && path.strip_prefix("\\\\?\\").is_some_and(|value| {
+                    let bytes = value.as_bytes();
+                    bytes.len() >= 3
+                        && bytes[0].is_ascii_alphabetic()
+                        && bytes[1] == b':'
+                        && bytes[2] == b'\\'
+                });
             if path.is_empty()
                 || path.len() > 4096
                 || path.chars().any(char::is_control)
                 || path.contains('"')
                 || !executable.is_absolute()
                 || path.starts_with("//")
-                || path.starts_with("\\\\")
+                || (path.starts_with("\\\\") && !local_extended_drive)
                 || (cfg!(windows)
                     && !executable
                         .extension()
