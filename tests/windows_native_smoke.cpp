@@ -396,7 +396,10 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
         need(std::filesystem::path(explicitExe).is_absolute(), "Test path is not absolute");
         // This exe is NOT an OpenSSH client; it exercises only file picker
         // persistence, never launches the selected program as a tunnel.
-        SetWindowTextW(GetDlgItem(window,286),explicitExe.c_str());
+        need(SetWindowTextW(GetDlgItem(window,286),explicitExe.c_str())!=0,
+             "Optional SSH binary field refused absolute path input");
+        need(windowText(GetDlgItem(window,286))==explicitExe,
+             "Optional SSH binary edit control truncated or altered absolute path");
         const int utf8Bytes=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,
             explicitExe.data(),static_cast<int>(explicitExe.size()),nullptr,0,nullptr,nullptr);
         need(utf8Bytes>0,"UTF-8 SSH executable test path invalid");
