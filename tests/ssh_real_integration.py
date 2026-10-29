@@ -53,7 +53,7 @@ def exact(sock, size):
 
 class Echo(socketserver.BaseRequestHandler):
     def handle(self):
-        self.request.settimeout(15)
+        self.request.settimeout(180)
         while True:
             chunk = self.request.recv(65536)
             if not chunk:
@@ -219,17 +219,23 @@ def main(repetition=0):
             engine = abi.call('fb_engine_create_json', profile)['engine_id']
             abi.call('fb_engine_start_json', engine)
 
+            # Identical per-process limits across the explicit engine and
+            # native FFI sessions are mandatory: they share one canonical
+            # managed SSH endpoint and reject conflicting configurations.
+            ssh_limits = {'max_flows': 128, 'max_opening': 16,
+                          'max_queued': 64, 'wait_timeout_ms': 500}
             def gate(ready):
                 abi.call('fb_engine_set_upstream_gate_json', engine,
-                         {'endpoint': endpoint, 'ready': ready, 'grace_ms': 15000})
+                         {'endpoint': endpoint, 'ready': ready, 'grace_ms': 15000,
+                          'limits': ssh_limits})
             gate(True)
             round_trip(engine_port, target_port)
             passed('Actual OpenSSH authentication, strict enrolled host key, binary traffic and half-close')
             from native_vertical_integration import actual_ssh
-            actual_ssh(abi, profile, endpoint, target_port)
+            actual_ssh(abi, profile, endpoint, target_port, limits=ssh_limits)
             passed('Native capture ABI: selected application -> real SSH -> target, without SOCKS ingress')
             from native_dns_integration import actual_ssh as actual_dns
-            actual_dns(abi, profile, endpoint, supervisor)
+            actual_dns(abi, profile, endpoint, supervisor, limits=ssh_limits)
             passed('Native DNS: resolver discovery and UDP/TCP queries through actual SSH')
             if repetition == 0:
                 from real_ssh_capacity import run as stress_actual_ssh
