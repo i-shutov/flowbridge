@@ -594,7 +594,7 @@ async fn handle(
     let mut waiter = None;
     if let Some(first) = route.first() {
         let initial = upstream_gate.borrow().clone();
-        if initial.matches(&first.endpoint) {
+        if selected.is_some() || initial.matches(&first.endpoint) {
             if let Some(budget) = selected.as_ref().map(|worker| &worker.budget).or(initial.budget.as_ref()) {
                 match budget.enqueue() {
                     Ok(value) => waiter = Some(value),
