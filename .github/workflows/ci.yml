@@ -36,6 +36,8 @@ jobs:
       - run: python tests/smoke.py
       - name: Native capture session vertical integration
         run: python tests/native_vertical_integration.py --output build/verification/native/session.json
+      - name: Native selected application through user-owned GUI SSH route
+        run: python tests/native_user_ssh_chain_integration.py --output build/verification/native/user-ssh-two-hop.json
       - name: Preserve native-session evidence
         if: always()
         uses: actions/upload-artifact@v7.0.0
