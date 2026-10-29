@@ -27,7 +27,7 @@ import uuid
 
 from ssh_real_integration import ABI, free_port, require, until
 from windows_wfp_redirect_runtime import (
-    Echo, Server, V6Server, Socks, run_probe, start, await_helper_ready,
+    Echo, Server, V6Server, Socks, run_probe, start, await_helper_ready, sha256_file,
 )
 
 
@@ -79,6 +79,11 @@ def main():
     helper = args.helper.resolve(strict=True)
     probe = args.probe.resolve(strict=True)
     library = args.library.resolve(strict=True)
+    report['binary_sha256'] = {
+        'helper': sha256_file(helper),
+        'probe': sha256_file(probe),
+        'rust_ffi': sha256_file(library),
+    }
     kernel = configure_kernel()
     servers = []
     engine = 0
