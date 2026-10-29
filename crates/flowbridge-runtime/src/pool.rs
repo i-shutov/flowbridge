@@ -30,14 +30,14 @@ pub struct Selected {
     pub budget: Arc<Budget>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct WorkerSnapshot {
     pub endpoint: Endpoint,
     pub ready: bool,
     pub admission: AdmissionSnapshot,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Snapshot {
     pub aggregate_max_flows: usize,
     pub ready_workers: usize,
@@ -221,20 +221,20 @@ mod tests {
     }
     #[tokio::test]
     async fn selects_two_workers_and_respects_existing_flow_ownership() {
-        let pool = pool([true, true]);
-        let first = pool.select(0).unwrap();
+        let group = pool([true, true]);
+        let first = group.select(0).unwrap();
         assert_eq!(first.endpoint.port, 49101);
         let held = first.budget.enqueue().unwrap().admit().await.unwrap();
         let second = pool.select(1).unwrap();
         assert_eq!(second.endpoint.port, 49102);
-        let pinned = pool.select(2).unwrap();
+        let pinned = group.select(2).unwrap();
         assert_eq!(pinned.endpoint.port, 49102);
         let unavailable = pool([false, true]);
         assert_eq!(unavailable.select(0).unwrap().endpoint.port, 49102);
         assert_eq!(first.budget.snapshot().active_including_opening, 1);
         drop(held);
         assert_eq!(first.budget.snapshot().active_including_opening, 0);
-        assert_eq!(pool.snapshot().ready_workers, 2);
+        assert_eq!(group.snapshot().ready_workers, 2);
     }
     #[test]
     fn rejects_duplicates_mismatched_primary_remote_and_aggregate_overcommit() {
