@@ -13,7 +13,7 @@ final class DNSProxyProvider: NEDNSProxyProvider {
         queue.maxConcurrentOperationCount = 16; return queue
     }()
     override func startProxy(options: [String: Any]?, completionHandler: @escaping (Error?) -> Void) {
-        guard let id = protocolConfiguration.providerConfiguration?["session_id"] as? String,
+        guard let id = options?["session_id"] as? String,
               !id.isEmpty, SharedNativeSession.shared.attach(id: id) else {
             completionHandler(Bridge.error("DNS requires the matching active native SSH session")); return
         }
