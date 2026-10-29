@@ -64,6 +64,7 @@ def main():
     report = {
         'passed': False, 'commit': os.environ.get('GITHUB_SHA'),
         'platform': platform.platform(), 'checks': [],
+        'helper_event_counts': {},
         'coverage': {'loaded_wfp_driver_traffic': False,
                      'real_user_owned_ffi_engine': False,
                      'ipv4_redirect': False, 'ipv6_redirect': False,
@@ -165,7 +166,7 @@ def main():
                 process = subprocess.Popen(
                     command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                     text=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                reader = await_helper_ready(process)
+                reader = await_helper_ready(process, report['helper_event_counts'])
 
             def stop_session():
                 nonlocal process, event, reader
