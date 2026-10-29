@@ -165,3 +165,4 @@ def run(abi, engine, engine_port, target_port, primary_settings, snapshot,
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
         print(json.dumps({'real_ssh_pool': report}, ensure_ascii=False), flush=True)
+    return report
