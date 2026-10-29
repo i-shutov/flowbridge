@@ -187,11 +187,21 @@ static void nativeLauncherArgumentTest() {
     need(params.find(L"--stop-event ")!=std::wstring::npos,"Stop event argument missing");
     need(params.find(L"--ssh-profile")==std::wstring::npos,
          "GUI-owned native capture unexpectedly forwards SSH secrets into UAC");
+    wchar_t systemDirectory[MAX_PATH]{};
+    const UINT directoryChars=GetSystemDirectoryW(systemDirectory,MAX_PATH);
+    need(directoryChars&&directoryChars<MAX_PATH,"System directory path unavailable");
+    const auto bypassExe=(std::filesystem::path(systemDirectory)/L"cmd.exe").wstring();
+    need(std::filesystem::is_regular_file(bypassExe),"Windows cmd.exe unavailable");
     const auto withBypass=capture_launcher::arguments(
-        LR"(C:\Users\Test User\profile.json)",L"",{testApp},42,event,{testApp});
+        LR"(C:\Users\Test User\profile.json)",L"",{testApp},42,event,{bypassExe});
     need(withBypass.find(L"--bypass ")!=std::wstring::npos &&
          withBypass.find(L"--ssh-profile")==std::wstring::npos,
          "GUI/SSH process identity bypass or unprivileged SSH boundary missing");
+    bool selfBypassRejected=false;
+    try {
+        capture_launcher::arguments(LR"(C:\profile.json)",L"",{testApp},42,event,{testApp});
+    } catch(const std::exception&) { selfBypassRejected=true; }
+    need(selfBypassRejected,"Selected executable was silently bypassed at the WFP layer");
     bool invalidBypass=false;
     try {
         capture_launcher::arguments(LR"(C:\profile.json)",L"",{testApp},42,event,{L"relative-ssh.exe"});
