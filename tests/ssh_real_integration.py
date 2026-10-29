@@ -79,6 +79,7 @@ class ABI:
             'fb_engine_stop_json': [ctypes.c_uint64],
             'fb_engine_snapshot_json': [ctypes.c_uint64],
             'fb_engine_set_upstream_gate_json': [ctypes.c_uint64, ctypes.c_char_p],
+            'fb_engine_set_upstream_pool_json': [ctypes.c_uint64, ctypes.c_char_p],
         }
         for name, arguments in signatures.items():
             function = getattr(self.lib, name)
@@ -256,6 +257,15 @@ def main(repetition=0):
                     'elapsed_seconds': result['elapsed_seconds'],
                 }
                 passed('Real OpenSSH: 128 held channels, 64/128/192/256/512 overflow, retained bytes, capacity recovery')
+                from real_ssh_pool_integration import run as pool_actual_ssh
+                pool_result = pool_actual_ssh(
+                    abi, engine, engine_port, target_port, settings, snapshot,
+                    ssh_limits, output=args.output / 'real-ssh-pool.json')
+                report['pool'] = {
+                    'distinct_child_pids': pool_result['distinct_child_pids'],
+                    'primary_stream_survived_secondary_death': pool_result['existing_primary_stream_survived_peer_death'],
+                    'all_workers_down_fail_closed': pool_result['new_connections_fail_closed_with_all_workers_down']}
+                passed('Two independent OpenSSH children: distributed channels, surviving streams, fail-closed and recovery')
             old_pid = ready['pid']
             gate(False)
             os.kill(old_pid, signal.SIGKILL)
