@@ -30,8 +30,9 @@ inline std::wstring quote(const std::wstring& input) {
 inline std::wstring arguments(const std::wstring& profile,
                              const std::wstring& ssh,
                              const std::vector<std::wstring>& apps,
-                             DWORD owner, const std::wstring& eventName) {
-    if (!owner || apps.empty() || apps.size()>64 ||
+                             DWORD owner, const std::wstring& eventName,
+                             const std::vector<std::wstring>& bypass={}) {
+    if (!owner || apps.empty() || apps.size()>64 || bypass.size()>16 ||
         !std::filesystem::path(profile).is_absolute())
         throw std::runtime_error("Native capture requires an owner, profile, and 1..64 EXE paths");
     if(!ssh.empty() && !std::filesystem::path(ssh).is_absolute())
@@ -46,6 +47,14 @@ inline std::wstring arguments(const std::wstring& profile,
            !std::filesystem::is_regular_file(path))
             throw std::runtime_error("Select existing absolute executable paths");
         command+=L" --capture-app "+quote(path);
+    }
+    // The GUI/SSH executable must never be selected for redirect by mistake:
+    // the observed path of the actual OpenSSH backend is exempt at WFP ALE.
+    for(const auto& path:bypass) {
+        if(!std::filesystem::path(path).is_absolute() ||
+           !std::filesystem::is_regular_file(path))
+            throw std::runtime_error("Bypass executable must be an existing absolute path");
+        command+=L" --bypass "+quote(path);
     }
     return command;
 }
@@ -70,7 +79,8 @@ public:
     }
     void stop() noexcept {if(stop_){SetEvent(stop_);stopRequested_=true;}}
     void start(const std::wstring& profile,const std::wstring& ssh,
-               const std::vector<std::wstring>& apps) {
+               const std::vector<std::wstring>& apps,
+               const std::vector<std::wstring>& bypass={}) {
         if(process_)throw std::runtime_error("Native capture is already active or stopping");
         wchar_t module[32768]{};
         DWORD n=GetModuleFileNameW(nullptr,module,32768);
@@ -85,7 +95,7 @@ public:
         HANDLE control=CreateEventW(nullptr,TRUE,FALSE,name.c_str());
         if(!control||GetLastError()==ERROR_ALREADY_EXISTS){if(control)CloseHandle(control);throw std::runtime_error("Capture event creation failed");}
         try {
-            auto params=arguments(profile,ssh,apps,GetCurrentProcessId(),name);
+            auto params=arguments(profile,ssh,apps,GetCurrentProcessId(),name,bypass);
             SHELLEXECUTEINFOW launch{};
             launch.cbSize=sizeof(launch);
             launch.fMask=SEE_MASK_NOCLOSEPROCESS|SEE_MASK_FLAG_NO_UI;
