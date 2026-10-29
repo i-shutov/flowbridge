@@ -87,10 +87,14 @@ pub(super) fn report(request: &Value) -> Value {
                     item["ready"] = json!(ready);
                 }
                 let admission = &worker["admission"];
-                let mut counters = numeric(admission, &[
-                    "active_including_opening", "opening", "queued", "rejected"]);
-                counters["limits"] = numeric(&admission["limits"], &[
-                    "max_flows", "max_opening", "max_queued", "wait_timeout_ms"]);
+                let mut counters = numeric(
+                    admission,
+                    &["active_including_opening", "opening", "queued", "rejected"],
+                );
+                counters["limits"] = numeric(
+                    &admission["limits"],
+                    &["max_flows", "max_opening", "max_queued", "wait_timeout_ms"],
+                );
                 item["admission"] = counters;
                 workers.push(item);
             }
@@ -147,8 +151,13 @@ mod tests {
             result["managed_pool"]["workers"][0]["admission"]["active_including_opening"],
             5
         );
-        assert_eq!(result["managed_pool"]["workers"][0]["admission"]["limits"]["max_flows"], 64);
-        assert!(result["managed_pool"]["workers"][0].get("endpoint").is_none());
+        assert_eq!(
+            result["managed_pool"]["workers"][0]["admission"]["limits"]["max_flows"],
+            64
+        );
+        assert!(result["managed_pool"]["workers"][0]
+            .get("endpoint")
+            .is_none());
     }
     #[test]
     fn nested_injection_and_empty_snapshots_are_safe() {
