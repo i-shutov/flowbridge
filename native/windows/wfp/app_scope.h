@@ -1,5 +1,7 @@
 #pragma once
-#include <fwpmu.h>
+// Include winsock2/windows/fwpmu once in the caller before this helper.
+// fwpmu GUID definitions are intentionally outside its ordinary include guard;
+// re-including it in an INITGUID translation unit defines every GUID twice.
 #include <array>
 #include <filesystem>
 #include <stdexcept>
