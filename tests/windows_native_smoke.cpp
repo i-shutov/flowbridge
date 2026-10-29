@@ -396,8 +396,12 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
         need(std::filesystem::path(explicitExe).is_absolute(), "Test path is not absolute");
         // This exe is NOT an OpenSSH client; it exercises only file picker
         // persistence, never launches the selected program as a tunnel.
-        need(SetWindowTextW(GetDlgItem(window,286),explicitExe.c_str())!=0,
-             "Optional SSH binary field refused absolute path input");
+        // SetWindowTextW is not allowed to set an EDIT control in another
+        // application process. Use the same marshalled WM_SETTEXT message as
+        // all other native GUI smoke input helpers.
+        need(SendMessageW(GetDlgItem(window,286),WM_SETTEXT,0,
+                          reinterpret_cast<LPARAM>(explicitExe.c_str()))!=0,
+             "Optional SSH binary field refused cross-process WM_SETTEXT input");
         const auto observedExe=windowText(GetDlgItem(window,286));
         if(observedExe!=explicitExe){
             std::size_t first=0;
