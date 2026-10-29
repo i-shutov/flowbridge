@@ -100,6 +100,51 @@ static void nativeTemplateTest(){
     auto blocked=native_profile::build(profile,{"C:\\Apps\\Claude.exe"},"ssh",true);need(blocked["default_action"]["type"]=="block","explicit block-other option missing");
     std::puts("PASS native template export: basenames, deduplication, selected unknown hosts via proxy, other apps Direct, optional Block");
 }
+static void nativeUnelevatedSshProfileTest() {
+    auto source=config(1081);
+    source["proxies"]={{{"id","managed-ssh"},{"kind","socks5"},
+                       {"endpoint",{{"host","127.0.0.1"},{"port",1080}}},
+                       {"username",nullptr},{"password_env","FLOWBRIDGE_TEST_SECRET"}}};
+    const auto isolated=native_profile::viaUserOwnedSsh(source,{R"(C:\AI\Claude.exe)"});
+    const auto dumped=isolated.dump();
+    result(fb_validate_json(dumped.c_str()));
+    need(isolated["proxies"].size()==1&&isolated["chains"].empty(),
+         "Elevated helper retained unrelated proxy routes or chains");
+    need(isolated["proxies"][0]["id"]=="gui-owned-socks" &&
+         isolated["proxies"][0]["endpoint"]["host"]=="127.0.0.1" &&
+         isolated["proxies"][0]["endpoint"]["port"]==1081,
+         "Native helper does not target the user-owned engine listener");
+    need(isolated["listen"]=="127.0.0.1:1","Unbound WFP-only profile listener mismatch");
+    need(dumped.find("FLOWBRIDGE_TEST_SECRET")==std::string::npos &&
+         dumped.find("managed-ssh")==std::string::npos,
+         "Privileged helper still receives user-mode SSH credentials/configuration");
+    Json flow={{"application","claude.exe"},
+               {"destination",{{"host","uncached.example"},{"port",443}}},
+               {"resolved_ip",nullptr}};
+    auto proxy=result(fb_evaluate_json(dumped.c_str(),flow.dump().c_str()));
+    need(proxy["decision"]["action"]["type"]=="proxy" &&
+         proxy["decision"]["action"]["id"]=="gui-owned-socks",
+         "Selected app did not use the user-owned SSH/SOCKS engine");
+    flow["application"]="not-selected.exe";
+    need(result(fb_evaluate_json(dumped.c_str(),flow.dump().c_str()))["decision"]["action"]["type"]=="direct",
+         "Unselected app unexpectedly captured by private helper policy");
+    auto expectReject=[&](const std::string& listen) {
+        auto bad=source;bad["listen"]=listen;bool rejected=false;
+        try {native_profile::viaUserOwnedSsh(bad,{"app.exe"});}
+        catch(const std::exception&) {rejected=true;}
+        need(rejected,"Unsafe/non-loopback GUI SOCKS listener accepted");
+    };
+    for(const auto& listen:{"0.0.0.0:1081","127.0.0.1:0","127.0.0.1:65536",
+                             "127.0.0.1:abc","hostname.example:1081","[::]:1081"})
+        expectReject(listen);
+    auto ipv6=source;ipv6["listen"]="[::1]:1082";
+    const auto v6=native_profile::viaUserOwnedSsh(ipv6,{"app.exe"});
+    result(fb_validate_json(v6.dump().c_str()));
+    need(v6["proxies"][0]["endpoint"]["host"]=="::1" &&
+         v6["proxies"][0]["endpoint"]["port"]==1082,
+         "IPv6 user-owned local SOCKS endpoint was rewritten unsafely");
+    std::puts("PASS native GUI-owned SSH: local listener only, no privileged secrets/routes, selected policy, IPv6 and fail-closed validation");
+}
 static void nativeLauncherArgumentTest() {
     wchar_t module[32768]{};DWORD count=GetModuleFileNameW(nullptr,module,32768);
     need(count&&count<32768,"test helper path unavailable");
@@ -109,6 +154,18 @@ static void nativeLauncherArgumentTest() {
     need(params.find(L"--gui-owner 42")!=std::wstring::npos,"GUI lifetime argument missing");
     need(params.find(L"--capture-app ")!=std::wstring::npos,"Selected process path missing");
     need(params.find(L"--stop-event ")!=std::wstring::npos,"Stop event argument missing");
+    need(params.find(L"--ssh-profile")==std::wstring::npos,
+         "GUI-owned native capture unexpectedly forwards SSH secrets into UAC");
+    const auto withBypass=capture_launcher::arguments(
+        L"C:\Users\Test User\profile.json",L"",{testApp},42,event,{testApp});
+    need(withBypass.find(L"--bypass ")!=std::wstring::npos &&
+         withBypass.find(L"--ssh-profile")==std::wstring::npos,
+         "GUI/SSH process identity bypass or unprivileged SSH boundary missing");
+    bool invalidBypass=false;
+    try {
+        capture_launcher::arguments(L"C:\profile.json",L"",{testApp},42,event,{L"relative-ssh.exe"});
+    } catch(const std::exception&) { invalidBypass=true; }
+    need(invalidBypass,"Relative SSH backend bypass accepted");
     need(capture_launcher::quote(L"C:\\A B\\") == L"\"C:\\A B\\\\\"", "Windows backslash quoting incorrect");
     bool rejected=false;
     try {capture_launcher::arguments(L"relative.json",L"",{testApp},42,event);} catch(const std::exception&) {rejected=true;}
@@ -253,6 +310,6 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
 }
 int wmain(int argc,wchar_t** argv) {
     WSADATA data{}; if(WSAStartup(MAKEWORD(2,2),&data)) return 1;
-    try { abiTest();nativeTemplateTest();nativeLauncherArgumentTest(); if(argc>=2) guiTest(argv[1],argc>=3?argv[2]:nullptr); WSACleanup(); return 0; }
+    try { abiTest();nativeTemplateTest();nativeUnelevatedSshProfileTest();nativeLauncherArgumentTest(); if(argc>=2) guiTest(argv[1],argc>=3?argv[2]:nullptr); WSACleanup(); return 0; }
     catch(const std::exception& error) { std::fprintf(stderr,"FAIL: %s\n",error.what()); WSACleanup(); return 1; }
 }
