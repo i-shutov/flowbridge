@@ -1,0 +1,103 @@
+name: Windows native beta vertical validation
+on:
+  push:
+    branches: [work/windows-beta-control]
+    paths: ['tools/apply_windows_beta.py','.github/workflows/beta-windows-validation.yml','native/windows/**','tests/windows_dns_policy.py','packaging/windows/FlowBridgeBeta.nsi']
+permissions:
+  contents: read
+concurrency:
+  group: windows-beta-preparation
+  cancel-in-progress: true
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - id: source
+        run: |
+          python3 tools/apply_windows_beta.py
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add native tests packaging
+          git diff --cached --quiet || git commit -m 'feat(windows): GUI native capture, leased IPC and transactional remote DNS'
+          git push origin HEAD:refs/heads/work/windows-beta-control
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  windows:
+    needs: prepare
+    runs-on: windows-2025
+    timeout-minutes: 25
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Build Rust library and validate DNS ABI
+        run: |
+          cargo build --locked --workspace
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/native_dns_integration.py --output build/verification/windows-beta/dns-abi.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo build --locked --release -p flowbridge-ffi -p flowbridge-cli
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build native GUI and helper
+        run: |
+          cmake -S native/windows -B build/windows -A x64 -DFLOWBRIDGE_BUILD_NATIVE_TESTS=ON -DFLOWBRIDGE_FFI_LIBRARY="$env:GITHUB_WORKSPACE/target/release/flowbridge_ffi.dll.lib"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build/windows --config Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake -S native/windows/wfp -B build/windows-capture -A x64 -DFLOWBRIDGE_FFI_LIBRARY="$env:GITHUB_WORKSPACE/target/release/flowbridge_ffi.dll.lib"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build/windows-capture --config Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item target/release/flowbridge_ffi.dll build/windows/Release/
+          Copy-Item target/release/flowbridge_ffi.dll build/windows-capture/Release/
+          New-Item -ItemType Directory -Force build/windows/Release/resources | Out-Null
+          Copy-Item resources/presets.json build/windows/Release/resources/
+      - name: Actual Windows DNS client and rollback policy
+        run: python tests/windows_dns_policy.py --output build/verification/windows-beta/nrpt.json
+      - name: Native GUI smoke
+        run: |
+          & ./build/windows/Release/FlowBridgeNativeSmoke.exe "$env:GITHUB_WORKSPACE/build/windows/Release/FlowBridge.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build internal native installer
+        run: |
+          choco install nsis --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python packaging/windows/build-installer.py --skip-build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item build/windows-capture/Release/FlowBridgeCapture.exe build/payload/
+          Copy-Item native/windows/wfp/dns_policy.ps1 build/payload/
+          $nsis="${env:ProgramFiles(x86)}/NSIS/makensis.exe"
+          & $nsis /INPUTCHARSET UTF8 "/DPAYLOAD_DIR=$env:GITHUB_WORKSPACE/build/payload" "/DOUTPUT_FILE=$env:GITHUB_WORKSPACE/artifacts/FlowBridge-native-beta-candidate-setup.exe" packaging/windows/FlowBridgeBeta.nsi
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-FileHash artifacts/FlowBridge-native-beta-candidate-setup.exe -Algorithm SHA256 | Format-List | Out-File artifacts/native-beta-SHA256.txt
+      - name: Archive exact source
+        if: always()
+        run: |
+          New-Item -ItemType Directory -Force build/verification/windows-beta | Out-Null
+          git rev-parse HEAD | Out-File build/verification/windows-beta/source-sha.txt
+          git archive --format=zip --prefix=flowbridge/ -o build/verification/windows-beta/prepared-source.zip HEAD
+      - uses: actions/upload-artifact@v7.0.0
+        if: always()
+        with:
+          name: FlowBridge-Windows-native-beta-evidence
+          path: build/verification/windows-beta/
+          retention-days: 14
+      - uses: actions/upload-artifact@v7.0.0
+        with:
+          name: FlowBridge-Windows-native-beta-candidate
+          path: |
+            artifacts/FlowBridge-native-beta-candidate-setup.exe
+            artifacts/native-beta-SHA256.txt
+          if-no-files-found: error
+          retention-days: 14
