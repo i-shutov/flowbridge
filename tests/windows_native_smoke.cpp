@@ -181,10 +181,18 @@ static void nativeLauncherArgumentTest() {
     need(count&&count<32768,"test helper path unavailable");
     auto testApp=std::wstring(module,count);
     const auto event=L"Local\\FlowBridgeCaptureStop-{12345678-1234-1234-1234-123456789012}";
-    auto params=capture_launcher::arguments(L"C:\\Users\\Test User\\profile.json",L"",{testApp},42,event);
+    const auto digest=profile_integrity::sha256("abc");
+    need(digest=="ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+         "Windows SHA-256 interoperability with standard crypto is broken");
+    need(profile_integrity::identical(digest,digest)&&
+         !profile_integrity::identical(digest,std::string(64,'0')),
+         "Native SHA-256 comparison failed");
+    auto params=capture_launcher::arguments(L"C:\\Users\\Test User\\profile.json",L"",{testApp},42,event,{},digest);
     need(params.find(L"--gui-owner 42")!=std::wstring::npos,"GUI lifetime argument missing");
     need(params.find(L"--capture-app ")!=std::wstring::npos,"Selected process path missing");
     need(params.find(L"--stop-event ")!=std::wstring::npos,"Stop event argument missing");
+    need(params.find(L"--profile-sha256 ")!=std::wstring::npos,
+         "Launcher did not pin profile bytes across UAC");
     need(params.find(L"--ssh-profile")==std::wstring::npos,
          "GUI-owned native capture unexpectedly forwards SSH secrets into UAC");
     wchar_t systemDirectory[MAX_PATH]{};
@@ -193,27 +201,31 @@ static void nativeLauncherArgumentTest() {
     const auto bypassExe=(std::filesystem::path(systemDirectory)/L"cmd.exe").wstring();
     need(std::filesystem::is_regular_file(bypassExe),"Windows cmd.exe unavailable");
     const auto withBypass=capture_launcher::arguments(
-        LR"(C:\Users\Test User\profile.json)",L"",{testApp},42,event,{bypassExe});
+        LR"(C:\Users\Test User\profile.json)",L"",{testApp},42,event,{bypassExe},digest);
     need(withBypass.find(L"--bypass ")!=std::wstring::npos &&
          withBypass.find(L"--ssh-profile")==std::wstring::npos,
          "GUI/SSH process identity bypass or unprivileged SSH boundary missing");
     bool selfBypassRejected=false;
     try {
-        capture_launcher::arguments(LR"(C:\profile.json)",L"",{testApp},42,event,{testApp});
+        capture_launcher::arguments(LR"(C:\profile.json)",L"",{testApp},42,event,{testApp},digest);
     } catch(const std::exception&) { selfBypassRejected=true; }
     need(selfBypassRejected,"Selected executable was silently bypassed at the WFP layer");
     bool invalidBypass=false;
     try {
-        capture_launcher::arguments(LR"(C:\profile.json)",L"",{testApp},42,event,{L"relative-ssh.exe"});
+        capture_launcher::arguments(LR"(C:\profile.json)",L"",{testApp},42,event,{L"relative-ssh.exe"},digest);
     } catch(const std::exception&) { invalidBypass=true; }
     need(invalidBypass,"Relative SSH backend bypass accepted");
     need(capture_launcher::quote(L"C:\\A B\\") == L"\"C:\\A B\\\\\"", "Windows backslash quoting incorrect");
     bool rejected=false;
-    try {capture_launcher::arguments(L"relative.json",L"",{testApp},42,event);} catch(const std::exception&) {rejected=true;}
+    try {capture_launcher::arguments(L"relative.json",L"",{testApp},42,event,{},digest);} catch(const std::exception&) {rejected=true;}
     need(rejected,"Relative elevated configuration accepted");
     rejected=false;
-    try {capture_launcher::arguments(L"C:\\profile.json",L"",{L"relative.exe"},42,event);} catch(const std::exception&) {rejected=true;}
+    try {capture_launcher::arguments(L"C:\\profile.json",L"",{L"relative.exe"},42,event,{},digest);} catch(const std::exception&) {rejected=true;}
     need(rejected,"Relative capture executable accepted");
+    bool missingHashRejected=false;
+    try {capture_launcher::arguments(LR"(C:\profile.json)",L"",{testApp},42,event,{},"invalid");}
+    catch(const std::exception&) {missingHashRejected=true;}
+    need(missingHashRejected,"Launcher accepted missing/invalid GUI profile digest");
     std::puts("PASS native capture launcher: full-path selection, quoted parameters, GUI owner and validation");
 }
 // Use client coordinates rather than comparing screen rectangles. These

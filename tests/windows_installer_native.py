@@ -5,6 +5,7 @@ Refuses non-CI machines and any pre-existing registered FlowBridge installation.
 The installed GUI is tested through the real Win32/network integration harness.
 """
 import argparse
+import ctypes
 import hashlib
 import json
 import os
@@ -135,6 +136,32 @@ def main():
                 "GUI-owned capture must reuse the unelevated SSH session" in rejected_ssh.stdout,
                 "Installed privileged helper accepted GUI-owned SSH execution")
         passed("Installed helper refuses privileged SSH launch for GUI-owned capture")
+        # Create a genuine user-owned stop event so the installed helper reaches
+        # its profile digest guard. The wrong digest must fail before any WFP
+        # device/open or network redirect, even without a test driver.
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.CreateEventW.argtypes = [ctypes.c_void_p, ctypes.c_int,
+                                        ctypes.c_int, ctypes.c_wchar_p]
+        kernel.CreateEventW.restype = ctypes.c_void_p
+        kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+        kernel.CloseHandle.restype = ctypes.c_int
+        stop_name = "Local\\FlowBridgeCaptureStop-InstallerQA-" + str(os.getpid())
+        event = kernel.CreateEventW(None, True, False, stop_name)
+        require(event, "Could not create installer QA stop event")
+        try:
+            invalid_digest = subprocess.run(
+                [str(capture), "--console", "--profile",
+                 str(install / "examples/direct.json"), "--capture-app",
+                 str(install / "FlowBridge.exe"), "--gui-owner", str(os.getpid()),
+                 "--stop-event", stop_name, "--profile-sha256", "0" * 64],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                timeout=10, text=True)
+            require(invalid_digest.returncode != 0 and
+                    "GUI native profile SHA-256 mismatch" in invalid_digest.stdout,
+                    "Installed helper accepted a modified profile across UAC")
+        finally:
+            kernel.CloseHandle(event)
+        passed("Installed helper pins exact profile SHA-256 before opening the WFP driver")
         text = run([str(args.harness.resolve()), str(install / "FlowBridge.exe"),
                     str((args.output / "installed-ui.bmp").resolve())])
         require("PASS Win32 GUI" in text and "PASS Windows DLL" in text, "GUI smoke incomplete")
