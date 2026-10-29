@@ -745,7 +745,7 @@ mod network_tests {
         // error is -3 rather than EOF/I/O/timeout. All four outcomes must
         // promptly wake without retaining the handle or dangling memory.
         assert!(
-            matches!(code, 0 | -1 | -2 | -3),
+            matches!(code, -3..=0),
             "unexpected close/read result: {code}"
         );
         assert!(start.elapsed() < Duration::from_millis(500));
