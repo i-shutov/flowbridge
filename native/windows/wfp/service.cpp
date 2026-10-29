@@ -19,6 +19,7 @@
 #include "capture.h"
 #include "redirect_io.h"
 #include "control.h"
+#include "listener_owner.hpp"
 #include "flowbridge.h"
 #include "nlohmann/json.hpp"
 using Json=nlohmann::json;
@@ -217,6 +218,20 @@ void run() {
     if(input.bad() || config.size()>1024*1024 || config.find('\0')!=std::string::npos) throw std::runtime_error("Invalid profile file");
     response(fb_validate_json(config.c_str()));
     auto j=Json::parse(config);
+    std::string guiListenerHost;
+    unsigned short guiListenerPort=0;
+    if(guiOwnerPid) {
+        for(const auto& proxy:j.at("proxies")) {
+            if(proxy.at("id")!="gui-owned-socks")continue;
+            if(guiListenerPort || proxy.at("kind")!="socks5")
+                throw std::runtime_error("Invalid GUI-owned SOCKS route");
+            guiListenerHost=proxy.at("endpoint").at("host").get<std::string>();
+            const auto port=proxy.at("endpoint").at("port").get<unsigned int>();
+            if(port==0||port>65535)
+                throw std::runtime_error("GUI-owned SOCKS listener port is invalid");
+            guiListenerPort=static_cast<unsigned short>(port);
+        }
+    }
     auto idleMs=j.value("idle_timeout_ms",uint64_t(300000));
     // Beta uses bounded native workers. The shared Rust budget also counts
     // opening/waiting flows and holds its permit until stream destruction.
@@ -259,10 +274,22 @@ void run() {
                 {std::lock_guard<std::mutex> guard(lock); --admitted;}
             }
         });
+        // Before WFP captures any selected application, check the Windows
+        // TCP owner table. A different process must not impersonate the
+        // unelevated GUI's SOCKS listener on its loopback port.
+        if(guiListenerPort &&
+           !listener_owner::ownedBy(guiListenerHost,guiListenerPort,guiOwnerPid))
+            throw std::runtime_error("GUI-owned SOCKS listener is not bound by the expected FlowBridge GUI process");
         if(!stopping) capture.start(p4,p6,bypassPaths,capturePaths);
-        if(!stopping) {report(SERVICE_RUNNING); log({{"event","ready"},{"capture","tcp_ipv4_ipv6"},{"workers",max},{"selected_executables",capturePaths.size()}});}
+        if(!stopping) {report(SERVICE_RUNNING); log({{"event","ready"},{"capture","tcp_ipv4_ipv6"},{"workers",max},{"selected_executables",capturePaths.size()},{"gui_listener_os_owner_verified",guiListenerPort!=0}});}
         auto lastSnapshot=GetTickCount64();
+        auto lastOwnerCheck=GetTickCount64();
         while(!stopping) {
+            if(guiListenerPort && GetTickCount64()-lastOwnerCheck>=500) {
+                lastOwnerCheck=GetTickCount64();
+                if(!listener_owner::ownedBy(guiListenerHost,guiListenerPort,guiOwnerPid))
+                    throw std::runtime_error("GUI-owned SOCKS listener disappeared or changed PID; native WFP capture withdrawn");
+            }
             if(ssh.id) {
                 auto observed=ssh.snapshot();
                 const auto state=observed.at("status").value("state",std::string());
