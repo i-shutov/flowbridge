@@ -651,7 +651,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
                     if(id==Start||id==Apply||id==SaveDesktop){
                          if(nativeCapture.active()||nativeCapture.stopping())
                              throw std::runtime_error("Сначала остановите нативный перехват, затем меняйте или останавливайте SSH.");
-                         workerError.clear();auto value=commandConfiguration();auto settings=desktopSettings();validateDesktop(settings);if(settings.value("managed_ssh",false))validateManagedRoute(value,settings["ssh"]);dispatch(id==Start?Start:Apply,std::move(value),std::move(settings));}
+                         workerError.clear();auto value=commandConfiguration();auto settings=desktopSettings();validateDesktop(settings);if(settings.value("managed_ssh",false))validateManagedRoute(value,settings["ssh"]);dispatch(id==Start?Start:id==SaveDesktop?SaveDesktop:Apply,std::move(value),std::move(settings));}
                     else if(id==Stop){
                          if(nativeCapture.active()||nativeCapture.stopping())
                              stopNativeCapture(); // first remove WFP filters, then user can stop SSH
