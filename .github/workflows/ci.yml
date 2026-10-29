@@ -1,6 +1,9 @@
 name: rust-and-native-applications
 on:
   push:
+    # Feature-branch commits are checked by pull_request; avoid running the
+    # same five expensive Windows/macOS/Linux jobs twice for identical SHA.
+    branches: [main]
     paths-ignore: ['native/windows/wfp/driver/**', '.github/workflows/windows-driver.yml', 'docs/**']
   pull_request:
     paths-ignore: ['native/windows/wfp/driver/**', '.github/workflows/windows-driver.yml', 'docs/**']
@@ -15,7 +18,9 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ci-${{ github.ref }}
+  # Long 1k/10k-channel manual SSH acceptance must not cancel a main push
+  # build, or another independently requested manual audit.
+  group: ci-${{ github.event_name }}-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || 'auto' }}
   cancel-in-progress: true
 env:
   PYTHONUTF8: '1'
