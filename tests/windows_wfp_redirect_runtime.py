@@ -117,6 +117,31 @@ def run_probe(client, port, *, success=True):
         require(p.returncode != 0, 'Selected EXE bypassed rejected SOCKS (DIRECT leak)')
 
 
+def await_helper_ready(child):
+    """Observe the exact child that was launched; refuse silent early exit."""
+    messages = queue.Queue()
+    def pump():
+        try:
+            for line in child.stdout:
+                try:
+                    message = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                event = message.get('event')
+                if event in ('ready', 'faulted'):
+                    messages.put((event, message))
+        finally:
+            messages.put(('eof', {'exit_code': child.poll()}))
+    reader = threading.Thread(target=pump, daemon=True)
+    reader.start()
+    try:
+        outcome, value = messages.get(timeout=45)
+    except queue.Empty as error:
+        raise AssertionError('Native helper readiness timed out') from error
+    require(outcome == 'ready', f'Native capture failed before readiness: {value}')
+    return reader
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--helper', type=Path, required=True)
@@ -130,15 +155,14 @@ def main():
     probe_binary = args.probe.resolve(strict=True)
     report = {'passed': False, 'coverage': {'real_wfp_redirect': False,
              'selected_executable': True, 'external_network': False,
-             'ssh_forwarding_tested': False, 'dns_settings_changed': False},
+             'ssh_forwarding_tested': False, 'dns_settings_changed': False,
+             'dns_interception_tested': False, 'owner_process_death_cleanup': False},
              'platform': platform.platform(), 'checks': []}
-    preflight = json.loads(subprocess.run([str(helper), '--preflight'], capture_output=True,
-                           text=True, timeout=10, check=True).stdout)
-    require(preflight.get('kernel_driver_accessible') is True,
-            'Signed/test-signed WFP driver not loaded and available to this token')
     event = None
     server_threads = []
     process = None
+    owner = None
+    reader = None
     kernel = ctypes.WinDLL('kernel32', use_last_error=True)
     kernel.CreateEventW.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_wchar_p]
     kernel.CreateEventW.restype = ctypes.c_void_p
@@ -147,6 +171,13 @@ def main():
     kernel.CloseHandle.argtypes = [ctypes.c_void_p]
     kernel.CloseHandle.restype = ctypes.c_int
     try:
+        # This check belongs inside the evidence-producing try/finally. A
+        # missing/invalid driver must yield a failed JSON report, not silence.
+        preflight = json.loads(subprocess.run([str(helper), '--preflight'], capture_output=True,
+                               text=True, timeout=10, check=True).stdout)
+        require(preflight.get('kernel_driver_accessible') is True,
+                'Signed/test-signed WFP driver not loaded and available to this token')
+        report['checks'].append('Driver ABI and access preflight passed; redirect unproven until traffic')
         echo = Server(('127.0.0.1', 0), Echo)
         server_threads.append((echo, start(echo)))
         socks = Server(('127.0.0.1', 0), Socks)
@@ -185,21 +216,7 @@ def main():
                                         '--gui-owner', str(os.getpid()), '--stop-event', event_name],
                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                        text=True, creationflags=subprocess.CREATE_NO_WINDOW)
-            ready = queue.Queue()
-            def pump():
-                for line in process.stdout:
-                    try:
-                        message = json.loads(line)
-                        if message.get('event') == 'ready':
-                            ready.put(('ready', message))
-                        if message.get('event') == 'faulted':
-                            ready.put(('faulted', message))
-                    except json.JSONDecodeError:
-                        continue
-            reader = threading.Thread(target=pump, daemon=True)
-            reader.start()
-            outcome, value = ready.get(timeout=45)
-            require(outcome == 'ready', f'Native capture failed before readiness: {value}')
+            reader = await_helper_ready(process)
             run_probe(selected, echo.server_address[1])
             require(socks.connects >= 1, 'Selected client did not enter SOCKS through WFP')
             count = socks.connects
@@ -214,6 +231,41 @@ def main():
             require(process.wait(timeout=30) == 0, 'Native helper did not cleanly stop')
             run_probe(selected, echo.server_address[1])
             report['checks'].append('Stop event closes helper, drops WFP dynamic filters and restores connection')
+            reader.join(timeout=5)
+            if process.stdout:
+                process.stdout.close()
+            process = None
+
+            # Second actual redirect run tests the independent owner-PID
+            # lifetime guard without setting the stop event. A disposable
+            # child plays the GUI-owner role; no real GUI or user apps are
+            # terminated. The selected connection must be restored afterward.
+            socks.deny = False
+            owner = subprocess.Popen(
+                [sys.executable, '-c', 'import time; time.sleep(120)'],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW)
+            event_name = 'Local\\FlowBridgeCaptureStop-' + str(uuid.uuid4())
+            event = kernel.CreateEventW(None, True, False, event_name)
+            require(event, f'Could not create owner-death stop event: {ctypes.get_last_error()}')
+            process = subprocess.Popen(
+                [str(helper), '--console', '--profile', str(profile),
+                 '--capture-app', str(selected), '--gui-owner', str(owner.pid),
+                 '--stop-event', event_name],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW)
+            reader = await_helper_ready(process)
+            before = socks.connects
+            run_probe(selected, echo.server_address[1])
+            require(socks.connects>before, 'Owner-lifetime run never captured selected EXE')
+            owner.terminate()
+            owner.wait(timeout=10)
+            require(process.wait(timeout=30)==0,
+                    'Helper survived abrupt GUI-owner termination')
+            reader.join(timeout=5)
+            run_probe(selected, echo.server_address[1])
+            report['checks'].append('Abrupt owner-process exit removes dynamic WFP filters without stop event')
+            report['coverage']['owner_process_death_cleanup'] = True
             report['coverage']['real_wfp_redirect'] = True
             report['passed'] = True
     except Exception as error:
@@ -222,6 +274,9 @@ def main():
     finally:
         if event:
             kernel.SetEvent(event)
+        if owner and owner.poll() is None:
+            owner.terminate()
+            owner.wait(timeout=10)
         if process:
             try:
                 process.wait(timeout=10)
