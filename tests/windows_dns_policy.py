@@ -11,6 +11,7 @@ import socket
 import subprocess
 import sys
 import time
+import tempfile
 import uuid
 from native_dns_integration import ABI, configure, Server, Resolver, ForwardSocks, start, stop
 from ssh_real_integration import require, until, free_port
@@ -81,6 +82,25 @@ def main():
         finally:
             ps(command="Get-DnsClientNrptRule | Where-Object DisplayName -eq '"+foreign+"' | Remove-DnsClientNrptRule -Force")
         report['checks'].append('Existing policy is refused and unrelated rules survive recovery')
+        abi.lib.fb_native_destroy(ident);ident=0
+        # A separately owned listener lets us kill the exact process and verify
+        # the independent rollback guardian rather than normal Stop cleanup.
+        with tempfile.TemporaryDirectory(prefix='flowbridge-dns-crash-') as temporary:
+            ready=Path(temporary)/'ready'
+            code="import socket,time,sys,pathlib;u=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);u.bind(('127.0.0.1',53));t=socket.socket();t.bind(('127.0.0.1',53));t.listen();pathlib.Path(sys.argv[1]).write_text('ready');time.sleep(120)"
+            owner=subprocess.Popen([sys.executable,'-c',code,str(ready)])
+            try:
+                until(lambda:ready.exists() or owner.poll() is not None,10)
+                require(owner.poll() is None and ready.exists(),'Crash-test listener failed to bind')
+                policy('Enter',token,owner.pid)
+                require(has_token(token),'Crash-test DNS rule was not installed')
+                owner.kill();owner.wait(timeout=5)
+                until(lambda:not has_token(token),30)
+                require(baseline()==before,'Guardian changed adapter DNS')
+            finally:
+                if owner.poll() is None:owner.kill();owner.wait(timeout=5)
+                policy('Exit',token,os.getpid())
+        report['checks'].append('Independent guardian removes the exact owned DNS policy after its listener process is killed')
         report['passed']=True
     except Exception as error:
         report['error']=str(error);raise
