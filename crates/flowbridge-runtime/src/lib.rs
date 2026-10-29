@@ -543,11 +543,10 @@ async fn handle(
                     connection.state = "waiting_for_tunnel".into();
                 }
             }
-            let deadline = waiter
-                .as_ref()
-                .map(|w| w.deadline)
-                .unwrap_or(Instant::now() + initial.grace)
-                .min(Instant::now() + initial.grace);
+            // SSH reconnect grace is independent of the per-process capacity
+            // wait timeout. Queue permits stay held (and bounded) throughout
+            // this phase, then the capacity deadline is restarted at readiness.
+            let deadline = Instant::now() + initial.grace;
             loop {
                 if !upstream_gate.borrow().pauses(&first.endpoint) {
                     break;
@@ -561,6 +560,9 @@ async fn handle(
                         return Err("managed SSH upstream did not recover before reconnect deadline".into());
                     }
                 }
+            }
+            if let Some(waiter) = &mut waiter {
+                waiter.reset_capacity_deadline();
             }
             if let Some(connection) = lock(&guard.state).connections.get_mut(&guard.id) {
                 connection.state = "connecting".into();
