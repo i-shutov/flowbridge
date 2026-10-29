@@ -128,7 +128,7 @@ mod tests {
                 "managed_pool":{"aggregate_max_flows":128,"ready_workers":1,
                     "workers":[{"endpoint":{"host":"PRIVATE_ENDPOINT","port":1080},"ready":true,
                         "admission":{"active_including_opening":5,"queued":2,
-                            "limits":{"max_flows":64,"password":"PRIVATE_LIMIT"}}}]}}},
+                            "limits":{"max_flows":64,"password":"PRIVATE_LIMIT"}}}]}},
             "ssh":{"status":{"state":"degraded","restarts":1,"resource_exhaustion_count":12,
                 "diagnostic_code":"ssh_resource_exhausted", "backend_path":"PRIVATE_PATH",
                 "backend_version":"OpenSSH_for_Windows_9.5p1, LibreSSL 3.8.2", "last_error":"PRIVATE_ERROR"},
