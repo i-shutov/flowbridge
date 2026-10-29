@@ -366,9 +366,13 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
             Json saved=Json::parse(in);
             return saved.value("remote_dns_via_ssh",true);
         };
+        waitFor([&]{return IsWindowEnabled(GetDlgItem(window,285));},
+                "Remote DNS checkbox did not become available after discovery");
         SendMessageW(GetDlgItem(window,285),BM_SETCHECK,BST_UNCHECKED,0);
         click(window,285);
         need(!savedDns(),"Unchecked remote DNS was not saved to desktop profile");
+        waitFor([&]{return IsWindowEnabled(GetDlgItem(window,285));},
+                "Remote DNS checkbox remained busy");
         SendMessageW(GetDlgItem(window,285),BM_SETCHECK,BST_CHECKED,0);
         click(window,285);
         need(savedDns(),"Checked remote DNS was not restored in desktop profile");
