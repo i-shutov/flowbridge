@@ -266,6 +266,11 @@ static void assertCompactLayout(HWND window,const wchar_t* screenshot) {
     need(outer.left>=monitor.rcWork.left-2&&outer.top>=monitor.rcWork.top-2&&
          outer.right<=monitor.rcWork.right+2&&outer.bottom<=monitor.rcWork.bottom+2,
          "Compact GUI extends outside monitor work area");
+    // Query the running GUI window, not the harness' own (potentially
+    // DPI-virtualized) GetDeviceCaps(LOGPIXELSX). This is actual OS DPI.
+    const UINT dpi=GetDpiForWindow(window);
+    need(dpi>=96&&dpi<=768,"Actual GUI window reported an invalid Win32 DPI");
+    std::printf("FB_QA_WINDOW_DPI=%u\n",static_cast<unsigned>(dpi));
     RECT client{};GetClientRect(window,&client);
     need(client.right>=920&&client.bottom>=600,"Compact window minimum client area not reached");
     auto evidence=[&](const wchar_t* page) {

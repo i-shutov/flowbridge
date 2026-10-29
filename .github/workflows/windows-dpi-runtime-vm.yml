@@ -1,0 +1,55 @@
+name: Windows true DPI 100-200% visual QA — authorized VM only
+on:
+  workflow_dispatch:
+    inputs:
+      expected_dpi:
+        description: 'Operator-configured actual display DPI; do not simulate'
+        type: choice
+        required: true
+        options: ['96', '120', '144', '192']
+      expected_resolution:
+        description: 'Physical primary monitor resolution'
+        required: true
+        type: choice
+        options: ['1366x768', '1920x1080']
+permissions:
+  contents: read
+concurrency:
+  group: flowbridge-dpi-vm
+  cancel-in-progress: false
+jobs:
+  actual-dpi:
+    # An explicitly provisioned disposable desktop VM with the requested
+    # DPI and resolution. No persistent user workstation / hosted service.
+    runs-on: [self-hosted, windows, x64, flowbridge-dpi-vm]
+    timeout-minutes: 25
+    env:
+      FLOWBRIDGE_DPI_VM: '1'
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Build real Win32 GUI and native UI/FFI smoke
+        shell: pwsh
+        run: |
+          cargo build --locked --release -p flowbridge-ffi
+          cmake -S native/windows -B build/windows -A x64 -DFLOWBRIDGE_BUILD_NATIVE_TESTS=ON -DFLOWBRIDGE_FFI_LIBRARY="$env:GITHUB_WORKSPACE/target/release/flowbridge_ffi.dll.lib"
+          cmake --build build/windows --config Release
+          Copy-Item target/release/flowbridge_ffi.dll build/windows/Release/
+          New-Item -ItemType Directory -Force build/windows/Release/resources | Out-Null
+          Copy-Item resources/presets.json build/windows/Release/resources/
+      - name: Verify real GUI DPI and capture five pages, without changing VM display settings
+        shell: pwsh
+        run: |
+          python tests/windows_dpi_matrix_vm.py --gui build/windows/Release/FlowBridge.exe --harness build/windows/Release/FlowBridgeNativeSmoke.exe --expected-dpi ${{ inputs.expected_dpi }} --expected-resolution ${{ inputs.expected_resolution }} --output build/verification/dpi/result.json
+      - name: Preserve DPI report and unmodified screenshots even on test failure
+        if: always()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: FlowBridge-actual-DPI-${{ inputs.expected_dpi }}-${{ inputs.expected_resolution }}
+          path: build/verification/dpi/
+          if-no-files-found: warn
+          retention-days: 30
