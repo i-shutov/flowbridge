@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """VM-only actual WFP -> elevated helper -> user-owned FlowBridge -> SOCKS -> echo.
 
-This tests a real installed WFP redirect driver and the real user-level Rust
-engine, with an isolated mock for the remote SSH SOCKS endpoint. It does NOT
+This tests a real installed WFP redirect driver and the real GUI-owner Rust
+engine in a *separate process from the elevated helper*, with an isolated mock
+for the remote SSH SOCKS endpoint. The VM harness itself requires an admin
+token and does NOT prove the normal GUI's medium-integrity security boundary.
+It does NOT
 test OpenSSH authentication, remote system DNS, DNS interception, TLS or QUIC.
 Only loopback sockets and disposable test executables are used.
 """
@@ -68,7 +71,9 @@ def main():
                      'user_engine_loss_filter_cleanup': False,
                      'remote_openssh_authentication': False,
                      'remote_dns_interception': False,
-                     'external_network': False}
+                     'external_network': False,
+                     'gui_process_medium_integrity_verified': False,
+                     'ssh_keys_read_by_elevated_helper': False}
     }
     helper = args.helper.resolve(strict=True)
     probe = args.probe.resolve(strict=True)
@@ -81,8 +86,9 @@ def main():
     event = None
     engine_started = False
     try:
-        # This ABI lives in the Python (unelevated-GUI stand-in) process.
-        # The helper separately loads the same release DLL from its own folder.
+        # This ABI lives in the Python GUI-owner stand-in process. The
+        # VM's admin token is required here, so this is not a medium-integrity
+        # GUI identity test. The helper loads a separate DLL instance.
         abi = ABI(library)
         for host, kind in [('127.0.0.1', Server), ('::1', V6Server)]:
             echo = kind((host, 0), Echo)
@@ -130,8 +136,8 @@ def main():
             require(preflight.get('kernel_driver_accessible') is True,
                     'Driver not installed/loaded under authorized VM test token')
             report['checks'].append('Read-only device ABI probe confirms an accessible signed/test-signed driver')
-            # The normal engine owns its actual loopback listener and is the
-            # only component with a reference to the simulated SSH upstream.
+            # The GUI-owner engine owns its actual loopback listener and is
+            # the only component with the simulated SSH upstream reference.
             engine = abi.call('fb_engine_create_json', user)['engine_id']
             abi.call('fb_engine_set_upstream_gate_json', engine,
                      {'endpoint': target_proxy, 'ready': True,
@@ -139,7 +145,7 @@ def main():
             abi.call('fb_engine_start_json', engine)
             engine_started = True
             until(lambda: abi.call('fb_engine_snapshot_json', engine)['status']['running'], 5)
-            report['checks'].append('Real user-level Rust FFI engine owns the visible GUI SOCKS port')
+            report['checks'].append('Real Rust FFI engine in GUI-owner test PID owns the loopback SOCKS listener')
 
             for host, target_port in targets.values():
                 run_probe(selected, host, target_port)
