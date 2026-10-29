@@ -140,6 +140,10 @@ pub struct Rule {
     pub action: Action,
 }
 
+fn default_remote_dns_via_ssh() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -153,6 +157,11 @@ pub struct Config {
     pub handshake_timeout_ms: u64,
     pub idle_timeout_ms: u64,
     pub max_connections: usize,
+    /// When false, reject hostname destinations without *any* local DNS
+    /// fallback. Literal IPs continue to use normal policy/routing. Only
+    /// explicit SOCKS input can preserve and forward original hostnames.
+    #[serde(default = "default_remote_dns_via_ssh")]
+    pub remote_dns_via_ssh: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -315,6 +324,18 @@ impl Config {
                 rule_id: None,
                 action: Action::Block,
                 reason: "invalid flow endpoint or application identity".into(),
+            };
+        }
+        // The GUI's remote-SSH-DNS switch is a real policy gate. It cannot
+        // force local DNS when disabled: that would leak. Reject names before
+        // route expansion and before any socket or system resolver is touched.
+        if !self.remote_dns_via_ssh
+            && flow.destination.host.parse::<IpAddr>().is_err()
+        {
+            return Decision {
+                rule_id: None,
+                action: Action::Block,
+                reason: "remote SSH DNS disabled; hostname rejected without local fallback".into(),
             };
         }
         for rule in &self.rules {
