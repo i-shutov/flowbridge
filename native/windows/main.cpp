@@ -246,7 +246,17 @@ class Worker {
         ssh=0;activeWorkerCount=1;
     }
     void stopSsh() {
-        for(auto id:sshIds())response(fb_ssh_stop_json(id));
+        std::string firstError;
+        for(auto id:sshIds()) {
+            try { response(fb_ssh_stop_json(id)); }
+            catch(const std::exception& e) { if(firstError.empty())firstError=e.what(); }
+        }
+        if(!firstError.empty())throw std::runtime_error("Не все SSH-процессы остановились: "+firstError);
+    }
+    void clearManagedGate() {
+        if(!engine)return;
+        const Json value={{"endpoint",nullptr},{"ready",false},{"grace_ms",0}};
+        response(fb_engine_set_upstream_gate_json(engine,value.dump().c_str()));
     }
     void ensureSsh(const Json& profile,int count) {
         if(ssh)return;
@@ -330,6 +340,9 @@ class Worker {
                         }
                         if(managed&&!ssh)ensureSsh(options["ssh"],desired);
                         accept(value);
+                        // Release old per-worker budgets before changing pool size.
+                        // The engine must be stopped; live flows cannot be migrated.
+                        if(!running&&!waiting)clearManagedGate();
                         if(action==Apply) {
                             result->saved=value;result->acceptedDesktop=options;
                         }
@@ -354,6 +367,9 @@ class Worker {
                     } else if(action==Stop) {
                         waiting=false;
                         if(engine)response(fb_engine_stop_json(engine));
+                        clearManagedGate();
+                        // No stale gate/worker routing remains installed after Stop.
+                        managedActive=false;
                         if(ssh)stopSsh();
                     }
                     if(ssh&&managedActive) {
@@ -369,7 +385,8 @@ class Worker {
                             workers.push_back({{"pid",state.value("pid",Json())},
                                                {"state",mode},
                                                {"local_port",state.value("local_port",0)},
-                                               {"resource_exhaustion_count",state.value("resource_exhaustion_count",uint64_t(0))}});
+                                               {"resource_exhaustion_count",state.value("resource_exhaustion_count",uint64_t(0))},
+                                               {"backend_path",state.value("backend_path",Json())}});
                         }
                         result->ssh["workers"]=workers;
                         result->ssh["status"]["ready_workers"]=readyCount;
@@ -545,7 +562,7 @@ void startNativeCapture(){
         // already gates its loopback SOCKS ingress on actual SSH readiness.
         if(!engineRunning||pendingStart||!tunnelReady)
             throw std::runtime_error("Сначала нажмите «Подключить» и дождитесь готовности SSH. Нативный перехват использует этот пользовательский SSH-сеанс.");
-        validateManagedRoute(base.dump(),settings.at("ssh"));
+        validateManagedRoute(base.dump(),settings.at("ssh"),settings.value("ssh_workers",1));
         const auto actual=latestEngineSnapshot.value("status",Json::object());
         if(actual.value("listen",std::string())!=base.at("listen").get<std::string>())
             throw std::runtime_error("Изменён локальный SOCKS-порт. Сначала примените новый профиль и дождитесь готовности.");
