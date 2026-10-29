@@ -56,6 +56,8 @@ def run(abi, engine, engine_port, target_port, primary_settings, snapshot,
                 'The routed Rust engine must remain live throughout the pool test')
         configure(True, True)
 
+        previous_connections = abi.call('fb_engine_snapshot_json', engine)['connections']
+        last_id = max((c['id'] for c in previous_connections), default=0)
         for i in range(16):
             client = connect(engine_port, target_port)
             payload = b'flowbridge-two-real-ssh-workers\x00\xff' + bytes([i])
@@ -64,7 +66,8 @@ def run(abi, engine, engine_port, target_port, primary_settings, snapshot,
             held.append(client)
 
         status = abi.call('fb_engine_snapshot_json', engine)
-        active = [c for c in status['connections'] if c['state'] == 'active' and c.get('worker_port')]
+        active = [c for c in status['connections']
+                  if c['id'] > last_id and c['state'] == 'active' and c.get('worker_port')]
         counts = {primary['port']: 0, second['port']: 0}
         for connection in active:
             require(connection['worker_port'] in counts,
