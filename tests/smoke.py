@@ -204,6 +204,23 @@ class Smoke(unittest.TestCase):
                     self.assertEqual(exact(client, 16), b"after-half-close")
             self.assertEqual(seen, [("must-not-resolve.invalid", 443)])
 
+    def test_remote_dns_checkbox_off_rejects_hostname_without_contacting_upstream(self):
+        # The OFF state is intentionally numeric-IP-only. It never silently
+        # asks the Windows/macOS resolver and never falls back to DIRECT.
+        with MockServer(echo) as upstream:
+            config = copy.deepcopy(BASE)
+            config["proxies"] = [{"id": "up", "kind": "socks5",
+                "endpoint": {"host": "127.0.0.1", "port": upstream.port},
+                "username": None, "password_env": None}]
+            config["default_action"] = {"type": "proxy", "id": "up"}
+            config["remote_dns_via_ssh"] = False
+            with server(config) as port:
+                for hostname in ["uncached-name.invalid", "localhost"]:
+                    client, code = socks(port, hostname, 443)
+                    client.close()
+                    self.assertEqual(code, 2, "Unchecked DNS mode allowed hostname routing")
+            self.assertEqual(upstream.hits, 0, "Unchecked DNS mode contacted the upstream proxy")
+
     def test_failed_proxy_never_falls_back_to_direct(self):
         config = copy.deepcopy(BASE)
         config["proxies"] = [{"id": "dead", "kind": "socks5", "endpoint": {"host": "127.0.0.1", "port": unused_port()}, "username": None, "password_env": None}]
