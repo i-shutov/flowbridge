@@ -466,7 +466,10 @@ void showSnapshot(const Json& snap) {
     InvalidateRect(GetDlgItem(window,Badge),nullptr,TRUE);
     ListView_DeleteAllItems(table); int row=0;
     for(const auto& connection:snap.value("connections",Json::array())) {
-        std::wstring fields[]={display(connection,"id"), display(connection,"host")+L":"+display(connection,"port"),display(connection,"rule"),display(connection,"action"),display(connection,"state"),display(connection,"bytes_up")+L" / "+display(connection,"bytes_down"),display(connection,"error")};
+        auto route=display(connection,"action");
+        if(connection.contains("worker_port")&&!connection["worker_port"].is_null())
+            route+=L" · SSH:"+display(connection,"worker_port");
+        std::wstring fields[]={display(connection,"id"), display(connection,"host")+L":"+display(connection,"port"),display(connection,"rule"),route,display(connection,"state"),display(connection,"bytes_up")+L" / "+display(connection,"bytes_down"),display(connection,"error")};
         LVITEMW item{}; item.mask=LVIF_TEXT; item.iItem=row; item.pszText=fields[0].data(); ListView_InsertItem(table,&item);
         for(int col=1;col<7;++col) ListView_SetItemText(table,row,col,fields[col].data()); ++row;
     }
@@ -651,6 +654,20 @@ void showSsh(const Json& ssh,bool waiting){
     }
     if(status.contains("backend_path")&&!status["backend_path"].is_null())text+=" · "+status["backend_path"].get<std::string>();
     if(status.contains("backend_version")&&!status["backend_version"].is_null())text+=" · "+status["backend_version"].get<std::string>();
+    const auto pool=latestEngineSnapshot.value("managed_pool",Json());
+    if(pool.is_object()) {
+        uint64_t active=0,queued=0,rejected=0;
+        for(const auto& worker:pool.value("workers",Json::array())) {
+            const auto counters=worker.value("admission",Json::object());
+            active+=counters.value("active_including_opening",uint64_t(0));
+            queued+=counters.value("queued",uint64_t(0));
+            rejected+=counters.value("rejected",uint64_t(0));
+        }
+        text+="\nКаналов: "+std::to_string(active)+"/"+
+            std::to_string(pool.value("aggregate_max_flows",128))+
+            " · очередь: "+std::to_string(queued)+
+            " · отказов: "+std::to_string(rejected);
+    }
     setText(GetDlgItem(window,SshHealth),text);setText(GetDlgItem(window,SshSummary),text);
     if(waiting){setText(GetDlgItem(window,Badge),"●  Ожидание готовности SSH");setText(GetDlgItem(window,Status),"Сначала проверяется SSH/SOCKS5. Локальный движок запустится после подтверждения готовности.");}
     if(engineRunning&&!tunnelReady){setText(GetDlgItem(window,Badge),state=="degraded"?"●  SSH перегружен / проверяется · новые соединения ждут":"●  SSH восстанавливается · SOCKS ждёт upstream");}
