@@ -577,7 +577,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         add(L"BUTTON",L"Сжатие SSH (полезно не для всех нагрузок)",BS_AUTOCHECKBOX|WS_TABSTOP,Compression,12);
         add(L"BUTTON",L"Разрешать DNS на удалённом SSH-сервере",BS_AUTOCHECKBOX|WS_TABSTOP,RemoteDns,12);
         add(L"BUTTON",L"Выбрать…",WS_TABSTOP,BrowseKey,12);add(L"BUTTON",L"Выбрать…",WS_TABSTOP,BrowseKnown,12);
-        label(L"Только ключ / SSH agent. Ключ сервера должен быть заранее проверен и добавлен в known_hosts. Пароли и обход проверки ключа не поддерживаются.",SshHelp,12);
+        label(L"SSH: ключ сервера проверьте в known_hosts. DNS: только hostname в явном SOCKS5; без галочки имена блокируются, локального обхода нет. Прозрачный WFP DNS не защищён.",SshHelp,12);
         label(L"Внешний прокси управляется отдельно от FlowBridge.",SshSummary,1);
         add(L"BUTTON",L"Сохранить подключение",WS_TABSTOP,SaveDesktop,1);
         label(L"Для SSH: сначала «Подключить» и дождитесь готовности, затем выберите EXE и «Нативный перехват». SSH остаётся без UAC. WFP-драйвер должен быть установлен отдельно.",AppsHelp,2);
