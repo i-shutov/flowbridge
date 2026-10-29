@@ -7,6 +7,8 @@ struct DesktopSettings: Codable {
     var sshUser = ""
     var sshPort = 22
     var localPort = 1080
+    // Optional field ensures older saved macOS DesktopSettings decode normally.
+    var sshWorkers: Int? = 1
     var identityFile = ""
     var knownHostsFile = ""
     var compression = false
@@ -29,13 +31,13 @@ struct DesktopSettings: Codable {
     var remoteDNSResolver: String? = ""
 
 
-    func sshJSON() throws -> String {
+    func sshJSON(localPort overridePort: Int? = nil) throws -> String {
         guard !sshHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !sshUser.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw Bridge.error("Укажите SSH-сервер и имя пользователя.")
         }
         return try Bridge.text([
-            "host": sshHost, "user": sshUser, "port": sshPort, "local_port": localPort,
+            "host": sshHost, "user": sshUser, "port": sshPort, "local_port": overridePort ?? localPort,
             "identity_file": identityFile.isEmpty ? NSNull() : identityFile as Any,
             "known_hosts_file": knownHostsFile.isEmpty ? NSNull() : knownHostsFile as Any,
             "compression": compression, "server_alive_interval_secs": aliveInterval,
