@@ -245,6 +245,8 @@ def main():
                 [sys.executable, '-c', 'import time; time.sleep(120)'],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 creationflags=subprocess.CREATE_NO_WINDOW)
+            require(kernel.CloseHandle(event), 'Could not release the first stop event')
+            event = None
             event_name = 'Local\\FlowBridgeCaptureStop-' + str(uuid.uuid4())
             event = kernel.CreateEventW(None, True, False, event_name)
             require(event, f'Could not create owner-death stop event: {ctypes.get_last_error()}')
