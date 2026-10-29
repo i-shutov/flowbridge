@@ -25,7 +25,7 @@ using Json = nlohmann::json;
 namespace {
 constexpr size_t MaxBytes = 1024 * 1024;
 constexpr UINT Completed = WM_APP + 1;
-enum { Start=100, Stop, Apply, Open, Save, Proxy, Host, Port, Protocol, Config, Connections, Log, Status, Mode, QuickLabel, ConfigLabel, ConnectionsLabel, LogLabel, NavDashboard=200, NavConnection, NavApps, NavAdvanced, Theme=204, PageTitle=205, PageSubtitle=206, Badge=207, Metrics=208, DashboardHelp=209, SshHealth=210, ManagedMode=230, SshHost=231, SshPort=232, SshUser=233, KeyPath=234, KnownHosts=235, LocalPort=236, Compression=237, Keepalive=238, KeepaliveCount=239, SaveDesktop=240, BrowseKey=241, BrowseKnown=242, SshHelp=243, ConnectionSummary=244, Discover=260, AppsTable=261, PresetAI=262, PresetWeb=263, PresetBoth=264, BrowseApp=265, ExportNative=266, BlockOthers=267, AppsHelp=268, AppsSummary=269, ScanStatus=270, SshTitle=271, SshSummary=272, RetryInitial=245, RetryMax=246, Banner=280, ExportDiagnostics=281, StartCapture=282, StopCapture=283, CaptureStatus=284 };
+enum { Start=100, Stop, Apply, Open, Save, Proxy, Host, Port, Protocol, Config, Connections, Log, Status, Mode, QuickLabel, ConfigLabel, ConnectionsLabel, LogLabel, NavDashboard=200, NavConnection, NavApps, NavAdvanced, Theme=204, PageTitle=205, PageSubtitle=206, Badge=207, Metrics=208, DashboardHelp=209, SshHealth=210, ManagedMode=230, SshHost=231, SshPort=232, SshUser=233, KeyPath=234, KnownHosts=235, LocalPort=236, Compression=237, Keepalive=238, KeepaliveCount=239, SaveDesktop=240, BrowseKey=241, BrowseKnown=242, SshHelp=243, ConnectionSummary=244, Discover=260, AppsTable=261, PresetAI=262, PresetWeb=263, PresetBoth=264, BrowseApp=265, ExportNative=266, BlockOthers=267, AppsHelp=268, AppsSummary=269, ScanStatus=270, SshTitle=271, SshSummary=272, RetryInitial=245, RetryMax=246, Banner=280, ExportDiagnostics=281, StartCapture=282, StopCapture=283, CaptureStatus=284, RemoteDns=285 };
 constexpr int DiscoverCommand=900, PollCommand=999;
 std::map<int,int> pages; // -1 global; 0 dashboard; 1 connection; 2 applications; 3 advanced
 int activePage=0;
@@ -164,12 +164,14 @@ Json sshSettings() {
 }
 Json desktopSettings() {
     Json selected=Json::array();for(const auto& path:selectedApps)selected.push_back(path);
-    return {{"version",1},{"managed_ssh",SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1},{"ssh",sshSettings()},{"preset",selectedPreset},{"selected_applications",selected},{"block_other_applications",SendMessageW(GetDlgItem(window,BlockOthers),BM_GETCHECK,0,0)==BST_CHECKED},{"dark",dark}};
+    return {{"version",1},{"managed_ssh",SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1},{"ssh",sshSettings()},{"preset",selectedPreset},{"selected_applications",selected},{"block_other_applications",SendMessageW(GetDlgItem(window,BlockOthers),BM_GETCHECK,0,0)==BST_CHECKED},{"remote_dns_via_ssh",SendMessageW(GetDlgItem(window,RemoteDns),BM_GETCHECK,0,0)==BST_CHECKED},{"dark",dark}};
 }
 void validateDesktop(const Json& value) {
     const auto& ssh=value.at("ssh");auto host=ssh.at("host").get<std::string>(),user=ssh.at("user").get<std::string>();
     auto allowed=[](const std::string& text,const std::string& punctuation){return std::all_of(text.begin(),text.end(),[&](unsigned char c){return (c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||punctuation.find(static_cast<char>(c))!=std::string::npos;});};
     bool managed=value.value("managed_ssh",false);
+    if(value.contains("remote_dns_via_ssh")&&!value["remote_dns_via_ssh"].is_boolean())
+        throw std::runtime_error("Режим удалённого DNS должен быть логическим значением.");
     if((managed||!host.empty())&&(host.empty()||host.size()>253||host[0]=='-'||!allowed(host,".-:_[]%")))throw std::runtime_error("SSH-сервер: укажите hostname / IP без пробелов, URI и параметров командной строки.");
     if((managed||!user.empty())&&(user.empty()||user.size()>128||user[0]=='-'||!allowed(user,"._-")))throw std::runtime_error("SSH-пользователь: нужны ASCII буквы, цифры, точка, дефис или подчёркивание.");
     for(const auto* key:{"identity_file","known_hosts_file"})if(!ssh.at(key).is_null()){auto path=ssh.at(key).get<std::string>();if(path.empty()||path.size()>4096||std::any_of(path.begin(),path.end(),[](unsigned char c){return c<32||c==127||c=='"';}))throw std::runtime_error("Путь ключа / known_hosts содержит недопустимые символы.");}
@@ -183,7 +185,13 @@ std::string commandConfiguration() {
         Json managed={{"id","managed-ssh"},{"kind","socks5"},{"endpoint",{{"host","127.0.0.1"},{"port",settings["local_port"]}}},{"username",nullptr},{"password_env",nullptr}};
         auto& proxies=value["proxies"];auto found=std::find_if(proxies.begin(),proxies.end(),[](const Json& p){return p.value("id",std::string())=="managed-ssh";});
         if(found==proxies.end())proxies.push_back(managed);else *found=managed;
-        value["default_action"]={{"type","proxy"},{"id","managed-ssh"}};setText(configEdit,value.dump(2));fillQuick();
+        value["default_action"]={{"type","proxy"},{"id","managed-ssh"}};
+        value["remote_dns_via_ssh"] = SendMessageW(GetDlgItem(window,RemoteDns),BM_GETCHECK,0,0)==BST_CHECKED;
+        setText(configEdit,value.dump(2));fillQuick();
+    } else {
+        // The managed-SSH checkbox is not a promise about third-party
+        // proxies. In external mode use normal explicit SOCKS policy.
+        value["remote_dns_via_ssh"] = true;
     }
     return value.dump(2);
 }
@@ -508,7 +516,10 @@ void layout() {
         move(fields[i],x+24+i*(unit+24),504,unit,28);
     }
     move(SshHelp,x+24,540,w-48,34);
-    move(SaveDesktop,x,height-56,230,36);
+    // DNS scope is deliberately limited to explicit SOCKS hostname input.
+    // Keep the toggle and Save button horizontally separate at 980x680.
+    move(RemoteDns,x+24,height-58,w-290,26);
+    move(SaveDesktop,x+w-230,height-56,230,36);
     // Applications: four equal-flow buttons and a table that yields space to
     // the status/actions footer rather than being clipped by it.
     move(AppsHelp,x+24,139,w-48,54);
@@ -564,6 +575,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         for(int id:{SshHost,SshUser,KeyPath,KnownHosts})add(L"EDIT",L"",WS_BORDER|ES_AUTOHSCROLL|WS_TABSTOP,id,12);
         for(int id:{SshPort,LocalPort,Keepalive,KeepaliveCount,RetryInitial,RetryMax})add(L"EDIT",L"",WS_BORDER|ES_NUMBER|WS_TABSTOP,id,12);
         add(L"BUTTON",L"Сжатие SSH (полезно не для всех нагрузок)",BS_AUTOCHECKBOX|WS_TABSTOP,Compression,12);
+        add(L"BUTTON",L"Разрешать DNS на удалённом SSH-сервере",BS_AUTOCHECKBOX|WS_TABSTOP,RemoteDns,12);
         add(L"BUTTON",L"Выбрать…",WS_TABSTOP,BrowseKey,12);add(L"BUTTON",L"Выбрать…",WS_TABSTOP,BrowseKnown,12);
         label(L"Только ключ / SSH agent. Ключ сервера должен быть заранее проверен и добавлен в known_hosts. Пароли и обход проверки ключа не поддерживаются.",SshHelp,12);
         label(L"Внешний прокси управляется отдельно от FlowBridge.",SshSummary,1);
@@ -590,6 +602,11 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         if(!desktop.is_object())desktop=Json::object();
         auto settings=desktop.value("ssh",Json::object());if(!settings.is_object())settings=Json::object();auto setSetting=[&](int id,const char* key,const Json& fallback){auto field=settings.value(key,fallback);setText(GetDlgItem(window,id),field.is_string()?field.get<std::string>():field.is_null()?std::string():field.dump());};
         setSetting(SshHost,"host","");setSetting(SshPort,"port",22);setSetting(SshUser,"user","");setSetting(KeyPath,"identity_file",nullptr);setSetting(KnownHosts,"known_hosts_file",nullptr);setSetting(LocalPort,"local_port",1080);setSetting(Keepalive,"server_alive_interval_secs",15);setSetting(KeepaliveCount,"server_alive_count_max",3);setSetting(RetryInitial,"restart_initial_delay_ms",1000);setSetting(RetryMax,"restart_max_delay_ms",30000);SendMessageW(GetDlgItem(window,Compression),BM_SETCHECK,settings.value("compression",false)?BST_CHECKED:BST_UNCHECKED,0);
+        // Existing desktop profiles migrate to checked-by-default behavior.
+        const auto savedRemoteDns=desktop.value("remote_dns_via_ssh",Json(true));
+        const bool remoteDnsEnabled=savedRemoteDns.is_boolean()?savedRemoteDns.get<bool>():true;
+        SendMessageW(GetDlgItem(window,RemoteDns),BM_SETCHECK,remoteDnsEnabled?BST_CHECKED:BST_UNCHECKED,0);
+        if(!savedRemoteDns.is_boolean())note("Некорректная настройка DNS: включён безопасный режим по умолчанию.");
         SendMessageW(mode,CB_SETCURSEL,desktop.value("managed_ssh",false)?1:0,0);SendMessageW(GetDlgItem(window,BlockOthers),BM_SETCHECK,desktop.value("block_other_applications",false)?BST_CHECKED:BST_UNCHECKED,0);selectedPreset=desktop.value("preset",std::string("ai_web"));for(const auto& selected:desktop.value("selected_applications",std::vector<std::string>{}))selectedApps.insert(selected);dark=desktop.value("dark",false);
         try{wchar_t exe[32768]{};GetModuleFileNameW(nullptr,exe,32768);auto resource=std::filesystem::path(exe).parent_path()/L"resources"/L"presets.json";if(!std::filesystem::exists(resource))resource=std::filesystem::path(__FILE__).parent_path().parent_path().parent_path()/"resources"/"presets.json";catalog=Json::parse(readFile(resource));}catch(const std::exception& e){catalog=Json::object();note(std::string("Каталог шаблонов недоступен: ")+e.what());}
         setText(configEdit,value);fillQuick();applyTheme();switchPage(0);worker.start();SetTimer(h,1,1000,nullptr);return 0;
@@ -607,6 +624,10 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
                 if(id>=NavDashboard&&id<=NavAdvanced)switchPage(id-NavDashboard);
                 else if(id==Theme){dark=!dark;applyTheme();try{saveDesktop();}catch(const std::exception& e){note(e.what());}}
                 else if(id==ExportDiagnostics){exportDiagnostics();}
+                else if(id==RemoteDns){
+                    saveDesktop();
+                    note("DNS через SSH: только hostname в явном SOCKS5. Без галочки доступны лишь IP; локального DNS fallback нет. Для новых соединений примените профиль. Прозрачный DNS WFP не защищён.");
+                }
                 else if(!busy){
                     if(id==Start||id==Apply||id==SaveDesktop){
                          if(nativeCapture.active()||nativeCapture.stopping())
