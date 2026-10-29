@@ -664,7 +664,15 @@ fn stderr_line(state: &Arc<Mutex<State>>, bytes: &[u8]) {
         None
     };
     let mut s = lock(state);
-    if lower.contains("too many open files") || lower.contains("no buffer space available") {
+    // OpenSSH on Windows may report Winsock resource exhaustion as WSAENOBUFS
+    // or "No buffer space available"; POSIX reports EMFILE/ENFILE. Do not
+    // infer a specific descriptor ceiling from these diagnostic strings.
+    let exhausted = lower.contains("too many open files")
+        || lower.contains("no buffer space available")
+        || lower.contains("wsaenobufs")
+        || lower.contains("error 10055")
+        || lower.contains("resource temporarily unavailable");
+    if exhausted {
         let now = Instant::now();
         s.status.resource_exhaustion_count = s.status.resource_exhaustion_count.saturating_add(1);
         s.status.last_resource_error_unix_ms = Some(
@@ -687,10 +695,14 @@ fn stderr_line(state: &Arc<Mutex<State>>, bytes: &[u8]) {
         }
         s.last_resource_event = Some(now);
         let total = s.status.resource_exhaustion_count;
+        // A child can spam tens of thousands of identical resource errors per
+        // second. Preserve only aggregate totals and a fixed, path-free code,
+        // not its arbitrary stderr payload or one warning per failed accept.
         s.event(
             "error",
-            format!("SSH resource exhaustion ({total} occurrences): {text}"),
+            format!("SSH resource exhaustion observed ({total} occurrences); new connections paused"),
         );
+        return;
     }
     if lower.contains("timeout, server ") && lower.contains("not responding") {
         s.status.diagnostic_code = Some("ssh_server_unresponsive".into());
