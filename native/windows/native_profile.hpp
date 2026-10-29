@@ -49,6 +49,11 @@ inline nlohmann::json viaUserOwnedSsh(nlohmann::json config,
     // rules in the elevated helper. The user-mode engine applies those rules.
     config["proxies"]=Json::array({upstream});
     config["chains"]=Json::array();
+    // Config::validate normally rejects a SOCKS proxy pointing back at the
+    // same local ingress port. A native session never binds its profile.listen,
+    // but still shares the strict Config schema with the ordinary listener.
+    // Use a deliberately unbound internal placeholder, never the GUI port.
+    config["listen"]="127.0.0.1:"+std::to_string(port==1?2:1);
     return build(std::move(config),selected,"gui-owned-socks",false);
 }
 
