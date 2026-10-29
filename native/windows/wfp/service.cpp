@@ -1,6 +1,7 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
+#include <winioctl.h>
 #include <atomic>
 #include <array>
 #include <algorithm>
