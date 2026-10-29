@@ -19,6 +19,7 @@
 #include "nlohmann/json.hpp"
 #include "../native/windows/native_profile.hpp"
 #include "../native/windows/capture_launcher.hpp"
+#include "../native/windows/wfp/listener_owner.hpp"
 
 using Json = nlohmann::json;
 using namespace std::chrono_literals;
@@ -99,6 +100,36 @@ static void nativeTemplateTest(){
     flow["application"]="other.exe";auto other=result(fb_evaluate_json(exported.dump().c_str(),flow.dump().c_str()));need(other["decision"]["action"]["type"]=="direct","unselected app did not use Direct");
     auto blocked=native_profile::build(profile,{"C:\\Apps\\Claude.exe"},"ssh",true);need(blocked["default_action"]["type"]=="block","explicit block-other option missing");
     std::puts("PASS native template export: basenames, deduplication, selected unknown hosts via proxy, other apps Direct, optional Block");
+}
+static void nativeGuiListenerOwnerTest() {
+    Socket v4;
+    const auto port=listenOn(v4);
+    const auto pid=GetCurrentProcessId();
+    need(listener_owner::ownedBy("127.0.0.1",port,pid),
+         "Windows TCP owner table did not attest the current GUI listener");
+    need(!listener_owner::ownedBy("127.0.0.1",port,pid+1),
+         "Windows TCP owner table accepted a different process as SOCKS owner");
+    need(!listener_owner::ownedBy("127.0.0.1",port==1?2:1,pid),
+         "Windows TCP owner table accepted a different port");
+    bool rejected=false;
+    try {listener_owner::ownedBy("0.0.0.0",port,pid);}
+    catch(const std::exception&) {rejected=true;}
+    need(rejected,"Non-loopback listener was accepted for privileged WFP routing");
+    Socket v6(socket(AF_INET6,SOCK_STREAM,IPPROTO_TCP));
+    sockaddr_in6 address{};address.sin6_family=AF_INET6;
+    address.sin6_addr=in6addr_loopback;
+    DWORD only6=1;need(setsockopt(v6.value,IPPROTO_IPV6,IPV6_V6ONLY,
+        reinterpret_cast<const char*>(&only6),sizeof(only6))==0,"IPv6-only listener setup");
+    need(bind(v6.value,reinterpret_cast<sockaddr*>(&address),sizeof(address))==0 &&
+         listen(v6.value,8)==0,"IPv6 test listener failed");
+    int length=sizeof(address);
+    need(getsockname(v6.value,reinterpret_cast<sockaddr*>(&address),&length)==0,
+         "IPv6 test listener port unavailable");
+    need(listener_owner::ownedBy("::1",ntohs(address.sin6_port),pid),
+         "Windows IPv6 TCP owner table did not attest the current GUI listener");
+    need(!listener_owner::ownedBy("::1",ntohs(address.sin6_port),pid+1),
+         "Windows IPv6 listener ownership incorrectly trusted an unrelated PID");
+    std::puts("PASS Windows TCP ownership: IPv4/IPv6 loopback, exact PID and port, unsafe bind rejected");
 }
 static void nativeUnelevatedSshProfileTest() {
     auto source=config(1081);
@@ -310,6 +341,6 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
 }
 int wmain(int argc,wchar_t** argv) {
     WSADATA data{}; if(WSAStartup(MAKEWORD(2,2),&data)) return 1;
-    try { abiTest();nativeTemplateTest();nativeUnelevatedSshProfileTest();nativeLauncherArgumentTest(); if(argc>=2) guiTest(argv[1],argc>=3?argv[2]:nullptr); WSACleanup(); return 0; }
+    try { abiTest();nativeTemplateTest();nativeGuiListenerOwnerTest();nativeUnelevatedSshProfileTest();nativeLauncherArgumentTest(); if(argc>=2) guiTest(argv[1],argc>=3?argv[2]:nullptr); WSACleanup(); return 0; }
     catch(const std::exception& error) { std::fprintf(stderr,"FAIL: %s\n",error.what()); WSACleanup(); return 1; }
 }
