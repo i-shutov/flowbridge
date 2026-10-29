@@ -8,6 +8,7 @@ as a passing step on ordinary GitHub-hosted runners.
 """
 import argparse
 import ctypes
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -207,13 +208,25 @@ def main():
                       'max_connections': 16}
             profile = root / 'native-profile.json'
             profile.write_text(json.dumps(config), encoding='utf-8')
+            profile_sha256 = hashlib.sha256(profile.read_bytes()).hexdigest()
+            mismatch = subprocess.run(
+                [str(helper), '--console', '--profile', str(profile),
+                 '--capture-app', str(selected), '--gui-owner', str(os.getpid()),
+                 '--stop-event', event_name, '--profile-sha256', '0' * 64],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                timeout=10, creationflags=subprocess.CREATE_NO_WINDOW)
+            require(mismatch.returncode != 0 and
+                    'GUI native profile SHA-256 mismatch' in mismatch.stdout,
+                    'Elevated helper accepted a modified GUI-owned profile')
+            report['checks'].append('Profile tampering across UAC is rejected before WFP is enabled')
             run_probe(selected, echo.server_address[1])
             run_probe(unrelated, echo.server_address[1])
             require(socks.connects == 0, 'Selected client used SOCKS before capture')
             report['checks'].append('Both identical-basename executables work without capture')
             process = subprocess.Popen([str(helper), '--console', '--profile', str(profile),
                                         '--capture-app', str(selected),
-                                        '--gui-owner', str(os.getpid()), '--stop-event', event_name],
+                                        '--gui-owner', str(os.getpid()), '--stop-event', event_name,
+                                         '--profile-sha256', profile_sha256],
                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                        text=True, creationflags=subprocess.CREATE_NO_WINDOW)
             reader = await_helper_ready(process)
@@ -253,7 +266,7 @@ def main():
             process = subprocess.Popen(
                 [str(helper), '--console', '--profile', str(profile),
                  '--capture-app', str(selected), '--gui-owner', str(owner.pid),
-                 '--stop-event', event_name],
+                 '--stop-event', event_name, '--profile-sha256', profile_sha256],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                 creationflags=subprocess.CREATE_NO_WINDOW)
             reader = await_helper_ready(process)
