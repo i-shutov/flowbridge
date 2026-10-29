@@ -175,6 +175,14 @@ static void assertCompactLayout(HWND window) {
     click(window,203);
     inside(109);inside(111); // JSON editor and log
     click(window,200);
+    // Opening the Applications page can launch the real bounded discovery
+    // worker. Await its completion before the subsequent Apply/Start smoke:
+    // otherwise the legitimate busy gate rejects Apply and causes a false
+    // GUI regression unrelated to geometry.
+    waitFor([&]{
+        return IsWindowEnabled(GetDlgItem(window,100)) &&
+               IsWindowEnabled(GetDlgItem(window,260));
+    },"Compact layout triggered discovery which did not return to idle");
     std::puts("PASS compact Windows GUI: SSH, apps, native capture actions and diagnostics fit 980x680");
 }
 static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
