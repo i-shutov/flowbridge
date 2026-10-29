@@ -16,6 +16,8 @@
 #include <thread>
 #include <vector>
 #include "capture.h"
+#include "../native_ipc.hpp"
+#include "dns_policy.hpp"
 #include "redirect_io.h"
 #include "flowbridge.h"
 #include "nlohmann/json.hpp"
@@ -25,11 +27,23 @@ constexpr wchar_t ServiceName[]=L"FlowBridgeCapture";
 std::atomic<bool> stopping{false};
 SERVICE_STATUS_HANDLE statusHandle=nullptr;
 std::mutex statusLock, logLock;
-std::wstring profilePath, sshProfilePath;
+std::wstring profilePath, sshProfilePath, nativeOptionsPath, uiToken;
+DWORD uiOwner=0;
+native_ipc::Child ui;
+std::deque<Json> recent;
+void uiState(const std::string& state,Json snapshot=Json::object(),const std::string& error={}) {
+    Json value={{"state",state},{"native",std::move(snapshot)}};if(!error.empty())value["error"]=error;
+    ui.status(value);
+}
 std::vector<std::wstring> bypassPaths;
 void log(const Json& event) noexcept {
     try { std::lock_guard<std::mutex> guard(logLock); auto line=event.dump()+"\n";
-        std::cerr<<line; OutputDebugStringA(line.c_str()); } catch (...) {}
+        std::cerr<<line; OutputDebugStringA(line.c_str());
+        if(event.value("event",std::string())!="native_status") {
+            recent.push_back({{"level",event.contains("error")?"error":"info"},{"message",event.dump()}});
+            if(recent.size()>128)recent.pop_front();
+        }
+    } catch (...) {}
 }
 void report(DWORD state, DWORD error=0) {
     std::lock_guard<std::mutex> guard(statusLock);
@@ -194,7 +208,10 @@ void run() {
     size_t max=std::min<size_t>(128,j.value("max_connections",size_t(128)));
     if(!max) throw std::runtime_error("Zero maximum connections");
     OwnedSSH ssh; OwnedNative native;
-    Json nativeOptions=Json::object();
+    Json nativeOptions=nativeOptionsPath.empty()?Json::object():Json::parse(readConfiguration(nativeOptionsPath));
+    if(!nativeOptionsPath.empty()&&!sshProfilePath.empty())throw std::runtime_error("Choose UI-owned or service-owned SSH, not both");
+    if(ui.attached()&&nativeOptionsPath.empty())throw std::runtime_error("UI native options are required");
+    uiState("starting");
     if(!sshProfilePath.empty()) {
         auto sshConfig=readConfiguration(sshProfilePath);
         ssh.id=response(fb_ssh_create_json(sshConfig.c_str())).at("ssh_id").get<uint64_t>();
@@ -221,7 +238,20 @@ void run() {
     std::mutex lock; std::condition_variable cv; std::deque<SOCKET> queue; bool ending=false; size_t admitted=0;
     std::vector<std::thread> workers;
     auto finish=[&]{ {std::lock_guard<std::mutex> guard(lock); ending=true; for(auto s:queue) closesocket(s); queue.clear();} cv.notify_all(); for(auto& t:workers) if(t.joinable()) t.join(); };
-    Capture capture;
+    Capture capture; DnsPolicy dnsPolicy;
+    auto heartbeat=[&]{
+        if(!ui.alive()){stopping=true;return;}
+        Json message;
+        try {
+            for(unsigned i=0;i<16&&ui.read(message);++i){
+                if(message.value("stop",false)){stopping=true;return;}
+                if(message.contains("ready")&&message["ready"].is_boolean()) {
+                    auto gate=Json{{"ready",message["ready"]}}.dump();
+                    response(fb_native_set_gate_json(native.id,gate.c_str()));
+                }
+            }
+        } catch(...) {stopping=true;}
+    };
     try {
         for(size_t i=0;i<max;++i) workers.emplace_back([&]{
             for(;;) {SOCKET socket;
@@ -230,10 +260,17 @@ void run() {
                 {std::lock_guard<std::mutex> guard(lock); --admitted;}
             }
         });
+        heartbeat();
         if(!stopping) capture.start(p4,p6,bypassPaths);
+        if(!stopping && nativeOptions.contains("dns") && !nativeOptions["dns"].is_null()) {
+            response(fb_native_dns_start_json(native.id,R"({"listen":"127.0.0.1:53"})"));
+            dnsPolicy.enter();
+        }
+        heartbeat();
         if(!stopping) {report(SERVICE_RUNNING); log({{"event","ready"},{"capture","tcp_ipv4_ipv6"},{"workers",max}});}
         auto lastSnapshot=GetTickCount64();
         while(!stopping) {
+            heartbeat(); if(stopping)break;
             if(ssh.id) {
                 auto observed=ssh.snapshot();
                 const auto state=observed.at("status").value("state",std::string());
@@ -242,7 +279,10 @@ void run() {
             }
             if(GetTickCount64()-lastSnapshot>=1000) {
                 auto report=response(fb_native_snapshot_json(native.id));
-                report["event"]="native_status";log(report);lastSnapshot=GetTickCount64();
+                report["status"]["dns_active"]=dnsPolicy.active();
+                report["status"]["dns_scope"]=dnsPolicy.active()?"system_standard_dns":"unchanged";
+                {std::lock_guard<std::mutex> guard(logLock);report["events"]=recent;}
+                uiState("ready",report);lastSnapshot=GetTickCount64();
             }
             fd_set set; FD_ZERO(&set); FD_SET(l4.value,&set); FD_SET(l6.value,&set); timeval wait{0,200000};
             int n=select(0,&set,nullptr,nullptr,&wait); if(n==SOCKET_ERROR) throw std::runtime_error("Listener select failed");
@@ -253,8 +293,15 @@ void run() {
                 if(admitted>=max) closesocket(accepted); else {queue.push_back(accepted); ++admitted; cv.notify_one();}
             }
         }
-        capture.stop(); fb_native_destroy(native.id); finish(); native.id=0;
-    } catch(...) {stopping=true; capture.stop(); fb_native_destroy(native.id); finish(); native.id=0; throw;}
+        capture.stop();
+        dnsPolicy.restore();
+        fb_native_destroy(native.id); finish(); native.id=0;
+        uiState("stopped",{{"ok",true},{"status",{{"running",false},{"transparent",true}}}});
+    } catch(...) {
+        stopping=true;capture.stop();
+        try{dnsPolicy.restore();}catch(const std::exception& error){log({{"event","dns_restore_failed"},{"error",error.what()}});}
+        fb_native_destroy(native.id);finish();native.id=0;throw;
+    }
 }
 void WINAPI serviceMain(DWORD,wchar_t**) {
     statusHandle=RegisterServiceCtrlHandlerExW(ServiceName,control,nullptr);
@@ -273,6 +320,12 @@ int wmain(int argc,wchar_t** argv) {
             else if(arg==L"--service") service=true;
             else if(arg==L"--profile" && i+1<argc) profilePath=argv[++i];
             else if(arg==L"--ssh-profile" && i+1<argc) sshProfilePath=argv[++i];
+            else if(arg==L"--native-options" && i+1<argc) nativeOptionsPath=argv[++i];
+            else if(arg==L"--ui-token" && i+1<argc) uiToken=argv[++i];
+            else if(arg==L"--owner" && i+1<argc) {
+                std::wstring number=argv[++i];size_t used=0;auto parsed=std::stoul(number,&used);
+                if(used!=number.size()||!parsed)throw std::runtime_error("Invalid UI owner PID");uiOwner=parsed;
+            }
             else if(arg==L"--bypass" && i+1<argc) bypassPaths.emplace_back(argv[++i]);
             else throw std::runtime_error("Usage: FlowBridgeCapture --console|--service --profile ABSOLUTE_PATH [--ssh-profile ABSOLUTE_PATH] [--bypass ABSOLUTE_EXE_PATH]...");
         }
@@ -282,9 +335,12 @@ int wmain(int argc,wchar_t** argv) {
         wchar_t self[32768]{}; DWORD length=GetModuleFileNameW(nullptr,self,32768);
         if(!length || length>=32768) throw std::runtime_error("Service executable identity unavailable");
         bypassPaths.emplace_back(self,length);
+        if(!nativeOptionsPath.empty()&&!std::filesystem::path(nativeOptionsPath).is_absolute())throw std::runtime_error("Native options path must be absolute");
+        if(!uiToken.empty()){if(!console||!uiOwner)throw std::runtime_error("Invalid UI invocation");ui.attach(uiToken,uiOwner);}
+        else if(uiOwner)throw std::runtime_error("UI token required");
         if(console) {SetConsoleCtrlHandler(consoleControl,TRUE);run();return 0;}
         SERVICE_TABLE_ENTRYW table[]={{const_cast<wchar_t*>(ServiceName),serviceMain},{nullptr,nullptr}};
         if(!StartServiceCtrlDispatcherW(table)) throw std::runtime_error("SCM dispatcher failed: "+std::to_string(GetLastError()));
         return 0;
-    } catch(const std::exception& e) {log({{"event","faulted"},{"error",e.what()}});return 1;}
+    } catch(const std::exception& e) {uiState("faulted",Json::object(),e.what());log({{"event","faulted"},{"error",e.what()}});return 1;}
 }

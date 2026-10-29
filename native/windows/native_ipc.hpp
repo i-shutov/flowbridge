@@ -93,7 +93,7 @@ class Parent {
     void cleanup()noexcept {
         close(process_);close(pipe_);
         std::error_code error;
-        for(auto name:{L"profile.json",L"options.json"})std::filesystem::remove(directory_/name,error);
+        if(!directory_.empty())for(auto name:{L"profile.json",L"options.json"})std::filesystem::remove(directory_/name,error);
         if(!directory_.empty())std::filesystem::remove(directory_,error);
         directory_.clear();
     }
@@ -137,7 +137,9 @@ public:
         if(GetNamedPipeClientProcessId(pipe_,&client)) {
             if(client!=GetProcessId(process_))throw std::runtime_error("Unexpected native pipe client");
             Json message;
-            for(unsigned i=0;i<32&&receive(pipe_,message);++i){last_=std::move(message);observed_=GetTickCount64();}
+            try { for(unsigned i=0;i<32&&receive(pipe_,message);++i){
+                if(message.contains("state")){last_=std::move(message);observed_=GetTickCount64();}
+            }} catch(...) {if(alive())throw;}
             send(pipe_,{{"ready",upstreamReady}});
         }
         if(!alive()) {

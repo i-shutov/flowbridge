@@ -1,3 +1,5 @@
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
 #include <commctrl.h>
 #include <commdlg.h>
@@ -17,6 +19,7 @@
 #include <vector>
 #include "discovery.hpp"
 #include "native_profile.hpp"
+#include "native_ipc.hpp"
 #include "flowbridge.h"
 #include "nlohmann/json.hpp"
 
@@ -24,7 +27,7 @@ using Json = nlohmann::json;
 namespace {
 constexpr size_t MaxBytes = 1024 * 1024;
 constexpr UINT Completed = WM_APP + 1;
-enum { Start=100, Stop, Apply, Open, Save, Proxy, Host, Port, Protocol, Config, Connections, Log, Status, Mode, QuickLabel, ConfigLabel, ConnectionsLabel, LogLabel, NavDashboard=200, NavConnection, NavApps, NavAdvanced, Theme=204, PageTitle=205, PageSubtitle=206, Badge=207, Metrics=208, DashboardHelp=209, SshHealth=210, ManagedMode=230, SshHost=231, SshPort=232, SshUser=233, KeyPath=234, KnownHosts=235, LocalPort=236, Compression=237, Keepalive=238, KeepaliveCount=239, SaveDesktop=240, BrowseKey=241, BrowseKnown=242, SshHelp=243, ConnectionSummary=244, Discover=260, AppsTable=261, PresetAI=262, PresetWeb=263, PresetBoth=264, BrowseApp=265, ExportNative=266, BlockOthers=267, AppsHelp=268, AppsSummary=269, ScanStatus=270, SshTitle=271, SshSummary=272, RetryInitial=245, RetryMax=246, Banner=280, ExportDiagnostics=281 };
+enum { Start=100, Stop, Apply, Open, Save, Proxy, Host, Port, Protocol, Config, Connections, Log, Status, Mode, QuickLabel, ConfigLabel, ConnectionsLabel, LogLabel, NavDashboard=200, NavConnection, NavApps, NavAdvanced, Theme=204, PageTitle=205, PageSubtitle=206, Badge=207, Metrics=208, DashboardHelp=209, SshHealth=210, ManagedMode=230, SshHost=231, SshPort=232, SshUser=233, KeyPath=234, KnownHosts=235, LocalPort=236, Compression=237, Keepalive=238, KeepaliveCount=239, SaveDesktop=240, BrowseKey=241, BrowseKnown=242, SshHelp=243, ConnectionSummary=244, Discover=260, AppsTable=261, PresetAI=262, PresetWeb=263, PresetBoth=264, BrowseApp=265, ExportNative=266, BlockOthers=267, AppsHelp=268, AppsSummary=269, ScanStatus=270, SshTitle=271, SshSummary=272, RetryInitial=245, RetryMax=246, Banner=280, ExportDiagnostics=281, CaptureMode=282, RemoteDNS=283, DNSResolver=284, DNSHint=285 };
 constexpr int DiscoverCommand=900, PollCommand=999;
 std::map<int,int> pages; // -1 global; 0 dashboard; 1 connection; 2 applications; 3 advanced
 int activePage=0;
@@ -160,7 +163,9 @@ Json sshSettings() {
 }
 Json desktopSettings() {
     Json selected=Json::array();for(const auto& path:selectedApps)selected.push_back(path);
-    return {{"version",1},{"managed_ssh",SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1},{"ssh",sshSettings()},{"preset",selectedPreset},{"selected_applications",selected},{"block_other_applications",SendMessageW(GetDlgItem(window,BlockOthers),BM_GETCHECK,0,0)==BST_CHECKED},{"dark",dark}};
+    return {{"version",1},{"managed_ssh",SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1},{"ssh",sshSettings()},{"preset",selectedPreset},{"selected_applications",selected},{"block_other_applications",SendMessageW(GetDlgItem(window,BlockOthers),BM_GETCHECK,0,0)==BST_CHECKED},{"dark",dark},{"native_capture",SendMessageW(GetDlgItem(window,CaptureMode),BM_GETCHECK,0,0)==BST_CHECKED},
+        {"remote_dns",SendMessageW(GetDlgItem(window,RemoteDNS),BM_GETCHECK,0,0)==BST_CHECKED},
+        {"dns_resolver",utf8(GetDlgItem(window,DNSResolver))}};
 }
 void validateDesktop(const Json& value) {
     const auto& ssh=value.at("ssh");auto host=ssh.at("host").get<std::string>(),user=ssh.at("user").get<std::string>();
@@ -196,6 +201,26 @@ struct Result { Json snapshot,ssh,acceptedDesktop; std::string error,saved;std::
 class Worker {
     std::mutex mutex;std::condition_variable cv;std::thread thread;int command=0;std::string config;Json settings;
     uint64_t engine=0,ssh=0;Json activeSsh=Json::object();bool waiting=false,managedActive=false;std::string pending;
+    native_ipc::Parent capture;
+    bool nativeWanted=false;Json pendingOptions;
+    void launchNative() {
+        auto root=Json::parse(pending);
+        root=native_profile::build(std::move(root),pendingOptions.at("selected_applications").get<std::vector<std::string>>(),
+            "managed-ssh",pendingOptions.value("block_other_applications",false));
+        Json nativeOptions={{"managed_endpoint",{{"host","127.0.0.1"},{"port",activeSsh.at("local_port")}}},
+            {"ready",false},{"ready_lease_ms",5000},{"pause_grace_ms",30000}};
+        auto literal=[](const std::string& value){IN_ADDR v4{};IN6_ADDR v6{};return InetPtonA(AF_INET,value.c_str(),&v4)==1||InetPtonA(AF_INET6,value.c_str(),&v6)==1;};
+        if(pendingOptions.value("remote_dns",true)) {
+            if(!literal(activeSsh.at("host").get<std::string>()))throw std::runtime_error("Для удалённого DNS этой беты укажите IP SSH-сервера, а не hostname.");
+            auto resolver=pendingOptions.value("dns_resolver",std::string());
+            if(resolver.empty())resolver=response(fb_ssh_remote_dns_json(ssh)).at("servers").at(0).get<std::string>();
+            if(!literal(resolver))throw std::runtime_error("DNS-сервер должен быть IP-адресом удалённой машины.");
+            nativeOptions["dns"]={{"resolver",{{"host",resolver},{"port",53}}},{"timeout_ms",5000}};
+        }
+        auto snapshot=response(fb_ssh_snapshot_json(ssh));
+        auto path=snapshot.at("status").at("backend_path").get<std::string>();
+        capture.start(root,nativeOptions,path);
+    }
     void gate(bool ready){if(engine){Json value={{"endpoint",managedActive?Json{{"host","127.0.0.1"},{"port",activeSsh.value("local_port",1080)}}:Json(nullptr)},{"ready",ready},{"grace_ms",30000}};response(fb_engine_set_upstream_gate_json(engine,value.dump().c_str()));}}
     void accept(const std::string& value) {
         response(fb_validate_json(value.c_str()));
@@ -208,11 +233,17 @@ class Worker {
             {std::unique_lock<std::mutex> lock(mutex);cv.wait(lock,[this]{return command!=0;});action=command;value=std::move(config);options=std::move(settings);command=0;}
             auto result=std::make_unique<Result>();result->exit=action==-1;
             try {
-                if(action==-1) {waiting=false;if(engine)fb_engine_destroy(engine);engine=0;if(ssh)fb_ssh_destroy(ssh);ssh=0;}
+                if(action==-1) {capture.stop();waiting=false;if(engine)fb_engine_destroy(engine);engine=0;if(ssh)fb_ssh_destroy(ssh);ssh=0;}
                 else if(action==DiscoverCommand) {result->apps=discovery::scan(options);result->scanned=true;}
                 else {
                     if(action==Apply&&waiting){result->error="Дождитесь запуска или нажмите «Остановить» перед изменением профиля.";}
                     else if(action==Start||action==Apply) {
+                        if(capture.exists())throw std::runtime_error("Сначала остановите нативный перехват перед изменением настроек.");
+                        if(action==Start){
+                            nativeWanted=options.value("native_capture",false);pendingOptions=options;
+                            if(nativeWanted&&!options.value("managed_ssh",false))throw std::runtime_error("Нативная бета требует встроенного SSH.");
+                            if(nativeWanted&&options.at("selected_applications").empty())throw std::runtime_error("Выберите приложения для перехвата.");
+                        }
                         bool managed=options.value("managed_ssh",false);validateDesktop(options);if(managed)validateManagedRoute(value,options["ssh"]);
                         bool running=engine&&response(fb_engine_snapshot_json(engine))["status"].value("running",false);
                         if(running&&managed!=managedActive)throw std::runtime_error("Остановите подключение перед сменой внешнего прокси / управляемого SSH.");
@@ -232,17 +263,32 @@ class Worker {
                                 gate(false);waiting=true;pending=value;result->acceptedDesktop=options;
                             } else {if(ssh){response(fb_ssh_stop_json(ssh));}waiting=false;gate(true);response(fb_engine_start_json(engine));result->saved=value;result->acceptedDesktop=options;}
                         }
-                    } else if(action==Stop) {waiting=false;if(engine)response(fb_engine_stop_json(engine));if(ssh)response(fb_ssh_stop_json(ssh));}
+                    } else if(action==Stop) {capture.stop();nativeWanted=false;waiting=false;if(engine)response(fb_engine_stop_json(engine));if(ssh)response(fb_ssh_stop_json(ssh));}
                     if(ssh&&managedActive) {
                         result->ssh=response(fb_ssh_snapshot_json(ssh));auto state=result->ssh["status"].value("state",std::string());
                         if(managedActive)gate(state=="ready");
-                        if(waiting&&state=="ready") {response(fb_engine_start_json(engine));waiting=false;result->saved=pending;}
+                        if(waiting&&state=="ready") {
+                            if(nativeWanted){if(!capture.exists())launchNative();}
+                            else {response(fb_engine_start_json(engine));waiting=false;result->saved=pending;}
+                        }
                         else if(waiting&&state=="failed") {waiting=false;throw std::runtime_error(result->ssh["status"].value("last_error",std::string("Не удалось запустить SSH.")));}
                     }
-                    if(engine)result->snapshot=response(fb_engine_snapshot_json(engine));
+                    if(capture.exists()) {
+                        auto observed=capture.poll(result->ssh.is_object()&&result->ssh.at("status").value("state",std::string())=="ready");
+                        auto state=observed.value("state",std::string("starting"));
+                        result->snapshot=observed.value("native",Json{{"status",{{"running",false},{"transparent",true}}}});
+                        if(!result->snapshot.contains("status"))result->snapshot={{"status",{{"running",false},{"transparent",true}}}};
+                        if(state=="ready"&&waiting){waiting=false;result->saved=pending;result->acceptedDesktop=pendingOptions;}
+                        if(observed.contains("error"))throw std::runtime_error(observed["error"].get<std::string>());
+                        if(observed.contains("warning"))result->error=observed["warning"].get<std::string>();
+                    }else if(engine)result->snapshot=response(fb_engine_snapshot_json(engine));
                 }
             }catch(const std::exception& e){
                 result->error=e.what();result->saved.clear();
+                if(action==-1)result->exit=false;
+                if(capture.exists()&&!capture.alive()){try{capture.stop();}catch(...){}waiting=false;nativeWanted=false;}
+                if(capture.exists()&&(waiting||action==Start)){try{capture.stop();}catch(...){}waiting=false;}
+
                 if(managedActive&&(waiting||action==Start)){waiting=false;try{gate(false);}catch(...){}if(engine){try{response(fb_engine_stop_json(engine));}catch(...){}}if(ssh){try{response(fb_ssh_stop_json(ssh));result->ssh=response(fb_ssh_snapshot_json(ssh));}catch(...){}fb_ssh_destroy(ssh);ssh=0;}}
                 try{if(engine)result->snapshot=response(fb_engine_snapshot_json(engine));}catch(...){}
             }
@@ -257,7 +303,7 @@ public:
     ~Worker(){if(thread.joinable())thread.join();}
 } worker;
 void enableControls() {
-    for(int id:{Start,Stop,Apply,Open,Save,Proxy,Host,Port,Protocol,Config,Discover,ExportNative,ManagedMode,SshHost,SshPort,SshUser,KeyPath,KnownHosts,LocalPort,Compression,Keepalive,KeepaliveCount,SaveDesktop,BrowseKey,BrowseKnown,BrowseApp,RetryInitial,RetryMax,PresetAI,PresetWeb,PresetBoth,BlockOthers})EnableWindow(GetDlgItem(window,id),!busy&&!closing&&(!pendingStart||id==Stop||id==Discover||id==BrowseApp||id==PresetAI||id==PresetWeb||id==PresetBoth||id==BlockOthers));
+    for(int id:{CaptureMode,RemoteDNS,DNSResolver,Start,Stop,Apply,Open,Save,Proxy,Host,Port,Protocol,Config,Discover,ExportNative,ManagedMode,SshHost,SshPort,SshUser,KeyPath,KnownHosts,LocalPort,Compression,Keepalive,KeepaliveCount,SaveDesktop,BrowseKey,BrowseKnown,BrowseApp,RetryInitial,RetryMax,PresetAI,PresetWeb,PresetBoth,BlockOthers})EnableWindow(GetDlgItem(window,id),!busy&&!closing&&(!pendingStart||id==Stop||id==Discover||id==BrowseApp||id==PresetAI||id==PresetWeb||id==PresetBoth||id==BlockOthers));
     EnableWindow(GetDlgItem(window,Start),!busy&&!closing&&!engineRunning&&!pendingStart);
     setText(GetDlgItem(window,Start),pendingStart?"Подключаем…":engineRunning?"Подключено":"Подключить");
 }
@@ -277,7 +323,9 @@ void showSnapshot(const Json& snap) {
     auto text=std::string(running?"Подключено":"Остановлено")+" | SOCKS5: "+status.value("listen",std::string(""))+" | Активно: "+std::to_string(status.value("active",0))+" | Всего: "+std::to_string(status.value("accepted",0))+" | Ошибок: "+std::to_string(status.value("failed",0));
     if(!workerError.empty()) text+=" | Ошибка: "+workerError;
     setText(GetDlgItem(window,Status),text);
-    setText(GetDlgItem(window,Badge),running?"●  Локальный SOCKS5 работает":"●  Не подключено");
+    bool native=status.value("transparent",false);
+    setText(GetDlgItem(window,Badge),running?(native?"●  Нативный TCP-перехват работает":"●  Локальный SOCKS5 работает"):"●  Не подключено");
+    setText(GetDlgItem(window,Mode),native?(status.value("dns_active",false)?"TCP + системный DNS через SSH. Собственный DoH/DoT не перехватывается.":"Нативный TCP. Системный DNS не перенаправлен."):"Локальный SOCKS5: приложения должны явно использовать прокси.");
     setText(GetDlgItem(window,Metrics),"АКТИВНЫЕ СОЕДИНЕНИЯ     "+std::to_string(status.value("active",0))+"       ПРИНЯТО     "+std::to_string(status.value("accepted",0))+"       ТРАФИК ↑ / ↓     "+std::to_string(status.value("bytes_up",uint64_t(0)))+" / "+std::to_string(status.value("bytes_down",uint64_t(0)))+" Б");
     InvalidateRect(GetDlgItem(window,Badge),nullptr,TRUE);
     ListView_DeleteAllItems(table); int row=0;
@@ -355,7 +403,7 @@ void browseApplication(){auto path=chooseFile(L"Приложения Windows\0*.
 void exportNative(){captureSelections();if(selectedApps.empty())throw std::runtime_error("Сначала отметьте приложения для экспорта.");auto config=Json::parse(commandConfiguration());
     std::string target=SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1?"managed-ssh":selectedProxyId;if(target.empty())throw std::runtime_error("Добавьте и выберите upstream-прокси в разделе подключения.");
     config=native_profile::build(std::move(config),std::vector<std::string>(selectedApps.begin(),selectedApps.end()),target,SendMessageW(GetDlgItem(window,BlockOthers),BM_GETCHECK,0,0)==BST_CHECKED);
-    response(fb_validate_json(config.dump().c_str()));auto path=chooseFile(L"Нативный профиль JSON\0*.json\0",true);if(path.empty())return;writeFile(path,config.dump(2));saveDesktop();note("Нативный профиль экспортирован. В этом пакете захват недоступен; локальный SOCKS не фильтрует приложения.");
+    response(fb_validate_json(config.dump().c_str()));auto path=chooseFile(L"Нативный профиль JSON\0*.json\0",true);if(path.empty())return;writeFile(path,config.dump(2));saveDesktop();note("Нативный профиль экспортирован. Для запуска включите WFP на странице приложений; локальный SOCKS сам не фильтрует приложения.");
 }
 void showSsh(const Json& ssh,bool waiting){
     latestSshSnapshot=ssh;
@@ -393,6 +441,20 @@ void layout(){RECT r{};GetClientRect(window,&r);int width=static_cast<int>(r.rig
     move(Compression,x+24,578,w-48,26);int unit=(w-120)/4;int labels[]={2016,2017,2019,2020};int fields[]={Keepalive,KeepaliveCount,RetryInitial,RetryMax};for(int i=0;i<4;++i){move(labels[i],x+24+i*(unit+24),622,unit,22);move(fields[i],x+24+i*(unit+24),650,unit,34);}move(SshHelp,x+24,706,w-48,56);move(SaveDesktop,x,height-68,240,40);
     move(AppsHelp,x+24,150,w-48,58);move(PresetAI,x,242,180,42);move(PresetWeb,x+192,242,180,42);move(PresetBoth,x+384,242,180,42);move(Discover,x+w-210,242,210,42);
     move(ScanStatus,x,300,w,24);move(AppsSummary,x,334,w-180,24);move(BrowseApp,x+w-172,328,172,36);move(AppsTable,x,382,w,std::max(160,height-580));move(2018,x,height-178,w,42);move(BlockOthers,x,height-120,w-300,28);move(ExportNative,x+w-290,height-94,290,42);
+    move(AppsHelp,x+16,136,w-32,44);
+    move(PresetAI,x,192,140,34);move(PresetWeb,x+150,192,140,34);move(PresetBoth,x+300,192,140,34);move(Discover,x+w-190,192,190,34);
+    move(ScanStatus,x,236,w,22);move(AppsSummary,x,264,w-170,22);move(BrowseApp,x+w-160,258,160,30);
+    move(AppsTable,x,300,w,std::max(100,height-518));
+    move(CaptureMode,x,height-208,w,24);move(RemoteDNS,x,height-178,w,24);
+    move(DNSResolver,x,height-146,std::min(w,500),28);move(DNSHint,x,height-112,w,22);
+    move(BlockOthers,x,height-80,w-300,24);move(ExportNative,x+w-290,height-76,290,34);move(2018,x,height-38,w,24);
+    move(2010,x+16,238,half,20);move(2011,x+40+half,238,half,20);move(SshHost,x+16,261,half,28);move(SshUser,x+40+half,261,half,28);
+    move(2012,x+16,300,half,20);move(2013,x+40+half,300,half,20);move(SshPort,x+16,323,half,28);move(LocalPort,x+40+half,323,half,28);
+    move(2014,x+16,362,w-32,20);move(KeyPath,x+16,385,w-170,28);move(BrowseKey,x+w-138,385,122,28);
+    move(2015,x+16,423,w-32,20);move(KnownHosts,x+16,446,w-170,28);move(BrowseKnown,x+w-138,446,122,28);
+    move(Compression,x+16,486,w-32,24);
+    for(int i=0;i<4;++i){move(labels[i],x+16+i*(unit+24),520,unit,20);move(fields[i],x+16+i*(unit+24),543,unit,28);}
+    move(SshHelp,x+16,584,w-32,42);
     move(Apply,x,138,195,40);move(Open,x+207,138,180,40);move(Save,x+399,138,180,40);move(ConfigLabel,x,198,w,38);int editor=std::max(200,(height-340)*3/5);move(Config,x,246,w,editor);move(LogLabel,x,266+editor,w,24);move(Log,x,302+editor,w,std::max(100,height-editor-330));
 }
 LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
@@ -412,6 +474,11 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         label(L"Состояние SSH",SshTitle,0);label(L"SSH: используется внешний прокси",SshHealth,0);
         label(L"Текущие и недавние соединения",ConnectionsLabel,0);
         label(L"Существующие TCP-соединения не восстанавливаются после обрыва SSH.",DashboardHelp,0);
+        add(L"BUTTON",L"Перехватывать выбранные приложения через WFP",BS_AUTOCHECKBOX|WS_TABSTOP,CaptureMode,2);
+        add(L"BUTTON",L"Разрешать DNS на удалённом SSH-сервере",BS_AUTOCHECKBOX|WS_TABSTOP,RemoteDNS,2);
+        add(L"EDIT",L"",WS_BORDER|ES_AUTOHSCROLL|WS_TABSTOP,DNSResolver,2);
+        SendMessageW(GetDlgItem(h,DNSResolver),EM_SETCUEBANNER,0,reinterpret_cast<LPARAM>(L"Удалённый DNS IP · пусто = автоматически"));
+        label(L"DNS применяется ко всей системе; существующая NRPT-политика не заменяется.",DNSHint,2);
         label(L"Способ подключения",ConnectionSummary,1);
         HWND mode=add(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_TABSTOP,ManagedMode,1);SendMessageW(mode,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"Готовый внешний прокси"));SendMessageW(mode,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"SSH с автовосстановлением"));SendMessageW(mode,CB_SETCURSEL,0,0);
         label(L"Прокси",QuickLabel,11);add(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_TABSTOP|WS_VSCROLL,Proxy,11);
@@ -447,12 +514,15 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         if(!desktop.is_object())desktop=Json::object();
         auto settings=desktop.value("ssh",Json::object());if(!settings.is_object())settings=Json::object();auto setSetting=[&](int id,const char* key,const Json& fallback){auto field=settings.value(key,fallback);setText(GetDlgItem(window,id),field.is_string()?field.get<std::string>():field.is_null()?std::string():field.dump());};
         setSetting(SshHost,"host","");setSetting(SshPort,"port",22);setSetting(SshUser,"user","");setSetting(KeyPath,"identity_file",nullptr);setSetting(KnownHosts,"known_hosts_file",nullptr);setSetting(LocalPort,"local_port",1080);setSetting(Keepalive,"server_alive_interval_secs",15);setSetting(KeepaliveCount,"server_alive_count_max",3);setSetting(RetryInitial,"restart_initial_delay_ms",1000);setSetting(RetryMax,"restart_max_delay_ms",30000);SendMessageW(GetDlgItem(window,Compression),BM_SETCHECK,settings.value("compression",false)?BST_CHECKED:BST_UNCHECKED,0);
+        SendMessageW(GetDlgItem(h,CaptureMode),BM_SETCHECK,desktop.value("native_capture",false)?BST_CHECKED:BST_UNCHECKED,0);
+        SendMessageW(GetDlgItem(h,RemoteDNS),BM_SETCHECK,desktop.value("remote_dns",true)?BST_CHECKED:BST_UNCHECKED,0);
+        setText(GetDlgItem(h,DNSResolver),desktop.value("dns_resolver",std::string()));
         SendMessageW(mode,CB_SETCURSEL,desktop.value("managed_ssh",false)?1:0,0);SendMessageW(GetDlgItem(window,BlockOthers),BM_SETCHECK,desktop.value("block_other_applications",false)?BST_CHECKED:BST_UNCHECKED,0);selectedPreset=desktop.value("preset",std::string("ai_web"));for(const auto& selected:desktop.value("selected_applications",std::vector<std::string>{}))selectedApps.insert(selected);dark=desktop.value("dark",false);
         try{wchar_t exe[32768]{};GetModuleFileNameW(nullptr,exe,32768);auto resource=std::filesystem::path(exe).parent_path()/L"resources"/L"presets.json";if(!std::filesystem::exists(resource))resource=std::filesystem::path(__FILE__).parent_path().parent_path().parent_path()/"resources"/"presets.json";catalog=Json::parse(readFile(resource));}catch(const std::exception& e){catalog=Json::object();note(std::string("Каталог шаблонов недоступен: ")+e.what());}
         setText(configEdit,value);fillQuick();applyTheme();switchPage(0);worker.start();SetTimer(h,1,1000,nullptr);return 0;
     }
     case WM_SIZE: layout(); return 0;
-    case WM_GETMINMAXINFO: reinterpret_cast<MINMAXINFO*>(l)->ptMinTrackSize={1200,940}; return 0;
+    case WM_GETMINMAXINFO: reinterpret_cast<MINMAXINFO*>(l)->ptMinTrackSize={1080,740}; return 0;
     case WM_COMMAND:
         try {
             int id=LOWORD(w),event=HIWORD(w);
@@ -465,7 +535,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
                 else if(id==Theme){dark=!dark;applyTheme();try{saveDesktop();}catch(const std::exception& e){note(e.what());}}
                 else if(id==ExportDiagnostics){exportDiagnostics();}
                 else if(!busy){
-                    if(id==Start||id==Apply||id==SaveDesktop){workerError.clear();auto value=commandConfiguration();auto settings=desktopSettings();validateDesktop(settings);if(settings.value("managed_ssh",false))validateManagedRoute(value,settings["ssh"]);dispatch(id==Start?Start:Apply,std::move(value),std::move(settings));}
+                    if(id==Start||id==Apply||id==SaveDesktop){captureSelections();workerError.clear();auto value=commandConfiguration();auto settings=desktopSettings();validateDesktop(settings);if(settings.value("managed_ssh",false))validateManagedRoute(value,settings["ssh"]);dispatch(id==Start?Start:Apply,std::move(value),std::move(settings));}
                     else if(id==Stop){workerError.clear();dispatch(Stop);}
                     else if(id==Open||id==Save)fileDialog(id==Save);
                     else if(id==BrowseKey||id==BrowseKnown){auto path=chooseFile(L"Все файлы\0*.*\0",false,L"");if(!path.empty())setText(GetDlgItem(h,id==BrowseKey?KeyPath:KnownHosts),discovery::utf8(path.wstring()));}
@@ -482,6 +552,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
     case WM_TIMER: if(!busy&&!closing) dispatch(PollCommand); return 0;
     case Completed: {
         std::unique_ptr<Result> result(reinterpret_cast<Result*>(l)); busy=false;pendingStart=result->waiting;
+        if(closing&&!result->error.empty()) {closing=false;SetTimer(h,1,1000,nullptr);note("Остановка не подтверждена: "+result->error);enableControls();return 0;}
         if(result->exit) { DestroyWindow(h); return 0; }
         if(closing) { dispatch(-1); return 0; }
         try {
@@ -505,7 +576,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
     case WM_PAINT:{PAINTSTRUCT ps{};HDC dc=BeginPaint(h,&ps);RECT r{};GetClientRect(h,&r);FillRect(dc,&r,backgroundBrush);RECT side{0,0,212,r.bottom};FillRect(dc,&side,sidebarBrush);
         SetBkMode(dc,TRANSPARENT);SetTextColor(dc,RGB(237,243,255));SelectObject(dc,headingFont);RECT brand{27,36,197,70};DrawTextW(dc,L"FlowBridge",-1,&brand,DT_LEFT|DT_SINGLELINE);SelectObject(dc,smallFont);SetTextColor(dc,RGB(143,164,195));RECT tag{28,79,194,117};DrawTextW(dc,L"ЛИЧНЫЙ МАРШРУТ\nSSH / SOCKS5",-1,&tag,DT_LEFT);RECT version{28,r.bottom-125,195,r.bottom-82};DrawTextW(dc,L"v0.2.0\nЛокальный режим",-1,&version,DT_LEFT);
         auto panel=[&](int top,int bottom){HPEN pen=CreatePen(PS_SOLID,1,dark?RGB(45,61,83):RGB(225,232,242));auto oldPen=SelectObject(dc,pen);auto oldBrush=SelectObject(dc,cardBrush);RoundRect(dc,236,top,r.right-28,bottom,18,18);SelectObject(dc,oldPen);SelectObject(dc,oldBrush);DeleteObject(pen);};
-        if(activePage==0){panel(132,286);panel(304,370);panel(392,482);}else if(activePage==1){panel(132,232);bool managed=SendMessageW(GetDlgItem(h,ManagedMode),CB_GETCURSEL,0,0)==1;panel(246,managed?782:470);}else if(activePage==2)panel(132,218);
+        if(activePage==0){panel(132,286);panel(304,370);panel(392,482);}else if(activePage==1){panel(132,232);bool managed=SendMessageW(GetDlgItem(h,ManagedMode),CB_GETCURSEL,0,0)==1;panel(230,managed?634:470);}else if(activePage==2)panel(132,218);
         EndPaint(h,&ps);return 0;}
     case WM_CTLCOLORSTATIC:case WM_CTLCOLOREDIT:case WM_CTLCOLORLISTBOX:case WM_CTLCOLORBTN:{HDC dc=reinterpret_cast<HDC>(w);HWND child=reinterpret_cast<HWND>(l);int id=GetDlgCtrlID(child);bool plain=id==Banner||id==PageTitle||id==PageSubtitle||id==ConfigLabel||id==ConnectionsLabel||id==LogLabel||id==DashboardHelp||id==ScanStatus||id==AppsSummary||id==2018;
         SetTextColor(dc,id==Badge?(engineRunning&&tunnelReady?RGB(18,143,98):engineRunning?RGB(180,120,23):muted()):(id==PageSubtitle||id==Mode||id==SshHelp||id==AppsHelp||id==ScanStatus||id==2018?muted():ink()));SetBkColor(dc,plain?bg():card());return reinterpret_cast<LRESULT>(plain?backgroundBrush:cardBrush);}
@@ -530,7 +601,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show) {
     smallFont=CreateFontW(-13,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
     WNDCLASSW cls{}; cls.lpfnWndProc=windowProc; cls.hInstance=instance; cls.lpszClassName=L"FlowBridgeNativeV02"; cls.hCursor=LoadCursorW(nullptr,IDC_ARROW); cls.hbrBackground=reinterpret_cast<HBRUSH>(COLOR_WINDOW+1);
     if(!RegisterClassW(&cls)) { CloseHandle(guard); return 1; }
-    HWND h=CreateWindowW(cls.lpszClassName,L"FlowBridge 0.2 — личный маршрут",WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN,CW_USEDEFAULT,CW_USEDEFAULT,1280,1000,nullptr,nullptr,instance,nullptr);
+    HWND h=CreateWindowW(cls.lpszClassName,L"FlowBridge 0.2 — личный маршрут",WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN,CW_USEDEFAULT,CW_USEDEFAULT,1180,800,nullptr,nullptr,instance,nullptr);
     if(!h) { CloseHandle(guard); return 1; } ShowWindow(h,show); MSG msg{}; BOOL status;
     while((status=GetMessageW(&msg,nullptr,0,0))>0) { if(!IsDialogMessageW(h,&msg)) { TranslateMessage(&msg); DispatchMessageW(&msg); } }
     CloseHandle(guard); return status==-1?1:static_cast<int>(msg.wParam);
