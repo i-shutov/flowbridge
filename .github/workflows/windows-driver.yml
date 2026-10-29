@@ -2,6 +2,9 @@ name: windows-wfp-driver
 on:
   workflow_dispatch:
   push:
+    # Driver changes in feature branches are validated by pull_request,
+    # avoiding duplicate WDK build charges on both push and PR.
+    branches: [main]
     paths:
       - 'native/windows/wfp/**'
       - '.github/workflows/windows-driver.yml'
