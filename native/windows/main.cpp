@@ -221,9 +221,76 @@ void validateManagedRoute(const std::string& text,const Json& ssh,int workerCoun
 }
 struct Result { Json snapshot,ssh,acceptedDesktop; std::string error,saved;std::vector<discovery::App> apps;bool exit=false,scanned=false,waiting=false; };
 class Worker {
-    std::mutex mutex;std::condition_variable cv;std::thread thread;int command=0;std::string config;Json settings;
-    uint64_t engine=0,ssh=0;Json activeSsh=Json::object();bool waiting=false,managedActive=false;std::string pending;
-    void gate(bool ready){if(engine){Json value={{"endpoint",managedActive?Json{{"host","127.0.0.1"},{"port",activeSsh.value("local_port",1080)}}:Json(nullptr)},{"ready",ready},{"grace_ms",30000}};response(fb_engine_set_upstream_gate_json(engine,value.dump().c_str()));}}
+    std::mutex mutex;
+    std::condition_variable cv;
+    std::thread thread;
+    int command=0;
+    std::string config;
+    Json settings;
+    uint64_t engine=0,ssh=0;
+    std::vector<uint64_t> sshExtras;
+    int activeWorkerCount=1;
+    Json activeSsh=Json::object();
+    bool waiting=false,managedActive=false;
+    std::string pending;
+    std::vector<uint64_t> sshIds() const {
+        std::vector<uint64_t> ids;
+        if(ssh)ids.push_back(ssh);
+        ids.insert(ids.end(),sshExtras.begin(),sshExtras.end());
+        return ids;
+    }
+    void destroySsh() {
+        for(auto id:sshExtras)fb_ssh_destroy(id);
+        sshExtras.clear();
+        if(ssh)fb_ssh_destroy(ssh);
+        ssh=0;activeWorkerCount=1;
+    }
+    void stopSsh() {
+        for(auto id:sshIds())response(fb_ssh_stop_json(id));
+    }
+    void ensureSsh(const Json& profile,int count) {
+        if(ssh)return;
+        std::vector<uint64_t> created;
+        try {
+            for(int i=0;i<count;++i) {
+                auto workerProfile=profile;
+                workerProfile["local_port"]=profile.at("local_port").get<int>()+2*i;
+                const auto id=response(fb_ssh_create_json(workerProfile.dump().c_str()))
+                    .at("ssh_id").get<uint64_t>();
+                created.push_back(id);
+            }
+        } catch (...) {
+            for(auto id:created)fb_ssh_destroy(id);
+            throw;
+        }
+        ssh=created.front();
+        sshExtras.assign(created.begin()+1,created.end());
+        activeSsh=profile;activeWorkerCount=count;
+    }
+    void gate(bool allowed) {
+        if(!engine)return;
+        const int base=activeSsh.value("local_port",1080);
+        if(managedActive&&activeWorkerCount>1) {
+            Json members=Json::array();
+            const auto ids=sshIds();
+            for(size_t i=0;i<ids.size();++i) {
+                const auto status=response(fb_ssh_snapshot_json(ids[i])).at("status");
+                members.push_back({{"endpoint",{{"host","127.0.0.1"},{"port",base+2*static_cast<int>(i)}}},
+                                   {"ready",allowed&&status.value("state",std::string())=="ready"}});
+            }
+            const int perWorker=128/activeWorkerCount;
+            const Json pool={{"primary",{{"host","127.0.0.1"},{"port",base}}},
+                {"workers",members},
+                {"limits",{{"max_flows",perWorker},{"max_opening",std::min(16,perWorker)},
+                           {"max_queued",64/activeWorkerCount},{"wait_timeout_ms",10000}}},
+                {"aggregate_max_flows",128}};
+            response(fb_engine_set_upstream_pool_json(engine,pool.dump().c_str()));
+        } else {
+            const Json value={{"endpoint",managedActive?Json{{"host","127.0.0.1"},{"port",base}}:Json(nullptr)},
+                              {"ready",allowed},{"grace_ms",30000}};
+            response(fb_engine_set_upstream_gate_json(engine,value.dump().c_str()));
+        }
+    }
     void accept(const std::string& value) {
         response(fb_validate_json(value.c_str()));
         if(!engine)engine=response(fb_engine_create_json(value.c_str())).at("engine_id").get<uint64_t>();
@@ -232,55 +299,118 @@ class Worker {
     void run() {
         for(;;) {
             int action;std::string value;Json options;
-            {std::unique_lock<std::mutex> lock(mutex);cv.wait(lock,[this]{return command!=0;});action=command;value=std::move(config);options=std::move(settings);command=0;}
+            {
+                std::unique_lock<std::mutex> lock(mutex);
+                cv.wait(lock,[this]{return command!=0;});
+                action=command;value=std::move(config);options=std::move(settings);command=0;
+            }
             auto result=std::make_unique<Result>();result->exit=action==-1;
             try {
-                if(action==-1) {waiting=false;if(engine)fb_engine_destroy(engine);engine=0;if(ssh)fb_ssh_destroy(ssh);ssh=0;}
-                else if(action==DiscoverCommand) {result->apps=discovery::scan(options);result->scanned=true;}
-                else {
-                    if(action==Apply&&waiting){result->error="Дождитесь запуска или нажмите «Остановить» перед изменением профиля.";}
-                    else if(action==Start||action==Apply) {
-                        bool managed=options.value("managed_ssh",false);validateDesktop(options);if(managed)validateManagedRoute(value,options["ssh"],options.value("ssh_workers",1));
-                        bool running=engine&&response(fb_engine_snapshot_json(engine))["status"].value("running",false);
-                        if(running&&managed!=managedActive)throw std::runtime_error("Остановите подключение перед сменой внешнего прокси / управляемого SSH.");
-                        if(ssh && managed && activeSsh!=options["ssh"]) {
-                            if(running||waiting)throw std::runtime_error("Остановите подключение перед изменением параметров SSH.");
-                            fb_ssh_destroy(ssh);ssh=0;
+                if(action==-1) {
+                    waiting=false;
+                    if(engine)fb_engine_destroy(engine);
+                    engine=0;destroySsh();
+                } else if(action==DiscoverCommand) {
+                    result->apps=discovery::scan(options);result->scanned=true;
+                } else {
+                    if(action==Apply&&waiting) {
+                        result->error="Дождитесь запуска или нажмите «Остановить» перед изменением профиля.";
+                    } else if(action==Start||action==Apply) {
+                        const bool managed=options.value("managed_ssh",false);
+                        validateDesktop(options);
+                        if(managed)validateManagedRoute(value,options["ssh"],options.value("ssh_workers",1));
+                        const bool running=engine&&response(fb_engine_snapshot_json(engine))["status"].value("running",false);
+                        if(running&&managed!=managedActive)
+                            throw std::runtime_error("Остановите подключение перед сменой внешнего прокси / управляемого SSH.");
+                        const int desired=options.value("ssh_workers",1);
+                        if(ssh&&managed&&(activeSsh!=options["ssh"]||activeWorkerCount!=desired)) {
+                            if(running||waiting)
+                                throw std::runtime_error("Остановите подключение перед изменением параметров SSH или числа процессов.");
+                            destroySsh();
                         }
-                        if(managed&&!ssh){ssh=response(fb_ssh_create_json(options["ssh"].dump().c_str())).at("ssh_id").get<uint64_t>();activeSsh=options["ssh"];}
+                        if(managed&&!ssh)ensureSsh(options["ssh"],desired);
                         accept(value);
-                        if(action==Apply){result->saved=value;result->acceptedDesktop=options;}
+                        if(action==Apply) {
+                            result->saved=value;result->acceptedDesktop=options;
+                        }
                         if(action==Start) {
                             managedActive=managed;
                             if(managed) {
-                                if(!ssh) {ssh=response(fb_ssh_create_json(options["ssh"].dump().c_str())).at("ssh_id").get<uint64_t>();activeSsh=options["ssh"];}
-                                auto state=response(fb_ssh_snapshot_json(ssh))["status"].value("state",std::string("stopped"));
-                                if(state=="stopped"||state=="failed")response(fb_ssh_start_json(ssh));
+                                if(!ssh)ensureSsh(options["ssh"],desired);
+                                for(auto id:sshIds()) {
+                                    const auto state=response(fb_ssh_snapshot_json(id))["status"]
+                                        .value("state",std::string("stopped"));
+                                    if(state=="stopped"||state=="failed")
+                                        response(fb_ssh_start_json(id));
+                                }
                                 gate(false);waiting=true;pending=value;result->acceptedDesktop=options;
-                            } else {if(ssh){response(fb_ssh_stop_json(ssh));}waiting=false;gate(true);response(fb_engine_start_json(engine));result->saved=value;result->acceptedDesktop=options;}
+                            } else {
+                                if(ssh)stopSsh();
+                                waiting=false;gate(true);
+                                response(fb_engine_start_json(engine));
+                                result->saved=value;result->acceptedDesktop=options;
+                            }
                         }
-                    } else if(action==Stop) {waiting=false;if(engine)response(fb_engine_stop_json(engine));if(ssh)response(fb_ssh_stop_json(ssh));}
+                    } else if(action==Stop) {
+                        waiting=false;
+                        if(engine)response(fb_engine_stop_json(engine));
+                        if(ssh)stopSsh();
+                    }
                     if(ssh&&managedActive) {
-                        result->ssh=response(fb_ssh_snapshot_json(ssh));auto state=result->ssh["status"].value("state",std::string());
-                        if(managedActive)gate(state=="ready");
-                        if(waiting&&state=="ready") {response(fb_engine_start_json(engine));waiting=false;result->saved=pending;}
-                        else if(waiting&&state=="failed") {waiting=false;throw std::runtime_error(result->ssh["status"].value("last_error",std::string("Не удалось запустить SSH.")));}
+                        result->ssh=response(fb_ssh_snapshot_json(ssh));
+                        auto primary=result->ssh["status"];
+                        Json workers=Json::array();
+                        int readyCount=0;bool allFailed=true;
+                        for(auto id:sshIds()) {
+                            const auto state=response(fb_ssh_snapshot_json(id))["status"];
+                            const auto mode=state.value("state",std::string());
+                            if(mode=="ready")++readyCount;
+                            if(mode!="failed")allFailed=false;
+                            workers.push_back({{"pid",state.value("pid",Json())},
+                                               {"state",mode},
+                                               {"local_port",state.value("local_port",0)},
+                                               {"resource_exhaustion_count",state.value("resource_exhaustion_count",uint64_t(0))}});
+                        }
+                        result->ssh["workers"]=workers;
+                        result->ssh["status"]["ready_workers"]=readyCount;
+                        result->ssh["status"]["worker_count"]=activeWorkerCount;
+                        if(readyCount>0)result->ssh["status"]["state"]="ready";
+                        gate(true);
+                        if(waiting&&readyCount>0) {
+                            response(fb_engine_start_json(engine));
+                            waiting=false;result->saved=pending;
+                        } else if(waiting&&allFailed) {
+                            waiting=false;
+                            throw std::runtime_error(primary.value("last_error",std::string("Все SSH-процессы завершились с ошибкой.")));
+                        }
                     }
                     if(engine)result->snapshot=response(fb_engine_snapshot_json(engine));
                 }
-            }catch(const std::exception& e){
+            } catch(const std::exception& e) {
                 result->error=e.what();result->saved.clear();
-                if(managedActive&&(waiting||action==Start)){waiting=false;try{gate(false);}catch(...){}if(engine){try{response(fb_engine_stop_json(engine));}catch(...){}}if(ssh){try{response(fb_ssh_stop_json(ssh));result->ssh=response(fb_ssh_snapshot_json(ssh));}catch(...){}fb_ssh_destroy(ssh);ssh=0;}}
+                if(managedActive&&(waiting||action==Start)) {
+                    waiting=false;
+                    try{gate(false);}catch(...){}
+                    if(engine){try{response(fb_engine_stop_json(engine));}catch(...){}}
+                    if(ssh){
+                        try{stopSsh();result->ssh=response(fb_ssh_snapshot_json(ssh));}catch(...){}
+                        destroySsh();
+                    }
+                }
                 try{if(engine)result->snapshot=response(fb_engine_snapshot_json(engine));}catch(...){}
             }
             result->waiting=waiting;
             if(!PostMessageW(window,Completed,0,reinterpret_cast<LPARAM>(result.get())))return;
-            result.release();if(action==-1)return;
+            result.release();
+            if(action==-1)return;
         }
     }
 public:
     void start(){thread=std::thread([this]{run();});}
-    void submit(int action,std::string value={},Json options=Json::object()){{std::lock_guard<std::mutex> lock(mutex);command=action;config=std::move(value);settings=std::move(options);}cv.notify_one();}
+    void submit(int action,std::string value={},Json options=Json::object()) {
+        {std::lock_guard<std::mutex> lock(mutex);command=action;config=std::move(value);settings=std::move(options);}
+        cv.notify_one();
+    }
     ~Worker(){if(thread.joinable())thread.join();}
 } worker;
 void enableControls() {
