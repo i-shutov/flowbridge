@@ -19,6 +19,7 @@ DEFINE_GUID(FWPM_CONDITION_ALE_APP_ID,0xd78e1e87,0x8644,0x4ea5,0x94,0x37,0xd8,0x
 #define FWPM_CALLOUT_FLAG_REGISTERED 0x00040000
 #endif
 #endif
+#include "app_scope.h"
 namespace {
 void check(DWORD error, const char* what) {
     if (error) throw std::runtime_error(std::string(what)+": "+std::to_string(error));
@@ -45,9 +46,14 @@ void Capture::stop() noexcept {
         CloseHandle(driver_); driver_=INVALID_HANDLE_VALUE;
     }
 }
-void Capture::start(unsigned short p4, unsigned short p6, const std::vector<std::wstring>& bypass) {
+void Capture::start(unsigned short p4, unsigned short p6, const std::vector<std::wstring>& bypass,
+                    const std::vector<std::wstring>& paths) {
     if (engine_ || driver_!=INVALID_HANDLE_VALUE) throw std::runtime_error("Capture already started");
     if (bypass.size()>16) throw std::runtime_error("At most sixteen bypass executable paths");
+    if(paths.empty() || paths.size()>64) throw std::runtime_error("Select 1..64 absolute capture executable paths");
+    std::vector<ApplicationId> applications;
+    applications.reserve(paths.size());
+    for(const auto& path:paths) applications.emplace_back(path);
     try {
         driver_=CreateFileW(FB_WFP_DEVICE,GENERIC_READ|GENERIC_WRITE,0,nullptr,OPEN_EXISTING,0,nullptr);
         if (driver_==INVALID_HANDLE_VALUE) check(GetLastError(),"Open signed WFP driver");
@@ -74,16 +80,20 @@ void Capture::start(unsigned short p4, unsigned short p6, const std::vector<std:
             callout.displayData.name=const_cast<wchar_t*>(L"FlowBridge TCP callout");
             check(FwpmCalloutAdd0(engine_,&callout,nullptr,nullptr),"Add callout");
             verifyCallout(engine_,keys[i]);
-            FWPM_FILTER_CONDITION0 tcp{}; tcp.fieldKey=FWPM_CONDITION_IP_PROTOCOL;
-            tcp.matchType=FWP_MATCH_EQUAL; tcp.conditionValue.type=FWP_UINT8; tcp.conditionValue.uint8=IPPROTO_TCP;
             FWPM_FILTER0 filter{}; filter.layerKey=layers[i]; filter.subLayerKey=FB_WFP_SUBLAYER;
             filter.providerKey=const_cast<GUID*>(&FB_WFP_PROVIDER);
             filter.displayData.name=const_cast<wchar_t*>(L"FlowBridge capture TCP");
             UINT64 captureWeight=1, bypassWeight=100;
             filter.weight.type=FWP_UINT64; filter.weight.uint64=&captureWeight;
             filter.action.type=FWP_ACTION_CALLOUT_TERMINATING; filter.action.calloutKey=keys[i];
-            filter.numFilterConditions=1; filter.filterCondition=&tcp;
-            check(FwpmFilterAdd0(engine_,&filter,nullptr,nullptr),"Add TCP filter");
+            // A separate filter per full executable identity gives OR between
+            // applications and AND between that identity and TCP. No catch-all.
+            for(const auto& application:applications) {
+                auto conditions=application.tcpConditions();
+                filter.numFilterConditions=static_cast<UINT32>(conditions.size());
+                filter.filterCondition=conditions.data();
+                check(FwpmFilterAdd0(engine_,&filter,nullptr,nullptr),"Add selected application TCP filter");
+            }
             for (const auto& path:bypass) {
                 FWP_BYTE_BLOB* app=nullptr;
                 check(FwpmGetAppIdFromFileName0(path.c_str(),&app),"Resolve bypass executable");
@@ -92,7 +102,7 @@ void Capture::start(unsigned short p4, unsigned short p6, const std::vector<std:
                 // Separate high-weight permit filters avoid OR semantics for
                 // repeated NOT_EQUAL conditions on the same app-id field.
                 filter.action.type=FWP_ACTION_PERMIT; filter.weight.uint64=&bypassWeight;
-                filter.filterCondition=&condition;
+                filter.numFilterConditions=1; filter.filterCondition=&condition;
                 filter.displayData.name=const_cast<wchar_t*>(L"FlowBridge explicit executable bypass");
                 DWORD result=FwpmFilterAdd0(engine_,&filter,nullptr,nullptr);
                 FwpmFreeMemory0(reinterpret_cast<void**>(&app)); check(result,"Add bypass filter");

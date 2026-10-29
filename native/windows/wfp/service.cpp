@@ -26,7 +26,7 @@ std::atomic<bool> stopping{false};
 SERVICE_STATUS_HANDLE statusHandle=nullptr;
 std::mutex statusLock, logLock;
 std::wstring profilePath, sshProfilePath;
-std::vector<std::wstring> bypassPaths;
+std::vector<std::wstring> bypassPaths, capturePaths;
 void log(const Json& event) noexcept {
     try { std::lock_guard<std::mutex> guard(logLock); auto line=event.dump()+"\n";
         std::cerr<<line; OutputDebugStringA(line.c_str()); } catch (...) {}
@@ -230,8 +230,8 @@ void run() {
                 {std::lock_guard<std::mutex> guard(lock); --admitted;}
             }
         });
-        if(!stopping) capture.start(p4,p6,bypassPaths);
-        if(!stopping) {report(SERVICE_RUNNING); log({{"event","ready"},{"capture","tcp_ipv4_ipv6"},{"workers",max}});}
+        if(!stopping) capture.start(p4,p6,bypassPaths,capturePaths);
+        if(!stopping) {report(SERVICE_RUNNING); log({{"event","ready"},{"capture","tcp_ipv4_ipv6"},{"workers",max},{"selected_executables",capturePaths.size()}});}
         auto lastSnapshot=GetTickCount64();
         while(!stopping) {
             if(ssh.id) {
@@ -273,10 +273,13 @@ int wmain(int argc,wchar_t** argv) {
             else if(arg==L"--service") service=true;
             else if(arg==L"--profile" && i+1<argc) profilePath=argv[++i];
             else if(arg==L"--ssh-profile" && i+1<argc) sshProfilePath=argv[++i];
+            else if(arg==L"--capture-app" && i+1<argc) capturePaths.emplace_back(argv[++i]);
             else if(arg==L"--bypass" && i+1<argc) bypassPaths.emplace_back(argv[++i]);
-            else throw std::runtime_error("Usage: FlowBridgeCapture --console|--service --profile ABSOLUTE_PATH [--ssh-profile ABSOLUTE_PATH] [--bypass ABSOLUTE_EXE_PATH]...");
+            else throw std::runtime_error("Usage: FlowBridgeCapture --console|--service --profile ABSOLUTE_PATH --capture-app ABSOLUTE_EXE_PATH [--capture-app ...] [--ssh-profile ABSOLUTE_PATH] [--bypass ABSOLUTE_EXE_PATH]...");
         }
         if(console==service || profilePath.empty() || !std::filesystem::path(profilePath).is_absolute()) throw std::runtime_error("Choose one run mode and an absolute administrator-controlled profile path");
+        if(capturePaths.empty() || capturePaths.size()>64) throw std::runtime_error("Select 1..64 capture executables with --capture-app; whole-machine capture is not implicit");
+        for(const auto& p:capturePaths) if(!std::filesystem::path(p).is_absolute() || !std::filesystem::is_regular_file(p)) throw std::runtime_error("Capture executable must be an existing absolute path");
         if(!sshProfilePath.empty() && !std::filesystem::path(sshProfilePath).is_absolute())throw std::runtime_error("SSH profile path must be absolute");
         for(const auto& p:bypassPaths) if(!std::filesystem::path(p).is_absolute()) throw std::runtime_error("Bypass executable path must be absolute");
         wchar_t self[32768]{}; DWORD length=GetModuleFileNameW(nullptr,self,32768);
