@@ -38,6 +38,9 @@ pub struct Config {
     pub local_port: u16,
     pub identity_file: Option<String>,
     pub known_hosts_file: Option<String>,
+    /// Opt-in, absolute path to a user-reviewed OpenSSH-compatible client.
+    /// Never auto-switch to another backend after authentication or overload.
+    pub ssh_executable: Option<String>,
     pub compression: bool,
     pub verbose_diagnostics: bool,
     pub server_alive_interval_secs: u64,
@@ -61,6 +64,7 @@ impl Default for Config {
             local_port: 1080,
             identity_file: None,
             known_hosts_file: None,
+            ssh_executable: None,
             compression: false,
             verbose_diagnostics: false,
             server_alive_interval_secs: 15,
@@ -129,6 +133,29 @@ impl Config {
             {
                 return Err(TunnelError(
                     "SSH file paths must be bounded and contain no controls or quotes".into(),
+                ));
+            }
+        }
+        if let Some(path) = &self.ssh_executable {
+            let executable = std::path::Path::new(path);
+            if path.is_empty()
+                || path.len() > 4096
+                || path.chars().any(char::is_control)
+                || path.contains('"')
+                || !executable.is_absolute()
+                || path.starts_with("//")
+                || path.starts_with("\\\\")
+                || (cfg!(windows)
+                    && !executable.extension().and_then(|ext| ext.to_str())
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("exe")))
+            {
+                return Err(TunnelError(
+                    "SSH executable must be an absolute local executable path, not an option, URI or network share".into(),
+                ));
+            }
+            if cfg!(target_os = "macos") && executable != std::path::Path::new("/usr/bin/ssh") {
+                return Err(TunnelError(
+                    "macOS native capture requires /usr/bin/ssh for its verified signing-ID bypass".into(),
                 ));
             }
         }
@@ -376,7 +403,7 @@ impl Supervisor {
                 // Native macOS capture exempts the observed code-signing ID of
                 // this exact system client; PATH lookup could select a different
                 // binary and invalidate that loop-prevention rule.
-                let mut command = Command::new(resolve_ssh()?);
+                let mut command = Command::new(resolve_ssh(config)?);
                 command.args(config.arguments());
                 Ok(command)
             }),
@@ -910,7 +937,19 @@ fn parse_resolvers(output: &str) -> Result<Vec<String>, TunnelError> {
     }
     Ok(result)
 }
-fn resolve_ssh() -> io::Result<std::path::PathBuf> {
+fn resolve_ssh(config: &Config) -> io::Result<std::path::PathBuf> {
+    if let Some(explicit) = &config.ssh_executable {
+        let path = std::fs::canonicalize(explicit)?;
+        if !path.is_file() {
+            return Err(io::Error::new(io::ErrorKind::NotFound,
+                "The explicitly selected OpenSSH client is not a file"));
+        }
+        if cfg!(target_os = "macos") && path != std::fs::canonicalize("/usr/bin/ssh")? {
+            return Err(io::Error::new(io::ErrorKind::PermissionDenied,
+                "macOS selected SSH backend does not match signed native capture bypass"));
+        }
+        return Ok(path);
+    }
     if cfg!(target_os = "macos") {
         return std::fs::canonicalize("/usr/bin/ssh");
     }
@@ -986,6 +1025,10 @@ fn supervise(config: Config, state: Arc<Mutex<State>>, control: Arc<Control>, la
         let launched = launcher(&config).and_then(|command| {
             let executable = command.get_program().to_owned();
             let version = backend_version(&executable, &control);
+            if config.ssh_executable.is_some() && version.is_none() {
+                return Err(io::Error::new(io::ErrorKind::InvalidData,
+                    "Explicit SSH backend did not identify itself as OpenSSH from -V; no fallback backend was launched"));
+            }
             {
                 let mut s = lock(&state);
                 s.status.backend_path = Some(executable.to_string_lossy().into_owned());
