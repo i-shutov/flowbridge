@@ -225,7 +225,7 @@ mod tests {
         let first = group.select(0).unwrap();
         assert_eq!(first.endpoint.port, 49101);
         let held = first.budget.enqueue().unwrap().admit().await.unwrap();
-        let second = pool.select(1).unwrap();
+        let second = group.select(1).unwrap();
         assert_eq!(second.endpoint.port, 49102);
         let pinned = group.select(2).unwrap();
         assert_eq!(pinned.endpoint.port, 49102);
