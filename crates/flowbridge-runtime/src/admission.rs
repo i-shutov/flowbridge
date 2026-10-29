@@ -140,6 +140,13 @@ impl Admission {
     }
 }
 impl Waiter {
+    /// Tunnel recovery and capacity admission have separate deadlines.
+    /// The queue semaphore stays acquired throughout reconnect so a burst
+    /// cannot create unlimited pending SOCKS sockets. When SSH becomes ready,
+    /// the *capacity* wait starts afresh, not from the moment SSH went down.
+    pub fn reset_capacity_deadline(&mut self) {
+        self.deadline = Instant::now() + Duration::from_millis(self.budget.limits.wait_timeout_ms);
+    }
     pub async fn admit(self) -> Result<Admission, String> {
         let result = tokio::time::timeout_at(self.deadline, async {
             let active = self

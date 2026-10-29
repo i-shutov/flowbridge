@@ -70,7 +70,7 @@ def rejected(abi, name, *arguments):
     raise AssertionError(name + ' unexpectedly accepted invalid operation')
 
 
-def actual_ssh(abi, profile, endpoint, target_port):
+def actual_ssh(abi, profile, endpoint, target_port, *, limits=None):
     """Invoked from isolated OpenSSH test: no local SOCKS ingress is used."""
     configure(abi)
     native_profile = copy.deepcopy(profile)
@@ -80,6 +80,8 @@ def actual_ssh(abi, profile, endpoint, target_port):
         'ports': [], 'action': action}]
     native_profile['default_action'] = {'type': 'block'}
     options = {'managed_endpoint': endpoint, 'ready': True, 'ready_lease_ms': 10000}
+    if limits is not None:
+        options['limits'] = limits
     ident = abi.call('fb_native_create_json', native_profile, options)['session_id']
     stream = 0
     try:

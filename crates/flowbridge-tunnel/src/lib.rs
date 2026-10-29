@@ -1178,9 +1178,17 @@ mod tests {
         // Keep listener ports below the platform's client ephemeral range:
         // health probes in parallel tests otherwise can consume a just-released
         // temporary listener port before its fake child binds it.
-        static NEXT: AtomicUsize = AtomicUsize::new(18000);
+        // GitHub-hosted macOS can reuse a fixed test port (18000+) from
+        // another concurrently running test executable or service, between
+        // our bind probe and the fake child startup. Use a per-test-process
+        // distinct non-ephemeral (on macOS/Windows) port range rather than
+        // reusing the same low 16 ports on every CI invocation.
+        static NEXT: std::sync::OnceLock<AtomicUsize> = std::sync::OnceLock::new();
+        let next = NEXT
+            .get_or_init(|| AtomicUsize::new(16_000 + (std::process::id() as usize % 1800) * 8));
         let local_port = loop {
-            let port = NEXT.fetch_add(1, Ordering::SeqCst) as u16;
+            let port = next.fetch_add(1, Ordering::SeqCst) as u16;
+            assert!(port < 32_000, "test-only SSH listener port range exhausted");
             if TcpListener::bind(("127.0.0.1", port)).is_ok() {
                 break port;
             }

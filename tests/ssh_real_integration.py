@@ -53,7 +53,7 @@ def exact(sock, size):
 
 class Echo(socketserver.BaseRequestHandler):
     def handle(self):
-        self.request.settimeout(15)
+        self.request.settimeout(180)
         while True:
             chunk = self.request.recv(65536)
             if not chunk:
@@ -63,6 +63,7 @@ class Echo(socketserver.BaseRequestHandler):
 
 class Server(socketserver.ThreadingTCPServer):
     daemon_threads = True
+    request_queue_size = 256
 
 
 class ABI:
@@ -214,22 +215,47 @@ def main(repetition=0):
                        'proxies': [{'id': 'ssh', 'kind': 'socks5', 'endpoint': endpoint}],
                        'chains': [], 'rules': [], 'default_action': {'type': 'proxy', 'id': 'ssh'},
                        'connect_timeout_ms': 10000, 'handshake_timeout_ms': 10000,
-                       'idle_timeout_ms': 300000, 'max_connections': 32}
+                       'idle_timeout_ms': 300000, 'max_connections': 256 if repetition == 0 else 32}
             engine = abi.call('fb_engine_create_json', profile)['engine_id']
             abi.call('fb_engine_start_json', engine)
 
+            # Identical per-process limits across the explicit engine and
+            # native FFI sessions are mandatory: they share one canonical
+            # managed SSH endpoint and reject conflicting configurations.
+            ssh_limits = {'max_flows': 128, 'max_opening': 16,
+                          'max_queued': 64, 'wait_timeout_ms': 500}
             def gate(ready):
                 abi.call('fb_engine_set_upstream_gate_json', engine,
-                         {'endpoint': endpoint, 'ready': ready, 'grace_ms': 15000})
+                         {'endpoint': endpoint, 'ready': ready, 'grace_ms': 15000,
+                          'limits': ssh_limits})
             gate(True)
             round_trip(engine_port, target_port)
             passed('Actual OpenSSH authentication, strict enrolled host key, binary traffic and half-close')
             from native_vertical_integration import actual_ssh
-            actual_ssh(abi, profile, endpoint, target_port)
+            actual_ssh(abi, profile, endpoint, target_port, limits=ssh_limits)
             passed('Native capture ABI: selected application -> real SSH -> target, without SOCKS ingress')
             from native_dns_integration import actual_ssh as actual_dns
-            actual_dns(abi, profile, endpoint, supervisor)
+            actual_dns(abi, profile, endpoint, supervisor, limits=ssh_limits)
             passed('Native DNS: resolver discovery and UDP/TCP queries through actual SSH')
+            if repetition == 0:
+                from real_ssh_capacity import run as stress_actual_ssh
+                # A real OpenSSH backend (not a mock) holds exactly the
+                # conservative default 128 managed admissions while bursts
+                # try to exceed it. Run once; 19 remaining iterations still
+                # test authentication/reconnect/strict host keys independently.
+                result = stress_actual_ssh(
+                    abi, engine, engine_port, target_port, snapshot,
+                    output=args.output / 'real-ssh-capacity.json',
+                    churn=int(os.environ.get('FLOWBRIDGE_SSH_CHURN', '200')),
+                )
+                report['capacity'] = {
+                    'real_openssh': True,
+                    'held': result['open_ssh_connections_held'],
+                    'rejected': result['attempted_after_capacity'],
+                    'churn': result['churn_attempts'],
+                    'elapsed_seconds': result['elapsed_seconds'],
+                }
+                passed('Real OpenSSH: 128 held channels, 64/128/192/256/512 overflow, retained bytes, capacity recovery')
             old_pid = ready['pid']
             gate(False)
             os.kill(old_pid, signal.SIGKILL)
