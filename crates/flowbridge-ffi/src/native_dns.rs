@@ -266,10 +266,33 @@ async fn bind_pair(
     std::net::SocketAddr,
 )> {
     let mut last_conflict = None;
-    for _ in 0..32 {
-        // TCP/UDP ephemeral port allocators are independent. Reserve TCP
-        // first and request its actual port for UDP. Retry only port-zero
-        // conflicts, retaining the original loopback address and error.
+    for _ in 0..64 {
+        // Windows TCP's ephemeral-port allocator can pick a port from a
+        // reserved/excluded UDP range. WSAEACCES 10013 then repeats even
+        // though TCP :0 succeeded. Bind UDP :0 *first* on Windows, then
+        // reserve TCP on the same port; explicit ports retain the original
+        // deterministic path below and never select a different port.
+        if cfg!(windows) && listen.port() == 0 {
+            let udp = match tokio::net::UdpSocket::bind(listen).await {
+                Ok(udp) => udp,
+                Err(error) if retryable_bind_conflict(&error) => {
+                    last_conflict = Some(error);
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
+            let address = udp.local_addr()?;
+            match tokio::net::TcpListener::bind(address).await {
+                Ok(tcp) => return Ok((udp, tcp, address)),
+                Err(error) if retryable_bind_conflict(&error) => {
+                    last_conflict = Some(error);
+                    continue;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        // On non-Windows platforms, and for explicitly selected Windows
+        // ports, retain TCP-first binding and the exact requested port.
         let tcp = match tokio::net::TcpListener::bind(listen).await {
             Ok(tcp) => tcp,
             Err(error) if listen.port() == 0 && retryable_bind_conflict(&error) => {
@@ -291,7 +314,7 @@ async fn bind_pair(
     Err(last_conflict.unwrap_or_else(|| {
         io::Error::new(
             io::ErrorKind::AddrInUse,
-            "No shared TCP/UDP ephemeral port available after 32 attempts",
+            "No shared TCP/UDP ephemeral port available after 64 attempts",
         )
     }))
 }

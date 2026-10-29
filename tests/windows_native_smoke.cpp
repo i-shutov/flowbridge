@@ -300,6 +300,13 @@ static void assertCompactLayout(HWND window,const wchar_t* screenshot) {
          "Managed SSH labels or help disappeared when switching modes");
     const auto sshHelp=inside(243);
     const auto save=inside(240);
+    const auto sshExe=inside(286);
+    const auto browseSsh=inside(287);
+    const auto compression=inside(237);
+    need(IsWindowVisible(GetDlgItem(window,286))&&IsWindowVisible(GetDlgItem(window,287)),
+         "Optional OpenSSH executable input/picker is missing on managed SSH page");
+    need(compression.right+6<=sshExe.left && sshExe.right+6<=browseSsh.left,
+         "Explicit SSH executable selector overlaps compression or Browse at 980x680");
     const auto dnsToggle=inside(285);
     need(IsWindowVisible(GetDlgItem(window,285)),
          "Remote SSH DNS control was not shown for managed SSH");
@@ -356,11 +363,18 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
         click(window,201);need(IsWindowVisible(GetDlgItem(window,hostId)),"connection page did not show existing proxy controls");
         SendMessageW(GetDlgItem(window,modeId),CB_SETCURSEL,1,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(modeId,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,modeId)));
         need(IsWindowVisible(GetDlgItem(window,231))&&!IsWindowVisible(GetDlgItem(window,hostId)),"managed SSH mode visibility failed");
+        need(IsWindowVisible(GetDlgItem(window,286))&&IsWindow(GetDlgItem(window,287)),
+             "Windows native SSH executable selector is missing");
         need(IsWindowVisible(GetDlgItem(window,285))&&
              SendMessageW(GetDlgItem(window,285),BM_GETCHECK,0,0)==BST_CHECKED,
              "Remote SSH DNS checkbox is not checked by default");
         edit(GetDlgItem(window,231),"test.example");
         edit(GetDlgItem(window,233),"testuser");
+        edit(GetDlgItem(window,286),"ssh.exe");
+        click(window,240);
+        need(windowText(GetDlgItem(window,280)).find(L"абсолютным путём")!=std::wstring::npos,
+             "Relative SSH binary path was accepted in Windows GUI");
+        edit(GetDlgItem(window,286),"");
         wchar_t appData[32768]{};
         const DWORD appDataChars=GetEnvironmentVariableW(L"LOCALAPPDATA",appData,32768);
         need(appDataChars>0&&appDataChars<32768,"LOCALAPPDATA is unavailable");
@@ -381,6 +395,80 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
         SendMessageW(GetDlgItem(window,285),BM_SETCHECK,BST_CHECKED,0);
         click(window,285);
         need(savedDns(),"Checked remote DNS was not restored in desktop profile");
+        wchar_t currentExe[32768]{};
+        need(GetModuleFileNameW(nullptr,currentExe,32768)>0, "Test executable path unavailable");
+        const std::wstring explicitExe(currentExe);
+        need(std::filesystem::path(explicitExe).is_absolute(), "Test path is not absolute");
+        // This exe is NOT an OpenSSH client; it exercises only file picker
+        // persistence, never launches the selected program as a tunnel.
+        // SetWindowTextW is not allowed to set an EDIT control in another
+        // application process. Use the same marshalled WM_SETTEXT message as
+        // all other native GUI smoke input helpers.
+        need(SendMessageW(GetDlgItem(window,286),WM_SETTEXT,0,
+                          reinterpret_cast<LPARAM>(explicitExe.c_str()))!=0,
+             "Optional SSH binary field refused cross-process WM_SETTEXT input");
+        const auto observedExe=windowText(GetDlgItem(window,286));
+        if(observedExe!=explicitExe){
+            std::size_t first=0;
+            while(first<std::min(observedExe.size(),explicitExe.size()) &&
+                  observedExe[first]==explicitExe[first])++first;
+            std::fprintf(stderr,
+                "SSH exe field diagnosis: expected_utf16_units=%zu actual_utf16_units=%zu first_diff=%zu expected_cp=%u actual_cp=%u visible=%d enabled=%d\n",
+                explicitExe.size(),observedExe.size(),first,
+                first<explicitExe.size()?static_cast<unsigned>(explicitExe[first]):0,
+                first<observedExe.size()?static_cast<unsigned>(observedExe[first]):0,
+                IsWindowVisible(GetDlgItem(window,286))?1:0,
+                IsWindowEnabled(GetDlgItem(window,286))?1:0);
+        }
+        need(observedExe==explicitExe,
+             "Optional SSH binary edit control truncated or altered absolute path");
+        const int utf8Bytes=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,
+            explicitExe.data(),static_cast<int>(explicitExe.size()),nullptr,0,nullptr,nullptr);
+        need(utf8Bytes>0,"UTF-8 SSH executable test path invalid");
+        std::string expectedUtf8(static_cast<size_t>(utf8Bytes),'\0');
+        need(WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,
+             explicitExe.data(),static_cast<int>(explicitExe.size()),expectedUtf8.data(),
+             utf8Bytes,nullptr,nullptr)==utf8Bytes,"UTF-8 SSH executable conversion failed");
+        click(window,240);
+        auto matchesSavedExe=[&]{
+            try {
+                std::ifstream in(desktopFile,std::ios::binary);
+                if(!in)return false;
+                auto value=Json::parse(in);
+                return value["ssh"]["ssh_executable"]==expectedUtf8;
+            }catch(const std::exception&){return false;}
+        };
+        try {
+            waitFor(matchesSavedExe,"User-selected absolute OpenSSH exe path was not persisted");
+        }catch(const std::exception&){
+            // Report only sanitized state, not private usernames or paths.
+            std::string actualType="unavailable";
+            std::size_t actualSize=0;
+            try {
+                std::ifstream in(desktopFile,std::ios::binary);
+                Json actual=Json::parse(in);
+                actualType=actual["ssh"]["ssh_executable"].type_name();
+                if(actual["ssh"]["ssh_executable"].is_string())
+                    actualSize=actual["ssh"]["ssh_executable"].get<std::string>().size();
+            }catch(const std::exception&){}
+            const auto banner=windowText(GetDlgItem(window,280));
+            const int bytes=WideCharToMultiByte(CP_UTF8,0,banner.data(),
+                static_cast<int>(banner.size()),nullptr,0,nullptr,nullptr);
+            std::string encoded(bytes>0?static_cast<std::size_t>(bytes):0,'\0');
+            if(bytes>0)WideCharToMultiByte(CP_UTF8,0,banner.data(),
+                static_cast<int>(banner.size()),encoded.data(),bytes,nullptr,nullptr);
+            std::fprintf(stderr,
+                "SSH backend save diagnosis: enabled=%d, observed_type=%s, actual_size=%zu, expected_size=%zu, banner=%s\n",
+                IsWindowEnabled(GetDlgItem(window,240))?1:0,actualType.c_str(),
+                actualSize,expectedUtf8.size(),encoded.c_str());
+            throw;
+        }
+        edit(GetDlgItem(window,286),"");
+        click(window,240);
+        waitFor([&]{
+            try {std::ifstream in(desktopFile);return in&&Json::parse(in)["ssh"]["ssh_executable"].is_null();}
+            catch(const std::exception&){return false;}
+        },"Reset-to-PATH OpenSSH backend was not persisted");
         SendMessageW(GetDlgItem(window,modeId),CB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(modeId,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,modeId)));
         click(window,203);need(IsWindowVisible(GetDlgItem(window,editorId)),"advanced page did not show full profile");
         unsigned short port=unusedPort(); auto profile=config(port);

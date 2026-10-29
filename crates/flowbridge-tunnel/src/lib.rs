@@ -38,6 +38,9 @@ pub struct Config {
     pub local_port: u16,
     pub identity_file: Option<String>,
     pub known_hosts_file: Option<String>,
+    /// Opt-in, absolute path to a user-reviewed OpenSSH-compatible client.
+    /// Never auto-switch to another backend after authentication or overload.
+    pub ssh_executable: Option<String>,
     pub compression: bool,
     pub verbose_diagnostics: bool,
     pub server_alive_interval_secs: u64,
@@ -61,6 +64,7 @@ impl Default for Config {
             local_port: 1080,
             identity_file: None,
             known_hosts_file: None,
+            ssh_executable: None,
             compression: false,
             verbose_diagnostics: false,
             server_alive_interval_secs: 15,
@@ -129,6 +133,44 @@ impl Config {
             {
                 return Err(TunnelError(
                     "SSH file paths must be bounded and contain no controls or quotes".into(),
+                ));
+            }
+        }
+        if let Some(path) = &self.ssh_executable {
+            let executable = std::path::Path::new(path);
+            // Rust canonicalize on Windows uses the local drive device prefix
+            // \\?\C:\... . Distinguish this explicitly from a UNC
+            // \\server\share or \\?\UNC\server\share path; the old
+            // prefix-only test rejected our own canonical absolute local exe.
+            let local_extended_drive = cfg!(windows)
+                && path.strip_prefix("\\\\?\\").is_some_and(|value| {
+                    let bytes = value.as_bytes();
+                    bytes.len() >= 3
+                        && bytes[0].is_ascii_alphabetic()
+                        && bytes[1] == b':'
+                        && bytes[2] == b'\\'
+                });
+            if path.is_empty()
+                || path.len() > 4096
+                || path.chars().any(char::is_control)
+                || path.contains('"')
+                || !executable.is_absolute()
+                || path.starts_with("//")
+                || (path.starts_with("\\\\") && !local_extended_drive)
+                || (cfg!(windows)
+                    && !executable
+                        .extension()
+                        .and_then(|ext| ext.to_str())
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("exe")))
+            {
+                return Err(TunnelError(
+                    "SSH executable must be an absolute local executable path, not an option, URI or network share".into(),
+                ));
+            }
+            if cfg!(target_os = "macos") && executable != std::path::Path::new("/usr/bin/ssh") {
+                return Err(TunnelError(
+                    "macOS native capture requires /usr/bin/ssh for its verified signing-ID bypass"
+                        .into(),
                 ));
             }
         }
@@ -376,7 +418,7 @@ impl Supervisor {
                 // Native macOS capture exempts the observed code-signing ID of
                 // this exact system client; PATH lookup could select a different
                 // binary and invalidate that loop-prevention rule.
-                let mut command = Command::new(resolve_ssh()?);
+                let mut command = Command::new(resolve_ssh(config)?);
                 command.args(config.arguments());
                 Ok(command)
             }),
@@ -910,7 +952,23 @@ fn parse_resolvers(output: &str) -> Result<Vec<String>, TunnelError> {
     }
     Ok(result)
 }
-fn resolve_ssh() -> io::Result<std::path::PathBuf> {
+fn resolve_ssh(config: &Config) -> io::Result<std::path::PathBuf> {
+    if let Some(explicit) = &config.ssh_executable {
+        let path = std::fs::canonicalize(explicit)?;
+        if !path.is_file() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "The explicitly selected OpenSSH client is not a file",
+            ));
+        }
+        if cfg!(target_os = "macos") && path != std::fs::canonicalize("/usr/bin/ssh")? {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "macOS selected SSH backend does not match signed native capture bypass",
+            ));
+        }
+        return Ok(path);
+    }
     if cfg!(target_os = "macos") {
         return std::fs::canonicalize("/usr/bin/ssh");
     }
@@ -986,6 +1044,10 @@ fn supervise(config: Config, state: Arc<Mutex<State>>, control: Arc<Control>, la
         let launched = launcher(&config).and_then(|command| {
             let executable = command.get_program().to_owned();
             let version = backend_version(&executable, &control);
+            if config.ssh_executable.is_some() && version.is_none() {
+                return Err(io::Error::new(io::ErrorKind::InvalidData,
+                    "Explicit SSH backend did not identify itself as OpenSSH from -V; no fallback backend was launched"));
+            }
             {
                 let mut s = lock(&state);
                 s.status.backend_path = Some(executable.to_string_lossy().into_owned());
@@ -1406,6 +1468,49 @@ mod tests {
                 .is_err()
         );
     }
+    #[test]
+    fn explicit_ssh_backend_requires_absolute_local_path_without_auto_fallback() {
+        let mut cfg = config();
+        cfg.ssh_executable = Some("ssh.exe".into());
+        assert!(
+            cfg.validate().is_err(),
+            "Relative PATH resolution must not override OpenSSH"
+        );
+        cfg.ssh_executable = Some("//remote/share/ssh.exe".into());
+        assert!(
+            cfg.validate().is_err(),
+            "Network-share backend must be refused"
+        );
+        cfg.ssh_executable = Some("".into());
+        assert!(
+            cfg.validate().is_err(),
+            "Empty SSH override must not become PATH lookup"
+        );
+        let current = std::env::current_exe().unwrap().canonicalize().unwrap();
+        cfg.ssh_executable = Some(current.to_string_lossy().into_owned());
+        if cfg!(target_os = "macos") {
+            assert!(
+                cfg.validate().is_err(),
+                "macOS must not silently change the signing-ID bypassed SSH binary"
+            );
+        } else {
+            cfg.validate().unwrap();
+            assert_eq!(resolve_ssh(&cfg).unwrap(), current);
+            // This test executable does NOT report an OpenSSH_ version. It
+            // must be rejected rather than launched as a dynamic SOCKS client.
+            let supervisor = Supervisor::new(cfg).unwrap();
+            supervisor.start().unwrap();
+            let failed = wait(&supervisor, |s| s.status.state == "failed");
+            assert!(failed
+                .status
+                .last_error
+                .as_deref()
+                .is_some_and(|message| message.contains("did not identify itself as OpenSSH")));
+            assert_eq!(failed.status.restarts, 0);
+            assert_eq!(failed.status.pid, None);
+        }
+    }
+
     #[test]
     fn strict_config_and_arguments_do_not_allow_shell_or_host_key_overrides() {
         let config=Config::from_json(r#"{"host":"server.example","user":"alice","identity_file":"/keys/with space/key","known_hosts_file":"/keys/known hosts","compression":true}"#).unwrap();
