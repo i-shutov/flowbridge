@@ -25,6 +25,14 @@ import time
 import uuid
 
 
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with Path(path).open('rb') as file:
+        for block in iter(lambda: file.read(1024 * 1024), b''):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def require(value, message):
     if not value:
         raise AssertionError(message)
@@ -197,7 +205,10 @@ def main():
             'Explicit FLOWBRIDGE_WFP_VM=1 and an elevated disposable Windows VM are required')
     helper = args.helper.resolve(strict=True)
     probe_binary = args.probe.resolve(strict=True)
-    report = {'passed': False, 'coverage': {'real_wfp_redirect': False,
+    report = {'passed': False, 'source_commit': os.environ.get('GITHUB_SHA'),
+              'binary_sha256': {'helper': sha256_file(helper),
+                                'probe': sha256_file(probe_binary)},
+              'coverage': {'real_wfp_redirect': False,
              'selected_executable': True, 'external_network': False,
              'ssh_forwarding_tested': False, 'dns_settings_changed': False,
              'dns_interception_tested': False, 'owner_process_death_cleanup': False,
