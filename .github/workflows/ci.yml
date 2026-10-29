@@ -45,7 +45,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - name: Syntax-check real-VM WFP harness without claiming driver acceptance
-        run: python -m py_compile tests/windows_wfp_redirect_runtime.py tests/windows_wfp_userchain_runtime.py tests/windows_dpi_matrix_vm.py
+        run: python -m py_compile tests/windows_wfp_redirect_runtime.py tests/windows_wfp_userchain_runtime.py tests/windows_dpi_matrix_vm.py tests/windows_openssh_capacity_vm.py
       - run: cargo fmt --all -- --check
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - run: cargo test --locked --workspace
