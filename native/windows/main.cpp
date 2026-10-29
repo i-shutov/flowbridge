@@ -17,6 +17,7 @@
 #include <vector>
 #include "discovery.hpp"
 #include "native_profile.hpp"
+#include "capture_launcher.hpp"
 #include "flowbridge.h"
 #include "nlohmann/json.hpp"
 
@@ -24,7 +25,7 @@ using Json = nlohmann::json;
 namespace {
 constexpr size_t MaxBytes = 1024 * 1024;
 constexpr UINT Completed = WM_APP + 1;
-enum { Start=100, Stop, Apply, Open, Save, Proxy, Host, Port, Protocol, Config, Connections, Log, Status, Mode, QuickLabel, ConfigLabel, ConnectionsLabel, LogLabel, NavDashboard=200, NavConnection, NavApps, NavAdvanced, Theme=204, PageTitle=205, PageSubtitle=206, Badge=207, Metrics=208, DashboardHelp=209, SshHealth=210, ManagedMode=230, SshHost=231, SshPort=232, SshUser=233, KeyPath=234, KnownHosts=235, LocalPort=236, Compression=237, Keepalive=238, KeepaliveCount=239, SaveDesktop=240, BrowseKey=241, BrowseKnown=242, SshHelp=243, ConnectionSummary=244, Discover=260, AppsTable=261, PresetAI=262, PresetWeb=263, PresetBoth=264, BrowseApp=265, ExportNative=266, BlockOthers=267, AppsHelp=268, AppsSummary=269, ScanStatus=270, SshTitle=271, SshSummary=272, RetryInitial=245, RetryMax=246, Banner=280, ExportDiagnostics=281 };
+enum { Start=100, Stop, Apply, Open, Save, Proxy, Host, Port, Protocol, Config, Connections, Log, Status, Mode, QuickLabel, ConfigLabel, ConnectionsLabel, LogLabel, NavDashboard=200, NavConnection, NavApps, NavAdvanced, Theme=204, PageTitle=205, PageSubtitle=206, Badge=207, Metrics=208, DashboardHelp=209, SshHealth=210, ManagedMode=230, SshHost=231, SshPort=232, SshUser=233, KeyPath=234, KnownHosts=235, LocalPort=236, Compression=237, Keepalive=238, KeepaliveCount=239, SaveDesktop=240, BrowseKey=241, BrowseKnown=242, SshHelp=243, ConnectionSummary=244, Discover=260, AppsTable=261, PresetAI=262, PresetWeb=263, PresetBoth=264, BrowseApp=265, ExportNative=266, BlockOthers=267, AppsHelp=268, AppsSummary=269, ScanStatus=270, SshTitle=271, SshSummary=272, RetryInitial=245, RetryMax=246, Banner=280, ExportDiagnostics=281, StartCapture=282, StopCapture=283, CaptureStatus=284 };
 constexpr int DiscoverCommand=900, PollCommand=999;
 std::map<int,int> pages; // -1 global; 0 dashboard; 1 connection; 2 applications; 3 advanced
 int activePage=0;
@@ -45,6 +46,8 @@ std::string localLog, workerError;
 std::string selectedProxyId;
 Json draft;
 Json latestEngineSnapshot=Json::object(),latestSshSnapshot=Json::object();
+capture_launcher::Session nativeCapture;
+
 const char* initialConfig = R"({"version":1,"listen":"127.0.0.1:1081","proxies":[{"id":"ssh","kind":"socks5","endpoint":{"host":"127.0.0.1","port":1080},"username":null,"password_env":null}],"chains":[],"rules":[],"default_action":{"type":"proxy","id":"ssh"},"connect_timeout_ms":10000,"handshake_timeout_ms":10000,"idle_timeout_ms":300000,"max_connections":512})";
 std::wstring wide(const std::string& s) {
     if (s.empty()) return {};
@@ -257,8 +260,10 @@ public:
     ~Worker(){if(thread.joinable())thread.join();}
 } worker;
 void enableControls() {
-    for(int id:{Start,Stop,Apply,Open,Save,Proxy,Host,Port,Protocol,Config,Discover,ExportNative,ManagedMode,SshHost,SshPort,SshUser,KeyPath,KnownHosts,LocalPort,Compression,Keepalive,KeepaliveCount,SaveDesktop,BrowseKey,BrowseKnown,BrowseApp,RetryInitial,RetryMax,PresetAI,PresetWeb,PresetBoth,BlockOthers})EnableWindow(GetDlgItem(window,id),!busy&&!closing&&(!pendingStart||id==Stop||id==Discover||id==BrowseApp||id==PresetAI||id==PresetWeb||id==PresetBoth||id==BlockOthers));
-    EnableWindow(GetDlgItem(window,Start),!busy&&!closing&&!engineRunning&&!pendingStart);
+    for(int id:{Start,Stop,StartCapture,StopCapture,Apply,Open,Save,Proxy,Host,Port,Protocol,Config,Discover,ExportNative,ManagedMode,SshHost,SshPort,SshUser,KeyPath,KnownHosts,LocalPort,Compression,Keepalive,KeepaliveCount,SaveDesktop,BrowseKey,BrowseKnown,BrowseApp,RetryInitial,RetryMax,PresetAI,PresetWeb,PresetBoth,BlockOthers})EnableWindow(GetDlgItem(window,id),!busy&&!closing&&(!pendingStart||id==Stop||id==Discover||id==BrowseApp||id==PresetAI||id==PresetWeb||id==PresetBoth||id==BlockOthers));
+    EnableWindow(GetDlgItem(window,Start),!busy&&!closing&&!engineRunning&&!pendingStart&&!nativeCapture.active());
+    EnableWindow(GetDlgItem(window,StartCapture),!busy&&!closing&&!engineRunning&&!pendingStart&&!nativeCapture.active());
+    EnableWindow(GetDlgItem(window,StopCapture),!closing&&nativeCapture.active());
     setText(GetDlgItem(window,Start),pendingStart?"Подключаем…":engineRunning?"Подключено":"Подключить");
 }
 void dispatch(int action,std::string text={},Json options=Json::object()){busy=true;if(action!=PollCommand)enableControls();worker.submit(action,std::move(text),std::move(options));}
@@ -352,10 +357,46 @@ void exportDiagnostics(){
 void browseApplication(){auto path=chooseFile(L"Приложения Windows\0*.exe\0",false,L"exe");if(path.empty())return;
     auto text=discovery::utf8(path.wstring());auto found=std::find_if(discovered.begin(),discovered.end(),[&](const discovery::App& a){return a.path==text;});if(found==discovered.end())discovered.push_back({"manual",discovery::utf8(path.stem().wstring()),text,"Выбрано вручную",100});selectedApps.insert(text);refreshApps();saveDesktop();
 }
+void startNativeCapture(){
+    captureSelections();
+    if(nativeCapture.active())throw std::runtime_error("Нативный перехват уже запущен.");
+    if(engineRunning||pendingStart)throw std::runtime_error("Сначала остановите локальный SOCKS; один экземпляр SSH не должен запускаться дважды.");
+    if(selectedApps.empty())throw std::runtime_error("Выберите хотя бы один существующий EXE.");
+    if(selectedApps.size()>64)throw std::runtime_error("Нативный режим поддерживает максимум 64 EXE.");
+    if(SendMessageW(GetDlgItem(window,BlockOthers),BM_GETCHECK,0,0)==BST_CHECKED)
+        throw std::runtime_error("Блокировка всех остальных приложений не реализована на системном уровне. Уберите галочку.");
+    auto settings=desktopSettings();validateDesktop(settings);
+    const bool managed=settings.value("managed_ssh",false);
+    auto base=Json::parse(commandConfiguration());
+    std::string target=managed?"managed-ssh":selectedProxyId;
+    if(target.empty())throw std::runtime_error("Укажите SOCKS/SSH upstream в разделе подключения.");
+    base=native_profile::build(std::move(base),std::vector<std::string>(selectedApps.begin(),selectedApps.end()),target,false);
+    auto value=base.dump(2);
+    response(fb_validate_json(value.c_str()));
+    if(managed)validateManagedRoute(value,settings.at("ssh"));
+    auto dir=desktopPath.parent_path();
+    if(dir.empty())throw std::runtime_error("Нет папки пользовательских настроек.");
+    const auto nativeProfile=dir/L"native-capture.json";
+    const auto sshProfile=dir/L"native-capture-ssh.json";
+    writeFile(nativeProfile,value);
+    if(managed)writeFile(sshProfile,settings.at("ssh").dump(2));
+    std::vector<std::wstring> apps;apps.reserve(selectedApps.size());
+    for(const auto& path:selectedApps)apps.push_back(wide(path));
+    nativeCapture.start(nativeProfile.wstring(),managed?sshProfile.wstring():L"",apps);
+    saveDesktop();
+    setText(GetDlgItem(window,CaptureStatus),"Запрос UAC принят, helper запущен. Наличие драйвера и реальное перенаправление проверяются отдельно.");
+    note("Запущен нативный helper для "+std::to_string(apps.size())+" EXE. Консоль helper показывает ошибки WFP/SSH.");
+}
+void stopNativeCapture(){
+    if(!nativeCapture.active()) {note("Нативный helper уже остановлен.");return;}
+    nativeCapture.stop();
+    setText(GetDlgItem(window,CaptureStatus),"Останавливаем helper: снимаются WFP-фильтры и закрываются соединения.");
+    note("Запрошена остановка нативного перехвата.");
+}
 void exportNative(){captureSelections();if(selectedApps.empty())throw std::runtime_error("Сначала отметьте приложения для экспорта.");auto config=Json::parse(commandConfiguration());
     std::string target=SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1?"managed-ssh":selectedProxyId;if(target.empty())throw std::runtime_error("Добавьте и выберите upstream-прокси в разделе подключения.");
     config=native_profile::build(std::move(config),std::vector<std::string>(selectedApps.begin(),selectedApps.end()),target,SendMessageW(GetDlgItem(window,BlockOthers),BM_GETCHECK,0,0)==BST_CHECKED);
-    response(fb_validate_json(config.dump().c_str()));auto path=chooseFile(L"Нативный профиль JSON\0*.json\0",true);if(path.empty())return;writeFile(path,config.dump(2));saveDesktop();note("Нативный профиль экспортирован. В этом пакете захват недоступен; локальный SOCKS не фильтрует приложения.");
+    response(fb_validate_json(config.dump().c_str()));auto path=chooseFile(L"Нативный профиль JSON\0*.json\0",true);if(path.empty())return;writeFile(path,config.dump(2));saveDesktop();note("Нативный профиль экспортирован; запуск перехвата производится отдельной кнопкой при доступном подписанном WFP-драйвере.");
 }
 void showSsh(const Json& ssh,bool waiting){
     latestSshSnapshot=ssh;
@@ -392,7 +433,12 @@ void layout(){RECT r{};GetClientRect(window,&r);int width=static_cast<int>(r.rig
     move(2014,x+24,414,w-48,22);move(KeyPath,x+24,442,w-182,34);move(BrowseKey,x+w-142,442,118,34);move(2015,x+24,494,w-48,22);move(KnownHosts,x+24,522,w-182,34);move(BrowseKnown,x+w-142,522,118,34);
     move(Compression,x+24,578,w-48,26);int unit=(w-120)/4;int labels[]={2016,2017,2019,2020};int fields[]={Keepalive,KeepaliveCount,RetryInitial,RetryMax};for(int i=0;i<4;++i){move(labels[i],x+24+i*(unit+24),622,unit,22);move(fields[i],x+24+i*(unit+24),650,unit,34);}move(SshHelp,x+24,706,w-48,56);move(SaveDesktop,x,height-68,240,40);
     move(AppsHelp,x+24,150,w-48,58);move(PresetAI,x,242,180,42);move(PresetWeb,x+192,242,180,42);move(PresetBoth,x+384,242,180,42);move(Discover,x+w-210,242,210,42);
-    move(ScanStatus,x,300,w,24);move(AppsSummary,x,334,w-180,24);move(BrowseApp,x+w-172,328,172,36);move(AppsTable,x,382,w,std::max(160,height-580));move(2018,x,height-178,w,42);move(BlockOthers,x,height-120,w-300,28);move(ExportNative,x+w-290,height-94,290,42);
+    move(ScanStatus,x,300,w,24);move(AppsSummary,x,334,w-180,24);move(BrowseApp,x+w-172,328,172,36);
+    move(AppsTable,x,382,w,std::max(90,height-628));
+    move(2018,x,height-231,w,40);move(CaptureStatus,x+24,height-188,w-48,33);
+    move(BlockOthers,x+24,height-144,w-48,28);
+    move(StartCapture,x+24,height-99,200,42);move(StopCapture,x+236,height-99,180,42);
+    move(ExportNative,x+w-290,height-99,290,42);
     move(Apply,x,138,195,40);move(Open,x+207,138,180,40);move(Save,x+399,138,180,40);move(ConfigLabel,x,198,w,38);int editor=std::max(200,(height-340)*3/5);move(Config,x,246,w,editor);move(LogLabel,x,266+editor,w,24);move(Log,x,302+editor,w,std::max(100,height-editor-330));
 }
 LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
@@ -407,7 +453,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         add(L"BUTTON",L"Подключить",WS_TABSTOP,Start,-1);add(L"BUTTON",L"Остановить",WS_TABSTOP,Stop,-1);
         label(L"●  Не подключено",Badge,0);SendMessageW(GetDlgItem(h,Badge),WM_SETFONT,reinterpret_cast<WPARAM>(headingFont),TRUE);
         label(L"Остановлено. Выберите подключение и нажмите «Подключить».",Status,0);
-        label(L"Локальный SOCKS5 • приложения должны явно использовать этот прокси. Нативный захват недоступен.",Mode,0);
+        label(L"Локальный SOCKS5 работает отдельно. Нативный перехват выбранных EXE доступен через UAC при установленном WFP-драйвере.",Mode,0);
         label(L"АКТИВНЫЕ СОЕДИНЕНИЯ     0       ПРИНЯТО     0       ТРАФИК ↑ / ↓     0 / 0 Б",Metrics,0);
         label(L"Состояние SSH",SshTitle,0);label(L"SSH: используется внешний прокси",SshHealth,0);
         label(L"Текущие и недавние соединения",ConnectionsLabel,0);
@@ -428,7 +474,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         label(L"Только ключ / SSH agent. Ключ сервера должен быть заранее проверен и добавлен в known_hosts. Пароли и обход проверки ключа не поддерживаются.",SshHelp,12);
         label(L"Внешний прокси управляется отдельно от FlowBridge.",SshSummary,1);
         add(L"BUTTON",L"Сохранить подключение",WS_TABSTOP,SaveDesktop,1);
-        label(L"Нативный захват в этом пакете недоступен. Выбор ниже сохраняется и экспортируется для отдельного нативного профиля; он не фильтрует клиентов локального SOCKS.",AppsHelp,2);
+        label(L"Выберите EXE, затем «Нативный перехват». Для реальной маршрутизации требуется заранее установленный подписанный тестовый WFP-драйвер; автоматической установки драйвера нет.",AppsHelp,2);
         add(L"BUTTON",L"AI-приложения",WS_TABSTOP,PresetAI,2);add(L"BUTTON",L"Веб-браузеры",WS_TABSTOP,PresetWeb,2);add(L"BUTTON",L"AI + веб",WS_TABSTOP,PresetBoth,2);
         add(L"BUTTON",L"Найти приложения",WS_TABSTOP,Discover,2);add(L"BUTTON",L"Добавить EXE…",WS_TABSTOP,BrowseApp,2);
         label(L"Поиск локальный: App Paths, список установки, известные ярлыки и запущенные процессы.",ScanStatus,2);label(L"Найдено: 0 • Выбрано: 0",AppsSummary,2);
@@ -436,6 +482,9 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         const wchar_t* appTitles[]={L"Приложение",L"Обнаруженный путь",L"Источник",L"Уверенность"};int appWidths[]={160,420,150,160};for(int i=0;i<4;++i){LVCOLUMNW col{};col.mask=LVCF_TEXT|LVCF_WIDTH;col.pszText=const_cast<wchar_t*>(appTitles[i]);col.cx=appWidths[i];ListView_InsertColumn(apps,i,&col);}
         label(L"В нативном профиле выбранные EXE идут через прокси; остальные — напрямую. Имена EXE не подтверждают издателя.",2018,2);
         add(L"BUTTON",L"Блокировать остальные приложения вместо Direct",BS_AUTOCHECKBOX|WS_TABSTOP,BlockOthers,2);add(L"BUTTON",L"Экспорт нативного профиля…",WS_TABSTOP,ExportNative,2);
+        add(L"BUTTON",L"Нативный перехват…",WS_TABSTOP,StartCapture,2);
+        add(L"BUTTON",L"Остановить перехват",WS_TABSTOP,StopCapture,2);
+        label(L"Нативный helper остановлен. Веб/AI-приложения идут напрямую, если не настроен их собственный прокси.",CaptureStatus,2);
         add(L"BUTTON",L"Применить профиль",WS_TABSTOP,Apply,3);add(L"BUTTON",L"Открыть JSON…",WS_TABSTOP,Open,3);add(L"BUTTON",L"Экспорт JSON…",WS_TABSTOP,Save,3);
         label(L"Полный профиль • правила / цепочки / listener. Критерии приложений неприменимы в локальном SOCKS-режиме.",ConfigLabel,3);
         configEdit=add(L"EDIT",L"",WS_BORDER|WS_VSCROLL|WS_HSCROLL|ES_MULTILINE|ES_AUTOVSCROLL|ES_AUTOHSCROLL|ES_WANTRETURN|WS_TABSTOP,Config,3);SendMessageW(configEdit,EM_SETLIMITTEXT,MaxBytes,0);
@@ -473,13 +522,24 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
                     else if(id==PresetAI||id==PresetWeb||id==PresetBoth)choosePreset(id==PresetAI?"ai":id==PresetWeb?"web":"ai_web");
                     else if(id==BrowseApp)browseApplication();
                     else if(id==ExportNative)exportNative();
+                    else if(id==StartCapture)startNativeCapture();
+                    else if(id==StopCapture)stopNativeCapture();
                     else if(id==BlockOthers)saveDesktop();
                 }
             }
         }catch(const std::exception& e){note(std::string("Ошибка: ")+e.what());}
         return 0;
     case WM_NOTIFY:{auto notification=reinterpret_cast<NMHDR*>(l);if(notification->idFrom==AppsTable&&notification->code==LVN_ITEMCHANGED&&!loadingApps&&((reinterpret_cast<NMLISTVIEW*>(l)->uOldState^reinterpret_cast<NMLISTVIEW*>(l)->uNewState)&LVIS_STATEIMAGEMASK)){captureSelections();setText(GetDlgItem(h,AppsSummary),"Найдено: "+std::to_string(discovered.size())+"   •   Выбрано: "+std::to_string(selectedApps.size())+"   •   Эвристика; проверяйте путь EXE");try{saveDesktop();}catch(const std::exception& e){note(e.what());}}return 0;}
-    case WM_TIMER: if(!busy&&!closing) dispatch(PollCommand); return 0;
+    case WM_TIMER: {
+        DWORD exitCode=0;
+        if(nativeCapture.poll(exitCode)) {
+            setText(GetDlgItem(h,CaptureStatus),"Нативный helper завершился. Код: "+std::to_string(exitCode)+". Открытые соединения прерваны.");
+            note(exitCode==0?"Нативный перехват остановлен.":"Нативный helper завершился с ошибкой: "+std::to_string(exitCode)+". Проверьте WFP-драйвер и журнал helper.");
+            enableControls();
+        }
+        if(!busy&&!closing)dispatch(PollCommand);
+        return 0;
+    }
     case Completed: {
         std::unique_ptr<Result> result(reinterpret_cast<Result*>(l)); busy=false;pendingStart=result->waiting;
         if(result->exit) { DestroyWindow(h); return 0; }
@@ -500,7 +560,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         } catch(const std::exception& e) { note(std::string("Ошибка: ")+e.what()); }
         enableControls(); return 0;
     }
-    case WM_CLOSE: if(!closing) { try{captureSelections();saveDesktop();}catch(const std::exception& e){note(e.what());} closing=true; KillTimer(h,1); setText(GetDlgItem(h,Status),"Останавливаем движок и SSH…"); enableControls(); if(!busy) dispatch(-1); } return 0;
+    case WM_CLOSE: if(!closing) { nativeCapture.stop(); try{captureSelections();saveDesktop();}catch(const std::exception& e){note(e.what());} closing=true; KillTimer(h,1); setText(GetDlgItem(h,Status),"Останавливаем движок и SSH…"); enableControls(); if(!busy) dispatch(-1); } return 0;
     case WM_ERASEBKGND:return 1;
     case WM_PAINT:{PAINTSTRUCT ps{};HDC dc=BeginPaint(h,&ps);RECT r{};GetClientRect(h,&r);FillRect(dc,&r,backgroundBrush);RECT side{0,0,212,r.bottom};FillRect(dc,&side,sidebarBrush);
         SetBkMode(dc,TRANSPARENT);SetTextColor(dc,RGB(237,243,255));SelectObject(dc,headingFont);RECT brand{27,36,197,70};DrawTextW(dc,L"FlowBridge",-1,&brand,DT_LEFT|DT_SINGLELINE);SelectObject(dc,smallFont);SetTextColor(dc,RGB(143,164,195));RECT tag{28,79,194,117};DrawTextW(dc,L"ЛИЧНЫЙ МАРШРУТ\nSSH / SOCKS5",-1,&tag,DT_LEFT);RECT version{28,r.bottom-125,195,r.bottom-82};DrawTextW(dc,L"v0.2.0\nЛокальный режим",-1,&version,DT_LEFT);
@@ -509,7 +569,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         EndPaint(h,&ps);return 0;}
     case WM_CTLCOLORSTATIC:case WM_CTLCOLOREDIT:case WM_CTLCOLORLISTBOX:case WM_CTLCOLORBTN:{HDC dc=reinterpret_cast<HDC>(w);HWND child=reinterpret_cast<HWND>(l);int id=GetDlgCtrlID(child);bool plain=id==Banner||id==PageTitle||id==PageSubtitle||id==ConfigLabel||id==ConnectionsLabel||id==LogLabel||id==DashboardHelp||id==ScanStatus||id==AppsSummary||id==2018;
         SetTextColor(dc,id==Badge?(engineRunning&&tunnelReady?RGB(18,143,98):engineRunning?RGB(180,120,23):muted()):(id==PageSubtitle||id==Mode||id==SshHelp||id==AppsHelp||id==ScanStatus||id==2018?muted():ink()));SetBkColor(dc,plain?bg():card());return reinterpret_cast<LRESULT>(plain?backgroundBrush:cardBrush);}
-    case WM_DRAWITEM:{auto item=reinterpret_cast<DRAWITEMSTRUCT*>(l);if(item->CtlType!=ODT_BUTTON)break;int id=static_cast<int>(item->CtlID);bool nav=id>=NavDashboard&&id<=NavAdvanced;bool selected=(nav&&id-NavDashboard==activePage)||(id==PresetAI&&selectedPreset=="ai")||(id==PresetWeb&&selectedPreset=="web")||(id==PresetBoth&&selectedPreset=="ai_web");bool primary=id==Start||id==ExportNative||id==SaveDesktop;bool enabled=(item->itemState&ODS_DISABLED)==0;bool down=(item->itemState&ODS_SELECTED)!=0;
+    case WM_DRAWITEM:{auto item=reinterpret_cast<DRAWITEMSTRUCT*>(l);if(item->CtlType!=ODT_BUTTON)break;int id=static_cast<int>(item->CtlID);bool nav=id>=NavDashboard&&id<=NavAdvanced;bool selected=(nav&&id-NavDashboard==activePage)||(id==PresetAI&&selectedPreset=="ai")||(id==PresetWeb&&selectedPreset=="web")||(id==PresetBoth&&selectedPreset=="ai_web");bool primary=id==Start||id==StartCapture||id==ExportNative||id==SaveDesktop;bool enabled=(item->itemState&ODS_DISABLED)==0;bool down=(item->itemState&ODS_SELECTED)!=0;
         COLORREF fill=nav?(selected?RGB(43,63,92):RGB(18,30,52)):primary?(enabled?RGB(45,105,231):RGB(134,159,201)):selected?(dark?RGB(37,68,112):RGB(227,238,255)):card();if(down)fill=RGB(48,87,150);
         HBRUSH brush=CreateSolidBrush(fill);HPEN pen=CreatePen(PS_SOLID,1,nav?fill:primary?fill:(dark?RGB(64,82,107):RGB(215,224,237)));auto oldB=SelectObject(item->hDC,brush);auto oldP=SelectObject(item->hDC,pen);RECT box=item->rcItem;FillRect(item->hDC,&box,nav||id==Theme?sidebarBrush:(id==BrowseKey||id==BrowseKnown?cardBrush:backgroundBrush));RoundRect(item->hDC,box.left,box.top,box.right,box.bottom,10,10);SelectObject(item->hDC,oldB);SelectObject(item->hDC,oldP);DeleteObject(brush);DeleteObject(pen);
         SetBkMode(item->hDC,TRANSPARENT);SetTextColor(item->hDC,!enabled?(primary?RGB(235,242,254):muted()):nav||primary?RGB(244,248,255):selected?RGB(54,112,220):ink());SelectObject(item->hDC,bodyFont);auto text=utf8(item->hwndItem);auto label=wide(text);RECT textBox=box;if(nav)textBox.left+=16;DrawTextW(item->hDC,label.c_str(),-1,&textBox,(nav?DT_LEFT:DT_CENTER)|DT_VCENTER|DT_SINGLELINE);if(item->itemState&ODS_FOCUS){InflateRect(&box,-4,-4);DrawFocusRect(item->hDC,&box);}return TRUE;}

@@ -62,8 +62,19 @@ def main():
             configure += ["-G", "Ninja", "-DCMAKE_SYSTEM_NAME=Windows", "-DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++", "-DCMAKE_BUILD_TYPE=Release"]
         run(configure)
         run(["cmake", "--build", cmake, "--config", "Release", "--target", "FlowBridge"])
+    capture = ROOT / "build/windows-capture" / ("Release/FlowBridgeCapture.exe" if windows else "FlowBridgeCapture.exe")
+    if not args.skip_build:
+        configure_capture = ["cmake", "-S", "native/windows/wfp", "-B", capture.parent.parent if windows else capture.parent,
+                             f"-DFLOWBRIDGE_FFI_LIBRARY={ffi}"]
+        if windows:
+            configure_capture += ["-A", "x64"]
+        else:
+            configure_capture += ["-G", "Ninja", "-DCMAKE_SYSTEM_NAME=Windows",
+                                  "-DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++", "-DCMAKE_BUILD_TYPE=Release"]
+        run(configure_capture)
+        run(["cmake", "--build", capture.parent.parent if windows else capture.parent, "--config", "Release", "--target", "FlowBridgeCapture"])
     payload = ROOT / "build/payload"
-    files = [(gui, "FlowBridge.exe"), (rust / "flowbridge.exe", "flowbridge-cli.exe"),
+    files = [(gui, "FlowBridge.exe"), (capture, "FlowBridgeCapture.exe"), (rust / "flowbridge.exe", "flowbridge-cli.exe"),
              (rust / "flowbridge_ffi.dll", "flowbridge_ffi.dll"), (ROOT / "LICENSE", "LICENSE"),
              (ROOT / "packaging/windows/README.txt", "README.txt"),
              (ROOT / "third_party/nlohmann/LICENSE.MIT", "licenses/nlohmann-json-LICENSE.MIT"),
@@ -100,7 +111,7 @@ def main():
     digest = hashlib.sha256(installer.read_bytes()).hexdigest()
     (output / (installer.name + ".sha256")).write_text(f"{digest}  {installer.name}\n")
     report = {"version": VERSION, "installer": str(installer), "bytes": installer.stat().st_size,
-              "sha256": digest, "signed": False, "bootstrapper_machine": f"0x{installer_machine:04x}", "payload_architecture": "x86_64", "mode": "explicit_socks5_with_optional_managed_ssh", "payload": entries}
+              "sha256": digest, "signed": False, "bootstrapper_machine": f"0x{installer_machine:04x}", "payload_architecture": "x86_64", "mode": "explicit_socks5_and_optional_elevated_native_capture", "native_capture_helper_included": True, "wfp_kernel_driver_included": False, "wfp_driver_runtime_accepted": False, "payload": entries}
     (ROOT / "docs/verification/windows-package.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps({key: value for key, value in report.items() if key != "payload"}, indent=2))
 

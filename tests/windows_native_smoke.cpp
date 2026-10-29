@@ -18,6 +18,7 @@
 #include "flowbridge.h"
 #include "nlohmann/json.hpp"
 #include "../native/windows/native_profile.hpp"
+#include "../native/windows/capture_launcher.hpp"
 
 using Json = nlohmann::json;
 using namespace std::chrono_literals;
@@ -99,6 +100,24 @@ static void nativeTemplateTest(){
     auto blocked=native_profile::build(profile,{"C:\\Apps\\Claude.exe"},"ssh",true);need(blocked["default_action"]["type"]=="block","explicit block-other option missing");
     std::puts("PASS native template export: basenames, deduplication, selected unknown hosts via proxy, other apps Direct, optional Block");
 }
+static void nativeLauncherArgumentTest() {
+    wchar_t module[32768]{};DWORD count=GetModuleFileNameW(nullptr,module,32768);
+    need(count&&count<32768,"test helper path unavailable");
+    auto testApp=std::wstring(module,count);
+    const auto event=L"Local\\FlowBridgeCaptureStop-{12345678-1234-1234-1234-123456789012}";
+    auto params=capture_launcher::arguments(L"C:\\Users\\Test User\\profile.json",L"",{testApp},42,event);
+    need(params.find(L"--gui-owner 42")!=std::wstring::npos,"GUI lifetime argument missing");
+    need(params.find(L"--capture-app ")!=std::wstring::npos,"Selected process path missing");
+    need(params.find(L"--stop-event ")!=std::wstring::npos,"Stop event argument missing");
+    need(capture_launcher::quote(L"C:\\A B\\") == L"\"C:\\A B\\\\\"", "Windows backslash quoting incorrect");
+    bool rejected=false;
+    try {capture_launcher::arguments(L"relative.json",L"",{testApp},42,event);} catch(const std::exception&) {rejected=true;}
+    need(rejected,"Relative elevated configuration accepted");
+    rejected=false;
+    try {capture_launcher::arguments(L"C:\\profile.json",L"",{L"relative.exe"},42,event);} catch(const std::exception&) {rejected=true;}
+    need(rejected,"Relative capture executable accepted");
+    std::puts("PASS native capture launcher: full-path selection, quoted parameters, GUI owner and validation");
+}
 static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
     STARTUPINFOW start{}; start.cb=sizeof(start); PROCESS_INFORMATION process{};
     std::wstring command=L"\""+std::wstring(executable)+L"\"";
@@ -132,7 +151,8 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
         edit(GetDlgItem(window,231),"server.example");edit(GetDlgItem(window,233),"testuser");edit(GetDlgItem(window,236),std::to_string(port));click(window,startId);
         need(windowText(GetDlgItem(window,280)).find(L"должны отличаться")!=std::wstring::npos,"managed SSH allowed ingress/local-port collision");need(IsWindowEnabled(GetDlgItem(window,startId)),"collision rejection left start pending");
         edit(GetDlgItem(window,236),"1080");SendMessageW(GetDlgItem(window,modeId),CB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(modeId,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,modeId)));edit(GetDlgItem(window,editorId),changed.dump());
-        click(window,202);waitFor([&]{return IsWindowEnabled(GetDlgItem(window,260));},"bounded application discovery did not finish");
+        click(window,202);need(IsWindow(GetDlgItem(window,282))&&IsWindow(GetDlgItem(window,283))&&IsWindow(GetDlgItem(window,284)),"Native capture GUI controls absent");
+        waitFor([&]{return IsWindowEnabled(GetDlgItem(window,260));},"bounded application discovery did not finish");
         need(IsWindowVisible(GetDlgItem(window,261)),"application discovery table hidden");
         click(window,262);click(window,263);click(window,264);need(SendMessageW(GetDlgItem(window,267),BM_GETCHECK,0,0)==BST_UNCHECKED,"native template unexpectedly blocks other apps by default");
         click(window,200);
@@ -144,6 +164,6 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
 }
 int wmain(int argc,wchar_t** argv) {
     WSADATA data{}; if(WSAStartup(MAKEWORD(2,2),&data)) return 1;
-    try { abiTest();nativeTemplateTest(); if(argc>=2) guiTest(argv[1],argc>=3?argv[2]:nullptr); WSACleanup(); return 0; }
+    try { abiTest();nativeTemplateTest();nativeLauncherArgumentTest(); if(argc>=2) guiTest(argv[1],argc>=3?argv[2]:nullptr); WSACleanup(); return 0; }
     catch(const std::exception& error) { std::fprintf(stderr,"FAIL: %s\n",error.what()); WSACleanup(); return 1; }
 }
