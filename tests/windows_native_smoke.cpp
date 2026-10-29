@@ -405,14 +405,39 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
              explicitExe.data(),static_cast<int>(explicitExe.size()),expectedUtf8.data(),
              utf8Bytes,nullptr,nullptr)==utf8Bytes,"UTF-8 SSH executable conversion failed");
         click(window,240);
-        waitFor([&]{
+        auto matchesSavedExe=[&]{
             try {
                 std::ifstream in(desktopFile,std::ios::binary);
                 if(!in)return false;
                 auto value=Json::parse(in);
                 return value["ssh"]["ssh_executable"]==expectedUtf8;
             }catch(const std::exception&){return false;}
-        },"User-selected absolute OpenSSH exe path was not persisted");
+        };
+        try {
+            waitFor(matchesSavedExe,"User-selected absolute OpenSSH exe path was not persisted");
+        }catch(const std::exception&){
+            // Report only sanitized state, not private usernames or paths.
+            std::string actualType="unavailable";
+            std::size_t actualSize=0;
+            try {
+                std::ifstream in(desktopFile,std::ios::binary);
+                Json actual=Json::parse(in);
+                actualType=actual["ssh"]["ssh_executable"].type_name();
+                if(actual["ssh"]["ssh_executable"].is_string())
+                    actualSize=actual["ssh"]["ssh_executable"].get<std::string>().size();
+            }catch(const std::exception&){}
+            const auto banner=windowText(GetDlgItem(window,280));
+            const int bytes=WideCharToMultiByte(CP_UTF8,0,banner.data(),
+                static_cast<int>(banner.size()),nullptr,0,nullptr,nullptr);
+            std::string encoded(bytes>0?static_cast<std::size_t>(bytes):0,'\0');
+            if(bytes>0)WideCharToMultiByte(CP_UTF8,0,banner.data(),
+                static_cast<int>(banner.size()),encoded.data(),bytes,nullptr,nullptr);
+            std::fprintf(stderr,
+                "SSH backend save diagnosis: enabled=%d, observed_type=%s, actual_size=%zu, expected_size=%zu, banner=%s\n",
+                IsWindowEnabled(GetDlgItem(window,240))?1:0,actualType.c_str(),
+                actualSize,expectedUtf8.size(),encoded.c_str());
+            throw;
+        }
         edit(GetDlgItem(window,286),"");
         click(window,240);
         waitFor([&]{
