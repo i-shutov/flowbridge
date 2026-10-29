@@ -125,7 +125,7 @@ def verify_stub(abi, ident):
     until(closed, 2)
 
 
-def actual_ssh(abi, profile, endpoint, ssh_id):
+def actual_ssh(abi, profile, endpoint, ssh_id, *, limits=None):
     configure(abi)
     servers = abi.call('fb_ssh_remote_dns_json', ssh_id)
     require(servers['source'] == 'remote_resolv_conf' and servers['servers'], 'Remote resolver discovery failed')
@@ -134,6 +134,8 @@ def actual_ssh(abi, profile, endpoint, ssh_id):
     try:
         options = {'managed_endpoint': endpoint, 'ready': True, 'ready_lease_ms': 10000,
                    'dns': {'resolver': {'host': '127.0.0.1', 'port': resolver.server_address[1]}, 'timeout_ms': 3000}}
+        if limits is not None:
+            options['limits'] = limits
         ident = abi.call('fb_native_create_json', profile, options)['session_id']
         message = query()
         result = abi.call('fb_native_dns_exchange_json', ident, {'query': list(message)})
