@@ -20,6 +20,7 @@
 #include "redirect_io.h"
 #include "control.h"
 #include "listener_owner.hpp"
+#include "../profile_integrity.hpp"
 #include "flowbridge.h"
 #include "nlohmann/json.hpp"
 using Json=nlohmann::json;
@@ -32,6 +33,7 @@ std::wstring profilePath, sshProfilePath;
 std::vector<std::wstring> bypassPaths, capturePaths;
 DWORD guiOwnerPid=0;
 std::wstring guiStopName;
+std::string guiProfileSha256;
 // The lifetime guard is optional in service/console developer mode. It is
 // mandatory for a GUI-owned elevated helper, including UAC race and GUI crash.
 class GuiLifetime {
@@ -216,6 +218,9 @@ void run() {
     if(!input || std::filesystem::file_size(profilePath)>1024*1024) throw std::runtime_error("Profile unavailable or exceeds 1 MiB");
     std::string config((std::istreambuf_iterator<char>(input)),{});
     if(input.bad() || config.size()>1024*1024 || config.find('\0')!=std::string::npos) throw std::runtime_error("Invalid profile file");
+    if(guiOwnerPid &&
+       !profile_integrity::identical(guiProfileSha256,profile_integrity::sha256(config)))
+        throw std::runtime_error("GUI native profile SHA-256 mismatch across UAC; refusing elevated capture");
     response(fb_validate_json(config.c_str()));
     auto j=Json::parse(config);
     std::string guiListenerHost;
@@ -355,6 +360,14 @@ int wmain(int argc,wchar_t** argv) {
                 guiOwnerPid=static_cast<DWORD>(number);
             }
             else if(arg==L"--stop-event" && i+1<argc) guiStopName=argv[++i];
+            else if(arg==L"--profile-sha256" && i+1<argc) {
+                const auto hash=std::wstring(argv[++i]);
+                if(hash.size()!=64 ||
+                   !std::all_of(hash.begin(),hash.end(),[](wchar_t c){
+                       return (c>=L'0'&&c<=L'9')||(c>=L'a'&&c<=L'f');
+                   })) throw std::runtime_error("Invalid profile SHA-256");
+                guiProfileSha256.assign(hash.begin(),hash.end());
+            }
             else if(arg==L"--bypass" && i+1<argc) bypassPaths.emplace_back(argv[++i]);
             else throw std::runtime_error("Usage: FlowBridgeCapture --console|--service --profile ABSOLUTE_PATH --capture-app ABSOLUTE_EXE_PATH [--capture-app ...] [--ssh-profile ABSOLUTE_PATH] [--bypass ABSOLUTE_EXE_PATH]...");
         }
@@ -366,6 +379,10 @@ int wmain(int argc,wchar_t** argv) {
         // SOCKS endpoint; standalone developer/service mode is separate.
         if(guiOwnerPid&&!sshProfilePath.empty())
             throw std::runtime_error("GUI-owned capture must reuse the unelevated SSH session; --ssh-profile is forbidden");
+        if(guiOwnerPid && !profile_integrity::valid(guiProfileSha256))
+            throw std::runtime_error("GUI capture requires an exact profile SHA-256");
+        if(!guiOwnerPid && !guiProfileSha256.empty())
+            throw std::runtime_error("Profile SHA-256 belongs to GUI-owned capture only");
         if(console==service || profilePath.empty() || !std::filesystem::path(profilePath).is_absolute()) throw std::runtime_error("Choose one run mode and an absolute administrator-controlled profile path");
         if(capturePaths.empty() || capturePaths.size()>64) throw std::runtime_error("Select 1..64 capture executables with --capture-app; whole-machine capture is not implicit");
         for(const auto& p:capturePaths) if(!std::filesystem::path(p).is_absolute() || !std::filesystem::is_regular_file(p)) throw std::runtime_error("Capture executable must be an existing absolute path");

@@ -421,7 +421,7 @@ void startNativeCapture(){
     std::vector<std::wstring> apps;apps.reserve(selectedApps.size());
     for(const auto& path:selectedApps)apps.push_back(wide(path));
     // GUI-originated native capture MUST pass an empty --ssh-profile.
-    nativeCapture.start(nativeProfile.wstring(),L"",apps,bypass);
+    nativeCapture.start(nativeProfile.wstring(),L"",apps,bypass,profile_integrity::sha256(value));
     saveDesktop();
     setText(GetDlgItem(window,CaptureStatus),
         managed?"WFP helper запускается через UAC; SSH и ключи остаются в обычном процессе FlowBridge."

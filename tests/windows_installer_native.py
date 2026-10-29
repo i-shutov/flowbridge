@@ -5,11 +5,13 @@ Refuses non-CI machines and any pre-existing registered FlowBridge installation.
 The installed GUI is tested through the real Win32/network integration harness.
 """
 import argparse
+import ctypes
 import hashlib
 import json
 import os
 from pathlib import Path
 import subprocess
+import socket
 import struct
 import sys
 import tempfile
@@ -135,6 +137,90 @@ def main():
                 "GUI-owned capture must reuse the unelevated SSH session" in rejected_ssh.stdout,
                 "Installed privileged helper accepted GUI-owned SSH execution")
         passed("Installed helper refuses privileged SSH launch for GUI-owned capture")
+        # Create a genuine user-owned stop event so the installed helper reaches
+        # its profile digest guard. The wrong digest must fail before any WFP
+        # device/open or network redirect, even without a test driver.
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.CreateEventW.argtypes = [ctypes.c_void_p, ctypes.c_int,
+                                        ctypes.c_int, ctypes.c_wchar_p]
+        kernel.CreateEventW.restype = ctypes.c_void_p
+        kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+        kernel.CloseHandle.restype = ctypes.c_int
+        stop_name = "Local\\FlowBridgeCaptureStop-InstallerQA-" + str(os.getpid())
+        event = kernel.CreateEventW(None, True, False, stop_name)
+        require(event, "Could not create installer QA stop event")
+        try:
+            invalid_digest = subprocess.run(
+                [str(capture), "--console", "--profile",
+                 str(install / "examples/direct.json"), "--capture-app",
+                 str(install / "FlowBridge.exe"), "--gui-owner", str(os.getpid()),
+                 "--stop-event", stop_name, "--profile-sha256", "0" * 64],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                timeout=10, text=True)
+            require(invalid_digest.returncode != 0 and
+                    "GUI native profile SHA-256 mismatch" in invalid_digest.stdout,
+                    "Installed helper accepted a modified profile across UAC")
+            # Exercise the real helper's Windows TCP owner attestation without
+            # loading a driver. A child PID must not inherit the parent's
+            # ability to route via a local listening SOCKS-like endpoint.
+            with socket.socket(socket.AF_INET,socket.SOCK_STREAM) as listener:
+                listener.bind(("127.0.0.1",0))
+                listener.listen(4)
+                listen_port=listener.getsockname()[1]
+                selected_exe=install / "FlowBridge.exe"
+                isolated = {
+                    "version": 1, "listen": "127.0.0.1:1",
+                    "proxies": [{"id":"gui-owned-socks","kind":"socks5",
+                                 "endpoint":{"host":"127.0.0.1","port":listen_port},
+                                 "username":None,"password_env":None}],
+                    "chains": [],
+                    "rules": [{"id":"selected-applications","enabled":True,
+                               "applications":["flowbridge.exe"],
+                               "hosts":[],"networks":[],"ports":[],
+                               "action":{"type":"proxy","id":"gui-owned-socks"}}],
+                    "default_action":{"type":"direct"},
+                    "connect_timeout_ms":3000,"handshake_timeout_ms":3000,
+                    "idle_timeout_ms":5000,"max_connections":2}
+                isolated_file=root / "pinned-user-socks.json"
+                isolated_bytes=json.dumps(isolated).encode("utf-8")
+                isolated_file.write_bytes(isolated_bytes)
+                verified_sha=hashlib.sha256(isolated_bytes).hexdigest()
+                fake_owner=subprocess.Popen(
+                    [sys.executable,"-c","import time;time.sleep(30)"],
+                    stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+                    creationflags=subprocess.CREATE_NO_WINDOW)
+                try:
+                    denied=subprocess.run(
+                        [str(capture),"--console","--profile",str(isolated_file),
+                         "--capture-app",str(selected_exe),
+                         "--gui-owner",str(fake_owner.pid),
+                         "--stop-event",stop_name,"--profile-sha256",verified_sha],
+                        stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+                        text=True,timeout=12)
+                    require(denied.returncode!=0 and
+                            "GUI-owned SOCKS listener is not bound by the expected FlowBridge GUI process" in denied.stdout,
+                            "Elevated WFP helper trusted a different process's local listener")
+                finally:
+                    fake_owner.terminate()
+                    fake_owner.wait(timeout=5)
+                passed("Installed helper rejects a SOCKS listener owned by another PID")
+                if preflight["kernel_driver_accessible"] is False:
+                    # Reaching the missing-driver rejection demonstrates that
+                    # the exact parent PID/listener pair passed the OS check.
+                    verified=subprocess.run(
+                        [str(capture),"--console","--profile",str(isolated_file),
+                         "--capture-app",str(selected_exe),
+                         "--gui-owner",str(os.getpid()),
+                         "--stop-event",stop_name,"--profile-sha256",verified_sha],
+                        stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+                        text=True,timeout=12)
+                    require(verified.returncode!=0 and
+                            "Open signed WFP driver" in verified.stdout,
+                            "Expected parent-owned SOCKS listener failed attestation or activated an unexpected driver")
+                    passed("Installed helper accepts exact GUI PID and port before honest missing-driver failure")
+        finally:
+            kernel.CloseHandle(event)
+        passed("Installed helper pins exact profile SHA-256 before opening the WFP driver")
         text = run([str(args.harness.resolve()), str(install / "FlowBridge.exe"),
                     str((args.output / "installed-ui.bmp").resolve())])
         require("PASS Win32 GUI" in text and "PASS Windows DLL" in text, "GUI smoke incomplete")
