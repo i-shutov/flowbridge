@@ -398,7 +398,20 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
         // persistence, never launches the selected program as a tunnel.
         need(SetWindowTextW(GetDlgItem(window,286),explicitExe.c_str())!=0,
              "Optional SSH binary field refused absolute path input");
-        need(windowText(GetDlgItem(window,286))==explicitExe,
+        const auto observedExe=windowText(GetDlgItem(window,286));
+        if(observedExe!=explicitExe){
+            std::size_t first=0;
+            while(first<std::min(observedExe.size(),explicitExe.size()) &&
+                  observedExe[first]==explicitExe[first])++first;
+            std::fprintf(stderr,
+                "SSH exe field diagnosis: expected_utf16_units=%zu actual_utf16_units=%zu first_diff=%zu expected_cp=%u actual_cp=%u visible=%d enabled=%d\n",
+                explicitExe.size(),observedExe.size(),first,
+                first<explicitExe.size()?static_cast<unsigned>(explicitExe[first]):0,
+                first<observedExe.size()?static_cast<unsigned>(observedExe[first]):0,
+                IsWindowVisible(GetDlgItem(window,286))?1:0,
+                IsWindowEnabled(GetDlgItem(window,286))?1:0);
+        }
+        need(observedExe==explicitExe,
              "Optional SSH binary edit control truncated or altered absolute path");
         const int utf8Bytes=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,
             explicitExe.data(),static_cast<int>(explicitExe.size()),nullptr,0,nullptr,nullptr);
