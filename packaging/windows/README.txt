@@ -95,3 +95,15 @@ flowbridge-cli.exe --help показывает доступные команды
 Пакет не подписан, если дистрибьютор отдельно не подписал его бинарные файлы.
 Это настоящий Win32 GUI с Rust C ABI; кросс-компиляция и Wine не заменяют
 проверку на настоящей Windows и проверки подписанного нативного backend.
+
+INTERNAL BETA CAPTURE HELPER
+FlowBridgeCapture.exe is included as a user-invoked UAC helper. It does not
+install, enable, trust, or sign a Windows kernel driver. The regular NSIS
+installer leaves system filter policy, driver services and DNS untouched.
+In the Applications tab choose an installed EXE, then Native capture. The
+helper requires the separately installed, approved WFP kernel callout; when
+missing, its console reports a driver failure and exits. Closing the GUI or
+pressing Stop signals the helper to remove this process's dynamic filters.
+Other applications are not covered by the selected-EXE capture filter.
+Do not confuse a successful GUI/helper build with real driver redirection QA.
+For a read-only check run: FlowBridgeCapture.exe --preflight

@@ -106,6 +106,7 @@ Section "FlowBridge" SEC_MAIN
   ${EndIf}
   SetOutPath "$INSTDIR"
   File "${PAYLOAD_DIR}${HOST_SEP}FlowBridge.exe"
+  File "${PAYLOAD_DIR}${HOST_SEP}FlowBridgeCapture.exe"
   File "${PAYLOAD_DIR}${HOST_SEP}flowbridge_ffi.dll"
   File "${PAYLOAD_DIR}${HOST_SEP}flowbridge-cli.exe"
   File "${PAYLOAD_DIR}${HOST_SEP}LICENSE"
@@ -140,6 +141,7 @@ Section "Uninstall"
   ; Explicit known files only. Never recursively delete user-selected directories,
   ; profile data, or files the user added to the installation directory.
   Delete "$INSTDIR\FlowBridge.exe"
+  Delete "$INSTDIR\FlowBridgeCapture.exe"
   Delete "$INSTDIR\flowbridge_ffi.dll"
   Delete "$INSTDIR\flowbridge-cli.exe"
   Delete "$INSTDIR\LICENSE"

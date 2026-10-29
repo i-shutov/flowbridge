@@ -1,6 +1,7 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
+#include <winioctl.h>
 #include <atomic>
 #include <array>
 #include <algorithm>
@@ -17,6 +18,7 @@
 #include <vector>
 #include "capture.h"
 #include "redirect_io.h"
+#include "control.h"
 #include "flowbridge.h"
 #include "nlohmann/json.hpp"
 using Json=nlohmann::json;
@@ -27,6 +29,33 @@ SERVICE_STATUS_HANDLE statusHandle=nullptr;
 std::mutex statusLock, logLock;
 std::wstring profilePath, sshProfilePath;
 std::vector<std::wstring> bypassPaths, capturePaths;
+DWORD guiOwnerPid=0;
+std::wstring guiStopName;
+// The lifetime guard is optional in service/console developer mode. It is
+// mandatory for a GUI-owned elevated helper, including UAC race and GUI crash.
+class GuiLifetime {
+    HANDLE owner_=nullptr, stop_=nullptr;
+    std::thread monitor_;
+public:
+    GuiLifetime() {
+        if(!guiOwnerPid)return;
+        if(guiStopName.rfind(L"Local\\FlowBridgeCaptureStop-",0)!=0 || guiStopName.size()>128)
+            throw std::runtime_error("Invalid GUI capture stop event");
+        owner_=OpenProcess(SYNCHRONIZE,FALSE,guiOwnerPid);
+        stop_=OpenEventW(SYNCHRONIZE,FALSE,guiStopName.c_str());
+        if(!owner_||!stop_){if(owner_)CloseHandle(owner_);if(stop_)CloseHandle(stop_);owner_=stop_=nullptr;
+            throw std::runtime_error("Capture GUI owner or stop event is unavailable");}
+        monitor_=std::thread([this]{
+            while(!stopping) {
+                if(WaitForSingleObject(owner_,0)!=WAIT_TIMEOUT ||
+                   WaitForSingleObject(stop_,0)!=WAIT_TIMEOUT){stopping=true;return;}
+                Sleep(50);
+            }
+        });
+    }
+    ~GuiLifetime(){stopping=true;if(monitor_.joinable())monitor_.join();
+        if(stop_)CloseHandle(stop_);if(owner_)CloseHandle(owner_);}
+};
 void log(const Json& event) noexcept {
     try { std::lock_guard<std::mutex> guard(logLock); auto line=event.dump()+"\n";
         std::cerr<<line; OutputDebugStringA(line.c_str()); } catch (...) {}
@@ -260,13 +289,29 @@ void WINAPI serviceMain(DWORD,wchar_t**) {
     statusHandle=RegisterServiceCtrlHandlerExW(ServiceName,control,nullptr);
     if(!statusHandle) return;
     report(SERVICE_START_PENDING);
-    try {run();report(SERVICE_STOPPED);}
+    try {GuiLifetime lifetime;run();report(SERVICE_STOPPED);}
     catch(const std::exception& e) {log({{"event","faulted"},{"error",e.what()}});report(SERVICE_STOPPED,ERROR_SERVICE_SPECIFIC_ERROR);}
 }
 }
 int wmain(int argc,wchar_t** argv) {
     bool console=false,service=false;
     try {
+        if(argc==2 && std::wstring(argv[1])==L"--preflight") {
+            // Read-only device query; presence is not interception acceptance.
+            HANDLE driver=CreateFileW(FB_WFP_DEVICE,GENERIC_READ|GENERIC_WRITE,0,nullptr,OPEN_EXISTING,0,nullptr);
+            DWORD code=driver==INVALID_HANDLE_VALUE?GetLastError():0;
+            bool valid=false;
+            if(driver!=INVALID_HANDLE_VALUE){
+                FbWfpStatus info{};DWORD got=0;
+                valid=DeviceIoControl(driver,FB_IOCTL_QUERY,nullptr,0,&info,sizeof(info),&got,nullptr)
+                    && got==sizeof(info)&&info.size==sizeof(info)&&info.version==FB_WFP_ABI;
+                if(!valid)code=GetLastError();CloseHandle(driver);
+            }
+            std::cout<<Json{{"product","FlowBridgeCapture"},{"native_helper",true},
+                 {"kernel_driver_accessible",valid},{"driver_error_code",code},
+                 {"redirect_runtime_tested",false},{"driver_auto_installed",false}}.dump()<<std::endl;
+            return 0;
+        }
         for(int i=1;i<argc;++i) {
             std::wstring arg=argv[i];
             if(arg==L"--console") console=true;
@@ -274,9 +319,20 @@ int wmain(int argc,wchar_t** argv) {
             else if(arg==L"--profile" && i+1<argc) profilePath=argv[++i];
             else if(arg==L"--ssh-profile" && i+1<argc) sshProfilePath=argv[++i];
             else if(arg==L"--capture-app" && i+1<argc) capturePaths.emplace_back(argv[++i]);
+            else if(arg==L"--gui-owner" && i+1<argc) {
+                auto value=std::wstring(argv[++i]);
+                if(value.empty()||!std::all_of(value.begin(),value.end(),[](wchar_t c){return c>=L'0'&&c<=L'9';}))
+                    throw std::runtime_error("Invalid GUI owner process ID");
+                auto number=std::stoull(value);
+                if(number==0||number>0xffffffffULL)throw std::runtime_error("Invalid GUI process ID");
+                guiOwnerPid=static_cast<DWORD>(number);
+            }
+            else if(arg==L"--stop-event" && i+1<argc) guiStopName=argv[++i];
             else if(arg==L"--bypass" && i+1<argc) bypassPaths.emplace_back(argv[++i]);
             else throw std::runtime_error("Usage: FlowBridgeCapture --console|--service --profile ABSOLUTE_PATH --capture-app ABSOLUTE_EXE_PATH [--capture-app ...] [--ssh-profile ABSOLUTE_PATH] [--bypass ABSOLUTE_EXE_PATH]...");
         }
+        if((guiOwnerPid==0)!=guiStopName.empty())throw std::runtime_error("GUI owner and stop event must be provided together");
+        if(service&&guiOwnerPid)throw std::runtime_error("SCM-managed helper cannot accept a GUI owner");
         if(console==service || profilePath.empty() || !std::filesystem::path(profilePath).is_absolute()) throw std::runtime_error("Choose one run mode and an absolute administrator-controlled profile path");
         if(capturePaths.empty() || capturePaths.size()>64) throw std::runtime_error("Select 1..64 capture executables with --capture-app; whole-machine capture is not implicit");
         for(const auto& p:capturePaths) if(!std::filesystem::path(p).is_absolute() || !std::filesystem::is_regular_file(p)) throw std::runtime_error("Capture executable must be an existing absolute path");
@@ -285,7 +341,7 @@ int wmain(int argc,wchar_t** argv) {
         wchar_t self[32768]{}; DWORD length=GetModuleFileNameW(nullptr,self,32768);
         if(!length || length>=32768) throw std::runtime_error("Service executable identity unavailable");
         bypassPaths.emplace_back(self,length);
-        if(console) {SetConsoleCtrlHandler(consoleControl,TRUE);run();return 0;}
+        if(console) {SetConsoleCtrlHandler(consoleControl,TRUE);GuiLifetime lifetime;run();return 0;}
         SERVICE_TABLE_ENTRYW table[]={{const_cast<wchar_t*>(ServiceName),serviceMain},{nullptr,nullptr}};
         if(!StartServiceCtrlDispatcherW(table)) throw std::runtime_error("SCM dispatcher failed: "+std::to_string(GetLastError()));
         return 0;

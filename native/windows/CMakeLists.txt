@@ -23,8 +23,8 @@ elseif(MINGW)
   target_compile_options(FlowBridge PRIVATE -Wall -Wextra -Wpedantic)
   target_link_options(FlowBridge PRIVATE -municode -static -static-libgcc -static-libstdc++)
 endif()
-# The WFP adapter is built for source integration only. It is not installed or
-# activated by this GUI. A signed driver and separate validation gate are needed.
+# The optional capture helper is packaged independently (without its kernel
+# driver). The GUI elevation request explicitly requires user approval.
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/wfp/redirect_io.cpp")
   add_library(flowbridge_wfp STATIC wfp/redirect_io.cpp)
   target_compile_definitions(flowbridge_wfp PUBLIC WIN32_LEAN_AND_MEAN NOMINMAX _WIN32_WINNT=0x0A00)
@@ -36,7 +36,7 @@ option(FLOWBRIDGE_BUILD_NATIVE_TESTS "Build Win32 ABI and GUI smoke harness (dis
 if(FLOWBRIDGE_BUILD_NATIVE_TESTS)
   add_executable(FlowBridgeNativeSmoke ../../tests/windows_native_smoke.cpp)
   target_include_directories(FlowBridgeNativeSmoke PRIVATE ../include ../../third_party)
-  target_link_libraries(FlowBridgeNativeSmoke PRIVATE flowbridge_ffi Threads::Threads ws2_32 user32 gdi32 comctl32 userenv bcrypt ntdll)
+  target_link_libraries(FlowBridgeNativeSmoke PRIVATE flowbridge_ffi Threads::Threads ws2_32 user32 gdi32 comctl32 userenv bcrypt ntdll shell32 ole32)
   if(MSVC)
     target_compile_options(FlowBridgeNativeSmoke PRIVATE /W4 /utf-8)
     set_property(TARGET FlowBridgeNativeSmoke PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")

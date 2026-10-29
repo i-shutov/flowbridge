@@ -18,6 +18,7 @@
 #include "flowbridge.h"
 #include "nlohmann/json.hpp"
 #include "../native/windows/native_profile.hpp"
+#include "../native/windows/capture_launcher.hpp"
 
 using Json = nlohmann::json;
 using namespace std::chrono_literals;
@@ -99,6 +100,91 @@ static void nativeTemplateTest(){
     auto blocked=native_profile::build(profile,{"C:\\Apps\\Claude.exe"},"ssh",true);need(blocked["default_action"]["type"]=="block","explicit block-other option missing");
     std::puts("PASS native template export: basenames, deduplication, selected unknown hosts via proxy, other apps Direct, optional Block");
 }
+static void nativeLauncherArgumentTest() {
+    wchar_t module[32768]{};DWORD count=GetModuleFileNameW(nullptr,module,32768);
+    need(count&&count<32768,"test helper path unavailable");
+    auto testApp=std::wstring(module,count);
+    const auto event=L"Local\\FlowBridgeCaptureStop-{12345678-1234-1234-1234-123456789012}";
+    auto params=capture_launcher::arguments(L"C:\\Users\\Test User\\profile.json",L"",{testApp},42,event);
+    need(params.find(L"--gui-owner 42")!=std::wstring::npos,"GUI lifetime argument missing");
+    need(params.find(L"--capture-app ")!=std::wstring::npos,"Selected process path missing");
+    need(params.find(L"--stop-event ")!=std::wstring::npos,"Stop event argument missing");
+    need(capture_launcher::quote(L"C:\\A B\\") == L"\"C:\\A B\\\\\"", "Windows backslash quoting incorrect");
+    bool rejected=false;
+    try {capture_launcher::arguments(L"relative.json",L"",{testApp},42,event);} catch(const std::exception&) {rejected=true;}
+    need(rejected,"Relative elevated configuration accepted");
+    rejected=false;
+    try {capture_launcher::arguments(L"C:\\profile.json",L"",{L"relative.exe"},42,event);} catch(const std::exception&) {rejected=true;}
+    need(rejected,"Relative capture executable accepted");
+    std::puts("PASS native capture launcher: full-path selection, quoted parameters, GUI owner and validation");
+}
+// Use client coordinates rather than comparing screen rectangles. These
+// assertions exercise actual Win32 child placement at the smallest supported
+// desktop size instead of accepting a cropped screenshot as visual QA.
+static RECT childBounds(HWND window,int id) {
+    HWND child=GetDlgItem(window,id);
+    need(child&&IsWindow(child),"Compact GUI control is missing");
+    RECT rect{};need(GetWindowRect(child,&rect)!=0,"Cannot measure compact GUI child");
+    MapWindowPoints(nullptr,window,reinterpret_cast<POINT*>(&rect),2);
+    return rect;
+}
+static void assertCompactLayout(HWND window) {
+    need(SetWindowPos(window,nullptr,0,0,980,680,SWP_NOMOVE|SWP_NOZORDER)!=0,
+         "Could not resize the GUI to compact Windows desktop");
+    RECT client{};GetClientRect(window,&client);
+    need(client.right>=920&&client.bottom>=600,"Compact window minimum client area not reached");
+    auto inside=[&](int id){
+        auto r=childBounds(window,id);
+        need(r.left>=0&&r.top>=0&&r.right<=client.right&&r.bottom<=client.bottom,
+             "Compact GUI child lies outside the viewport");
+        return r;
+    };
+    click(window,200);
+    const auto connections=inside(110);
+    const auto dashboardHelp=inside(209);
+    need(connections.bottom+6<=dashboardHelp.top,"Dashboard connection list obscures help");
+    click(window,201);
+    HWND mode=GetDlgItem(window,230);
+    SendMessageW(mode,CB_SETCURSEL,1,0);
+    SendMessageW(window,WM_COMMAND,MAKEWPARAM(230,CBN_SELCHANGE),reinterpret_cast<LPARAM>(mode));
+    need(IsWindowVisible(GetDlgItem(window,2010))&&
+         IsWindowVisible(GetDlgItem(window,2015))&&
+         IsWindowVisible(GetDlgItem(window,243)),
+         "Managed SSH labels or help disappeared when switching modes");
+    const auto sshHelp=inside(243);
+    const auto save=inside(240);
+    inside(246); // Last managed-SSH timeout field
+    need(sshHelp.bottom+6<=save.top,"Managed SSH form overlaps Save button");
+    SendMessageW(mode,CB_SETCURSEL,0,0);
+    SendMessageW(window,WM_COMMAND,MAKEWPARAM(230,CBN_SELCHANGE),reinterpret_cast<LPARAM>(mode));
+    need(IsWindowVisible(GetDlgItem(window,2000))&&
+         IsWindowVisible(GetDlgItem(window,2003))&&
+         !IsWindowVisible(GetDlgItem(window,243)),
+         "External proxy labels or managed-SSH help were shown in the wrong mode");
+    click(window,202);
+    const auto preset=inside(264);
+    const auto discover=inside(260);
+    need(preset.right+6<=discover.left,"Application presets overlap the Discover button");
+    const auto apps=inside(261);
+    const auto hint=inside(2018);
+    need(apps.bottom+6<=hint.top,"Application table overlaps its footer");
+    const auto start=inside(282),stop=inside(283),exported=inside(266);
+    need(start.right+6<=stop.left&&stop.right+6<=exported.left,
+         "Native capture actions overlap at compact width");
+    need(exported.bottom<=client.bottom,"Native capture actions are clipped");
+    click(window,203);
+    inside(109);inside(111); // JSON editor and log
+    click(window,200);
+    // Opening the Applications page can launch the real bounded discovery
+    // worker. Await its completion before the subsequent Apply/Start smoke:
+    // otherwise the legitimate busy gate rejects Apply and causes a false
+    // GUI regression unrelated to geometry.
+    waitFor([&]{
+        return IsWindowEnabled(GetDlgItem(window,100)) &&
+               IsWindowEnabled(GetDlgItem(window,260));
+    },"Compact layout triggered discovery which did not return to idle");
+    std::puts("PASS compact Windows GUI: SSH, apps, native capture actions and diagnostics fit 980x680");
+}
 static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
     STARTUPINFOW start{}; start.cb=sizeof(start); PROCESS_INFORMATION process{};
     std::wstring command=L"\""+std::wstring(executable)+L"\"";
@@ -107,6 +193,7 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
     try {
         need(WaitForInputIdle(process.hProcess,8000)==0,"GUI did not finish initialization");
         waitFor([&]{ window=FindWindowW(L"FlowBridgeNativeV02",nullptr); return window!=nullptr; },"GUI window did not appear");
+        assertCompactLayout(window);
         const int startId=100,stopId=101,applyId=102,proxyId=105,hostId=106,protocolId=108,editorId=109,tableId=110,statusId=112;
         const int modeId=230;SendMessageW(GetDlgItem(window,modeId),CB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(modeId,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,modeId)));
         need(IsWindow(GetDlgItem(window,231))&&IsWindow(GetDlgItem(window,234)),"structured SSH editor missing");
@@ -132,7 +219,8 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
         edit(GetDlgItem(window,231),"server.example");edit(GetDlgItem(window,233),"testuser");edit(GetDlgItem(window,236),std::to_string(port));click(window,startId);
         need(windowText(GetDlgItem(window,280)).find(L"должны отличаться")!=std::wstring::npos,"managed SSH allowed ingress/local-port collision");need(IsWindowEnabled(GetDlgItem(window,startId)),"collision rejection left start pending");
         edit(GetDlgItem(window,236),"1080");SendMessageW(GetDlgItem(window,modeId),CB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(modeId,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,modeId)));edit(GetDlgItem(window,editorId),changed.dump());
-        click(window,202);waitFor([&]{return IsWindowEnabled(GetDlgItem(window,260));},"bounded application discovery did not finish");
+        click(window,202);need(IsWindow(GetDlgItem(window,282))&&IsWindow(GetDlgItem(window,283))&&IsWindow(GetDlgItem(window,284)),"Native capture GUI controls absent");
+        waitFor([&]{return IsWindowEnabled(GetDlgItem(window,260));},"bounded application discovery did not finish");
         need(IsWindowVisible(GetDlgItem(window,261)),"application discovery table hidden");
         click(window,262);click(window,263);click(window,264);need(SendMessageW(GetDlgItem(window,267),BM_GETCHECK,0,0)==BST_UNCHECKED,"native template unexpectedly blocks other apps by default");
         click(window,200);
@@ -144,6 +232,6 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
 }
 int wmain(int argc,wchar_t** argv) {
     WSADATA data{}; if(WSAStartup(MAKEWORD(2,2),&data)) return 1;
-    try { abiTest();nativeTemplateTest(); if(argc>=2) guiTest(argv[1],argc>=3?argv[2]:nullptr); WSACleanup(); return 0; }
+    try { abiTest();nativeTemplateTest();nativeLauncherArgumentTest(); if(argc>=2) guiTest(argv[1],argc>=3?argv[2]:nullptr); WSACleanup(); return 0; }
     catch(const std::exception& error) { std::fprintf(stderr,"FAIL: %s\n",error.what()); WSACleanup(); return 1; }
 }

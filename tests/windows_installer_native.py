@@ -110,6 +110,17 @@ def main():
                                     str(install / "examples/direct.json")]).strip())
         require(validated["ok"] is True, "Installed CLI validation failed")
         passed("Installed CLI starts and validates a real profile")
+        # The native helper is included, but no unsigned WFP driver is installed.
+        capture = install / "FlowBridgeCapture.exe"
+        preflight = json.loads(run([str(capture), "--preflight"]).strip())
+        require(preflight["product"] == "FlowBridgeCapture" and preflight["native_helper"] is True,
+                "Native helper preflight did not respond")
+        require(preflight["driver_auto_installed"] is False and
+                preflight["redirect_runtime_tested"] is False,
+                "Installer falsely claims the kernel redirect is accepted")
+        passed("Installed elevated capture helper exposes an honest read-only driver preflight")
+        require(preflight.get("kernel_driver_accessible") in (True, False),
+                "Native driver probe returned an invalid boolean")
         text = run([str(args.harness.resolve()), str(install / "FlowBridge.exe"),
                     str((args.output / "installed-ui.bmp").resolve())])
         require("PASS Win32 GUI" in text and "PASS Windows DLL" in text, "GUI smoke incomplete")
