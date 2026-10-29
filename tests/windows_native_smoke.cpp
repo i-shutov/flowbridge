@@ -147,12 +147,20 @@ static void assertCompactLayout(HWND window) {
     HWND mode=GetDlgItem(window,230);
     SendMessageW(mode,CB_SETCURSEL,1,0);
     SendMessageW(window,WM_COMMAND,MAKEWPARAM(230,CBN_SELCHANGE),reinterpret_cast<LPARAM>(mode));
+    need(IsWindowVisible(GetDlgItem(window,2010))&&
+         IsWindowVisible(GetDlgItem(window,2015))&&
+         IsWindowVisible(GetDlgItem(window,243)),
+         "Managed SSH labels or help disappeared when switching modes");
     const auto sshHelp=inside(243);
     const auto save=inside(240);
     inside(246); // Last managed-SSH timeout field
     need(sshHelp.bottom+6<=save.top,"Managed SSH form overlaps Save button");
     SendMessageW(mode,CB_SETCURSEL,0,0);
     SendMessageW(window,WM_COMMAND,MAKEWPARAM(230,CBN_SELCHANGE),reinterpret_cast<LPARAM>(mode));
+    need(IsWindowVisible(GetDlgItem(window,2000))&&
+         IsWindowVisible(GetDlgItem(window,2003))&&
+         !IsWindowVisible(GetDlgItem(window,243)),
+         "External proxy labels or managed-SSH help were shown in the wrong mode");
     click(window,202);
     const auto preset=inside(264);
     const auto discover=inside(260);
