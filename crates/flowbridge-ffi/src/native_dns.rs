@@ -250,6 +250,14 @@ impl Server {
         })
     }
 }
+// Windows can report WSAEACCES (10013), not only WSAEADDRINUSE,
+// when an ephemeral port is reserved or held exclusively.
+// Explicitly selected ports always return their bind error immediately.
+fn retryable_bind_conflict(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::AddrInUse
+        || (cfg!(windows) && error.raw_os_error() == Some(10013))
+}
+
 async fn bind_pair(
     listen: std::net::SocketAddr,
 ) -> io::Result<(
@@ -257,24 +265,35 @@ async fn bind_pair(
     tokio::net::TcpListener,
     std::net::SocketAddr,
 )> {
-    for _ in 0..16 {
-        // Reserve TCP first: UDP's ephemeral allocator does not know about TCP
-        // listeners or TIME_WAIT. A port-zero request may choose another pair;
-        // an explicit port is never silently changed.
-        let tcp = tokio::net::TcpListener::bind(listen).await?;
+    let mut last_conflict = None;
+    for _ in 0..32 {
+        // TCP/UDP ephemeral port allocators are independent. Reserve TCP
+        // first and request its actual port for UDP. Retry only port-zero
+        // conflicts, retaining the original loopback address and error.
+        let tcp = match tokio::net::TcpListener::bind(listen).await {
+            Ok(tcp) => tcp,
+            Err(error) if listen.port() == 0 && retryable_bind_conflict(&error) => {
+                last_conflict = Some(error);
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
         let address = tcp.local_addr()?;
         match tokio::net::UdpSocket::bind(address).await {
             Ok(udp) => return Ok((udp, tcp, address)),
-            Err(error) if listen.port() == 0 && error.kind() == io::ErrorKind::AddrInUse => {
-                continue
+            Err(error) if listen.port() == 0 && retryable_bind_conflict(&error) => {
+                last_conflict = Some(error);
+                continue;
             }
             Err(error) => return Err(error),
         }
     }
-    Err(io::Error::new(
-        io::ErrorKind::AddrInUse,
-        "No shared TCP/UDP ephemeral port available after 16 attempts",
-    ))
+    Err(last_conflict.unwrap_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::AddrInUse,
+            "No shared TCP/UDP ephemeral port available after 32 attempts",
+        )
+    }))
 }
 impl Drop for Server {
     fn drop(&mut self) {
@@ -452,11 +471,23 @@ mod tests {
             assert_ne!(address.port(), 0);
             assert_eq!(udp.local_addr().unwrap(), address);
             assert_eq!(tcp.local_addr().unwrap(), address);
-            assert_eq!(
-                bind_pair(address).await.unwrap_err().kind(),
-                io::ErrorKind::AddrInUse
-            );
+            // Windows may report either 10048 or 10013 for an exclusive
+            // address conflict. In both cases explicit ports fail closed.
+            assert!(retryable_bind_conflict(
+                &bind_pair(address).await.unwrap_err()
+            ));
         }
+    }
+    #[test]
+    fn retryable_conflicts_are_platform_specific() {
+        assert!(retryable_bind_conflict(&io::Error::from(
+            io::ErrorKind::AddrInUse
+        )));
+        let windows_access = io::Error::from_raw_os_error(10013);
+        assert_eq!(retryable_bind_conflict(&windows_access), cfg!(windows));
+        assert!(!retryable_bind_conflict(&io::Error::from(
+            io::ErrorKind::InvalidInput
+        )));
     }
     #[test]
     fn malformed_wire_never_panics() {
