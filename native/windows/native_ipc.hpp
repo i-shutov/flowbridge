@@ -84,14 +84,14 @@ public:
 class Parent {
     HANDLE pipe_=nullptr,process_=nullptr;
     std::filesystem::path directory_;
-    Json last_=Json::object();ULONGLONG started_=0,observed_=0;
+    Json last_=Json::object();ULONGLONG started_=0,observed_=0;bool verified_=false;
     void write(const wchar_t* name,const Json& value){
         std::ofstream out(directory_/name,std::ios::binary|std::ios::trunc);auto data=value.dump();
         out.write(data.data(),static_cast<std::streamsize>(data.size()));out.close();
         if(!out)throw std::runtime_error("Cannot save native session input");
     }
     void cleanup()noexcept {
-        close(process_);close(pipe_);
+        close(process_);close(pipe_);verified_=false;
         std::error_code error;
         if(!directory_.empty())for(auto name:{L"profile.json",L"options.json"})std::filesystem::remove(directory_/name,error);
         if(!directory_.empty())std::filesystem::remove(directory_,error);
@@ -110,7 +110,9 @@ public:
         PWSTR programFiles=nullptr;
         if(FAILED(SHGetKnownFolderPath(FOLDERID_ProgramFiles,0,nullptr,&programFiles)))throw std::runtime_error("Program Files is unavailable");
         auto trusted=std::filesystem::path(programFiles)/L"FlowBridgeBeta";CoTaskMemFree(programFiles);
+#ifndef FLOWBRIDGE_IPC_TEST
         if(!std::filesystem::equivalent(helper.parent_path(),trusted))throw std::runtime_error("Native mode requires the protected Program Files\\FlowBridgeBeta installation");
+#endif
         auto token=guid();PWSTR local=nullptr;
         if(FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_CREATE,nullptr,&local)))throw std::runtime_error("Local AppData unavailable");
         directory_=std::filesystem::path(local)/L"FlowBridge"/L"NativeSessions"/token;CoTaskMemFree(local);
@@ -136,6 +138,9 @@ public:
         ULONG client=0;
         if(GetNamedPipeClientProcessId(pipe_,&client)) {
             if(client!=GetProcessId(process_))throw std::runtime_error("Unexpected native pipe client");
+            verified_=true;
+        }
+        if(verified_) {
             Json message;
             try { for(unsigned i=0;i<32&&receive(pipe_,message);++i){
                 if(message.contains("state")){last_=std::move(message);observed_=GetTickCount64();}
@@ -157,7 +162,10 @@ public:
         auto deadline=GetTickCount64()+20000;
         while(alive()&&GetTickCount64()<deadline){try{poll(false);send(pipe_,{{"stop",true}});}catch(...){}Sleep(50);}
         if(alive())throw std::runtime_error("Native helper has not stopped. DNS/capture restoration is not yet confirmed.");
+        try{poll(false);}catch(...){}
+        DWORD exitCode=1;GetExitCodeProcess(process_,&exitCode);
         Json final=last_;cleanup();
+        if(exitCode && !final.contains("error"))throw std::runtime_error("Native helper exited unsuccessfully; restoration not confirmed ("+std::to_string(exitCode)+")");
         if(final.contains("error"))throw std::runtime_error(final["error"].get<std::string>());
     }
 };

@@ -286,15 +286,16 @@ class Worker {
             }catch(const std::exception& e){
                 result->error=e.what();result->saved.clear();
                 if(action==-1)result->exit=false;
+                const bool failedNativeStart=nativeWanted&&waiting;
                 if(capture.exists()&&!capture.alive()){try{capture.stop();}catch(...){}waiting=false;nativeWanted=false;}
                 if(capture.exists()&&(waiting||action==Start)){try{capture.stop();}catch(...){}waiting=false;}
 
-                if(managedActive&&(waiting||action==Start)){waiting=false;try{gate(false);}catch(...){}if(engine){try{response(fb_engine_stop_json(engine));}catch(...){}}if(ssh){try{response(fb_ssh_stop_json(ssh));result->ssh=response(fb_ssh_snapshot_json(ssh));}catch(...){}fb_ssh_destroy(ssh);ssh=0;}}
+                if(managedActive&&!capture.alive()&&(waiting||action==Start||failedNativeStart)){waiting=false;try{gate(false);}catch(...){}if(engine){try{response(fb_engine_stop_json(engine));}catch(...){}}if(ssh){try{response(fb_ssh_stop_json(ssh));result->ssh=response(fb_ssh_snapshot_json(ssh));}catch(...){}fb_ssh_destroy(ssh);ssh=0;}}
                 try{if(engine)result->snapshot=response(fb_engine_snapshot_json(engine));}catch(...){}
             }
             result->waiting=waiting;
             if(!PostMessageW(window,Completed,0,reinterpret_cast<LPARAM>(result.get())))return;
-            result.release();if(action==-1)return;
+            bool quit=result->exit;result.release();if(quit)return;
         }
     }
 public:

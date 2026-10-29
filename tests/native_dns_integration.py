@@ -22,9 +22,16 @@ def query(ident=0x1234, kind=1):
 
 def answer(question):
     ident = struct.unpack('!H', question[:2])[0]
-    kind = struct.unpack('!H', question[-4:-2])[0]
+    cursor = 12
+    while question[cursor]:
+        length = question[cursor]
+        require(length <= 63 and cursor + length + 1 < len(question), 'Malformed fixture question')
+        cursor += length + 1
+    end = cursor + 5
+    kind = struct.unpack('!H', question[cursor+1:cursor+3])[0]
     payload = socket.inet_pton(socket.AF_INET6, '2001:db8::123') if kind == 28 else socket.inet_aton('192.0.2.123')
-    return struct.pack('!6H', ident ^ (1 if ident == 0xbeef else 0), 0x8180, 1, 1, 0, 0) + question[12:] + b'\xc0\x0c' + struct.pack('!HHIH', kind, 1, 30, len(payload)) + payload
+    return struct.pack('!6H', ident ^ (1 if ident == 0xbeef else 0), 0x8180, 1, 1, 0, 0) + question[12:end] + b'\xc0\x0c' + struct.pack('!HHIH', kind, 1, 30, len(payload)) + payload
+
 
 
 class Server(socketserver.ThreadingTCPServer):

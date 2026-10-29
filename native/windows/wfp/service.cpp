@@ -196,6 +196,11 @@ struct OwnedNative {
     void stop(){if(id){fb_native_destroy(id);id=0;}}
 };
 void run() {
+    HANDLE instance=CreateMutexW(nullptr,FALSE,L"Global\\FlowBridge.NativeCapture.Beta");
+    if(!instance)throw std::runtime_error("Cannot acquire native capture lifetime guard");
+    const DWORD previous=GetLastError();
+    struct InstanceGuard{HANDLE handle;~InstanceGuard(){CloseHandle(handle);}} instanceGuard{instance};
+    if(previous==ERROR_ALREADY_EXISTS)throw std::runtime_error("Another native capture helper is already active");
     std::ifstream input(std::filesystem::path(profilePath),std::ios::binary);
     if(!input || std::filesystem::file_size(profilePath)>1024*1024) throw std::runtime_error("Profile unavailable or exceeds 1 MiB");
     std::string config((std::istreambuf_iterator<char>(input)),{});

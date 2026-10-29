@@ -25,8 +25,8 @@ function Read-OwnedRule($Rule) {
         if ($r.product -ne 'FlowBridge' -or $r.schema -ne 1 -or $Rule.DisplayName -ne ($prefix + $r.token)) { return $null }
         $guid = [Guid]::Empty
         if (-not [Guid]::TryParseExact([string]$r.token,'D',[ref]$guid)) { return $null }
-        if (@($Rule.Namespace).Count -ne 1 -or [string]$Rule.Namespace[0] -ne [string]$r.namespace) { return $null }
-        if (@($Rule.NameServers).Count -ne 1 -or [string]$Rule.NameServers[0] -ne '127.0.0.1') { return $null }
+        if (@($Rule.Namespace).Count -ne 1 -or [string](@($Rule.Namespace))[0] -ne [string]$r.namespace) { return $null }
+        if (@($Rule.NameServers).Count -ne 1 -or [string](@($Rule.NameServers))[0] -ne '127.0.0.1') { return $null }
         if ($r.namespace -ne '.' -and $r.namespace -notmatch '^[a-z0-9][a-z0-9.-]{0,252}[a-z0-9]$') { return $null }
         if ([int]$r.owner_pid -le 0 -or [string]$r.owner_start_ticks -notmatch '^\d+$') { return $null }
         return $r
