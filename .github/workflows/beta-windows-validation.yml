@@ -2,7 +2,7 @@ name: Windows native beta vertical validation
 on:
   push:
     branches: [work/windows-beta-control]
-    paths: ['tools/apply_windows_beta.py','.github/workflows/beta-windows-validation.yml','native/windows/**','tests/windows_dns_policy.py','packaging/windows/FlowBridgeBeta.nsi']
+    paths: ['tools/apply_windows_beta.py','.github/workflows/beta-windows-validation.yml','native/windows/**','tests/windows*.py','tests/windows_native_ipc.cpp','packaging/windows/FlowBridgeBeta.nsi']
 permissions:
   contents: read
 concurrency:
@@ -24,7 +24,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add native tests packaging
-          git diff --cached --quiet || git commit -m 'feat(windows): GUI native capture, leased IPC and transactional remote DNS'
+          git diff --cached --quiet || git commit -m 'test(windows): IPC failures, native installer lifecycle and DNS crash rollback'
           git push origin HEAD:refs/heads/work/windows-beta-control
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
   windows:
@@ -63,8 +63,14 @@ jobs:
           Copy-Item target/release/flowbridge_ffi.dll build/windows-capture/Release/
           New-Item -ItemType Directory -Force build/windows/Release/resources | Out-Null
           Copy-Item resources/presets.json build/windows/Release/resources/
-      - name: Actual Windows DNS client and rollback policy
+      - name: Actual Windows DNS client and crash rollback policy
         run: python tests/windows_dns_policy.py --output build/verification/windows-beta/nrpt.json
+      - name: Real local IPC failure and Stop propagation
+        run: |
+          New-Item -ItemType Directory -Force build/ipc-smoke | Out-Null
+          Copy-Item build/windows/Release/FlowBridgeIPCSmoke.exe build/ipc-smoke/
+          & ./build/ipc-smoke/FlowBridgeIPCSmoke.exe 2>&1 | Tee-Object build/verification/windows-beta/ipc.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Native GUI smoke
         run: |
           & ./build/windows/Release/FlowBridgeNativeSmoke.exe "$env:GITHUB_WORKSPACE/build/windows/Release/FlowBridge.exe"
@@ -81,6 +87,8 @@ jobs:
           & $nsis /INPUTCHARSET UTF8 "/DPAYLOAD_DIR=$env:GITHUB_WORKSPACE/build/payload" "/DOUTPUT_FILE=$env:GITHUB_WORKSPACE/artifacts/FlowBridge-native-beta-candidate-setup.exe" packaging/windows/FlowBridgeBeta.nsi
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Get-FileHash artifacts/FlowBridge-native-beta-candidate-setup.exe -Algorithm SHA256 | Format-List | Out-File artifacts/native-beta-SHA256.txt
+      - name: Install upgrade exercise and uninstall protected native candidate
+        run: python tests/windows_beta_installer.py --installer artifacts/FlowBridge-native-beta-candidate-setup.exe --harness build/windows/Release/FlowBridgeNativeSmoke.exe --payload build/payload --output build/verification/windows-beta
       - name: Archive exact source
         if: always()
         run: |
