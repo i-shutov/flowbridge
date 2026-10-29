@@ -107,6 +107,7 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
     try {
         need(WaitForInputIdle(process.hProcess,8000)==0,"GUI did not finish initialization");
         waitFor([&]{ window=FindWindowW(L"FlowBridgeNativeV02",nullptr); return window!=nullptr; },"GUI window did not appear");
+        MoveWindow(window,0,0,1000,700,TRUE);
         const int startId=100,stopId=101,applyId=102,proxyId=105,hostId=106,protocolId=108,editorId=109,tableId=110,statusId=112;
         const int modeId=230;SendMessageW(GetDlgItem(window,modeId),CB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(modeId,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,modeId)));
         need(IsWindow(GetDlgItem(window,231))&&IsWindow(GetDlgItem(window,234)),"structured SSH editor missing");
@@ -135,6 +136,17 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
         click(window,202);waitFor([&]{return IsWindowEnabled(GetDlgItem(window,260));},"bounded application discovery did not finish");
         need(IsWindowVisible(GetDlgItem(window,261)),"application discovery table hidden");
         click(window,262);click(window,263);click(window,264);need(SendMessageW(GetDlgItem(window,267),BM_GETCHECK,0,0)==BST_UNCHECKED,"native template unexpectedly blocks other apps by default");
+        for(int page=0;page<4;++page){
+            click(window,200+page);
+            RECT bounds{};GetClientRect(window,&bounds);
+            for(HWND child=GetWindow(window,GW_CHILD);child;child=GetWindow(child,GW_HWNDNEXT))if(IsWindowVisible(child)){
+                RECT area{};GetWindowRect(child,&area);MapWindowPoints(nullptr,window,reinterpret_cast<POINT*>(&area),2);
+                need(area.left>=0&&area.top>=0&&area.right<=bounds.right&&area.bottom<=bounds.bottom,"Visible control lies outside compact client bounds");
+            }
+            if(screenshot){auto path=std::filesystem::path(screenshot);path.replace_filename(path.stem().wstring()+L"-page-"+std::to_wstring(page)+L".bmp");captureWindow(window,path);}
+        }
+        click(window,201);SendMessageW(GetDlgItem(window,modeId),CB_SETCURSEL,1,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(modeId,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,modeId)));
+        if(screenshot){auto path=std::filesystem::path(screenshot);path.replace_filename(path.stem().wstring()+L"-ssh.bmp");captureWindow(window,path);}
         click(window,200);
         SendMessageW(window,WM_CLOSE,0,0); need(WaitForSingleObject(process.hProcess,8000)==WAIT_OBJECT_0,"GUI close failed");
         DWORD exitCode=1; GetExitCodeProcess(process.hProcess,&exitCode); need(exitCode==0,"GUI nonzero exit");
@@ -143,6 +155,7 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
     CloseHandle(process.hThread); CloseHandle(process.hProcess);
 }
 int wmain(int argc,wchar_t** argv) {
+    SetProcessDPIAware();
     WSADATA data{}; if(WSAStartup(MAKEWORD(2,2),&data)) return 1;
     try { abiTest();nativeTemplateTest(); if(argc>=2) guiTest(argv[1],argc>=3?argv[2]:nullptr); WSACleanup(); return 0; }
     catch(const std::exception& error) { std::fprintf(stderr,"FAIL: %s\n",error.what()); WSACleanup(); return 1; }

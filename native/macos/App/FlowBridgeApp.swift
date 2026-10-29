@@ -147,7 +147,7 @@ private struct Dashboard: View {
                             Text("Меняется обработка стандартного DNS всей системы, не только выбранных приложений. Внутренние домены должны разрешаться на SSH-сервере. При сбое локального обхода нет. Собственный DoH/DoT не перехватывается.")
                                 .font(.caption).foregroundStyle(.orange)
                         }
-                        Text(native.available ? "Нужно одобрение macOS. TCP — на выбранных портах; DNS управляется отдельной галочкой. UDP/QUIC и остальные порты пока не перехватываются." : native.message)
+                        Text(native.available ? "Нужно одобрение macOS. TCP — на выбранных портах; DNS управляется отдельной галочкой. QUIC проксируемых приложений блокируется; остальной UDP не перехватывается." : native.message)
                             .font(.caption).foregroundStyle(native.available ? Color.secondary : Color.orange)
                     }
                 } header: { Label("Маршрутизация", systemImage: "point.3.connected.trianglepath.dotted") }

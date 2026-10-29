@@ -216,6 +216,13 @@ void run() {
     Json nativeOptions=nativeOptionsPath.empty()?Json::object():Json::parse(readConfiguration(nativeOptionsPath));
     if(!nativeOptionsPath.empty()&&!sshProfilePath.empty())throw std::runtime_error("Choose UI-owned or service-owned SSH, not both");
     if(ui.attached()&&nativeOptionsPath.empty())throw std::runtime_error("UI native options are required");
+    std::vector<std::wstring> quicApplications;
+    if(nativeOptions.contains("quic_applications")) {
+        auto paths=nativeOptions.at("quic_applications").get<std::vector<std::string>>();
+        if(paths.size()>128)throw std::runtime_error("Too many selected QUIC applications");
+        for(const auto& path:paths)quicApplications.push_back(native_ipc::wide(path));
+        nativeOptions.erase("quic_applications");
+    }
     uiState("starting");
     if(!sshProfilePath.empty()) {
         auto sshConfig=readConfiguration(sshProfilePath);
@@ -266,7 +273,7 @@ void run() {
             }
         });
         heartbeat();
-        if(!stopping) capture.start(p4,p6,bypassPaths);
+        if(!stopping) capture.start(p4,p6,bypassPaths,quicApplications,nativeOptions.contains("dns")&&!nativeOptions["dns"].is_null());
         if(!stopping && nativeOptions.contains("dns") && !nativeOptions["dns"].is_null()) {
             response(fb_native_dns_start_json(native.id,R"({"listen":"127.0.0.1:53"})"));
             dnsPolicy.enter();
@@ -285,6 +292,7 @@ void run() {
             if(GetTickCount64()-lastSnapshot>=1000) {
                 auto report=response(fb_native_snapshot_json(native.id));
                 report["status"]["dns_active"]=dnsPolicy.active();
+                report["status"]["quic_guard_app_paths"]=quicApplications.size();
                 report["status"]["dns_scope"]=dnsPolicy.active()?"system_standard_dns":"unchanged";
                 {std::lock_guard<std::mutex> guard(logLock);report["events"]=recent;}
                 uiState("ready",report);lastSnapshot=GetTickCount64();

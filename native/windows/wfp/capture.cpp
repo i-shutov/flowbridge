@@ -38,6 +38,7 @@ void verifyCallout(HANDLE engine, const GUID& key) {
 }
 Capture::~Capture() { stop(); }
 void Capture::stop() noexcept {
+    safety_.stop();
     // Dynamic session close atomically removes admissions before listeners stop.
     if (engine_) { FwpmEngineClose0(engine_); engine_=nullptr; }
     if (driver_!=INVALID_HANDLE_VALUE) {
@@ -45,7 +46,7 @@ void Capture::stop() noexcept {
         CloseHandle(driver_); driver_=INVALID_HANDLE_VALUE;
     }
 }
-void Capture::start(unsigned short p4, unsigned short p6, const std::vector<std::wstring>& bypass) {
+void Capture::start(unsigned short p4, unsigned short p6, const std::vector<std::wstring>& bypass, const std::vector<std::wstring>& quicApplications, bool remoteDns) {
     if (engine_ || driver_!=INVALID_HANDLE_VALUE) throw std::runtime_error("Capture already started");
     if (bypass.size()>16) throw std::runtime_error("At most sixteen bypass executable paths");
     try {
@@ -101,5 +102,6 @@ void Capture::start(unsigned short p4, unsigned short p6, const std::vector<std:
         FbWfpConfig config{sizeof(FbWfpConfig),FB_WFP_ABI,p4,p6,0};
         ioctl(driver_,FB_IOCTL_CONFIGURE,&config,sizeof(config));
         check(FwpmTransactionCommit0(engine_),"Commit capture filters");
+        safety_.start(quicApplications,remoteDns);
     } catch (...) { if (engine_) FwpmTransactionAbort0(engine_); stop(); throw; }
 }

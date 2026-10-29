@@ -217,6 +217,7 @@ class Worker {
             if(!literal(resolver))throw std::runtime_error("DNS-сервер должен быть IP-адресом удалённой машины.");
             nativeOptions["dns"]={{"resolver",{{"host",resolver},{"port",53}}},{"timeout_ms",5000}};
         }
+        nativeOptions["quic_applications"]=pendingOptions.at("selected_applications");
         auto snapshot=response(fb_ssh_snapshot_json(ssh));
         auto path=snapshot.at("status").at("backend_path").get<std::string>();
         capture.start(root,nativeOptions,path);
@@ -426,37 +427,35 @@ HWND control(const wchar_t* cls,const wchar_t* label,DWORD style,int id,DWORD ex
     auto h=CreateWindowExW(ex,cls,label,WS_CHILD|WS_VISIBLE|style,0,0,0,0,window,reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)),GetModuleHandleW(nullptr),nullptr);
     SendMessageW(h,WM_SETFONT,reinterpret_cast<WPARAM>(bodyFont),TRUE); return h;
 }
-void layout(){RECT r{};GetClientRect(window,&r);int width=static_cast<int>(r.right),height=static_cast<int>(r.bottom),x=236,w=width-x-28;
+void layout(){
+    RECT r{};GetClientRect(window,&r);int width=static_cast<int>(r.right),height=static_cast<int>(r.bottom),x=236,w=width-x-28;
     auto move=[](int id,int x,int y,int w,int h){MoveWindow(GetDlgItem(window,id),x,y,w,h,TRUE);};
     for(int id=NavDashboard;id<=NavAdvanced;++id)move(id,16,140+(id-NavDashboard)*54,180,44);
-    move(Theme,16,height-74,180,42);move(ExportDiagnostics,16,height-126,180,42);
-    move(Banner,x,108,w,19);move(PageTitle,x,30,w-330,36);move(PageSubtitle,x,78,w,25);move(Start,width-322,29,160,42);move(Stop,width-150,29,122,42);
-    move(Badge,x+24,152,w-48,34);move(Status,x+24,200,w-48,30);move(Mode,x+24,244,w-48,28);move(Metrics,x+24,321,w-48,24);
-    move(SshTitle,x+24,397,w-48,22);move(SshHealth,x+24,427,w-48,48);move(ConnectionsLabel,x,500,w,24);move(Connections,x,534,w,std::max(140,height-590));move(DashboardHelp,x,height-36,w,24);
-    move(ConnectionSummary,x+24,150,210,24);move(ManagedMode,x+244,144,w-268,220);move(SshSummary,x+24,190,w-48,36);
-    move(QuickLabel,x+24,262,140,22);move(Proxy,x+180,256,240,220);move(2000,x+24,307,300,22);move(2001,x+348,307,100,22);move(2002,x+472,307,200,22);
-    move(Host,x+24,336,300,36);move(Port,x+348,336,100,36);move(Protocol,x+472,336,235,220);move(2003,x+24,399,w-48,48);
-    int half=(w-72)/2;move(2010,x+24,254,half,22);move(2011,x+48+half,254,half,22);move(SshHost,x+24,282,half,34);move(SshUser,x+48+half,282,half,34);
-    move(2012,x+24,334,half,22);move(2013,x+48+half,334,half,22);move(SshPort,x+24,362,half,34);move(LocalPort,x+48+half,362,half,34);
-    move(2014,x+24,414,w-48,22);move(KeyPath,x+24,442,w-182,34);move(BrowseKey,x+w-142,442,118,34);move(2015,x+24,494,w-48,22);move(KnownHosts,x+24,522,w-182,34);move(BrowseKnown,x+w-142,522,118,34);
-    move(Compression,x+24,578,w-48,26);int unit=(w-120)/4;int labels[]={2016,2017,2019,2020};int fields[]={Keepalive,KeepaliveCount,RetryInitial,RetryMax};for(int i=0;i<4;++i){move(labels[i],x+24+i*(unit+24),622,unit,22);move(fields[i],x+24+i*(unit+24),650,unit,34);}move(SshHelp,x+24,706,w-48,56);move(SaveDesktop,x,height-68,240,40);
-    move(AppsHelp,x+24,150,w-48,58);move(PresetAI,x,242,180,42);move(PresetWeb,x+192,242,180,42);move(PresetBoth,x+384,242,180,42);move(Discover,x+w-210,242,210,42);
-    move(ScanStatus,x,300,w,24);move(AppsSummary,x,334,w-180,24);move(BrowseApp,x+w-172,328,172,36);move(AppsTable,x,382,w,std::max(160,height-580));move(2018,x,height-178,w,42);move(BlockOthers,x,height-120,w-300,28);move(ExportNative,x+w-290,height-94,290,42);
-    move(AppsHelp,x+16,136,w-32,44);
-    move(PresetAI,x,192,140,34);move(PresetWeb,x+150,192,140,34);move(PresetBoth,x+300,192,140,34);move(Discover,x+w-190,192,190,34);
-    move(ScanStatus,x,236,w,22);move(AppsSummary,x,264,w-170,22);move(BrowseApp,x+w-160,258,160,30);
-    move(AppsTable,x,300,w,std::max(100,height-518));
-    move(CaptureMode,x,height-208,w,24);move(RemoteDNS,x,height-178,w,24);
-    move(DNSResolver,x,height-146,std::min(w,500),28);move(DNSHint,x,height-112,w,22);
+    move(Theme,16,height-62,180,40);move(ExportDiagnostics,16,height-110,180,40);
+    move(Banner,x,108,w,19);move(PageTitle,x,30,w-330,36);move(PageSubtitle,x,78,w,25);
+    move(Start,width-322,29,160,42);move(Stop,width-150,29,122,42);
+    move(Badge,x+18,140,w-36,32);move(Status,x+18,181,w-36,28);move(Mode,x+18,221,w-36,28);
+    move(Metrics,x+18,281,w-36,24);move(SshTitle,x+18,339,w-36,22);move(SshHealth,x+18,367,w-36,42);
+    move(ConnectionsLabel,x,424,w,24);move(Connections,x,454,w,std::max(110,height-502));move(DashboardHelp,x,height-30,w,24);
+    move(ConnectionSummary,x+18,146,210,24);move(ManagedMode,x+236,140,w-254,220);move(SshSummary,x+18,182,w-36,36);
+    move(QuickLabel,x+18,254,140,22);move(Proxy,x+172,248,240,220);
+    move(2000,x+18,299,300,22);move(2001,x+342,299,100,22);move(2002,x+466,299,200,22);
+    move(Host,x+18,328,300,34);move(Port,x+342,328,100,34);move(Protocol,x+466,328,235,220);move(2003,x+18,389,w-36,48);
+    int half=(w-60)/2;
+    move(2010,x+16,228,half,20);move(2011,x+28+half,228,half,20);move(SshHost,x+16,250,half,28);move(SshUser,x+28+half,250,half,28);
+    move(2012,x+16,287,half,20);move(2013,x+28+half,287,half,20);move(SshPort,x+16,309,half,28);move(LocalPort,x+28+half,309,half,28);
+    move(2014,x+16,346,w-32,20);move(KeyPath,x+16,368,w-170,28);move(BrowseKey,x+w-138,368,122,28);
+    move(2015,x+16,405,w-32,20);move(KnownHosts,x+16,427,w-170,28);move(BrowseKnown,x+w-138,427,122,28);
+    move(Compression,x+16,465,w-32,24);
+    int unit=(w-104)/4;int labels[]={2016,2017,2019,2020};int fields[]={Keepalive,KeepaliveCount,RetryInitial,RetryMax};
+    for(int i=0;i<4;++i){move(labels[i],x+16+i*(unit+24),498,unit,20);move(fields[i],x+16+i*(unit+24),520,unit,28);}
+    move(SshHelp,x+16,557,w-32,40);move(SaveDesktop,x,height-54,240,36);
+    move(AppsHelp,x+16,136,w-32,44);move(PresetAI,x,192,140,34);move(PresetWeb,x+150,192,140,34);move(PresetBoth,x+300,192,140,34);move(Discover,x+w-190,192,190,34);
+    move(ScanStatus,x,236,w,22);move(AppsSummary,x,264,w-170,22);move(BrowseApp,x+w-160,258,160,30);move(AppsTable,x,300,w,std::max(100,height-518));
+    move(CaptureMode,x,height-208,w,24);move(RemoteDNS,x,height-178,w,24);move(DNSResolver,x,height-146,std::min(w,500),28);move(DNSHint,x,height-112,w,22);
     move(BlockOthers,x,height-80,w-300,24);move(ExportNative,x+w-290,height-76,290,34);move(2018,x,height-38,w,24);
-    move(2010,x+16,238,half,20);move(2011,x+40+half,238,half,20);move(SshHost,x+16,261,half,28);move(SshUser,x+40+half,261,half,28);
-    move(2012,x+16,300,half,20);move(2013,x+40+half,300,half,20);move(SshPort,x+16,323,half,28);move(LocalPort,x+40+half,323,half,28);
-    move(2014,x+16,362,w-32,20);move(KeyPath,x+16,385,w-170,28);move(BrowseKey,x+w-138,385,122,28);
-    move(2015,x+16,423,w-32,20);move(KnownHosts,x+16,446,w-170,28);move(BrowseKnown,x+w-138,446,122,28);
-    move(Compression,x+16,486,w-32,24);
-    for(int i=0;i<4;++i){move(labels[i],x+16+i*(unit+24),520,unit,20);move(fields[i],x+16+i*(unit+24),543,unit,28);}
-    move(SshHelp,x+16,584,w-32,42);
-    move(Apply,x,138,195,40);move(Open,x+207,138,180,40);move(Save,x+399,138,180,40);move(ConfigLabel,x,198,w,38);int editor=std::max(200,(height-340)*3/5);move(Config,x,246,w,editor);move(LogLabel,x,266+editor,w,24);move(Log,x,302+editor,w,std::max(100,height-editor-330));
+    move(Apply,x,138,195,40);move(Open,x+207,138,180,40);move(Save,x+399,138,180,40);move(ConfigLabel,x,198,w,38);
+    int editor=std::max(160,(height-340)*3/5);move(Config,x,246,w,editor);move(LogLabel,x,266+editor,w,24);move(Log,x,302+editor,w,std::max(70,height-editor-330));
 }
 LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
     switch(message) {
@@ -470,7 +469,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         add(L"BUTTON",L"Подключить",WS_TABSTOP,Start,-1);add(L"BUTTON",L"Остановить",WS_TABSTOP,Stop,-1);
         label(L"●  Не подключено",Badge,0);SendMessageW(GetDlgItem(h,Badge),WM_SETFONT,reinterpret_cast<WPARAM>(headingFont),TRUE);
         label(L"Остановлено. Выберите подключение и нажмите «Подключить».",Status,0);
-        label(L"Локальный SOCKS5 • приложения должны явно использовать этот прокси. Нативный захват недоступен.",Mode,0);
+        label(L"Выберите локальный SOCKS или нативный перехват на странице приложений.",Mode,0);
         label(L"АКТИВНЫЕ СОЕДИНЕНИЯ     0       ПРИНЯТО     0       ТРАФИК ↑ / ↓     0 / 0 Б",Metrics,0);
         label(L"Состояние SSH",SshTitle,0);label(L"SSH: используется внешний прокси",SshHealth,0);
         label(L"Текущие и недавние соединения",ConnectionsLabel,0);
@@ -496,13 +495,13 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         label(L"Только ключ / SSH agent. Ключ сервера должен быть заранее проверен и добавлен в known_hosts. Пароли и обход проверки ключа не поддерживаются.",SshHelp,12);
         label(L"Внешний прокси управляется отдельно от FlowBridge.",SshSummary,1);
         add(L"BUTTON",L"Сохранить подключение",WS_TABSTOP,SaveDesktop,1);
-        label(L"Нативный захват в этом пакете недоступен. Выбор ниже сохраняется и экспортируется для отдельного нативного профиля; он не фильтрует клиентов локального SOCKS.",AppsHelp,2);
+        label(L"WFP: выберите приложения и включите перехват ниже. Нужен установленный драйвер. Локальный SOCKS этот выбор не применяет.",AppsHelp,2);
         add(L"BUTTON",L"AI-приложения",WS_TABSTOP,PresetAI,2);add(L"BUTTON",L"Веб-браузеры",WS_TABSTOP,PresetWeb,2);add(L"BUTTON",L"AI + веб",WS_TABSTOP,PresetBoth,2);
         add(L"BUTTON",L"Найти приложения",WS_TABSTOP,Discover,2);add(L"BUTTON",L"Добавить EXE…",WS_TABSTOP,BrowseApp,2);
         label(L"Поиск локальный: App Paths, список установки, известные ярлыки и запущенные процессы.",ScanStatus,2);label(L"Найдено: 0 • Выбрано: 0",AppsSummary,2);
         HWND apps=add(WC_LISTVIEWW,L"",WS_BORDER|LVS_REPORT|LVS_SINGLESEL|WS_TABSTOP,AppsTable,2);ListView_SetExtendedListViewStyle(apps,LVS_EX_FULLROWSELECT|LVS_EX_CHECKBOXES|LVS_EX_DOUBLEBUFFER);
         const wchar_t* appTitles[]={L"Приложение",L"Обнаруженный путь",L"Источник",L"Уверенность"};int appWidths[]={160,420,150,160};for(int i=0;i<4;++i){LVCOLUMNW col{};col.mask=LVCF_TEXT|LVCF_WIDTH;col.pszText=const_cast<wchar_t*>(appTitles[i]);col.cx=appWidths[i];ListView_InsertColumn(apps,i,&col);}
-        label(L"В нативном профиле выбранные EXE идут через прокси; остальные — напрямую. Имена EXE не подтверждают издателя.",2018,2);
+        label(L"QUIC выбранных путей EXE блокируется; после обновления приложений повторите поиск.",2018,2);
         add(L"BUTTON",L"Блокировать остальные приложения вместо Direct",BS_AUTOCHECKBOX|WS_TABSTOP,BlockOthers,2);add(L"BUTTON",L"Экспорт нативного профиля…",WS_TABSTOP,ExportNative,2);
         add(L"BUTTON",L"Применить профиль",WS_TABSTOP,Apply,3);add(L"BUTTON",L"Открыть JSON…",WS_TABSTOP,Open,3);add(L"BUTTON",L"Экспорт JSON…",WS_TABSTOP,Save,3);
         label(L"Полный профиль • правила / цепочки / listener. Критерии приложений неприменимы в локальном SOCKS-режиме.",ConfigLabel,3);
@@ -523,7 +522,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         setText(configEdit,value);fillQuick();applyTheme();switchPage(0);worker.start();SetTimer(h,1,1000,nullptr);return 0;
     }
     case WM_SIZE: layout(); return 0;
-    case WM_GETMINMAXINFO: reinterpret_cast<MINMAXINFO*>(l)->ptMinTrackSize={1080,740}; return 0;
+    case WM_GETMINMAXINFO: reinterpret_cast<MINMAXINFO*>(l)->ptMinTrackSize={1000,700}; return 0;
     case WM_COMMAND:
         try {
             int id=LOWORD(w),event=HIWORD(w);
@@ -577,7 +576,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
     case WM_PAINT:{PAINTSTRUCT ps{};HDC dc=BeginPaint(h,&ps);RECT r{};GetClientRect(h,&r);FillRect(dc,&r,backgroundBrush);RECT side{0,0,212,r.bottom};FillRect(dc,&side,sidebarBrush);
         SetBkMode(dc,TRANSPARENT);SetTextColor(dc,RGB(237,243,255));SelectObject(dc,headingFont);RECT brand{27,36,197,70};DrawTextW(dc,L"FlowBridge",-1,&brand,DT_LEFT|DT_SINGLELINE);SelectObject(dc,smallFont);SetTextColor(dc,RGB(143,164,195));RECT tag{28,79,194,117};DrawTextW(dc,L"ЛИЧНЫЙ МАРШРУТ\nSSH / SOCKS5",-1,&tag,DT_LEFT);RECT version{28,r.bottom-125,195,r.bottom-82};DrawTextW(dc,L"v0.2.0\nЛокальный режим",-1,&version,DT_LEFT);
         auto panel=[&](int top,int bottom){HPEN pen=CreatePen(PS_SOLID,1,dark?RGB(45,61,83):RGB(225,232,242));auto oldPen=SelectObject(dc,pen);auto oldBrush=SelectObject(dc,cardBrush);RoundRect(dc,236,top,r.right-28,bottom,18,18);SelectObject(dc,oldPen);SelectObject(dc,oldBrush);DeleteObject(pen);};
-        if(activePage==0){panel(132,286);panel(304,370);panel(392,482);}else if(activePage==1){panel(132,232);bool managed=SendMessageW(GetDlgItem(h,ManagedMode),CB_GETCURSEL,0,0)==1;panel(230,managed?634:470);}else if(activePage==2)panel(132,218);
+        if(activePage==0){panel(132,258);panel(272,316);panel(332,416);}else if(activePage==1){panel(132,220);bool managed=SendMessageW(GetDlgItem(h,ManagedMode),CB_GETCURSEL,0,0)==1;panel(224,managed?601:455);}else if(activePage==2)panel(132,182);
         EndPaint(h,&ps);return 0;}
     case WM_CTLCOLORSTATIC:case WM_CTLCOLOREDIT:case WM_CTLCOLORLISTBOX:case WM_CTLCOLORBTN:{HDC dc=reinterpret_cast<HDC>(w);HWND child=reinterpret_cast<HWND>(l);int id=GetDlgCtrlID(child);bool plain=id==Banner||id==PageTitle||id==PageSubtitle||id==ConfigLabel||id==ConnectionsLabel||id==LogLabel||id==DashboardHelp||id==ScanStatus||id==AppsSummary||id==2018;
         SetTextColor(dc,id==Badge?(engineRunning&&tunnelReady?RGB(18,143,98):engineRunning?RGB(180,120,23):muted()):(id==PageSubtitle||id==Mode||id==SshHelp||id==AppsHelp||id==ScanStatus||id==2018?muted():ink()));SetBkColor(dc,plain?bg():card());return reinterpret_cast<LRESULT>(plain?backgroundBrush:cardBrush);}
@@ -602,7 +601,10 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show) {
     smallFont=CreateFontW(-13,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
     WNDCLASSW cls{}; cls.lpfnWndProc=windowProc; cls.hInstance=instance; cls.lpszClassName=L"FlowBridgeNativeV02"; cls.hCursor=LoadCursorW(nullptr,IDC_ARROW); cls.hbrBackground=reinterpret_cast<HBRUSH>(COLOR_WINDOW+1);
     if(!RegisterClassW(&cls)) { CloseHandle(guard); return 1; }
-    HWND h=CreateWindowW(cls.lpszClassName,L"FlowBridge 0.2 — личный маршрут",WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN,CW_USEDEFAULT,CW_USEDEFAULT,1180,800,nullptr,nullptr,instance,nullptr);
+    RECT work{};SystemParametersInfoW(SPI_GETWORKAREA,0,&work,0);
+    int initialWidth=std::min(1180,static_cast<int>(work.right-work.left));
+    int initialHeight=std::min(740,static_cast<int>(work.bottom-work.top));
+    HWND h=CreateWindowW(cls.lpszClassName,L"FlowBridge 0.2 — личный маршрут",WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN,work.left,work.top,initialWidth,initialHeight,nullptr,nullptr,instance,nullptr);
     if(!h) { CloseHandle(guard); return 1; } ShowWindow(h,show); MSG msg{}; BOOL status;
     while((status=GetMessageW(&msg,nullptr,0,0))>0) { if(!IsDialogMessageW(h,&msg)) { TranslateMessage(&msg); DispatchMessageW(&msg); } }
     CloseHandle(guard); return status==-1?1:static_cast<int>(msg.wParam);

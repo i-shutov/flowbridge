@@ -13,6 +13,7 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
     private var generation: UInt64 = 0
     private var sessionID: String?
     private var limit = 128
+    private var blockedQUIC = 0
     private var idleSeconds: Double = 300
     private var bypassSigningIDs: Set<String> = []
     private var sessions: [UUID: TCPRelay] = [:]
@@ -50,7 +51,12 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
                 settings.includedNetworkRules = ports.flatMap { port in
                     [Self.rule("0.0.0.0", port: port, prefix: 0), Self.rule("::", port: port, prefix: 0)]
                 }
-                var exclusions = [Self.rule("127.0.0.1", port: 0, prefix: 8), Self.rule("::1", port: 0, prefix: 128)]
+                settings.includedNetworkRules?.append(contentsOf:[
+                    NENetworkRule(remoteNetwork:NWHostEndpoint(hostname:"0.0.0.0",port:"443"),remotePrefix:0,localNetwork:nil,localPrefix:0,protocol:.UDP,direction:.outbound),
+                    NENetworkRule(remoteNetwork:NWHostEndpoint(hostname:"::",port:"443"),remotePrefix:0,localNetwork:nil,localPrefix:0,protocol:.UDP,direction:.outbound)])
+                var exclusions = [Self.rule("127.0.0.1", port: 0, prefix: 8), Self.rule("::1", port: 0, prefix: 128),
+                    NENetworkRule(remoteNetwork:NWHostEndpoint(hostname:"127.0.0.1",port:"0"),remotePrefix:8,localNetwork:nil,localPrefix:0,protocol:.UDP,direction:.outbound),
+                    NENetworkRule(remoteNetwork:NWHostEndpoint(hostname:"::1",port:"0"),remotePrefix:128,localNetwork:nil,localPrefix:0,protocol:.UDP,direction:.outbound)]
                 for proxy in config["proxies"] as? [[String: Any]] ?? [] {
                     guard let endpoint = proxy["endpoint"] as? [String: Any], let host = endpoint["host"] as? String,
                           let port = endpoint["port"] as? Int, let prefix = Self.ipPrefix(host), port != 53 else {
@@ -145,7 +151,22 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
             sessions[id] = relay; lock.unlock(); relay.start(); return true
         } catch { reject(flow, error.localizedDescription); return true }
     }
-    override func handleNewUDPFlow(_ flow: NEAppProxyUDPFlow, initialRemoteEndpoint remoteEndpoint: NWEndpoint) -> Bool { false }
+    override func handleNewUDPFlow(_ flow: NEAppProxyUDPFlow, initialRemoteEndpoint remoteEndpoint: NWEndpoint) -> Bool {
+        lock.lock();let source=profile;let isReady=ready;let bypass=bypassSigningIDs;lock.unlock()
+        guard isReady else { reject(flow,"UDP guard is not ready");return true }
+        guard let endpoint=remoteEndpoint as? NWHostEndpoint,let port=Int(endpoint.port) else {reject(flow,"Unknown UDP destination");return true}
+        let identity=flow.metaData.sourceAppSigningIdentifier
+        if bypass.contains(identity){return false}
+        do {
+            let request=try Bridge.text(["application":identity.isEmpty ? NSNull() : identity as Any,
+                "destination":["host":endpoint.hostname,"port":port],"resolved_ip":NSNull()])
+            let result=try source.withCString { c in try request.withCString { f in try Bridge.consume(fb_evaluate_json(c,f)) } }
+            guard let decision=result["decision"] as? [String:Any],let action=decision["action"] as? [String:Any],let type=action["type"] as? String else {throw Bridge.error("UDP policy unavailable")}
+            if type == "direct" {return false}
+            lock.lock();blockedQUIC += 1;lock.unlock()
+            reject(flow,"QUIC/UDP443 blocked by application proxy policy; use TCP");return true
+        }catch {reject(flow,error.localizedDescription);return true}
+    }
     private func reject(_ flow: NEAppProxyFlow, _ message: String) {
         let error = Bridge.error(message); flow.closeReadWithError(error); flow.closeWriteWithError(error); record(message)
     }
@@ -156,12 +177,12 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
     }
     private func snapshotData() throws -> Data {
         lock.lock(); let all = Array(sessions.values); let history = recent; let log = events
-        let isReady = ready; let currentSession = sessionID; let native = coreSession; lock.unlock()
+        let isReady = ready; let currentSession = sessionID; let native = coreSession; let udpBlocked=blockedQUIC; lock.unlock()
         let core = (try? Bridge.consume(fb_native_snapshot_json(native))) ?? [:]
         let value: [String: Any] = ["ready": isReady, "session_id": currentSession as Any? ?? NSNull(),
             "connections": all.map { $0.snapshot() } + history, "events": log,
             "status": core["status"] ?? [:], "managed_upstream": core["managed_upstream"] ?? NSNull(),
-            "dns": SharedNativeSession.shared.snapshot(handle:native)]
+            "dns": SharedNativeSession.shared.snapshot(handle:native), "quic_blocked":udpBlocked]
         return try JSONSerialization.data(withJSONObject: value)
     }
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)? = nil) {
