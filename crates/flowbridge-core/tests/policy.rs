@@ -18,6 +18,7 @@ fn config() -> Config {
         handshake_timeout_ms: 10_000,
         idle_timeout_ms: 60_000,
         max_connections: 256,
+        remote_dns_via_ssh: true,
     }
 }
 
@@ -55,6 +56,32 @@ fn flow(host: &str, port: u16) -> Flow {
         },
         resolved_ip: None,
     }
+}
+
+#[test]
+fn remote_ssh_dns_switch_is_default_on_and_fail_closed_when_off() {
+    let default_profile = serde_json::json!({
+        "version": 1, "listen": "127.0.0.1:1081",
+        "proxies": [], "chains": [], "rules": [],
+        "default_action": {"type": "direct"},
+        "connect_timeout_ms": 1000, "handshake_timeout_ms": 1000,
+        "idle_timeout_ms": 1000, "max_connections": 4
+    });
+    let loaded = Config::from_json(&default_profile.to_string()).unwrap();
+    assert!(loaded.remote_dns_via_ssh, "older JSON must default to remote hostname forwarding");
+    let mut checked = config();
+    checked.remote_dns_via_ssh = false;
+    checked.default_action = Action::Proxy { id: "first".into() };
+    for hostname in ["example.invalid", "localhost", "some.host."] {
+        let decision = checked.evaluate(&flow(hostname, 443));
+        assert_eq!(decision.action, Action::Block);
+        assert!(decision.reason.contains("without local fallback"));
+    }
+    assert!(matches!(checked.evaluate(&flow("192.0.2.10", 443)).action, Action::Proxy { .. }));
+    assert!(matches!(checked.evaluate(&flow("::1", 443)).action, Action::Proxy { .. }));
+    let mut bad = default_profile;
+    bad["remote_dns_via_ssh"] = serde_json::json!("false");
+    assert!(Config::from_json(&bad.to_string()).is_err(), "text flags are not valid bools");
 }
 
 #[test]
