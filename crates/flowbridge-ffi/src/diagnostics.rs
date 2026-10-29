@@ -26,6 +26,8 @@ pub(super) fn report(request: &Value) -> Value {
             "resource_exhaustion_count",
             "last_resource_error_unix_ms",
             "health_failures",
+            "worker_count",
+            "ready_workers",
         ],
     );
     ssh_summary["state"] = choice(
@@ -72,6 +74,32 @@ pub(super) fn report(request: &Value) -> Value {
     } else {
         Value::Null
     };
+    let pool = &engine["managed_pool"];
+    // Do not expose upstream endpoints, hostnames or executable paths.
+    // Each bounded ordinal record holds only numerical admission counters.
+    let safe_pool = if pool.is_object() {
+        let mut record = numeric(pool, &["aggregate_max_flows", "ready_workers"]);
+        let mut workers = Vec::new();
+        if let Some(entries) = pool["workers"].as_array() {
+            for (index, worker) in entries.iter().take(4).enumerate() {
+                let mut item = json!({"index":index});
+                if let Some(ready) = worker["ready"].as_bool() {
+                    item["ready"] = json!(ready);
+                }
+                let admission = &worker["admission"];
+                let mut counters = numeric(admission, &[
+                    "active_including_opening", "opening", "queued", "rejected"]);
+                counters["limits"] = numeric(&admission["limits"], &[
+                    "max_flows", "max_opening", "max_queued", "wait_timeout_ms"]);
+                item["admission"] = counters;
+                workers.push(item);
+            }
+        }
+        record["workers"] = json!(workers);
+        record
+    } else {
+        Value::Null
+    };
     json!({
         "schema_version": 1,
         "product": "FlowBridge",
@@ -82,6 +110,7 @@ pub(super) fn report(request: &Value) -> Value {
         "ssh": ssh_summary,
         "engine": numeric(&engine["status"], &["running", "generation", "active", "accepted", "completed", "failed", "bytes_up", "bytes_down", "transparent"]),
         "managed_upstream": managed,
+        "managed_pool": safe_pool,
         "redaction": "Allowlisted counters only: no keys, profile, usernames, paths, hostnames, destinations or raw logs.",
         "coverage": {"snapshot_only": true, "remote_network_probe_performed": false,
             "os_descriptor_count_measured": false, "transparent_dns_verified": false}
@@ -95,7 +124,11 @@ mod tests {
         let input = json!({
             "engine": {"status": {"active": 7, "listen": "PRIVATE_ADDRESS", "secret":"PRIVATE_PASSWORD"},
                 "connections":[{"host":"PRIVATE_DOMAIN"}], "events":[{"message":"PRIVATE_LOG"}],
-                "managed_upstream":{"queued":2,"limits":{"max_flows":128,"password":"PRIVATE_LIMIT"}}},
+                "managed_upstream":{"queued":2,"limits":{"max_flows":128,"password":"PRIVATE_LIMIT"}},
+                "managed_pool":{"aggregate_max_flows":128,"ready_workers":1,
+                    "workers":[{"endpoint":{"host":"PRIVATE_ENDPOINT","port":1080},"ready":true,
+                        "admission":{"active_including_opening":5,"queued":2,
+                            "limits":{"max_flows":64,"password":"PRIVATE_LIMIT"}}}]}}},
             "ssh":{"status":{"state":"degraded","restarts":1,"resource_exhaustion_count":12,
                 "diagnostic_code":"ssh_resource_exhausted", "backend_path":"PRIVATE_PATH",
                 "backend_version":"OpenSSH_for_Windows_9.5p1, LibreSSL 3.8.2", "last_error":"PRIVATE_ERROR"},
@@ -109,6 +142,13 @@ mod tests {
             "OpenSSH_for_Windows_9.5p1"
         );
         assert_eq!(result["managed_upstream"]["limits"]["max_flows"], 128);
+        assert_eq!(result["managed_pool"]["ready_workers"], 1);
+        assert_eq!(
+            result["managed_pool"]["workers"][0]["admission"]["active_including_opening"],
+            5
+        );
+        assert_eq!(result["managed_pool"]["workers"][0]["admission"]["limits"]["max_flows"], 64);
+        assert!(result["managed_pool"]["workers"][0].get("endpoint").is_none());
     }
     #[test]
     fn nested_injection_and_empty_snapshots_are_safe() {
