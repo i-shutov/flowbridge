@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import struct
 import sys
 import tempfile
 import time
@@ -124,6 +125,24 @@ def main():
         text = run([str(args.harness.resolve()), str(install / "FlowBridge.exe"),
                     str((args.output / "installed-ui.bmp").resolve())])
         require("PASS Win32 GUI" in text and "PASS Windows DLL" in text, "GUI smoke incomplete")
+        require("PASS compact Windows GUI" in text, "Compact GUI geometry checks missing")
+        snapshots = {}
+        for page in ("dashboard", "ssh", "proxy", "apps", "advanced"):
+            image = args.output / f"installed-ui-compact-{page}.bmp"
+            pixels = image.read_bytes()
+            require(len(pixels) >= 54 and pixels[:2] == b"BM",
+                    f"Missing or malformed Win32 evidence screenshot: {page}")
+            width, negative_height = struct.unpack_from("<ii", pixels, 18)
+            height = abs(negative_height)
+            require(width >= 920 and height >= 600 and
+                    len(pixels) >= 54 + width * height * 4,
+                    f"Truncated or out-of-bounds compact page screenshot: {page}")
+            snapshots[page] = {"sha256": hashlib.sha256(pixels).hexdigest(),
+                               "width": width, "height": height}
+        require(len({snapshot["sha256"] for snapshot in snapshots.values()}) == len(snapshots),
+                "At least two compact pages produced an identical screenshot")
+        report["compact_ui_screenshots"] = snapshots
+        passed("All five compact Win32 views have real monitor-bounded, full-client BMP evidence")
         passed("Installed native GUI and DLL: real TCP traffic, half-close, Apply/Start/Stop")
         profile = Path(os.environ["LOCALAPPDATA"]) / "FlowBridge/profile.json"
         profile_hash = digest(profile)
