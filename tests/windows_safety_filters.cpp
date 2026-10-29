@@ -33,6 +33,12 @@ static int sendUDP(const std::string& ip,unsigned short port){
     auto target=endpoint(ip,port);int sent=sendto(socket.value,"x",1,0,reinterpret_cast<sockaddr*>(&target),sizeof(target));
     return sent==1?0:WSAGetLastError();
 }
+static bool delivered(SOCKET socket,unsigned milliseconds=700){
+    fd_set readable;FD_ZERO(&readable);FD_SET(socket,&readable);
+    timeval timeout{static_cast<long>(milliseconds/1000),static_cast<long>((milliseconds%1000)*1000)};
+    int ready=select(0,&readable,nullptr,nullptr,&timeout);require(ready>=0,"UDP receive readiness failed");
+    if(!ready)return false;char value=0;require(recv(socket,&value,1,0)==1&&value=='x',"Unexpected fixture datagram");return true;
+}
 static int connectTCP(const std::string& ip,unsigned short port){
     Socket socket;socket.value=::socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);require(socket.value!=INVALID_SOCKET,"TCP socket failed");
     auto target=endpoint(ip,port);int result=connect(socket.value,reinterpret_cast<sockaddr*>(&target),sizeof(target));return result==0?0:WSAGetLastError();
@@ -50,14 +56,17 @@ int wmain(int argc,wchar_t** argv){
         require(GetEnvironmentVariableW(L"GITHUB_ACTIONS",nullptr,0)!=0,"Disposable hosted runner required");
         auto ip=localIP();Socket quic,dnsUDP,dnsTCP;
         bindSocket(quic,SOCK_DGRAM,ip,443);bindSocket(dnsUDP,SOCK_DGRAM,ip,53);bindSocket(dnsTCP,SOCK_STREAM,ip,53);
-        require(sendUDP(ip,443)==0&&sendUDP(ip,53)==0&&connectTCP(ip,53)==0,"Unfiltered local fixture not reachable");
+        require(sendUDP(ip,443)==0&&delivered(quic.value)&&sendUDP(ip,53)==0&&delivered(dnsUDP.value)&&connectTCP(ip,53)==0,"Unfiltered local fixture not reachable");
         wchar_t exe[32768]{};require(GetModuleFileNameW(nullptr,exe,32768)!=0,"Executable identity unavailable");
         SafetyFilters filters;filters.start({exe},true);
         int quicError=sendUDP(ip,443),udpError=sendUDP(ip,53),tcpError=connectTCP(ip,53);
         std::cout<<"WFP errors: QUIC="<<quicError<<" UDP53="<<udpError<<" TCP53="<<tcpError<<"\n";
-        require(quicError==WSAEACCES&&udpError==WSAEACCES&&tcpError==WSAEACCES,"WFP did not deny selected QUIC and direct DNS");
+        // UDP send can enqueue successfully before asynchronous WFP authorization.
+        // The acceptance criterion is non-delivery to the actual listener.
+        require((quicError==0||quicError==WSAEACCES)&&(udpError==0||udpError==WSAEACCES)&&tcpError==WSAEACCES,"Unexpected socket error under WFP policy");
+        require(!delivered(quic.value)&&!delivered(dnsUDP.value),"WFP allowed a forbidden UDP datagram to reach the listener");
         // Loopback stub traffic is not blocked by the remote-DNS guard.
-        Socket loop;bindSocket(loop,SOCK_DGRAM,"127.0.0.1",53);require(sendUDP("127.0.0.1",53)==0,"Loopback DNS stub was blocked");
+        Socket loop;bindSocket(loop,SOCK_DGRAM,"127.0.0.1",53);require(sendUDP("127.0.0.1",53)==0&&delivered(loop.value),"Loopback DNS stub was blocked");
         auto other=std::filesystem::path(exe).parent_path()/L"unselected-network-fixture.exe";
         require(!std::filesystem::exists(other),"Unselected fixture already exists");std::filesystem::copy_file(exe,other);
         struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code error;std::filesystem::remove(path,error);}} cleanup{other};
@@ -66,8 +75,8 @@ int wmain(int argc,wchar_t** argv){
         require(CreateProcessW(other.c_str(),command.data(),nullptr,nullptr,FALSE,CREATE_NO_WINDOW,nullptr,nullptr,&si,&pi)!=0,"Cannot start unselected fixture");
         auto waited=WaitForSingleObject(pi.hProcess,5000);DWORD code=1;
         if(waited!=WAIT_OBJECT_0){TerminateProcess(pi.hProcess,1);WaitForSingleObject(pi.hProcess,3000);}else GetExitCodeProcess(pi.hProcess,&code);
-        CloseHandle(pi.hThread);CloseHandle(pi.hProcess);require(code==0,"Unselected application QUIC was blocked");
-        filters.stop();require(sendUDP(ip,443)==0&&sendUDP(ip,53)==0&&connectTCP(ip,53)==0,"Dynamic safety filters survived Stop");
+        CloseHandle(pi.hThread);CloseHandle(pi.hProcess);require(code==0&&delivered(quic.value),"Unselected application QUIC was blocked");
+        filters.stop();require(sendUDP(ip,443)==0&&delivered(quic.value)&&sendUDP(ip,53)==0&&delivered(dnsUDP.value)&&connectTCP(ip,53)==0,"Dynamic safety filters survived Stop");
         std::cout<<"PASS: real WFP selected-EXE UDP443 blocking, global non-loopback UDP/TCP53 blocking, local DNS exemption, unselected-app bypass and rollback. IPv6 filters installed; IPv6 traffic not exercised.\n";
         WSACleanup();return 0;
     }catch(const std::exception& error){std::cerr<<"FAIL: "<<error.what()<<"\n";WSACleanup();return 1;}
