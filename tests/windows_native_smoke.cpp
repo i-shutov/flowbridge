@@ -157,13 +157,13 @@ static void nativeLauncherArgumentTest() {
     need(params.find(L"--ssh-profile")==std::wstring::npos,
          "GUI-owned native capture unexpectedly forwards SSH secrets into UAC");
     const auto withBypass=capture_launcher::arguments(
-        L"C:\Users\Test User\profile.json",L"",{testApp},42,event,{testApp});
+        LR"(C:\Users\Test User\profile.json)",L"",{testApp},42,event,{testApp});
     need(withBypass.find(L"--bypass ")!=std::wstring::npos &&
          withBypass.find(L"--ssh-profile")==std::wstring::npos,
          "GUI/SSH process identity bypass or unprivileged SSH boundary missing");
     bool invalidBypass=false;
     try {
-        capture_launcher::arguments(L"C:\profile.json",L"",{testApp},42,event,{L"relative-ssh.exe"});
+        capture_launcher::arguments(LR"(C:\profile.json)",L"",{testApp},42,event,{L"relative-ssh.exe"});
     } catch(const std::exception&) { invalidBypass=true; }
     need(invalidBypass,"Relative SSH backend bypass accepted");
     need(capture_launcher::quote(L"C:\\A B\\") == L"\"C:\\A B\\\\\"", "Windows backslash quoting incorrect");
