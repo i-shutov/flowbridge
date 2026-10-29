@@ -1442,6 +1442,35 @@ mod tests {
         );
     }
     #[test]
+    fn explicit_ssh_backend_requires_absolute_local_path_without_auto_fallback() {
+        let mut cfg = config();
+        cfg.ssh_executable = Some("ssh.exe".into());
+        assert!(cfg.validate().is_err(), "Relative PATH resolution must not override OpenSSH");
+        cfg.ssh_executable = Some("//remote/share/ssh.exe".into());
+        assert!(cfg.validate().is_err(), "Network-share backend must be refused");
+        cfg.ssh_executable = Some("".into());
+        assert!(cfg.validate().is_err(), "Empty SSH override must not become PATH lookup");
+        let current = std::env::current_exe().unwrap().canonicalize().unwrap();
+        cfg.ssh_executable = Some(current.to_string_lossy().into_owned());
+        if cfg!(target_os = "macos") {
+            assert!(cfg.validate().is_err(),
+                "macOS must not silently change the signing-ID bypassed SSH binary");
+        } else {
+            cfg.validate().unwrap();
+            assert_eq!(resolve_ssh(&cfg).unwrap(), current);
+            // This test executable does NOT report an OpenSSH_ version. It
+            // must be rejected rather than launched as a dynamic SOCKS client.
+            let supervisor = Supervisor::new(cfg).unwrap();
+            supervisor.start().unwrap();
+            let failed = wait(&supervisor, |s| s.status.state == "failed");
+            assert!(failed.status.last_error.as_deref()
+                .is_some_and(|message| message.contains("did not identify itself as OpenSSH")));
+            assert_eq!(failed.status.restarts, 0);
+            assert_eq!(failed.status.pid, None);
+        }
+    }
+
+    #[test]
     fn strict_config_and_arguments_do_not_allow_shell_or_host_key_overrides() {
         let config=Config::from_json(r#"{"host":"server.example","user":"alice","identity_file":"/keys/with space/key","known_hosts_file":"/keys/known hosts","compression":true}"#).unwrap();
         assert_eq!(config.port, 22);
