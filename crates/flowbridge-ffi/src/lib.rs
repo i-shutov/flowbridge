@@ -744,7 +744,10 @@ mod network_tests {
         // closed check. In that valid order the documented handle/argument
         // error is -3 rather than EOF/I/O/timeout. All four outcomes must
         // promptly wake without retaining the handle or dangling memory.
-        assert!(matches!(code, 0 | -1 | -2 | -3), "unexpected close/read result: {code}");
+        assert!(
+            matches!(code, 0 | -1 | -2 | -3),
+            "unexpected close/read result: {code}"
+        );
         assert!(start.elapsed() < Duration::from_millis(500));
         assert!(retained.closed.load(Ordering::Acquire));
         assert!(native_stream(id).is_err());
