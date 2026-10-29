@@ -2,7 +2,7 @@ name: Windows native beta vertical validation
 on:
   push:
     branches: [work/windows-beta-control]
-    paths: ['tools/apply_windows_beta.py','.github/workflows/beta-windows-validation.yml','native/windows/**','tests/windows*.py','tests/windows_native_ipc.cpp','packaging/windows/FlowBridgeBeta.nsi']
+    paths: ['tools/apply_windows_beta.py','.github/workflows/beta-windows-validation.yml','native/**','tests/windows*.py','tests/windows_*.cpp','packaging/windows/**']
 permissions:
   contents: read
 concurrency:
@@ -24,7 +24,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add native tests packaging
-          git diff --cached --quiet || git commit -m 'test(windows): IPC failures, native installer lifecycle and DNS crash rollback'
+          git diff --cached --quiet || git commit -m 'feat(beta): native QUIC guards and compact interface acceptance'
           git push origin HEAD:refs/heads/work/windows-beta-control
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
   windows:
@@ -71,9 +71,13 @@ jobs:
           Copy-Item build/windows/Release/FlowBridgeIPCSmoke.exe build/ipc-smoke/
           & ./build/ipc-smoke/FlowBridgeIPCSmoke.exe 2>&1 | Tee-Object build/verification/windows-beta/ipc.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Native GUI smoke
+      - name: Real WFP selected QUIC and direct DNS leak prevention
         run: |
-          & ./build/windows/Release/FlowBridgeNativeSmoke.exe "$env:GITHUB_WORKSPACE/build/windows/Release/FlowBridge.exe"
+          & ./build/windows/Release/FlowBridgeSafetySmoke.exe 2>&1 | Tee-Object build/verification/windows-beta/wfp-safety.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Compact native GUI smoke
+        run: |
+          & ./build/windows/Release/FlowBridgeNativeSmoke.exe "$env:GITHUB_WORKSPACE/build/windows/Release/FlowBridge.exe" "$env:GITHUB_WORKSPACE/build/verification/windows-beta/compact-ui.bmp"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build internal native installer
         run: |
@@ -83,6 +87,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item build/windows-capture/Release/FlowBridgeCapture.exe build/payload/
           Copy-Item native/windows/wfp/dns_policy.ps1 build/payload/
+          Copy-Item packaging/windows/NATIVE_BETA_README.txt build/payload/README.txt -Force
           $nsis="${env:ProgramFiles(x86)}/NSIS/makensis.exe"
           & $nsis /INPUTCHARSET UTF8 "/DPAYLOAD_DIR=$env:GITHUB_WORKSPACE/build/payload" "/DOUTPUT_FILE=$env:GITHUB_WORKSPACE/artifacts/FlowBridge-native-beta-candidate-setup.exe" packaging/windows/FlowBridgeBeta.nsi
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -108,4 +113,28 @@ jobs:
             artifacts/FlowBridge-native-beta-candidate-setup.exe
             artifacts/native-beta-SHA256.txt
           if-no-files-found: error
+          retention-days: 14
+  macos:
+    needs: prepare
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+      - run: brew install xcodegen
+      - run: bash packaging/macos/build-pkg.sh local
+      - name: Compile the native TCP DNS and QUIC providers
+        working-directory: native/macos
+        run: |
+          set -o pipefail
+          mkdir -p ../../build/verification/macos-beta
+          xcodebuild -project FlowBridge.xcodeproj -scheme FlowBridge -configuration Debug ARCHS="$(uname -m)" CODE_SIGNING_ALLOWED=NO build 2>&1 | tee ../../build/verification/macos-beta/native-build.log
+      - uses: actions/upload-artifact@v7.0.0
+        if: always()
+        with:
+          name: FlowBridge-macOS-native-beta-build-evidence
+          path: build/verification/macos-beta/
+          if-no-files-found: warn
           retention-days: 14
