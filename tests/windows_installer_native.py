@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import socket
 import struct
 import sys
 import tempfile
@@ -159,6 +160,64 @@ def main():
             require(invalid_digest.returncode != 0 and
                     "GUI native profile SHA-256 mismatch" in invalid_digest.stdout,
                     "Installed helper accepted a modified profile across UAC")
+            # Exercise the real helper's Windows TCP owner attestation without
+            # loading a driver. A child PID must not inherit the parent's
+            # ability to route via a local listening SOCKS-like endpoint.
+            with socket.socket(socket.AF_INET,socket.SOCK_STREAM) as listener:
+                listener.bind(("127.0.0.1",0))
+                listener.listen(4)
+                listen_port=listener.getsockname()[1]
+                selected_exe=install / "FlowBridge.exe"
+                isolated = {
+                    "version": 1, "listen": "127.0.0.1:1",
+                    "proxies": [{"id":"gui-owned-socks","kind":"socks5",
+                                 "endpoint":{"host":"127.0.0.1","port":listen_port},
+                                 "username":None,"password_env":None}],
+                    "chains": [],
+                    "rules": [{"id":"selected-applications","enabled":True,
+                               "applications":["flowbridge.exe"],
+                               "hosts":[],"networks":[],"ports":[],
+                               "action":{"type":"proxy","id":"gui-owned-socks"}}],
+                    "default_action":{"type":"direct"},
+                    "connect_timeout_ms":3000,"handshake_timeout_ms":3000,
+                    "idle_timeout_ms":5000,"max_connections":2}
+                isolated_file=root / "pinned-user-socks.json"
+                isolated_bytes=json.dumps(isolated).encode("utf-8")
+                isolated_file.write_bytes(isolated_bytes)
+                verified_sha=hashlib.sha256(isolated_bytes).hexdigest()
+                fake_owner=subprocess.Popen(
+                    [sys.executable,"-c","import time;time.sleep(30)"],
+                    stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+                    creationflags=subprocess.CREATE_NO_WINDOW)
+                try:
+                    denied=subprocess.run(
+                        [str(capture),"--console","--profile",str(isolated_file),
+                         "--capture-app",str(selected_exe),
+                         "--gui-owner",str(fake_owner.pid),
+                         "--stop-event",stop_name,"--profile-sha256",verified_sha],
+                        stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+                        text=True,timeout=12)
+                    require(denied.returncode!=0 and
+                            "GUI-owned SOCKS listener is not bound by the expected FlowBridge GUI process" in denied.stdout,
+                            "Elevated WFP helper trusted a different process's local listener")
+                finally:
+                    fake_owner.terminate()
+                    fake_owner.wait(timeout=5)
+                passed("Installed helper rejects a SOCKS listener owned by another PID")
+                if preflight["kernel_driver_accessible"] is False:
+                    # Reaching the missing-driver rejection demonstrates that
+                    # the exact parent PID/listener pair passed the OS check.
+                    verified=subprocess.run(
+                        [str(capture),"--console","--profile",str(isolated_file),
+                         "--capture-app",str(selected_exe),
+                         "--gui-owner",str(os.getpid()),
+                         "--stop-event",stop_name,"--profile-sha256",verified_sha],
+                        stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+                        text=True,timeout=12)
+                    require(verified.returncode!=0 and
+                            "Open signed WFP driver" in verified.stdout,
+                            "Expected parent-owned SOCKS listener failed attestation or activated an unexpected driver")
+                    passed("Installed helper accepts exact GUI PID and port before honest missing-driver failure")
         finally:
             kernel.CloseHandle(event)
         passed("Installed helper pins exact profile SHA-256 before opening the WFP driver")
