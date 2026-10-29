@@ -1,0 +1,32 @@
+name: Windows real WFP application scope
+on:
+  workflow_dispatch:
+  push:
+    branches: ['fix/wfp-selected-executable']
+  pull_request:
+    paths: ['native/windows/wfp/**', 'tests/windows_wfp_scope.*', 'tests/wfp_scope/**', '.github/workflows/wfp-scope.yml']
+permissions:
+  contents: read
+concurrency:
+  group: wfp-scope-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  actual-bfe-scope:
+    runs-on: windows-2025
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: cmake -S tests/wfp_scope -B build/wfp-scope -A x64
+      - run: cmake --build build/wfp-scope --config Release
+      - name: Actual kernel filter scope and cleanup without loading a driver
+        run: python tests/windows_wfp_scope.py --executable build/wfp-scope/Release/FlowBridgeWfpScopeQA.exe --output build/verification/wfp-scope/result.json
+      - uses: actions/upload-artifact@v7.0.0
+        if: always()
+        with:
+          name: FlowBridge-real-WFP-scope-QA
+          path: build/verification/wfp-scope/
+          if-no-files-found: warn
+          retention-days: 14

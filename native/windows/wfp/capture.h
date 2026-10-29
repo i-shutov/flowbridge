@@ -12,7 +12,8 @@ public:
     Capture(const Capture&) = delete;
     Capture& operator=(const Capture&) = delete;
     void start(unsigned short port4be, unsigned short port6be,
-               const std::vector<std::wstring>& bypass);
+               const std::vector<std::wstring>& bypass,
+               const std::vector<std::wstring>& applications);
     void stop() noexcept;
 private:
     HANDLE driver_ = INVALID_HANDLE_VALUE;
