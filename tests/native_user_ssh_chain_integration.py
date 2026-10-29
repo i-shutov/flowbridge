@@ -68,10 +68,11 @@ def main():
     try:
         # The managed SSH endpoint is deliberately owned by the GUI engine.
         engine = abi.call("fb_engine_create_json", gui)["engine_id"]
+        shared_limits = {"max_flows": 4, "max_opening": 2,
+                         "max_queued": 4, "wait_timeout_ms": 3000}
         abi.call("fb_engine_set_upstream_gate_json", engine, {
             "endpoint": endpoint, "ready": True, "grace_ms": 1000,
-            "limits": {"max_flows": 4, "max_opening": 2,
-                       "max_queued": 4, "wait_timeout_ms": 3000},
+            "limits": shared_limits,
         })
         abi.call("fb_engine_start_json", engine)
         session = abi.call("fb_native_create_json", native, {})["session_id"]
@@ -89,6 +90,7 @@ def main():
         # traffic during reconnect. A pending selected flow must not go DIRECT.
         abi.call("fb_engine_set_upstream_gate_json", engine, {
             "endpoint": endpoint, "ready": False, "grace_ms": 3000,
+            "limits": shared_limits,
         })
         pending = pool.submit(abi.call, "fb_native_stream_open_json", session, selection)
         time.sleep(0.15)
@@ -96,6 +98,7 @@ def main():
         require(server.active == 1, "Selected flow bypassed the user-level readiness gate")
         abi.call("fb_engine_set_upstream_gate_json", engine, {
             "endpoint": endpoint, "ready": True, "grace_ms": 3000,
+            "limits": shared_limits,
         })
         second = pending.result(timeout=10)["stream_id"]
         streams.append(second)
