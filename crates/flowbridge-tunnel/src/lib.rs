@@ -1184,9 +1184,8 @@ mod tests {
         // distinct non-ephemeral (on macOS/Windows) port range rather than
         // reusing the same low 16 ports on every CI invocation.
         static NEXT: std::sync::OnceLock<AtomicUsize> = std::sync::OnceLock::new();
-        let next = NEXT.get_or_init(|| {
-            AtomicUsize::new(16_000 + (std::process::id() as usize % 1800) * 8)
-        });
+        let next = NEXT
+            .get_or_init(|| AtomicUsize::new(16_000 + (std::process::id() as usize % 1800) * 8));
         let local_port = loop {
             let port = next.fetch_add(1, Ordering::SeqCst) as u16;
             assert!(port < 32_000, "test-only SSH listener port range exhausted");
