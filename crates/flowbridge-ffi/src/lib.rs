@@ -1127,6 +1127,52 @@ mod ssh_and_gate_tests {
         assert_eq!(unsafe { consume(fb_ssh_snapshot_json(0)) }["ok"], false);
     }
     #[test]
+    fn pool_ffi_rejects_unsafe_workers_without_changing_last_valid_generation() {
+        let config = CString::new(include_str!("../../../examples/ssh-socks.json")).unwrap();
+        let engine = unsafe { consume(fb_engine_create_json(config.as_ptr())) };
+        let id = engine["engine_id"].as_u64().unwrap();
+        let value = json!({
+            "primary":{"host":"127.0.0.1","port":1080},
+            "workers":[
+                {"endpoint":{"host":"127.0.0.1","port":1080},"ready":true},
+                {"endpoint":{"host":"127.0.0.1","port":1082},"ready":false}
+            ],
+            "limits":{"max_flows":2,"max_opening":1,"max_queued":2,"wait_timeout_ms":100},
+            "aggregate_max_flows":4
+        });
+        let input = CString::new(value.to_string()).unwrap();
+        assert_eq!(
+            unsafe { consume(fb_engine_set_upstream_pool_json(id, input.as_ptr())) }["ok"],
+            true
+        );
+        let snapshot = unsafe { consume(fb_engine_snapshot_json(id)) };
+        assert_eq!(snapshot["managed_pool"]["ready_workers"], 1);
+        assert_eq!(snapshot["managed_pool"]["workers"][1]["ready"], false);
+        for bad in [
+            json!({"invalid":true}),
+            json!({"primary":{"host":"127.0.0.1","port":1080},
+                "workers":[{"endpoint":{"host":"127.0.0.1","port":1080},"ready":true},
+                           {"endpoint":{"host":"127.0.0.1","port":1080},"ready":true}],
+                "limits":{"max_flows":2,"max_opening":1,"max_queued":2,"wait_timeout_ms":100},
+                "aggregate_max_flows":4}),
+            json!({"primary":{"host":"127.0.0.1","port":1080},
+                "workers":[{"endpoint":{"host":"127.0.0.1","port":1080},"ready":true},
+                           {"endpoint":{"host":"127.0.0.1","port":1082},"ready":true}],
+                "limits":{"max_flows":2,"max_opening":1,"max_queued":2,"wait_timeout_ms":100},
+                "aggregate_max_flows":3}),
+        ] {
+            let arg = CString::new(bad.to_string()).unwrap();
+            assert_eq!(
+                unsafe { consume(fb_engine_set_upstream_pool_json(id, arg.as_ptr())) }["ok"],
+                false
+            );
+            let after = unsafe { consume(fb_engine_snapshot_json(id)) };
+            assert_eq!(after["managed_pool"]["ready_workers"], 1);
+        }
+        fb_engine_destroy(id);
+    }
+
+    #[test]
     fn gate_ffi_validates_strict_input_and_checked_engine_handles() {
         let config = CString::new(include_str!("../../../examples/direct.json")).unwrap();
         let engine = unsafe { consume(fb_engine_create_json(config.as_ptr())) };
