@@ -36,7 +36,9 @@ int hold(const wchar_t* path,const wchar_t* stopName,const wchar_t* ownerText){
     GUID key{};const auto uuid=UuidCreate(&key);
     if(uuid!=RPC_S_OK && uuid!=RPC_S_UUID_LOCAL_ONLY)check(uuid,"Create test key");
     check(FwpmTransactionBegin0(engine.value,0),"Begin test transaction");
-    FWPM_SUBLAYER0 layer{};layer.subLayerKey=key;layer.weight=0x100;
+    // QA only: run the scoped BLOCK before hard-permit rules that can otherwise
+    // mask AUTH_CONNECT loopback tests. Production CONNECT_REDIRECT is unchanged.
+    FWPM_SUBLAYER0 layer{};layer.subLayerKey=key;layer.weight=0xffff;
     layer.displayData.name=const_cast<wchar_t*>(L"FlowBridge isolated EXE scope QA");
     check(FwpmSubLayerAdd0(engine.value,&layer,nullptr),"Add test sublayer");
     auto conditions=application.tcpConditions();
@@ -49,7 +51,7 @@ int hold(const wchar_t* path,const wchar_t* stopName,const wchar_t* ownerText){
         check(FwpmFilterAdd0(engine.value,&filter,nullptr,nullptr),"Add test app filter");
     }
     check(FwpmTransactionCommit0(engine.value),"Commit test filters");
-    std::cout<<"{\"ready\":true,\"driver_loaded\":false,\"layer\":\"ALE_AUTH_CONNECT\"}"<<std::endl;
+    std::cout<<"{\"ready\":true,\"driver_loaded\":false,\"sublayer_weight\":65535,\"layer\":\"ALE_AUTH_CONNECT\"}"<<std::endl;
     HANDLE events[]={stop.value,owner.value};
     const auto result=WaitForMultipleObjects(2,events,FALSE,120000);
     if(result==WAIT_FAILED)check(GetLastError(),"Wait test lifetime");
