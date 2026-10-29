@@ -25,6 +25,14 @@ import time
 import uuid
 
 
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with Path(path).open('rb') as file:
+        for block in iter(lambda: file.read(1024 * 1024), b''):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def require(value, message):
     if not value:
         raise AssertionError(message)
@@ -42,6 +50,8 @@ def exact(sock, count):
 
 class Echo(socketserver.BaseRequestHandler):
     def handle(self):
+        with self.server.lock:
+            self.server.accepted += 1
         self.request.settimeout(8)
         try:
             while data := self.request.recv(65536):
@@ -55,9 +65,34 @@ class Server(socketserver.ThreadingTCPServer):
     daemon_threads = True
     address_family = socket.AF_INET
     request_queue_size = 32
-    connects = 0
-    deny = False
-    lock = threading.Lock()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.connects = 0
+        self.accepted = 0
+        self.connects_by_family = {socket.AF_INET: 0, socket.AF_INET6: 0}
+        self.deny = False
+        self.lock = threading.Lock()
+
+
+class V6Server(Server):
+    address_family = socket.AF_INET6
+
+
+class UDP(socketserver.BaseRequestHandler):
+    def handle(self):
+        payload, server_socket = self.request
+        server_socket.sendto(payload, self.client_address)
+
+
+class UDPServer(socketserver.ThreadingUDPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+    address_family = socket.AF_INET
+
+
+class V6UDPServer(UDPServer):
+    address_family = socket.AF_INET6
 
 
 class Socks(socketserver.BaseRequestHandler):
@@ -67,13 +102,18 @@ class Socks(socketserver.BaseRequestHandler):
         try:
             require(exact(client, 3) == b'\x05\x01\x00', 'SOCKS greeting')
             client.sendall(b'\x05\x00')
-            require(exact(client, 4) == b'\x05\x01\x00\x01', 'Expected IPv4 SOCKS CONNECT')
-            destination = socket.inet_ntoa(exact(client, 4))
+            header = exact(client, 4)
+            require(header[:3] == b'\x05\x01\x00' and header[3] in (1, 4),
+                    'Expected IPv4/IPv6 SOCKS CONNECT with a literal IP')
+            family = socket.AF_INET if header[3] == 1 else socket.AF_INET6
+            destination = socket.inet_ntop(family, exact(client, 4 if family == socket.AF_INET else 16))
             port = int.from_bytes(exact(client, 2), 'big')
-            require((destination, port) == ('127.0.0.1', self.server.echo_port),
-                    'Unrecognized test-only destination')
+            expected = self.server.echo_ports[family]
+            require((destination, port) == expected,
+                    'Unrecognized test-only destination or changed address family')
             with self.server.lock:
                 self.server.connects += 1
+                self.server.connects_by_family[family] += 1
                 deny = self.server.deny
             if deny:
                 client.sendall(b'\x05\x05\x00\x01' + bytes(6))
@@ -108,27 +148,38 @@ def start(server):
     return thread
 
 
-def run_probe(client, port, *, success=True):
-    p = subprocess.run([str(client), 'probe', '127.0.0.1', str(port), 'tcp'],
+def run_probe(client, host, port, *, protocol='tcp', success=True):
+    require(host in ('127.0.0.1', '::1') and protocol in ('tcp', 'udp'),
+            'Only literal loopback TCP/UDP probes are accepted')
+    p = subprocess.run([str(client), 'probe', host, str(port), protocol],
                        capture_output=True, text=True, timeout=20)
     if success:
         require(p.returncode == 0 and json.loads(p.stdout).get('echo_verified') is True,
-                f'{client} did not complete echoed bytes: {p.returncode} {p.stdout} {p.stderr}')
+                f'{client} did not complete echoed {host}/{protocol}: {p.returncode} {p.stdout} {p.stderr}')
     else:
-        require(p.returncode != 0, 'Selected EXE bypassed rejected SOCKS (DIRECT leak)')
+        require(p.returncode != 0,
+                f'Selected EXE bypassed rejected SOCKS via DIRECT ({host}/{protocol})')
 
 
-def await_helper_ready(child):
-    """Observe the exact child that was launched; refuse silent early exit."""
+def await_helper_ready(child, event_counts=None):
+    """Observe the actual helper child without uploading private JSON logs.
+
+    Only pre-approved event names are counted in evidence. Do not store raw
+    JSON with executable paths, profile details, destination IPs or SSH keys.
+    """
     messages = queue.Queue()
+    safe_events = {'ready', 'faulted', 'connected', 'closed',
+                   'rejected', 'native_status'}
     def pump():
         try:
             for line in child.stdout:
                 try:
                     message = json.loads(line)
-                except json.JSONDecodeError:
+                except (json.JSONDecodeError, ValueError):
                     continue
                 event = message.get('event')
+                if isinstance(event, str) and event in safe_events and event_counts is not None:
+                    event_counts[event] = min(event_counts.get(event, 0) + 1, 1000000)
                 if event in ('ready', 'faulted'):
                     messages.put((event, message))
         finally:
@@ -154,11 +205,17 @@ def main():
             'Explicit FLOWBRIDGE_WFP_VM=1 and an elevated disposable Windows VM are required')
     helper = args.helper.resolve(strict=True)
     probe_binary = args.probe.resolve(strict=True)
-    report = {'passed': False, 'coverage': {'real_wfp_redirect': False,
+    report = {'passed': False, 'source_commit': os.environ.get('GITHUB_SHA'),
+              'binary_sha256': {'helper': sha256_file(helper),
+                                'probe': sha256_file(probe_binary)},
+              'coverage': {'real_wfp_redirect': False,
              'selected_executable': True, 'external_network': False,
              'ssh_forwarding_tested': False, 'dns_settings_changed': False,
-             'dns_interception_tested': False, 'owner_process_death_cleanup': False},
-             'platform': platform.platform(), 'checks': []}
+             'dns_interception_tested': False, 'owner_process_death_cleanup': False,
+             'ipv4_redirect_verified': False, 'ipv6_redirect_verified': False,
+             'selected_udp_bypassed': False, 'selected_ipv6_udp_bypassed': False},
+             'platform': platform.platform(), 'checks': [],
+             'helper_event_counts': {}, 'socks_connects_by_family': {}}
     event = None
     server_threads = []
     process = None
@@ -179,10 +236,20 @@ def main():
         require(preflight.get('kernel_driver_accessible') is True,
                 'Signed/test-signed WFP driver not loaded and available to this token')
         report['checks'].append('Driver ABI and access preflight passed; redirect unproven until traffic')
-        echo = Server(('127.0.0.1', 0), Echo)
-        server_threads.append((echo, start(echo)))
+        targets = {}
+        udp_targets = {}
+        for family, host, tcp_type, udp_type in (
+            (socket.AF_INET, '127.0.0.1', Server, UDPServer),
+            (socket.AF_INET6, '::1', V6Server, V6UDPServer),
+        ):
+            echo = tcp_type((host, 0), Echo)
+            server_threads.append((echo, start(echo)))
+            targets[family] = (host, echo.server_address[1])
+            datagram = udp_type((host, 0), UDP)
+            server_threads.append((datagram, start(datagram)))
+            udp_targets[family] = (host, datagram.server_address[1])
         socks = Server(('127.0.0.1', 0), Socks)
-        socks.echo_port = echo.server_address[1]
+        socks.echo_ports = targets
         server_threads.append((socks, start(socks)))
         event_name = 'Local\\FlowBridgeCaptureStop-' + str(uuid.uuid4())
         event = kernel.CreateEventW(None, True, False, event_name)
@@ -219,31 +286,49 @@ def main():
                     'GUI native profile SHA-256 mismatch' in mismatch.stdout,
                     'Elevated helper accepted a modified GUI-owned profile')
             report['checks'].append('Profile tampering across UAC is rejected before WFP is enabled')
-            run_probe(selected, echo.server_address[1])
-            run_probe(unrelated, echo.server_address[1])
+            for host, port in targets.values():
+                run_probe(selected, host, port)
+                run_probe(unrelated, host, port)
+            for host, port in udp_targets.values():
+                run_probe(selected, host, port, protocol='udp')
             require(socks.connects == 0, 'Selected client used SOCKS before capture')
-            report['checks'].append('Both identical-basename executables work without capture')
+            report['checks'].append('IPv4/IPv6 TCP and UDP work before WFP capture')
             process = subprocess.Popen([str(helper), '--console', '--profile', str(profile),
                                         '--capture-app', str(selected),
                                         '--gui-owner', str(os.getpid()), '--stop-event', event_name,
                                          '--profile-sha256', profile_sha256],
                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                        text=True, creationflags=subprocess.CREATE_NO_WINDOW)
-            reader = await_helper_ready(process)
-            run_probe(selected, echo.server_address[1])
-            require(socks.connects >= 1, 'Selected client did not enter SOCKS through WFP')
+            reader = await_helper_ready(process, report['helper_event_counts'])
+            for family, (host, port) in targets.items():
+                before = socks.connects_by_family[family]
+                run_probe(selected, host, port)
+                require(socks.connects_by_family[family] > before,
+                        f'Selected IPv{4 if family == socket.AF_INET else 6} never entered SOCKS')
+                count = socks.connects
+                run_probe(unrelated, host, port)
+                require(socks.connects == count,
+                        'Unrelated full-path EXE with identical basename was captured')
+            report['checks'].append('Actual WFP ALE redirect forwards both IPv4 and IPv6 for the selected full EXE path')
+            report['coverage']['ipv4_redirect_verified'] = True
+            report['coverage']['ipv6_redirect_verified'] = True
             count = socks.connects
-            run_probe(unrelated, echo.server_address[1])
-            require(socks.connects == count, 'Unrelated same-basename client was captured')
-            report['checks'].append('WFP redirect sends only selected EXE through native SOCKS bridge')
+            for family, (host, port) in udp_targets.items():
+                run_probe(selected, host, port, protocol='udp')
+                require(socks.connects == count, 'Selected UDP was incorrectly captured by TCP-only WFP policy')
+                report['coverage']['selected_udp_bypassed' if family == socket.AF_INET
+                                   else 'selected_ipv6_udp_bypassed'] = True
+            report['checks'].append('Selected IPv4 and IPv6 UDP remain unaffected, no SOCKS ingress')
             socks.deny = True
-            run_probe(selected, echo.server_address[1], success=False)
-            run_probe(unrelated, echo.server_address[1])
-            report['checks'].append('Explicit SOCKS denial never falls back to direct TCP')
+            for host, port in targets.values():
+                run_probe(selected, host, port, success=False)
+                run_probe(unrelated, host, port)
+            report['checks'].append('Explicit SOCKS denial cannot fall back to DIRECT for either IP family')
             require(kernel.SetEvent(event), 'Stop event could not be signaled')
             require(process.wait(timeout=30) == 0, 'Native helper did not cleanly stop')
-            run_probe(selected, echo.server_address[1])
-            report['checks'].append('Stop event closes helper, drops WFP dynamic filters and restores connection')
+            for host, port in targets.values():
+                run_probe(selected, host, port)
+            report['checks'].append('Stop event drops both IPv4 and IPv6 WFP dynamic filters')
             reader.join(timeout=5)
             if process.stdout:
                 process.stdout.close()
@@ -269,18 +354,25 @@ def main():
                  '--stop-event', event_name, '--profile-sha256', profile_sha256],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                 creationflags=subprocess.CREATE_NO_WINDOW)
-            reader = await_helper_ready(process)
+            reader = await_helper_ready(process, report['helper_event_counts'])
             before = socks.connects
-            run_probe(selected, echo.server_address[1])
-            require(socks.connects>before, 'Owner-lifetime run never captured selected EXE')
+            for host, port in targets.values():
+                run_probe(selected, host, port)
+            require(socks.connects >= before + 2,
+                    'Owner-lifetime run did not capture both selected IPv4/IPv6 flows')
             owner.terminate()
             owner.wait(timeout=10)
             require(process.wait(timeout=30)==0,
                     'Helper survived abrupt GUI-owner termination')
             reader.join(timeout=5)
-            run_probe(selected, echo.server_address[1])
-            report['checks'].append('Abrupt owner-process exit removes dynamic WFP filters without stop event')
+            for host, port in targets.values():
+                run_probe(selected, host, port)
+            report['checks'].append('Abrupt GUI-owner death removes both IPv4 and IPv6 dynamic filters')
             report['coverage']['owner_process_death_cleanup'] = True
+            report['socks_connects_by_family'] = {
+                'ipv4': socks.connects_by_family[socket.AF_INET],
+                'ipv6': socks.connects_by_family[socket.AF_INET6],
+            }
             report['coverage']['real_wfp_redirect'] = True
             report['passed'] = True
     except Exception as error:

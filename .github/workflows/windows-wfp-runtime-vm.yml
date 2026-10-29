@@ -37,6 +37,10 @@ jobs:
         shell: pwsh
         run: |
           python tests/windows_wfp_redirect_runtime.py --helper build/windows-capture/Release/FlowBridgeCapture.exe --probe build/wfp-scope/Release/FlowBridgeWfpScopeQA.exe --output build/verification/wfp-runtime/result.json
+      - name: Exercise real WFP through GUI-owner Rust listener, with simulated SSH gate failures
+        shell: pwsh
+        run: |
+          python tests/windows_wfp_userchain_runtime.py --helper build/windows-capture/Release/FlowBridgeCapture.exe --probe build/wfp-scope/Release/FlowBridgeWfpScopeQA.exe --library target/release/flowbridge_ffi.dll --output build/verification/wfp-runtime/userchain.json
       - name: Preserve evidence (including failure)
         if: always()
         uses: actions/upload-artifact@v7.0.0
