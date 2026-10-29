@@ -508,7 +508,16 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
         click(window,stopId); waitFor([&]{ return windowText(GetDlgItem(window,statusId)).find(L"Остановлено |")!=std::wstring::npos; },"GUI Stop failed");
         SendMessageW(GetDlgItem(window,modeId),CB_SETCURSEL,1,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(modeId,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,modeId)));
         edit(GetDlgItem(window,231),"server.example");edit(GetDlgItem(window,233),"testuser");edit(GetDlgItem(window,236),std::to_string(port));click(window,startId);
-        need(windowText(GetDlgItem(window,280)).find(L"должны отличаться")!=std::wstring::npos,"managed SSH allowed ingress/local-port collision");need(IsWindowEnabled(GetDlgItem(window,startId)),"collision rejection left start pending");
+        need(windowText(GetDlgItem(window,280)).find(L"пересекается")!=std::wstring::npos,
+             "managed SSH allowed ingress/primary-local-port collision");
+        need(IsWindowEnabled(GetDlgItem(window,startId)),"collision rejection left start pending");
+        // The second worker has its own port (base + 2); it too must be
+        // excluded from the GUI's ingress listener before launching SSH.
+        SendMessageW(GetDlgItem(window,288),CB_SETCURSEL,1,0);
+        edit(GetDlgItem(window,236),std::to_string(port-2));click(window,startId);
+        need(windowText(GetDlgItem(window,280)).find(L"пересекается")!=std::wstring::npos,
+             "managed SSH pool allowed ingress/secondary-port recursion");
+        SendMessageW(GetDlgItem(window,288),CB_SETCURSEL,0,0);
         edit(GetDlgItem(window,236),"1080");SendMessageW(GetDlgItem(window,modeId),CB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(modeId,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,modeId)));edit(GetDlgItem(window,editorId),changed.dump());
         click(window,202);need(IsWindow(GetDlgItem(window,282))&&IsWindow(GetDlgItem(window,283))&&IsWindow(GetDlgItem(window,284)),"Native capture GUI controls absent");
         waitFor([&]{return IsWindowEnabled(GetDlgItem(window,260));},"bounded application discovery did not finish");
