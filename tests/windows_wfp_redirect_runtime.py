@@ -153,17 +153,25 @@ def run_probe(client, host, port, *, protocol='tcp', success=True):
                 f'Selected EXE bypassed rejected SOCKS via DIRECT ({host}/{protocol})')
 
 
-def await_helper_ready(child):
-    """Observe the exact child that was launched; refuse silent early exit."""
+def await_helper_ready(child, event_counts=None):
+    """Observe the actual helper child without uploading private JSON logs.
+
+    Only pre-approved event names are counted in evidence. Do not store raw
+    JSON with executable paths, profile details, destination IPs or SSH keys.
+    """
     messages = queue.Queue()
+    safe_events = {'ready', 'faulted', 'connected', 'closed',
+                   'rejected', 'native_status'}
     def pump():
         try:
             for line in child.stdout:
                 try:
                     message = json.loads(line)
-                except json.JSONDecodeError:
+                except (json.JSONDecodeError, ValueError):
                     continue
                 event = message.get('event')
+                if isinstance(event, str) and event in safe_events and event_counts is not None:
+                    event_counts[event] = min(event_counts.get(event, 0) + 1, 1000000)
                 if event in ('ready', 'faulted'):
                     messages.put((event, message))
         finally:
@@ -195,7 +203,8 @@ def main():
              'dns_interception_tested': False, 'owner_process_death_cleanup': False,
              'ipv4_redirect_verified': False, 'ipv6_redirect_verified': False,
              'selected_udp_bypassed': False, 'selected_ipv6_udp_bypassed': False},
-             'platform': platform.platform(), 'checks': [], 'socks_connects_by_family': {}}
+             'platform': platform.platform(), 'checks': [],
+             'helper_event_counts': {}, 'socks_connects_by_family': {}}
     event = None
     server_threads = []
     process = None
@@ -279,7 +288,7 @@ def main():
                                          '--profile-sha256', profile_sha256],
                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                        text=True, creationflags=subprocess.CREATE_NO_WINDOW)
-            reader = await_helper_ready(process)
+            reader = await_helper_ready(process, report['helper_event_counts'])
             for family, (host, port) in targets.items():
                 before = socks.connects_by_family[family]
                 run_probe(selected, host, port)
@@ -334,7 +343,7 @@ def main():
                  '--stop-event', event_name, '--profile-sha256', profile_sha256],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                 creationflags=subprocess.CREATE_NO_WINDOW)
-            reader = await_helper_ready(process)
+            reader = await_helper_ready(process, report['helper_event_counts'])
             before = socks.connects
             for host, port in targets.values():
                 run_probe(selected, host, port)
