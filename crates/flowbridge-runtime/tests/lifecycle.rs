@@ -78,7 +78,12 @@ fn managed_reconnect_waits_before_open_and_resumes_new_flow_without_replay() {
     let config = proxied_profile(proxy.local_addr().unwrap());
     let endpoint = config.proxies[0].endpoint.clone();
     let engine = Engine::new(config.clone()).unwrap();
-    let limits = Limits { max_flows: 2, max_opening: 1, max_queued: 2, wait_timeout_ms: 50 };
+    let limits = Limits {
+        max_flows: 2,
+        max_opening: 1,
+        max_queued: 2,
+        wait_timeout_ms: 50,
+    };
     engine
         .set_upstream_gate_with_limits(Some(endpoint.clone()), false, 2000, limits.clone())
         .unwrap();
@@ -106,7 +111,11 @@ fn managed_reconnect_waits_before_open_and_resumes_new_flow_without_replay() {
     // Regression: while SSH is restarting, the short 50ms *capacity*
     // deadline must not override the separate 2s reconnect grace.
     thread::sleep(Duration::from_millis(180));
-    assert!(engine.snapshot().connections.iter().any(|c| c.state == "waiting_for_tunnel"));
+    assert!(engine
+        .snapshot()
+        .connections
+        .iter()
+        .any(|c| c.state == "waiting_for_tunnel"));
     proxy.set_nonblocking(false).unwrap();
     let server = thread::spawn(move || {
         let (mut stream, _) = proxy.accept().unwrap();
