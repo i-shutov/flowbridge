@@ -252,12 +252,6 @@ class Worker {
                                 gate(false);waiting=true;pending=value;result->acceptedDesktop=options;
                             } else {if(ssh){response(fb_ssh_stop_json(ssh));}waiting=false;gate(true);response(fb_engine_start_json(engine));result->saved=value;result->acceptedDesktop=options;}
                         }
-                    } else if(action==SaveDesktop) {
-                        // Save the SSH identity/backend and desktop preferences
-                        // without claiming that the running engine profile was
-                        // reloaded. The old path dropped this action silently.
-                        validateDesktop(options);
-                        result->acceptedDesktop=options;
                     } else if(action==Stop) {waiting=false;if(engine)response(fb_engine_stop_json(engine));if(ssh)response(fb_ssh_stop_json(ssh));}
                     if(ssh&&managedActive) {
                         result->ssh=response(fb_ssh_snapshot_json(ssh));auto state=result->ssh["status"].value("state",std::string());
@@ -647,11 +641,18 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
                     saveDesktop();
                     note("DNS через SSH: только hostname в явном SOCKS5. Без галочки доступны лишь IP; локального DNS fallback нет. Для новых соединений примените профиль. Прозрачный DNS WFP не защищён.");
                 }
+                else if(id==SaveDesktop&&!busy){
+                    // Pure desktop preferences are saved synchronously. No
+                    // worker dispatch, SSH connection, or engine apply occurs.
+                    // This is the same trusted path as Theme and Remote DNS.
+                    saveDesktop();
+                    note("Параметры подключения сохранены. Активный SSH не меняется до переподключения.");
+                }
                 else if(!busy){
-                    if(id==Start||id==Apply||id==SaveDesktop){
+                    if(id==Start||id==Apply){
                          if(nativeCapture.active()||nativeCapture.stopping())
                              throw std::runtime_error("Сначала остановите нативный перехват, затем меняйте или останавливайте SSH.");
-                         workerError.clear();auto value=commandConfiguration();auto settings=desktopSettings();validateDesktop(settings);if(settings.value("managed_ssh",false))validateManagedRoute(value,settings["ssh"]);dispatch(id==Start?Start:id==SaveDesktop?SaveDesktop:Apply,std::move(value),std::move(settings));}
+                         workerError.clear();auto value=commandConfiguration();auto settings=desktopSettings();validateDesktop(settings);if(settings.value("managed_ssh",false))validateManagedRoute(value,settings["ssh"]);dispatch(id,std::move(value),std::move(settings));}
                     else if(id==Stop){
                          if(nativeCapture.active()||nativeCapture.stopping())
                              stopNativeCapture(); // first remove WFP filters, then user can stop SSH
