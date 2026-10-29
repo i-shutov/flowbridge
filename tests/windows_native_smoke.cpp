@@ -118,6 +118,57 @@ static void nativeLauncherArgumentTest() {
     need(rejected,"Relative capture executable accepted");
     std::puts("PASS native capture launcher: full-path selection, quoted parameters, GUI owner and validation");
 }
+// Use client coordinates rather than comparing screen rectangles. These
+// assertions exercise actual Win32 child placement at the smallest supported
+// desktop size instead of accepting a cropped screenshot as visual QA.
+static RECT childBounds(HWND window,int id) {
+    HWND child=GetDlgItem(window,id);
+    need(child&&IsWindow(child),"Compact GUI control is missing");
+    RECT rect{};need(GetWindowRect(child,&rect)!=0,"Cannot measure compact GUI child");
+    MapWindowPoints(nullptr,window,reinterpret_cast<POINT*>(&rect),2);
+    return rect;
+}
+static void assertCompactLayout(HWND window) {
+    need(SetWindowPos(window,nullptr,0,0,980,680,SWP_NOMOVE|SWP_NOZORDER)!=0,
+         "Could not resize the GUI to compact Windows desktop");
+    RECT client{};GetClientRect(window,&client);
+    need(client.right>=920&&client.bottom>=600,"Compact window minimum client area not reached");
+    auto inside=[&](int id){
+        auto r=childBounds(window,id);
+        need(r.left>=0&&r.top>=0&&r.right<=client.right&&r.bottom<=client.bottom,
+             "Compact GUI child lies outside the viewport");
+        return r;
+    };
+    click(window,200);
+    const auto connections=inside(110);
+    const auto dashboardHelp=inside(209);
+    need(connections.bottom+6<=dashboardHelp.top,"Dashboard connection list obscures help");
+    click(window,201);
+    HWND mode=GetDlgItem(window,230);
+    SendMessageW(mode,CB_SETCURSEL,1,0);
+    SendMessageW(window,WM_COMMAND,MAKEWPARAM(230,CBN_SELCHANGE),reinterpret_cast<LPARAM>(mode));
+    const auto sshHelp=inside(243);
+    const auto save=inside(240);
+    inside(246); // Last managed-SSH timeout field
+    need(sshHelp.bottom+6<=save.top,"Managed SSH form overlaps Save button");
+    SendMessageW(mode,CB_SETCURSEL,0,0);
+    SendMessageW(window,WM_COMMAND,MAKEWPARAM(230,CBN_SELCHANGE),reinterpret_cast<LPARAM>(mode));
+    click(window,202);
+    const auto preset=inside(264);
+    const auto discover=inside(260);
+    need(preset.right+6<=discover.left,"Application presets overlap the Discover button");
+    const auto apps=inside(261);
+    const auto hint=inside(2018);
+    need(apps.bottom+6<=hint.top,"Application table overlaps its footer");
+    const auto start=inside(282),stop=inside(283),exported=inside(266);
+    need(start.right+6<=stop.left&&stop.right+6<=exported.left,
+         "Native capture actions overlap at compact width");
+    need(exported.bottom<=client.bottom,"Native capture actions are clipped");
+    click(window,203);
+    inside(109);inside(111); // JSON editor and log
+    click(window,200);
+    std::puts("PASS compact Windows GUI: SSH, apps, native capture actions and diagnostics fit 980x680");
+}
 static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
     STARTUPINFOW start{}; start.cb=sizeof(start); PROCESS_INFORMATION process{};
     std::wstring command=L"\""+std::wstring(executable)+L"\"";
@@ -126,6 +177,7 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
     try {
         need(WaitForInputIdle(process.hProcess,8000)==0,"GUI did not finish initialization");
         waitFor([&]{ window=FindWindowW(L"FlowBridgeNativeV02",nullptr); return window!=nullptr; },"GUI window did not appear");
+        assertCompactLayout(window);
         const int startId=100,stopId=101,applyId=102,proxyId=105,hostId=106,protocolId=108,editorId=109,tableId=110,statusId=112;
         const int modeId=230;SendMessageW(GetDlgItem(window,modeId),CB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(modeId,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,modeId)));
         need(IsWindow(GetDlgItem(window,231))&&IsWindow(GetDlgItem(window,234)),"structured SSH editor missing");
