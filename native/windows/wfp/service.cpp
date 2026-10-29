@@ -333,6 +333,12 @@ int wmain(int argc,wchar_t** argv) {
         }
         if((guiOwnerPid==0)!=guiStopName.empty())throw std::runtime_error("GUI owner and stop event must be provided together");
         if(service&&guiOwnerPid)throw std::runtime_error("SCM-managed helper cannot accept a GUI owner");
+        // A UAC-elevated helper must not start OpenSSH or read private identity
+        // files using the elevated token for an unelevated GUI owner. The GUI
+        // runs SSH in its original user session and supplies only a loopback
+        // SOCKS endpoint; standalone developer/service mode is separate.
+        if(guiOwnerPid&&!sshProfilePath.empty())
+            throw std::runtime_error("GUI-owned capture must reuse the unelevated SSH session; --ssh-profile is forbidden");
         if(console==service || profilePath.empty() || !std::filesystem::path(profilePath).is_absolute()) throw std::runtime_error("Choose one run mode and an absolute administrator-controlled profile path");
         if(capturePaths.empty() || capturePaths.size()>64) throw std::runtime_error("Select 1..64 capture executables with --capture-app; whole-machine capture is not implicit");
         for(const auto& p:capturePaths) if(!std::filesystem::path(p).is_absolute() || !std::filesystem::is_regular_file(p)) throw std::runtime_error("Capture executable must be an existing absolute path");
