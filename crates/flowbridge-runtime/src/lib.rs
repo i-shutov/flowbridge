@@ -1,6 +1,7 @@
 //! Reusable native application engine. All control methods are synchronous and
 //! may be called from a UI worker or a Tokio task: networking owns its own thread.
 pub mod admission;
+pub mod pool;
 use flowbridge_core::{Action, Config, Endpoint, Flow};
 use flowbridge_net::{accept_socks5, connect_route_guarded, reply_socks5, NetError};
 use serde::Serialize;
@@ -9,7 +10,10 @@ use std::{
     io,
     net::IpAddr,
     pin::Pin,
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex, MutexGuard,
+    },
     task::{Context, Poll},
     thread,
     time::Duration,
@@ -72,6 +76,8 @@ pub struct Connection {
     pub bytes_up: u64,
     pub bytes_down: u64,
     pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub worker_port: Option<u16>,
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct Event {
@@ -86,6 +92,7 @@ pub struct Event {
 pub struct Snapshot {
     pub status: Status,
     pub managed_upstream: Option<admission::Snapshot>,
+    pub managed_pool: Option<pool::Snapshot>,
     pub connections: Vec<Connection>,
     pub events: Vec<Event>,
 }
@@ -122,6 +129,7 @@ struct UpstreamGate {
     ready: bool,
     grace: Duration,
     budget: Option<Arc<admission::Budget>>,
+    pool: Option<Arc<pool::Pool>>,
 }
 impl UpstreamGate {
     fn matches(&self, first_hop: &Endpoint) -> bool {
@@ -148,6 +156,7 @@ pub struct Engine {
     running: Mutex<Option<Running>>,
     operation: Mutex<()>,
     upstream_gate: watch::Sender<UpstreamGate>,
+    pool_cursor: Arc<AtomicU64>,
 }
 impl Engine {
     pub fn new(config: Config) -> Result<Self, RuntimeError> {
@@ -182,8 +191,10 @@ impl Engine {
                 ready: true,
                 grace: Duration::ZERO,
                 budget: None,
+                pool: None,
             })
             .0,
+            pool_cursor: Arc::new(AtomicU64::new(0)),
         })
     }
     pub fn from_json(json: &str) -> Result<Self, RuntimeError> {
@@ -199,6 +210,12 @@ impl Engine {
                 .budget
                 .as_ref()
                 .map(|b| b.snapshot()),
+            managed_pool: self
+                .upstream_gate
+                .borrow()
+                .pool
+                .as_ref()
+                .map(|p| p.snapshot()),
             connections: s.connections.values().cloned().collect(),
             events: s.events.iter().cloned().collect(),
         }
@@ -256,9 +273,43 @@ impl Engine {
             ready,
             grace: Duration::from_millis(grace_ms),
             budget,
+            pool: None,
         });
         Ok(lock(&self.state).status.clone())
     }
+    /// Configure 1..=4 independent OpenSSH listener processes; only new
+    /// single-hop SOCKS5 connections to the primary proxy are load-balanced.
+    /// Member budgets are globally shared by endpoint. Their hard sum must
+    /// fit the explicit aggregate cap; no worker is spawned by this engine.
+    pub fn set_upstream_pool_with_limits(
+        &self,
+        primary: Endpoint,
+        workers: Vec<pool::WorkerInput>,
+        limits: admission::Limits,
+        aggregate_max_flows: usize,
+    ) -> Result<Status, RuntimeError> {
+        let pool = Arc::new(
+            pool::Pool::new(primary, workers, limits, aggregate_max_flows).map_err(RuntimeError)?,
+        );
+        let config = lock(&self.state).config.clone();
+        if !config.proxies.iter().any(|p| {
+            matches!(p.kind, flowbridge_core::ProxyKind::Socks5) && pool.matches(&p.endpoint)
+        }) {
+            return Err(RuntimeError(
+                "SSH pool primary must be an existing SOCKS5 proxy in this profile".into(),
+            ));
+        }
+        let ready = pool.has_ready();
+        self.upstream_gate.send_replace(UpstreamGate {
+            endpoint: None,
+            ready,
+            grace: Duration::ZERO,
+            budget: None,
+            pool: Some(pool),
+        });
+        Ok(lock(&self.state).status.clone())
+    }
+
     pub fn start(&self) -> Result<Status, RuntimeError> {
         let _operation = lock(&self.operation);
         if lock(&self.state).status.running {
@@ -273,6 +324,7 @@ impl Engine {
         let (cancel, receiver) = watch::channel(false);
         let state = self.state.clone();
         let upstream_gate = self.upstream_gate.subscribe();
+        let pool_cursor = self.pool_cursor.clone();
         let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel(1);
         let worker = thread::Builder::new()
             .name("flowbridge-engine".into())
@@ -307,6 +359,7 @@ impl Engine {
                                 receiver,
                                 config.max_connections,
                                 upstream_gate,
+                                pool_cursor,
                             )
                             .await;
                         }
@@ -404,6 +457,7 @@ async fn serve(
     mut cancel: watch::Receiver<bool>,
     max: usize,
     upstream_gate: watch::Receiver<UpstreamGate>,
+    pool_cursor: Arc<AtomicU64>,
 ) {
     let permits = Arc::new(Semaphore::new(max));
     let mut tasks = JoinSet::new();
@@ -420,11 +474,12 @@ async fn serve(
                     let Some(next)=s.next_id.checked_add(1) else {s.event("error","connection IDs exhausted");continue;};s.next_id=next;
                     s.status.accepted=s.status.accepted.saturating_add(1);s.status.active+=1;
                     let generation=s.status.generation;
-                    s.connections.insert(id,Connection{id,generation,host:String::new(),port:0,rule:"pending".into(),action:"pending".into(),state:"negotiating".into(),bytes_up:0,bytes_down:0,error:None});
+                    s.connections.insert(id,Connection{id,generation,host:String::new(),port:0,rule:"pending".into(),action:"pending".into(),state:"negotiating".into(),bytes_up:0,bytes_down:0,error:None,worker_port:None});
                     (config,ConnectionGuard{state:state.clone(),id,finished:false})
                 };
                 let gate=upstream_gate.clone();
-                tasks.spawn(async move {let _permit=permit;let mut guard=guard;let result=handle(client,config,&guard,gate).await;guard.finish(result);});
+                let cursor = pool_cursor.clone();
+                tasks.spawn(async move {let _permit=permit;let mut guard=guard;let result=handle(client,config,&guard,gate,cursor).await;guard.finish(result);});
             }
         }
     }
@@ -495,6 +550,7 @@ async fn handle(
     config: Arc<Config>,
     guard: &ConnectionGuard,
     mut upstream_gate: watch::Receiver<UpstreamGate>,
+    pool_cursor: Arc<AtomicU64>,
 ) -> Result<(), String> {
     let target = accept_socks5(
         &mut client,
@@ -521,12 +577,44 @@ async fn handle(
         let _ = reply_socks5(&mut client, 2).await;
         return Err("blocked by policy".into());
     }
-    let route = config.route(&decision.action).map_err(|e| e.to_string())?;
+    let mut route = config.route(&decision.action).map_err(|e| e.to_string())?;
+    // The configured first proxy is a stable primary name. Actual per-flow
+    // ownership is pinned to one live OpenSSH listener before any upstream
+    // connection is attempted. A failed member is never replaced mid-stream.
+    let active_pool = upstream_gate.borrow().pool.clone();
+    let selected = if let (Some(first), Some(pool)) = (route.first(), active_pool.as_ref()) {
+        if pool.matches(&first.endpoint) {
+            if route.len() != 1 || !matches!(first.kind, flowbridge_core::ProxyKind::Socks5) {
+                let _ = reply_socks5(&mut client, 1).await;
+                return Err("managed SSH pool requires a single SOCKS5 hop".into());
+            }
+            let selection = match pool.select(pool_cursor.fetch_add(1, Ordering::Relaxed)) {
+                Ok(worker) => worker,
+                Err(error) => {
+                    let _ = reply_socks5(&mut client, 1).await;
+                    return Err(error);
+                }
+            };
+            route[0].endpoint = selection.endpoint.clone();
+            if let Some(connection) = lock(&guard.state).connections.get_mut(&guard.id) {
+                connection.worker_port = Some(selection.endpoint.port);
+            }
+            Some(selection)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     let mut waiter = None;
     if let Some(first) = route.first() {
         let initial = upstream_gate.borrow().clone();
-        if initial.matches(&first.endpoint) {
-            if let Some(budget) = &initial.budget {
+        if selected.is_some() || initial.matches(&first.endpoint) {
+            if let Some(budget) = selected
+                .as_ref()
+                .map(|worker| &worker.budget)
+                .or(initial.budget.as_ref())
+            {
                 match budget.enqueue() {
                     Ok(value) => waiter = Some(value),
                     Err(error) => {
@@ -583,9 +671,17 @@ async fn handle(
     } else {
         None
     };
-    let paused = route
-        .first()
-        .is_some_and(|first| upstream_gate.borrow().pauses(&first.endpoint));
+    let paused = if let Some(selected) = &selected {
+        !upstream_gate
+            .borrow()
+            .pool
+            .as_ref()
+            .is_some_and(|pool| pool.is_ready(&selected.endpoint))
+    } else {
+        route
+            .first()
+            .is_some_and(|first| upstream_gate.borrow().pauses(&first.endpoint))
+    };
     if paused {
         let _ = reply_socks5(&mut client, 1).await;
         return Err("managed SSH became unavailable while awaiting capacity".into());
@@ -604,7 +700,9 @@ async fn handle(
     let established = if may_retry {
         tokio::time::timeout_at(deadline, async {
         for attempt in 0..2 {
-            if route.first().is_some_and(|p| upstream_gate.borrow().pauses(&p.endpoint)) {
+            if selected.as_ref().is_some_and(|worker|
+                !upstream_gate.borrow().pool.as_ref().is_some_and(|pool| pool.is_ready(&worker.endpoint)))
+                || route.first().is_some_and(|p| upstream_gate.borrow().pauses(&p.endpoint)) {
                 return Err(NetError::InvalidConfig("managed upstream is paused"));
             }
             let result = connect_route_guarded(&target, &route,

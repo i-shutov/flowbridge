@@ -239,7 +239,7 @@ pub extern "C" fn fb_engine_snapshot_json(id: u64) -> *mut c_char {
         with_engine(id, |engine| {
             let snapshot = engine.snapshot();
             Ok(
-                json!({"ok":true,"status":snapshot.status,"connections":snapshot.connections,"events":snapshot.events,"managed_upstream":snapshot.managed_upstream}),
+                json!({"ok":true,"status":snapshot.status,"connections":snapshot.connections,"events":snapshot.events,"managed_upstream":snapshot.managed_upstream,"managed_pool":snapshot.managed_pool}),
             )
         })
     })
@@ -945,6 +945,37 @@ pub unsafe extern "C" fn fb_engine_set_upstream_gate_json(
     })
 }
 
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PoolInput {
+    primary: flowbridge_core::Endpoint,
+    workers: Vec<flowbridge_runtime::pool::WorkerInput>,
+    limits: flowbridge_runtime::admission::Limits,
+    aggregate_max_flows: usize,
+}
+/// Explicit managed SSH pool. No process is launched by this call: the GUI
+/// must start and independently monitor each real OpenSSH child first.
+/// Every flow remains pinned to one selected worker for its full lifetime.
+/// # Safety
+/// `pool_json` must reference a live NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn fb_engine_set_upstream_pool_json(
+    id: u64,
+    pool_json: *const c_char,
+) -> *mut c_char {
+    guarded(|| {
+        let pool: PoolInput =
+            serde_json::from_str(unsafe { input(pool_json) }?).map_err(|e| e.to_string())?;
+        with_engine(id, |engine| {
+            Ok(
+                json!({"ok":true,"status":engine.set_upstream_pool_with_limits(
+                pool.primary,pool.workers,pool.limits,pool.aggregate_max_flows)
+                .map_err(|e|e.to_string())?}),
+            )
+        })
+    })
+}
+
 struct SshSlot {
     supervisor: flowbridge_tunnel::Supervisor,
     gate: Mutex<()>,
@@ -1097,6 +1128,52 @@ mod ssh_and_gate_tests {
         assert_eq!(unsafe { consume(fb_ssh_stop_json(0)) }["ok"], false);
         assert_eq!(unsafe { consume(fb_ssh_snapshot_json(0)) }["ok"], false);
     }
+    #[test]
+    fn pool_ffi_rejects_unsafe_workers_without_changing_last_valid_generation() {
+        let config = CString::new(include_str!("../../../examples/ssh-socks.json")).unwrap();
+        let engine = unsafe { consume(fb_engine_create_json(config.as_ptr())) };
+        let id = engine["engine_id"].as_u64().unwrap();
+        let value = json!({
+            "primary":{"host":"127.0.0.1","port":1080},
+            "workers":[
+                {"endpoint":{"host":"127.0.0.1","port":1080},"ready":true},
+                {"endpoint":{"host":"127.0.0.1","port":1082},"ready":false}
+            ],
+            "limits":{"max_flows":2,"max_opening":1,"max_queued":2,"wait_timeout_ms":100},
+            "aggregate_max_flows":4
+        });
+        let input = CString::new(value.to_string()).unwrap();
+        assert_eq!(
+            unsafe { consume(fb_engine_set_upstream_pool_json(id, input.as_ptr())) }["ok"],
+            true
+        );
+        let snapshot = unsafe { consume(fb_engine_snapshot_json(id)) };
+        assert_eq!(snapshot["managed_pool"]["ready_workers"], 1);
+        assert_eq!(snapshot["managed_pool"]["workers"][1]["ready"], false);
+        for bad in [
+            json!({"invalid":true}),
+            json!({"primary":{"host":"127.0.0.1","port":1080},
+                "workers":[{"endpoint":{"host":"127.0.0.1","port":1080},"ready":true},
+                           {"endpoint":{"host":"127.0.0.1","port":1080},"ready":true}],
+                "limits":{"max_flows":2,"max_opening":1,"max_queued":2,"wait_timeout_ms":100},
+                "aggregate_max_flows":4}),
+            json!({"primary":{"host":"127.0.0.1","port":1080},
+                "workers":[{"endpoint":{"host":"127.0.0.1","port":1080},"ready":true},
+                           {"endpoint":{"host":"127.0.0.1","port":1082},"ready":true}],
+                "limits":{"max_flows":2,"max_opening":1,"max_queued":2,"wait_timeout_ms":100},
+                "aggregate_max_flows":3}),
+        ] {
+            let arg = CString::new(bad.to_string()).unwrap();
+            assert_eq!(
+                unsafe { consume(fb_engine_set_upstream_pool_json(id, arg.as_ptr())) }["ok"],
+                false
+            );
+            let after = unsafe { consume(fb_engine_snapshot_json(id)) };
+            assert_eq!(after["managed_pool"]["ready_workers"], 1);
+        }
+        fb_engine_destroy(id);
+    }
+
     #[test]
     fn gate_ffi_validates_strict_input_and_checked_engine_handles() {
         let config = CString::new(include_str!("../../../examples/direct.json")).unwrap();

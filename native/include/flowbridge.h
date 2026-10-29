@@ -33,6 +33,13 @@ char *fb_engine_snapshot_json(uint64_t engine_id);
  * {endpoint:{host:"127.0.0.1",port:1080}|null,ready:true,grace_ms:30000}.
  * New matching flows may wait for readiness; existing TCP bytes are never replayed. */
 char *fb_engine_set_upstream_gate_json(uint64_t engine_id, const char *gate_json);
+/* Independent managed OpenSSH worker selection (1..=4 local listeners).
+ * The first worker must match the existing configured SOCKS5 proxy.
+ * Workers: [{endpoint:{host:"127.0.0.1",port:1080},ready:true}, ...].
+ * Provide strict per-worker limits and aggregate_max_flows >= workers*max_flows.
+ * Caller owns/monitors separate SSH processes; this does not launch SSH,
+ * alter local DNS or migrate/replay established streams. */
+char *fb_engine_set_upstream_pool_json(uint64_t engine_id, const char *pool_json);
 void fb_engine_destroy(uint64_t engine_id);
 
 /* Native capture session: caller attests application identity. Upstream readiness
