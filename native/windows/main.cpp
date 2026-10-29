@@ -25,7 +25,7 @@ using Json = nlohmann::json;
 namespace {
 constexpr size_t MaxBytes = 1024 * 1024;
 constexpr UINT Completed = WM_APP + 1;
-enum { Start=100, Stop, Apply, Open, Save, Proxy, Host, Port, Protocol, Config, Connections, Log, Status, Mode, QuickLabel, ConfigLabel, ConnectionsLabel, LogLabel, NavDashboard=200, NavConnection, NavApps, NavAdvanced, Theme=204, PageTitle=205, PageSubtitle=206, Badge=207, Metrics=208, DashboardHelp=209, SshHealth=210, ManagedMode=230, SshHost=231, SshPort=232, SshUser=233, KeyPath=234, KnownHosts=235, LocalPort=236, Compression=237, Keepalive=238, KeepaliveCount=239, SaveDesktop=240, BrowseKey=241, BrowseKnown=242, SshHelp=243, ConnectionSummary=244, Discover=260, AppsTable=261, PresetAI=262, PresetWeb=263, PresetBoth=264, BrowseApp=265, ExportNative=266, BlockOthers=267, AppsHelp=268, AppsSummary=269, ScanStatus=270, SshTitle=271, SshSummary=272, RetryInitial=245, RetryMax=246, Banner=280, ExportDiagnostics=281, StartCapture=282, StopCapture=283, CaptureStatus=284, RemoteDns=285, SshExecutable=286, BrowseSsh=287 };
+enum { Start=100, Stop, Apply, Open, Save, Proxy, Host, Port, Protocol, Config, Connections, Log, Status, Mode, QuickLabel, ConfigLabel, ConnectionsLabel, LogLabel, NavDashboard=200, NavConnection, NavApps, NavAdvanced, Theme=204, PageTitle=205, PageSubtitle=206, Badge=207, Metrics=208, DashboardHelp=209, SshHealth=210, ManagedMode=230, SshHost=231, SshPort=232, SshUser=233, KeyPath=234, KnownHosts=235, LocalPort=236, Compression=237, Keepalive=238, KeepaliveCount=239, SaveDesktop=240, BrowseKey=241, BrowseKnown=242, SshHelp=243, ConnectionSummary=244, Discover=260, AppsTable=261, PresetAI=262, PresetWeb=263, PresetBoth=264, BrowseApp=265, ExportNative=266, BlockOthers=267, AppsHelp=268, AppsSummary=269, ScanStatus=270, SshTitle=271, SshSummary=272, RetryInitial=245, RetryMax=246, Banner=280, ExportDiagnostics=281, StartCapture=282, StopCapture=283, CaptureStatus=284, RemoteDns=285, SshExecutable=286, BrowseSsh=287, SshPoolWorkers=288, SshPoolLabel=2030 };
 constexpr int DiscoverCommand=900, PollCommand=999;
 std::map<int,int> pages; // -1 global; 0 dashboard; 1 connection; 2 applications; 3 advanced
 int activePage=0;
@@ -164,12 +164,16 @@ Json sshSettings() {
 }
 Json desktopSettings() {
     Json selected=Json::array();for(const auto& path:selectedApps)selected.push_back(path);
-    return {{"version",1},{"managed_ssh",SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1},{"ssh",sshSettings()},{"preset",selectedPreset},{"selected_applications",selected},{"block_other_applications",SendMessageW(GetDlgItem(window,BlockOthers),BM_GETCHECK,0,0)==BST_CHECKED},{"remote_dns_via_ssh",SendMessageW(GetDlgItem(window,RemoteDns),BM_GETCHECK,0,0)==BST_CHECKED},{"dark",dark}};
+    return {{"version",1},{"managed_ssh",SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1},{"ssh_workers",static_cast<int>(SendMessageW(GetDlgItem(window,SshPoolWorkers),CB_GETCURSEL,0,0))+1},{"ssh",sshSettings()},{"preset",selectedPreset},{"selected_applications",selected},{"block_other_applications",SendMessageW(GetDlgItem(window,BlockOthers),BM_GETCHECK,0,0)==BST_CHECKED},{"remote_dns_via_ssh",SendMessageW(GetDlgItem(window,RemoteDns),BM_GETCHECK,0,0)==BST_CHECKED},{"dark",dark}};
 }
 void validateDesktop(const Json& value) {
     const auto& ssh=value.at("ssh");auto host=ssh.at("host").get<std::string>(),user=ssh.at("user").get<std::string>();
     auto allowed=[](const std::string& text,const std::string& punctuation){return std::all_of(text.begin(),text.end(),[&](unsigned char c){return (c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||punctuation.find(static_cast<char>(c))!=std::string::npos;});};
     bool managed=value.value("managed_ssh",false);
+    const int workerCount=value.value("ssh_workers",1);
+    const int basePort=ssh.at("local_port").get<int>();
+    if(workerCount<1||workerCount>4||basePort+2*(workerCount-1)>65535)
+        throw std::runtime_error("Пул SSH: от 1 до 4 процессов; диапазон локальных SOCKS-портов переполнен.");
     if(value.contains("remote_dns_via_ssh")&&!value["remote_dns_via_ssh"].is_boolean())
         throw std::runtime_error("Режим удалённого DNS должен быть логическим значением.");
     if((managed||!host.empty())&&(host.empty()||host.size()>253||host[0]=='-'||!allowed(host,".-:_[]%")))throw std::runtime_error("SSH-сервер: укажите hostname / IP без пробелов, URI и параметров командной строки.");
@@ -203,11 +207,14 @@ std::string commandConfiguration() {
     }
     return value.dump(2);
 }
-void validateManagedRoute(const std::string& text,const Json& ssh) {
+void validateManagedRoute(const std::string& text,const Json& ssh,int workerCount) {
     const auto config=Json::parse(text);const auto listen=config.at("listen").get<std::string>();auto colon=listen.rfind(':');
     if(colon==std::string::npos)throw std::runtime_error("Некорректный listener FlowBridge.");
     size_t consumed=0;auto ingress=std::stoul(listen.substr(colon+1),&consumed);
-    if(consumed!=listen.size()-colon-1||ingress==ssh.at("local_port").get<unsigned long>())throw std::runtime_error("Порт FlowBridge и локальный SSH SOCKS-порт должны отличаться. Иначе клиенты могут обойти правила.");
+    if(consumed!=listen.size()-colon-1)throw std::runtime_error("Некорректный порт FlowBridge.");
+    const auto first=ssh.at("local_port").get<unsigned long>();
+    for(int i=0;i<workerCount;++i)if(ingress==first+static_cast<unsigned long>(2*i))
+        throw std::runtime_error("Порт FlowBridge пересекается с портом SSH-пула. Выберите другой listener.");
     auto action=config.at("default_action");if(action.value("type",std::string())!="proxy"||action.value("id",std::string())!="managed-ssh")throw std::runtime_error("Управляемый SSH должен быть первым proxy маршрута по умолчанию.");
     auto found=std::find_if(config.at("proxies").begin(),config.at("proxies").end(),[](const Json& p){return p.value("id",std::string())=="managed-ssh";});
     if(found==config.at("proxies").end()||found->value("kind",std::string())!="socks5"||found->at("endpoint").at("host")!="127.0.0.1"||found->at("endpoint").at("port")!=ssh.at("local_port"))throw std::runtime_error("Прокси маршрута не совпадает с реальным локальным endpoint управляемого SSH.");
@@ -233,7 +240,7 @@ class Worker {
                 else {
                     if(action==Apply&&waiting){result->error="Дождитесь запуска или нажмите «Остановить» перед изменением профиля.";}
                     else if(action==Start||action==Apply) {
-                        bool managed=options.value("managed_ssh",false);validateDesktop(options);if(managed)validateManagedRoute(value,options["ssh"]);
+                        bool managed=options.value("managed_ssh",false);validateDesktop(options);if(managed)validateManagedRoute(value,options["ssh"],options.value("ssh_workers",1));
                         bool running=engine&&response(fb_engine_snapshot_json(engine))["status"].value("running",false);
                         if(running&&managed!=managedActive)throw std::runtime_error("Остановите подключение перед сменой внешнего прокси / управляемого SSH.");
                         if(ssh && managed && activeSsh!=options["ssh"]) {
@@ -277,7 +284,7 @@ public:
     ~Worker(){if(thread.joinable())thread.join();}
 } worker;
 void enableControls() {
-    for(int id:{Start,Stop,StartCapture,StopCapture,Apply,Open,Save,Proxy,Host,Port,Protocol,Config,Discover,ExportNative,ManagedMode,SshHost,SshPort,SshUser,KeyPath,KnownHosts,LocalPort,Compression,Keepalive,KeepaliveCount,SaveDesktop,BrowseKey,BrowseKnown,BrowseApp,RetryInitial,RetryMax,PresetAI,PresetWeb,PresetBoth,BlockOthers,RemoteDns,SshExecutable,BrowseSsh})EnableWindow(GetDlgItem(window,id),!busy&&!closing&&(!pendingStart||id==Stop||id==Discover||id==BrowseApp||id==PresetAI||id==PresetWeb||id==PresetBoth||id==BlockOthers));
+    for(int id:{Start,Stop,StartCapture,StopCapture,Apply,Open,Save,Proxy,Host,Port,Protocol,Config,Discover,ExportNative,ManagedMode,SshHost,SshPort,SshUser,KeyPath,KnownHosts,LocalPort,Compression,Keepalive,KeepaliveCount,SaveDesktop,BrowseKey,BrowseKnown,BrowseApp,RetryInitial,RetryMax,PresetAI,PresetWeb,PresetBoth,BlockOthers,RemoteDns,SshExecutable,BrowseSsh,SshPoolWorkers})EnableWindow(GetDlgItem(window,id),!busy&&!closing&&(!pendingStart||id==Stop||id==Discover||id==BrowseApp||id==PresetAI||id==PresetWeb||id==PresetBoth||id==BlockOthers));
     EnableWindow(GetDlgItem(window,Start),!busy&&!closing&&!engineRunning&&!pendingStart&&!nativeCapture.active());
     EnableWindow(GetDlgItem(window,StartCapture),!busy&&!closing&&!engineRunning&&!pendingStart&&!nativeCapture.active());
     EnableWindow(GetDlgItem(window,StopCapture),!closing&&nativeCapture.active());
@@ -515,8 +522,10 @@ void layout() {
     move(BrowseKey,x+w-142,355,118,28);
     move(2015,x+24,391,w-48,18);move(KnownHosts,x+24,413,w-182,28);
     move(BrowseKnown,x+w-142,413,118,28);
-    move(Compression,x+24,450,175,24);
-    move(SshExecutable,x+215,449,w-385,28);
+    move(Compression,x+24,450,110,24);
+    move(SshPoolLabel,x+140,450,82,22);
+    move(SshPoolWorkers,x+226,446,62,145);
+    move(SshExecutable,x+302,449,w-472,28);
     move(BrowseSsh,x+w-142,449,118,28);
     const int unit=(w-120)/4;
     const int labels[]={2016,2017,2019,2020};
@@ -584,7 +593,12 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         label(L"Приватный ключ (пусто — SSH agent)",2014,12);label(L"known_hosts (пусто — стандартный файл OpenSSH)",2015,12);label(L"Keepalive, сек.",2016,12);label(L"Пропусков",2017,12);label(L"Повтор SSH, мс",2019,12);label(L"Макс. пауза, мс",2020,12);
         for(int id:{SshHost,SshUser,KeyPath,KnownHosts,SshExecutable})add(L"EDIT",L"",WS_BORDER|ES_AUTOHSCROLL|WS_TABSTOP,id,12);
         for(int id:{SshPort,LocalPort,Keepalive,KeepaliveCount,RetryInitial,RetryMax})add(L"EDIT",L"",WS_BORDER|ES_NUMBER|WS_TABSTOP,id,12);
-        add(L"BUTTON",L"Сжатие SSH (полезно не для всех нагрузок)",BS_AUTOCHECKBOX|WS_TABSTOP,Compression,12);
+        add(L"BUTTON",L"Сжатие SSH",BS_AUTOCHECKBOX|WS_TABSTOP,Compression,12);
+        label(L"Процессов",SshPoolLabel,12);
+        HWND count=add(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_TABSTOP,SshPoolWorkers,12);
+        for(const wchar_t* number:{L"1",L"2",L"3",L"4"})
+            SendMessageW(count,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(number));
+        SendMessageW(count,CB_SETCURSEL,0,0);
         add(L"BUTTON",L"Разрешать DNS на удалённом SSH-сервере",BS_AUTOCHECKBOX|WS_TABSTOP,RemoteDns,12);
         SendMessageW(GetDlgItem(h,SshExecutable),EM_SETCUEBANNER,TRUE,
                      reinterpret_cast<LPARAM>(L"Путь ssh.exe · пусто = PATH"));
@@ -615,6 +629,9 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         if(!desktop.is_object())desktop=Json::object();
         auto settings=desktop.value("ssh",Json::object());if(!settings.is_object())settings=Json::object();auto setSetting=[&](int id,const char* key,const Json& fallback){auto field=settings.value(key,fallback);setText(GetDlgItem(window,id),field.is_string()?field.get<std::string>():field.is_null()?std::string():field.dump());};
         setSetting(SshHost,"host","");setSetting(SshPort,"port",22);setSetting(SshUser,"user","");setSetting(KeyPath,"identity_file",nullptr);setSetting(KnownHosts,"known_hosts_file",nullptr);setSetting(SshExecutable,"ssh_executable",nullptr);setSetting(LocalPort,"local_port",1080);setSetting(Keepalive,"server_alive_interval_secs",15);setSetting(KeepaliveCount,"server_alive_count_max",3);setSetting(RetryInitial,"restart_initial_delay_ms",1000);setSetting(RetryMax,"restart_max_delay_ms",30000);SendMessageW(GetDlgItem(window,Compression),BM_SETCHECK,settings.value("compression",false)?BST_CHECKED:BST_UNCHECKED,0);
+        const auto savedCount=desktop.value("ssh_workers",Json(1));
+        const int sshWorkerCount=savedCount.is_number_integer()?std::clamp(savedCount.get<int>(),1,4):1;
+        SendMessageW(GetDlgItem(window,SshPoolWorkers),CB_SETCURSEL,sshWorkerCount-1,0);
         // Existing desktop profiles migrate to checked-by-default behavior.
         const auto savedRemoteDns=desktop.value("remote_dns_via_ssh",Json(true));
         const bool remoteDnsEnabled=savedRemoteDns.is_boolean()?savedRemoteDns.get<bool>():true;
@@ -652,7 +669,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
                     if(id==Start||id==Apply){
                          if(nativeCapture.active()||nativeCapture.stopping())
                              throw std::runtime_error("Сначала остановите нативный перехват, затем меняйте или останавливайте SSH.");
-                         workerError.clear();auto value=commandConfiguration();auto settings=desktopSettings();validateDesktop(settings);if(settings.value("managed_ssh",false))validateManagedRoute(value,settings["ssh"]);dispatch(id,std::move(value),std::move(settings));}
+                         workerError.clear();auto value=commandConfiguration();auto settings=desktopSettings();validateDesktop(settings);if(settings.value("managed_ssh",false))validateManagedRoute(value,settings["ssh"],settings.value("ssh_workers",1));dispatch(id,std::move(value),std::move(settings));}
                     else if(id==Stop){
                          if(nativeCapture.active()||nativeCapture.stopping())
                              stopNativeCapture(); // first remove WFP filters, then user can stop SSH
