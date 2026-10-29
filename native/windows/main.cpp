@@ -33,7 +33,7 @@ std::map<int,int> pages; // -1 global; 0 dashboard; 1 connection; 2 applications
 int activePage=0;
 HFONT bodyFont{},titleFont{},headingFont{},smallFont{};
 HBRUSH backgroundBrush{},cardBrush{},sidebarBrush{};
-bool dark=false,engineRunning=false,loadingApps=false,discoveryDone=false,pendingStart=false,tunnelReady=true;
+bool dark=false,engineRunning=false,loadingApps=false,discoveryDone=false,pendingStart=false,tunnelReady=true,captureUncertain=false;
 std::filesystem::path desktopPath;
 Json catalog=Json::object(),desktop=Json::object();
 std::vector<discovery::App> discovered;
@@ -218,6 +218,7 @@ class Worker {
             nativeOptions["dns"]={{"resolver",{{"host",resolver},{"port",53}}},{"timeout_ms",5000}};
         }
         nativeOptions["quic_applications"]=pendingOptions.at("selected_applications");
+        nativeOptions["capture_all_applications"]=pendingOptions.value("block_other_applications",false);
         auto snapshot=response(fb_ssh_snapshot_json(ssh));
         auto path=snapshot.at("status").at("backend_path").get<std::string>();
         capture.start(root,nativeOptions,path);
@@ -292,7 +293,12 @@ class Worker {
                 if(capture.exists()&&(waiting||action==Start)){try{capture.stop();}catch(...){}waiting=false;}
 
                 if(managedActive&&!capture.alive()&&(waiting||action==Start||failedNativeStart)){waiting=false;try{gate(false);}catch(...){}if(engine){try{response(fb_engine_stop_json(engine));}catch(...){}}if(ssh){try{response(fb_ssh_stop_json(ssh));result->ssh=response(fb_ssh_snapshot_json(ssh));}catch(...){}fb_ssh_destroy(ssh);ssh=0;}}
-                try{if(engine)result->snapshot=response(fb_engine_snapshot_json(engine));}catch(...){}
+                try{
+                    if(capture.alive()){
+                        result->snapshot=capture.cached().value("native",Json{{"status",{{"running",true},{"transparent",true}}}});
+                        result->snapshot["status"]["running"]=true;result->snapshot["status"]["uncertain"]=true;
+                    }else if(engine)result->snapshot=response(fb_engine_snapshot_json(engine));
+                }catch(...){}
             }
             result->waiting=waiting;
             if(!PostMessageW(window,Completed,0,reinterpret_cast<LPARAM>(result.get())))return;
@@ -326,15 +332,19 @@ void showSnapshot(const Json& snap) {
     if(!workerError.empty()) text+=" | Ошибка: "+workerError;
     setText(GetDlgItem(window,Status),text);
     bool native=status.value("transparent",false);
+    captureUncertain=status.value("uncertain",false);
+    if(status.value("display_connections_omitted",0))text+=" | Часть строк скрыта лимитом отображения";
+    setText(GetDlgItem(window,Status),text);
     setText(GetDlgItem(window,Badge),running?(native?"●  Нативный TCP-перехват работает":"●  Локальный SOCKS5 работает"):"●  Не подключено");
+    if(status.value("uncertain",false))setText(GetDlgItem(window,Badge),"●  Состояние перехвата не подтверждено — смотрите ошибку");
     setText(GetDlgItem(window,Mode),native?(status.value("dns_active",false)?"TCP + системный DNS через SSH. Собственный DoH/DoT не перехватывается.":"Нативный TCP. Системный DNS не перенаправлен."):"Локальный SOCKS5: приложения должны явно использовать прокси.");
     setText(GetDlgItem(window,Metrics),"АКТИВНЫЕ СОЕДИНЕНИЯ     "+std::to_string(status.value("active",0))+"       ПРИНЯТО     "+std::to_string(status.value("accepted",0))+"       ТРАФИК ↑ / ↓     "+std::to_string(status.value("bytes_up",uint64_t(0)))+" / "+std::to_string(status.value("bytes_down",uint64_t(0)))+" Б");
     InvalidateRect(GetDlgItem(window,Badge),nullptr,TRUE);
     ListView_DeleteAllItems(table); int row=0;
     for(const auto& connection:snap.value("connections",Json::array())) {
-        std::wstring fields[]={display(connection,"id"), display(connection,"host")+L":"+display(connection,"port"),display(connection,"rule"),display(connection,"action"),display(connection,"state"),display(connection,"bytes_up")+L" / "+display(connection,"bytes_down"),display(connection,"error")};
+        std::wstring fields[]={display(connection,"id"), display(connection,"application"), display(connection,"host")+L":"+display(connection,"port"),display(connection,"rule"),display(connection,"action"),display(connection,"state"),display(connection,"bytes_up")+L" / "+display(connection,"bytes_down"),display(connection,"error")};
         LVITEMW item{}; item.mask=LVIF_TEXT; item.iItem=row; item.pszText=fields[0].data(); ListView_InsertItem(table,&item);
-        for(int col=1;col<7;++col) ListView_SetItemText(table,row,col,fields[col].data()); ++row;
+        for(int col=1;col<8;++col) ListView_SetItemText(table,row,col,fields[col].data()); ++row;
     }
     std::string events=localLog;
     for(const auto& event:snap.value("events",Json::array())) events+="["+event.value("level",std::string("info"))+"] "+event.value("message",std::string(""))+"\r\n";
@@ -379,7 +389,7 @@ void captureSelections(){if(loadingApps||(!discoveryDone&&discovered.empty()))re
 void refreshApps(){
     loadingApps=true;HWND list=GetDlgItem(window,AppsTable);ListView_DeleteAllItems(list);int row=0;
     for(const auto& app:discovered){std::wstring fields[]={wide(app.name),wide(app.path),wide(app.source),wide(std::to_string(app.confidence)+"% • эвристика")};LVITEMW item{};item.mask=LVIF_TEXT;item.iItem=row;item.pszText=fields[0].data();ListView_InsertItem(list,&item);for(int col=1;col<4;++col)ListView_SetItemText(list,row,col,fields[col].data());ListView_SetCheckState(list,row,selectedApps.count(app.path)?TRUE:FALSE);++row;}
-    loadingApps=false;setText(GetDlgItem(window,AppsSummary),"Найдено: "+std::to_string(discovered.size())+"   •   Выбрано: "+std::to_string(selectedApps.size())+"   •   Сопоставление по имени EXE, без проверки издателя");
+    loadingApps=false;setText(GetDlgItem(window,AppsSummary),"Найдено: "+std::to_string(discovered.size())+"   •   Выбрано: "+std::to_string(selectedApps.size())+"   •   WFP ограничен выбранными путями EXE; издатель не проверяется");
 }
 void choosePreset(const std::string& preset){captureSelections();selectedPreset=preset;std::set<std::string> ids;
     for(const auto& p:catalog.value("presets",Json::array()))if(p.value("id",std::string())==preset)for(const auto& id:p.value("app_ids",std::vector<std::string>{}))ids.insert(id);
@@ -508,7 +518,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         configEdit=add(L"EDIT",L"",WS_BORDER|WS_VSCROLL|WS_HSCROLL|ES_MULTILINE|ES_AUTOVSCROLL|ES_AUTOHSCROLL|ES_WANTRETURN|WS_TABSTOP,Config,3);SendMessageW(configEdit,EM_SETLIMITTEXT,MaxBytes,0);
         label(L"Журнал движка и SSH • последние события",LogLabel,3);logEdit=add(L"EDIT",L"",WS_BORDER|WS_VSCROLL|ES_MULTILINE|ES_AUTOVSCROLL|ES_READONLY,Log,3);SendMessageW(logEdit,EM_SETLIMITTEXT,65536,0);
         table=add(WC_LISTVIEWW,L"",WS_BORDER|LVS_REPORT|LVS_SINGLESEL|WS_TABSTOP,Connections,0);ListView_SetExtendedListViewStyle(table,LVS_EX_FULLROWSELECT|LVS_EX_DOUBLEBUFFER);
-        const wchar_t* titles[]={L"ID",L"Назначение",L"Правило",L"Маршрут",L"Состояние",L"↑ / ↓, байт",L"Ошибка"};int widths[]={48,190,145,130,130,135,180};for(int i=0;i<7;++i){LVCOLUMNW col{};col.mask=LVCF_TEXT|LVCF_WIDTH;col.pszText=const_cast<wchar_t*>(titles[i]);col.cx=widths[i];ListView_InsertColumn(table,i,&col);}
+        const wchar_t* titles[]={L"ID",L"Приложение",L"Назначение",L"Правило",L"Маршрут",L"Состояние",L"↑ / ↓, байт",L"Ошибка"};int widths[]={48,140,190,145,130,130,135,180};for(int i=0;i<8;++i){LVCOLUMNW col{};col.mask=LVCF_TEXT|LVCF_WIDTH;col.pszText=const_cast<wchar_t*>(titles[i]);col.cx=widths[i];ListView_InsertColumn(table,i,&col);}
         std::string value=initialConfig;
         try{PWSTR path=nullptr;if(FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_CREATE,nullptr,&path)))throw std::runtime_error("Не удалось найти Local AppData.");profile=std::filesystem::path(path)/L"FlowBridge"/L"profile.json";CoTaskMemFree(path);desktopPath=profile.parent_path()/L"desktop-settings.json";if(std::filesystem::exists(profile))value=readFile(profile);if(std::filesystem::exists(desktopPath))desktop=Json::parse(readFile(desktopPath));}catch(const std::exception& e){note(std::string("Не удалось загрузить настройки: ")+e.what());}
         if(!desktop.is_object())desktop=Json::object();
@@ -579,7 +589,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         if(activePage==0){panel(132,258);panel(272,316);panel(332,416);}else if(activePage==1){panel(132,220);bool managed=SendMessageW(GetDlgItem(h,ManagedMode),CB_GETCURSEL,0,0)==1;panel(224,managed?601:455);}else if(activePage==2)panel(132,182);
         EndPaint(h,&ps);return 0;}
     case WM_CTLCOLORSTATIC:case WM_CTLCOLOREDIT:case WM_CTLCOLORLISTBOX:case WM_CTLCOLORBTN:{HDC dc=reinterpret_cast<HDC>(w);HWND child=reinterpret_cast<HWND>(l);int id=GetDlgCtrlID(child);bool plain=id==Banner||id==PageTitle||id==PageSubtitle||id==ConfigLabel||id==ConnectionsLabel||id==LogLabel||id==DashboardHelp||id==ScanStatus||id==AppsSummary||id==2018;
-        SetTextColor(dc,id==Badge?(engineRunning&&tunnelReady?RGB(18,143,98):engineRunning?RGB(180,120,23):muted()):(id==PageSubtitle||id==Mode||id==SshHelp||id==AppsHelp||id==ScanStatus||id==2018?muted():ink()));SetBkColor(dc,plain?bg():card());return reinterpret_cast<LRESULT>(plain?backgroundBrush:cardBrush);}
+        SetTextColor(dc,id==Badge?(engineRunning&&tunnelReady&&!captureUncertain?RGB(18,143,98):engineRunning?RGB(180,120,23):muted()):(id==PageSubtitle||id==Mode||id==SshHelp||id==AppsHelp||id==ScanStatus||id==2018?muted():ink()));SetBkColor(dc,plain?bg():card());return reinterpret_cast<LRESULT>(plain?backgroundBrush:cardBrush);}
     case WM_DRAWITEM:{auto item=reinterpret_cast<DRAWITEMSTRUCT*>(l);if(item->CtlType!=ODT_BUTTON)break;int id=static_cast<int>(item->CtlID);bool nav=id>=NavDashboard&&id<=NavAdvanced;bool selected=(nav&&id-NavDashboard==activePage)||(id==PresetAI&&selectedPreset=="ai")||(id==PresetWeb&&selectedPreset=="web")||(id==PresetBoth&&selectedPreset=="ai_web");bool primary=id==Start||id==ExportNative||id==SaveDesktop;bool enabled=(item->itemState&ODS_DISABLED)==0;bool down=(item->itemState&ODS_SELECTED)!=0;
         COLORREF fill=nav?(selected?RGB(43,63,92):RGB(18,30,52)):primary?(enabled?RGB(45,105,231):RGB(134,159,201)):selected?(dark?RGB(37,68,112):RGB(227,238,255)):card();if(down)fill=RGB(48,87,150);
         HBRUSH brush=CreateSolidBrush(fill);HPEN pen=CreatePen(PS_SOLID,1,nav?fill:primary?fill:(dark?RGB(64,82,107):RGB(215,224,237)));auto oldB=SelectObject(item->hDC,brush);auto oldP=SelectObject(item->hDC,pen);RECT box=item->rcItem;FillRect(item->hDC,&box,nav||id==Theme?sidebarBrush:(id==BrowseKey||id==BrowseKnown?cardBrush:backgroundBrush));RoundRect(item->hDC,box.left,box.top,box.right,box.bottom,10,10);SelectObject(item->hDC,oldB);SelectObject(item->hDC,oldP);DeleteObject(brush);DeleteObject(pen);

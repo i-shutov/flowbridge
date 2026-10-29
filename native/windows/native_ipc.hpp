@@ -39,6 +39,21 @@ inline std::wstring pipeName(const std::wstring& token) {
     if(token.size()!=36||token.find_first_not_of(L"0123456789abcdefABCDEF-")!=std::wstring::npos)throw std::runtime_error("Invalid capture token");
     return L"\\\\.\\pipe\\FlowBridge.Capture."+token;
 }
+inline Json boundedStatus(Json value) {
+    // Preserve readiness and aggregate counters even under a large connection
+    // history. Drop oldest display data, never silently lose every heartbeat.
+    if(value.contains("native")&&value["native"].is_object()){
+        auto& snapshot=value["native"];auto& events=snapshot["events"];auto& rows=snapshot["connections"];
+        unsigned omittedEvents=0,omittedRows=0;
+        while(value.dump().size()>MaxMessage-512){
+            if(events.is_array()&&!events.empty()){events.erase(events.begin());++omittedEvents;}
+            else if(rows.is_array()&&!rows.empty()){rows.erase(rows.end()-1);++omittedRows;}
+            else throw std::runtime_error("Native aggregate status exceeds control-message limit");
+        }
+        if(omittedEvents||omittedRows){snapshot["status"]["display_events_omitted"]=omittedEvents;snapshot["status"]["display_connections_omitted"]=omittedRows;}
+    }
+    return value;
+}
 inline bool send(HANDLE pipe,const Json& value) {
     auto text=value.dump();if(text.size()>MaxMessage)throw std::runtime_error("IPC message too large");
     DWORD sent=0;return WriteFile(pipe,text.data(),static_cast<DWORD>(text.size()),&sent,nullptr)&&sent==text.size();
@@ -77,7 +92,7 @@ public:
     }
     bool alive()const{return !parent_||WaitForSingleObject(parent_,0)==WAIT_TIMEOUT;}
     bool read(Json& value){return pipe_&&receive(pipe_,value);}
-    void status(const Json& value)noexcept{try{if(pipe_)send(pipe_,value);}catch(...) {}}
+    void status(const Json& value)noexcept{try{if(pipe_)send(pipe_,boundedStatus(value));}catch(...) {}}
 };
 
 // Called on the GUI worker thread. SSH and private-key access stay unelevated.
@@ -99,6 +114,7 @@ class Parent {
     }
 public:
     ~Parent(){try{stop();}catch(...){cleanup();}}
+    Json cached()const{return last_;}
     bool exists()const{return process_!=nullptr;}
     bool alive()const{return process_&&WaitForSingleObject(process_,0)==WAIT_TIMEOUT;}
     void start(const Json& profile,const Json& options,const std::string& sshPath) {

@@ -8,6 +8,7 @@
 #endif
 #include "../native/windows/native_ipc.hpp"
 #include <iostream>
+#include "../native/windows/wfp/flow_table.hpp"
 #include <thread>
 using native_ipc::Json;
 static void require(bool value,const char* message){if(!value)throw std::runtime_error(message);}
@@ -41,6 +42,21 @@ int wmain(int argc,wchar_t** argv){
     try{
         if(argc>1&&std::wstring(argv[1])==L"--console")return child(argc,argv);
         require(GetEnvironmentVariableW(L"GITHUB_ACTIONS",nullptr,0)!=0,"Run this isolated harness only on GitHub Actions");
+        NativeFlowTable table;std::vector<std::shared_ptr<NativeFlowTable::Row>> rows;
+        for(uint64_t i=1;i<=128;++i)rows.push_back(table.begin(i,100+i,"fixture.exe","192.0.2.1",443));
+        bool full=false;try{table.begin(129,1,"extra.exe","192.0.2.1",443);}catch(...){full=true;}require(full,"Native flow table is unbounded");
+        table.connected(rows[0],{{"rule_id","selected"},{"action",{{"type","proxy"},{"id","ssh"}}}});
+        std::vector<std::thread> counters;for(unsigned i=0;i<4;++i)counters.emplace_back([&]{for(unsigned n=0;n<10000;++n)rows[0]->bytesUp.fetch_add(1);});
+        for(auto& thread:counters)thread.join();
+        require(table.snapshot()[0]["bytes_up"]==40000&&table.snapshot()[0]["application"]=="fixture.exe","Native per-flow counters or identity changed");
+        for(const auto& row:rows)table.finish(row);
+        require(table.snapshot().size()==96,"Native history bound was not preserved");
+        Json oversized={{"state","ready"},{"native",{{"status",{{"running",true},{"active",128}}},{"connections",table.snapshot()},{"events",Json::array()}}}};
+        for(unsigned i=0;i<200;++i)oversized["native"]["events"].push_back({{"message",std::string(2048,'x')}});
+        auto bounded=native_ipc::boundedStatus(oversized);
+        require(bounded.dump().size()<=native_ipc::MaxMessage&&bounded["native"]["status"]["active"]==128,"Status pressure lost readiness/counters or exceeded IPC bound");
+        require(bounded["native"]["status"]["display_events_omitted"].get<unsigned>()>0,"Display truncation was not disclosed");
+        std::cout<<"PASS: bounded native per-flow history, concurrent counters and oversized status pressure\n";
         auto dir=native_ipc::executableDirectory();auto helper=dir/L"FlowBridgeCapture.exe";
         require(!std::filesystem::exists(helper),"Test helper already exists; do not replace production helper");
         wchar_t exe[32768]{};require(GetModuleFileNameW(nullptr,exe,32768)!=0,"Missing executable path");

@@ -18,6 +18,7 @@
 #include "capture.h"
 #include "../native_ipc.hpp"
 #include "dns_policy.hpp"
+#include "flow_table.hpp"
 #include "redirect_io.h"
 #include "flowbridge.h"
 #include "nlohmann/json.hpp"
@@ -31,6 +32,7 @@ std::wstring profilePath, sshProfilePath, nativeOptionsPath, uiToken;
 DWORD uiOwner=0;
 native_ipc::Child ui;
 std::deque<Json> recent;
+NativeFlowTable flowTable;
 void uiState(const std::string& state,Json snapshot=Json::object(),const std::string& error={}) {
     Json value={{"state",state},{"native",std::move(snapshot)}};if(!error.empty())value["error"]=error;
     ui.status(value);
@@ -40,7 +42,8 @@ void log(const Json& event) noexcept {
     try { std::lock_guard<std::mutex> guard(logLock); auto line=event.dump()+"\n";
         std::cerr<<line; OutputDebugStringA(line.c_str());
         if(event.value("event",std::string())!="native_status") {
-            recent.push_back({{"level",event.contains("error")?"error":"info"},{"message",event.dump()}});
+            auto message=event.dump();if(message.size()>1024){size_t end=1024;while(end>0&&(static_cast<unsigned char>(message[end])&0xc0)==0x80)--end;message.resize(end);message+="…";}
+            recent.push_back({{"level",event.contains("error")?"error":"info"},{"message",std::move(message)}});
             if(recent.size()>128)recent.pop_front();
         }
     } catch (...) {}
@@ -88,7 +91,7 @@ bool ready(SOCKET socket,bool writing) {
     return n>0;
 }
 struct Stream { uint64_t id=0; ~Stream(){if(id) fb_stream_close(id);} };
-void relay(SOCKET socket,uint64_t id,uint64_t idleMs) {
+bool relay(SOCKET socket,uint64_t id,uint64_t idleMs,const std::shared_ptr<NativeFlowTable::Row>& row) {
     std::atomic<bool> failed{false}; std::atomic<ULONGLONG> last{GetTickCount64()};
     auto cancelled=[&]{
         const auto observed=last.load(); // sample before clock: no unsigned race underflow
@@ -107,7 +110,7 @@ void relay(SOCKET socket,uint64_t id,uint64_t idleMs) {
                     auto n=fb_stream_write(id,buffer.data()+offset,static_cast<size_t>(count)-offset);
                     if(n==-2) continue;
                     if(n<=0) throw std::runtime_error("Upstream write failed");
-                    offset+=static_cast<size_t>(n); last=GetTickCount64();
+                    offset+=static_cast<size_t>(n); row->bytesUp.fetch_add(static_cast<uint64_t>(n)); last=GetTickCount64();
                 }
             }
         } catch (...) { failed=true; }
@@ -125,15 +128,16 @@ void relay(SOCKET socket,uint64_t id,uint64_t idleMs) {
                 int n=send(socket,reinterpret_cast<char*>(buffer.data()+offset),static_cast<int>(count-offset),0);
                 if(n<0 && WSAGetLastError()==WSAEWOULDBLOCK) continue;
                 if(n<=0) throw std::runtime_error("Client send failed");
-                offset+=static_cast<size_t>(n); last=GetTickCount64();
+                offset+=static_cast<size_t>(n); row->bytesDown.fetch_add(static_cast<uint64_t>(n)); last=GetTickCount64();
             }
         }
     } catch (...) {failed=true;}
     // Preserve upload after upstream half-close until its EOF/idle deadline.
     upload.join();
+    return !failed.load()&&!stopping.load()&&GetTickCount64()-last.load()<=idleMs;
 }
 void handle(SOCKET raw,uint64_t nativeSession,uint64_t idleMs) noexcept {
-    Socket socket(raw); FbRedirectContext context{};
+    Socket socket(raw); FbRedirectContext context{};std::shared_ptr<NativeFlowTable::Row> row;
     try {
         std::array<uint8_t,65536> records{}; uint32_t length=0;
         int error=fb_wfp_query(raw,&context,records.data(),static_cast<uint32_t>(records.size()),&length);
@@ -145,18 +149,21 @@ void handle(SOCKET raw,uint64_t nativeSession,uint64_t idleMs) noexcept {
         char address[INET6_ADDRSTRLEN]{};
         if(!InetNtopA(context.address_family,context.destination_address,address,sizeof(address))) throw std::runtime_error("Original endpoint conversion failed");
         Json flow={{"application",application},{"destination",{{"host",address},{"port",ntohs(context.destination_port_be)}}},{"resolved_ip",address}};
+        row=flowTable.begin(context.flow_id,context.original_process_id,application,address,ntohs(context.destination_port_be));
         // Core copies records and sets them on EVERY outbound socket before
         // connect, including direct routes and first proxy-hop retry sockets.
         auto result=response(fb_native_stream_open_wfp_json(nativeSession,flow.dump().c_str(),records.data(),length));
         Stream stream{result.at("stream_id").get<uint64_t>()};
-        if(stopping) return;
+        if(stopping){flowTable.finish(row,"Stopped before stream forwarding");return;}
+        flowTable.connected(row,result.at("decision"));
         u_long nonblocking=1;
         if(ioctlsocket(raw,FIONBIO,&nonblocking)!=0) throw std::runtime_error("Nonblocking client setup failed");
         log({{"event","connected"},{"flow_id",context.flow_id},{"pid",context.original_process_id},{"kernel_path",path},{"flow",flow},{"decision",result.at("decision")}});
-        relay(raw,stream.id,idleMs);
+        const bool clean=relay(raw,stream.id,idleMs,row);
+        flowTable.finish(row,clean?"":"Stream stopped, failed or reached idle deadline");
         log({{"event","closed"},{"flow_id",context.flow_id}});
-    } catch (const std::exception& e) {log({{"event","rejected"},{"flow_id",context.flow_id},{"error",e.what()}});}
-    catch (...) {log({{"event","rejected"},{"error","Unexpected native failure"}});}
+    } catch (const std::exception& e) {flowTable.finish(row,e.what());log({{"event","rejected"},{"flow_id",context.flow_id},{"error",e.what()}});}
+    catch (...) {flowTable.finish(row,"Unexpected native failure");log({{"event","rejected"},{"error","Unexpected native failure"}});}
 }
 SOCKET listener(int family,unsigned short& port) {
     Socket socket(::socket(family,SOCK_STREAM,IPPROTO_TCP));
@@ -223,6 +230,8 @@ void run() {
         for(const auto& path:paths)quicApplications.push_back(native_ipc::wide(path));
         nativeOptions.erase("quic_applications");
     }
+    const bool captureAll=nativeOptions.value("capture_all_applications",true);
+    nativeOptions.erase("capture_all_applications");
     uiState("starting");
     if(!sshProfilePath.empty()) {
         auto sshConfig=readConfiguration(sshProfilePath);
@@ -273,7 +282,7 @@ void run() {
             }
         });
         heartbeat();
-        if(!stopping) capture.start(p4,p6,bypassPaths,quicApplications,nativeOptions.contains("dns")&&!nativeOptions["dns"].is_null());
+        if(!stopping) capture.start(p4,p6,bypassPaths,quicApplications,nativeOptions.contains("dns")&&!nativeOptions["dns"].is_null(),captureAll);
         if(!stopping && nativeOptions.contains("dns") && !nativeOptions["dns"].is_null()) {
             response(fb_native_dns_start_json(native.id,R"({"listen":"127.0.0.1:53"})"));
             dnsPolicy.enter();
@@ -295,6 +304,7 @@ void run() {
                 report["status"]["quic_guard_app_paths"]=quicApplications.size();
                 report["status"]["dns_scope"]=dnsPolicy.active()?"system_standard_dns":"unchanged";
                 {std::lock_guard<std::mutex> guard(logLock);report["events"]=recent;}
+                report["connections"]=flowTable.snapshot();
                 uiState("ready",report);lastSnapshot=GetTickCount64();
             }
             fd_set set; FD_ZERO(&set); FD_SET(l4.value,&set); FD_SET(l6.value,&set); timeval wait{0,200000};

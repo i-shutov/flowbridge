@@ -46,7 +46,7 @@ void Capture::stop() noexcept {
         CloseHandle(driver_); driver_=INVALID_HANDLE_VALUE;
     }
 }
-void Capture::start(unsigned short p4, unsigned short p6, const std::vector<std::wstring>& bypass, const std::vector<std::wstring>& quicApplications, bool remoteDns) {
+void Capture::start(unsigned short p4, unsigned short p6, const std::vector<std::wstring>& bypass, const std::vector<std::wstring>& quicApplications, bool remoteDns, bool captureAll) {
     if (engine_ || driver_!=INVALID_HANDLE_VALUE) throw std::runtime_error("Capture already started");
     if (bypass.size()>16) throw std::runtime_error("At most sixteen bypass executable paths");
     try {
@@ -84,7 +84,20 @@ void Capture::start(unsigned short p4, unsigned short p6, const std::vector<std:
             filter.weight.type=FWP_UINT64; filter.weight.uint64=&captureWeight;
             filter.action.type=FWP_ACTION_CALLOUT_TERMINATING; filter.action.calloutKey=keys[i];
             filter.numFilterConditions=1; filter.filterCondition=&tcp;
-            check(FwpmFilterAdd0(engine_,&filter,nullptr,nullptr),"Add TCP filter");
+            if(captureAll)check(FwpmFilterAdd0(engine_,&filter,nullptr,nullptr),"Add TCP filter");
+            else {
+                if(quicApplications.empty())throw std::runtime_error("Selected application capture requires at least one executable path");
+                for(const auto& path:quicApplications){
+                    FWP_BYTE_BLOB* app=nullptr;check(FwpmGetAppIdFromFileName0(path.c_str(),&app),"Resolve selected capture executable");
+                    FWPM_FILTER_CONDITION0 conditions[2]={tcp,{}};
+                    conditions[1].fieldKey=FWPM_CONDITION_ALE_APP_ID;conditions[1].matchType=FWP_MATCH_EQUAL;
+                    conditions[1].conditionValue.type=FWP_BYTE_BLOB_TYPE;conditions[1].conditionValue.byteBlob=app;
+                    filter.numFilterConditions=2;filter.filterCondition=conditions;
+                    DWORD result=FwpmFilterAdd0(engine_,&filter,nullptr,nullptr);
+                    FwpmFreeMemory0(reinterpret_cast<void**>(&app));check(result,"Add selected executable TCP filter");
+                }
+                filter.numFilterConditions=1;filter.filterCondition=&tcp;
+            }
             for (const auto& path:bypass) {
                 FWP_BYTE_BLOB* app=nullptr;
                 check(FwpmGetAppIdFromFileName0(path.c_str(),&app),"Resolve bypass executable");

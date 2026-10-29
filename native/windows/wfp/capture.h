@@ -14,7 +14,7 @@ public:
     Capture& operator=(const Capture&) = delete;
     void start(unsigned short port4be, unsigned short port6be,
                const std::vector<std::wstring>& bypass,
-               const std::vector<std::wstring>& quicApplications={}, bool remoteDns=false);
+               const std::vector<std::wstring>& quicApplications={}, bool remoteDns=false, bool captureAll=true);
     void stop() noexcept;
 private:
     HANDLE driver_ = INVALID_HANDLE_VALUE;
