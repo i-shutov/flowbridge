@@ -700,7 +700,9 @@ fn stderr_line(state: &Arc<Mutex<State>>, bytes: &[u8]) {
         // not its arbitrary stderr payload or one warning per failed accept.
         s.event(
             "error",
-            format!("SSH resource exhaustion observed ({total} occurrences); new connections paused"),
+            format!(
+                "SSH resource exhaustion observed ({total} occurrences); new connections paused"
+            ),
         );
         return;
     }
@@ -1404,9 +1406,17 @@ mod tests {
         );
         assert_eq!(overloaded.status.resource_exhaustion_count, 10000);
         assert!(overloaded.events.len() < 20);
-        assert!(overloaded.stderr.len() < 20, "Repeated EMFILE must not flood stderr history");
-        assert!(overloaded.events.iter().any(|e| e.message.contains("10000 occurrences"))
-            || overloaded.status.resource_exhaustion_count == 10000);
+        assert!(
+            overloaded.stderr.len() < 20,
+            "Repeated EMFILE must not flood stderr history"
+        );
+        assert!(
+            overloaded
+                .events
+                .iter()
+                .any(|e| e.message.contains("10000 occurrences"))
+                || overloaded.status.resource_exhaustion_count == 10000
+        );
         assert_eq!(supervisor.start().unwrap().status.pid, ready.status.pid);
         let recovered = wait(&supervisor, |s| s.status.state == "ready");
         assert_eq!(recovered.status.pid, ready.status.pid);
@@ -1431,12 +1441,21 @@ mod tests {
         }
         let snap = supervisor.snapshot();
         assert_eq!(snap.status.resource_exhaustion_count, examples.len() as u64);
-        assert_eq!(snap.status.diagnostic_code.as_deref(), Some("ssh_resource_exhausted"));
+        assert_eq!(
+            snap.status.diagnostic_code.as_deref(),
+            Some("ssh_resource_exhausted")
+        );
         assert_eq!(snap.status.state, "degraded");
-        assert!(snap.stderr.is_empty(), "Private paths and resource spam must not be retained");
+        assert!(
+            snap.stderr.is_empty(),
+            "Private paths and resource spam must not be retained"
+        );
         let serialized = serde_json::to_string(&snap).unwrap();
         assert!(!serialized.contains("private") && !serialized.contains("10055"));
-        assert!(snap.events.len() <= 1, "Resource warnings must be coalesced");
+        assert!(
+            snap.events.len() <= 1,
+            "Resource warnings must be coalesced"
+        );
     }
 
     #[test]
