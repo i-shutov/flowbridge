@@ -329,9 +329,7 @@ impl Config {
         // The GUI's remote-SSH-DNS switch is a real policy gate. It cannot
         // force local DNS when disabled: that would leak. Reject names before
         // route expansion and before any socket or system resolver is touched.
-        if !self.remote_dns_via_ssh
-            && flow.destination.host.parse::<IpAddr>().is_err()
-        {
+        if !self.remote_dns_via_ssh && flow.destination.host.parse::<IpAddr>().is_err() {
             return Decision {
                 rule_id: None,
                 action: Action::Block,
