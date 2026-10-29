@@ -252,6 +252,12 @@ class Worker {
                                 gate(false);waiting=true;pending=value;result->acceptedDesktop=options;
                             } else {if(ssh){response(fb_ssh_stop_json(ssh));}waiting=false;gate(true);response(fb_engine_start_json(engine));result->saved=value;result->acceptedDesktop=options;}
                         }
+                    } else if(action==SaveDesktop) {
+                        // Save the SSH identity/backend and desktop preferences
+                        // without claiming that the running engine profile was
+                        // reloaded. The old path dropped this action silently.
+                        validateDesktop(options);
+                        result->acceptedDesktop=options;
                     } else if(action==Stop) {waiting=false;if(engine)response(fb_engine_stop_json(engine));if(ssh)response(fb_ssh_stop_json(ssh));}
                     if(ssh&&managedActive) {
                         result->ssh=response(fb_ssh_snapshot_json(ssh));auto state=result->ssh["status"].value("state",std::string());
