@@ -128,11 +128,27 @@ static RECT childBounds(HWND window,int id) {
     MapWindowPoints(nullptr,window,reinterpret_cast<POINT*>(&rect),2);
     return rect;
 }
-static void assertCompactLayout(HWND window) {
+static void assertCompactLayout(HWND window,const wchar_t* screenshot) {
     need(SetWindowPos(window,nullptr,0,0,980,680,SWP_NOMOVE|SWP_NOZORDER)!=0,
          "Could not resize the GUI to compact Windows desktop");
+    // Bounds must be on the actual monitor work area, not merely inside a
+    // BitBlt screenshot of an off-screen / cropped window DC.
+    MONITORINFO monitor{sizeof(MONITORINFO)};
+    need(GetMonitorInfoW(MonitorFromWindow(window,MONITOR_DEFAULTTONEAREST),&monitor)!=0,
+         "Could not query native monitor work area");
+    RECT outer{};
+    need(GetWindowRect(window,&outer)!=0,"Cannot read actual GUI window bounds");
+    need(outer.left>=monitor.rcWork.left-2&&outer.top>=monitor.rcWork.top-2&&
+         outer.right<=monitor.rcWork.right+2&&outer.bottom<=monitor.rcWork.bottom+2,
+         "Compact GUI extends outside monitor work area");
     RECT client{};GetClientRect(window,&client);
     need(client.right>=920&&client.bottom>=600,"Compact window minimum client area not reached");
+    auto evidence=[&](const wchar_t* page) {
+        if(!screenshot)return;
+        const std::filesystem::path target(screenshot);
+        const auto name=target.stem().wstring()+L"-compact-"+page+target.extension().wstring();
+        captureWindow(window,target.parent_path()/name);
+    };
     auto inside=[&](int id){
         auto r=childBounds(window,id);
         need(r.left>=0&&r.top>=0&&r.right<=client.right&&r.bottom<=client.bottom,
@@ -143,6 +159,7 @@ static void assertCompactLayout(HWND window) {
     const auto connections=inside(110);
     const auto dashboardHelp=inside(209);
     need(connections.bottom+6<=dashboardHelp.top,"Dashboard connection list obscures help");
+    evidence(L"dashboard");
     click(window,201);
     HWND mode=GetDlgItem(window,230);
     SendMessageW(mode,CB_SETCURSEL,1,0);
@@ -155,12 +172,14 @@ static void assertCompactLayout(HWND window) {
     const auto save=inside(240);
     inside(246); // Last managed-SSH timeout field
     need(sshHelp.bottom+6<=save.top,"Managed SSH form overlaps Save button");
+    evidence(L"ssh");
     SendMessageW(mode,CB_SETCURSEL,0,0);
     SendMessageW(window,WM_COMMAND,MAKEWPARAM(230,CBN_SELCHANGE),reinterpret_cast<LPARAM>(mode));
     need(IsWindowVisible(GetDlgItem(window,2000))&&
          IsWindowVisible(GetDlgItem(window,2003))&&
          !IsWindowVisible(GetDlgItem(window,243)),
          "External proxy labels or managed-SSH help were shown in the wrong mode");
+    evidence(L"proxy");
     click(window,202);
     const auto preset=inside(264);
     const auto discover=inside(260);
@@ -172,8 +191,10 @@ static void assertCompactLayout(HWND window) {
     need(start.right+6<=stop.left&&stop.right+6<=exported.left,
          "Native capture actions overlap at compact width");
     need(exported.bottom<=client.bottom,"Native capture actions are clipped");
+    evidence(L"apps");
     click(window,203);
     inside(109);inside(111); // JSON editor and log
+    evidence(L"advanced");
     click(window,200);
     // Opening the Applications page can launch the real bounded discovery
     // worker. Await its completion before the subsequent Apply/Start smoke:
@@ -193,7 +214,7 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
     try {
         need(WaitForInputIdle(process.hProcess,8000)==0,"GUI did not finish initialization");
         waitFor([&]{ window=FindWindowW(L"FlowBridgeNativeV02",nullptr); return window!=nullptr; },"GUI window did not appear");
-        assertCompactLayout(window);
+        assertCompactLayout(window,screenshot);
         const int startId=100,stopId=101,applyId=102,proxyId=105,hostId=106,protocolId=108,editorId=109,tableId=110,statusId=112;
         const int modeId=230;SendMessageW(GetDlgItem(window,modeId),CB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(modeId,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,modeId)));
         need(IsWindow(GetDlgItem(window,231))&&IsWindow(GetDlgItem(window,234)),"structured SSH editor missing");
