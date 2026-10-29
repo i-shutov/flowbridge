@@ -122,6 +122,19 @@ def main():
         passed("Installed elevated capture helper exposes an honest read-only driver preflight")
         require(preflight.get("kernel_driver_accessible") in (True, False),
                 "Native driver probe returned an invalid boolean")
+        # Trust-boundary regression on the REAL installed helper, independent
+        # of whether a signed kernel driver is available on hosted CI.
+        rejected_ssh = subprocess.run(
+            [str(capture), "--console", "--profile", str(install / "examples/direct.json"),
+             "--capture-app", str(install / "FlowBridge.exe"),
+             "--gui-owner", str(os.getpid()),
+             "--stop-event", "Local\\FlowBridgeCaptureStop-QA",
+             "--ssh-profile", str(install / "examples/direct.json")],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=10, text=True)
+        require(rejected_ssh.returncode != 0 and
+                "GUI-owned capture must reuse the unelevated SSH session" in rejected_ssh.stdout,
+                "Installed privileged helper accepted GUI-owned SSH execution")
+        passed("Installed helper refuses privileged SSH launch for GUI-owned capture")
         text = run([str(args.harness.resolve()), str(install / "FlowBridge.exe"),
                     str((args.output / "installed-ui.bmp").resolve())])
         require("PASS Win32 GUI" in text and "PASS Windows DLL" in text, "GUI smoke incomplete")

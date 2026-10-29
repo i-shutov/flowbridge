@@ -36,7 +36,7 @@ option(FLOWBRIDGE_BUILD_NATIVE_TESTS "Build Win32 ABI and GUI smoke harness (dis
 if(FLOWBRIDGE_BUILD_NATIVE_TESTS)
   add_executable(FlowBridgeNativeSmoke ../../tests/windows_native_smoke.cpp)
   target_include_directories(FlowBridgeNativeSmoke PRIVATE ../include ../../third_party)
-  target_link_libraries(FlowBridgeNativeSmoke PRIVATE flowbridge_ffi Threads::Threads ws2_32 user32 gdi32 comctl32 userenv bcrypt ntdll shell32 ole32)
+  target_link_libraries(FlowBridgeNativeSmoke PRIVATE flowbridge_ffi Threads::Threads ws2_32 iphlpapi user32 gdi32 comctl32 userenv bcrypt ntdll shell32 ole32)
   if(MSVC)
     target_compile_options(FlowBridgeNativeSmoke PRIVATE /W4 /utf-8)
     set_property(TARGET FlowBridgeNativeSmoke PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")

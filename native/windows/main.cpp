@@ -42,6 +42,7 @@ void switchPage(int page); void layout(); void refreshApps(); void saveDesktop()
 HWND window{}, configEdit{}, table{}, logEdit{};
 std::filesystem::path profile;
 bool busy=false, closing=false, filling=false, quickDirty=false;
+bool shutdownDispatched=false;
 std::string localLog, workerError;
 std::string selectedProxyId;
 Json draft;
@@ -267,6 +268,14 @@ void enableControls() {
     setText(GetDlgItem(window,Start),pendingStart?"Подключаем…":engineRunning?"Подключено":"Подключить");
 }
 void dispatch(int action,std::string text={},Json options=Json::object()){busy=true;if(action!=PollCommand)enableControls();worker.submit(action,std::move(text),std::move(options));}
+// The ordinary GUI owns the SSH transport; on exit the privileged capture
+// filters must be fully withdrawn before the user-owned SSH is torn down.
+void finishCloseAfterCapture(){
+    if(!closing||busy||nativeCapture.active()||nativeCapture.stopping()||shutdownDispatched)return;
+    shutdownDispatched=true;
+    KillTimer(window,1);
+    dispatch(-1);
+}
 std::wstring display(const Json& j,const char* name) {
     if(!j.contains(name)||j[name].is_null())return L"";
     auto text=j[name].is_string()?j[name].get<std::string>():j[name].dump();
@@ -362,8 +371,8 @@ void browseApplication(){auto path=chooseFile(L"Приложения Windows\0*.
 }
 void startNativeCapture(){
     captureSelections();
-    if(nativeCapture.active())throw std::runtime_error("Нативный перехват уже запущен.");
-    if(engineRunning||pendingStart)throw std::runtime_error("Сначала остановите локальный SOCKS; один экземпляр SSH не должен запускаться дважды.");
+    if(nativeCapture.active()||nativeCapture.stopping())
+        throw std::runtime_error("Дождитесь завершения предыдущего нативного перехвата.");
     if(selectedApps.empty())throw std::runtime_error("Выберите хотя бы один существующий EXE.");
     if(selectedApps.size()>64)throw std::runtime_error("Нативный режим поддерживает максимум 64 EXE.");
     if(SendMessageW(GetDlgItem(window,BlockOthers),BM_GETCHECK,0,0)==BST_CHECKED)
@@ -371,24 +380,55 @@ void startNativeCapture(){
     auto settings=desktopSettings();validateDesktop(settings);
     const bool managed=settings.value("managed_ssh",false);
     auto base=Json::parse(commandConfiguration());
-    std::string target=managed?"managed-ssh":selectedProxyId;
-    if(target.empty())throw std::runtime_error("Укажите SOCKS/SSH upstream в разделе подключения.");
-    base=native_profile::build(std::move(base),std::vector<std::string>(selectedApps.begin(),selectedApps.end()),target,false);
-    auto value=base.dump(2);
+    auto selected=std::vector<std::string>(selectedApps.begin(),selectedApps.end());
+    std::vector<std::wstring> bypass;
+    wchar_t exe[32768]{};
+    const DWORD count=GetModuleFileNameW(nullptr,exe,32768);
+    if(!count||count>=32768)throw std::runtime_error("Не удалось определить путь текущего FlowBridge.exe.");
+    bypass.emplace_back(exe,count);
+    if(managed) {
+        // Do not start an SSH client or load private keys in the UAC-elevated
+        // helper. The ordinary GUI's worker owns the OpenSSH watchdog and
+        // already gates its loopback SOCKS ingress on actual SSH readiness.
+        if(!engineRunning||pendingStart||!tunnelReady)
+            throw std::runtime_error("Сначала нажмите «Подключить» и дождитесь готовности SSH. Нативный перехват использует этот пользовательский SSH-сеанс.");
+        validateManagedRoute(base.dump(),settings.at("ssh"));
+        const auto actual=latestEngineSnapshot.value("status",Json::object());
+        if(actual.value("listen",std::string())!=base.at("listen").get<std::string>())
+            throw std::runtime_error("Изменён локальный SOCKS-порт. Сначала примените новый профиль и дождитесь готовности.");
+        const auto sshStatus=latestSshSnapshot.value("status",Json::object());
+        if(sshStatus.value("state",std::string())!="ready"||
+           !sshStatus.contains("backend_path")||!sshStatus["backend_path"].is_string())
+            throw std::runtime_error("Не получен проверенный путь пользовательского OpenSSH; перехват не запускается.");
+        const auto sshExe=wide(sshStatus["backend_path"].get<std::string>());
+        if(!std::filesystem::path(sshExe).is_absolute()||!std::filesystem::is_regular_file(sshExe))
+            throw std::runtime_error("Исполняемый файл пользовательского SSH не найден.");
+        bypass.push_back(sshExe); // prevent selected ssh.exe from looping into capture
+        base=native_profile::viaUserOwnedSsh(std::move(base),selected);
+    } else {
+        if(engineRunning||pendingStart)
+            throw std::runtime_error("Остановите локальный SOCKS перед отдельным перехватом через внешний прокси.");
+        if(selectedProxyId.empty())
+            throw std::runtime_error("Укажите SOCKS upstream в разделе подключения.");
+        base=native_profile::build(std::move(base),selected,selectedProxyId,false);
+    }
+    const auto value=base.dump(2);
     response(fb_validate_json(value.c_str()));
-    if(managed)validateManagedRoute(value,settings.at("ssh"));
     auto dir=desktopPath.parent_path();
     if(dir.empty())throw std::runtime_error("Нет папки пользовательских настроек.");
     const auto nativeProfile=dir/L"native-capture.json";
-    const auto sshProfile=dir/L"native-capture-ssh.json";
     writeFile(nativeProfile,value);
-    if(managed)writeFile(sshProfile,settings.at("ssh").dump(2));
     std::vector<std::wstring> apps;apps.reserve(selectedApps.size());
     for(const auto& path:selectedApps)apps.push_back(wide(path));
-    nativeCapture.start(nativeProfile.wstring(),managed?sshProfile.wstring():L"",apps);
+    // GUI-originated native capture MUST pass an empty --ssh-profile.
+    nativeCapture.start(nativeProfile.wstring(),L"",apps,bypass);
     saveDesktop();
-    setText(GetDlgItem(window,CaptureStatus),"Запрос UAC принят, helper запущен. Наличие драйвера и реальное перенаправление проверяются отдельно.");
-    note("Запущен нативный helper для "+std::to_string(apps.size())+" EXE. Консоль helper показывает ошибки WFP/SSH.");
+    setText(GetDlgItem(window,CaptureStatus),
+        managed?"WFP helper запускается через UAC; SSH и ключи остаются в обычном процессе FlowBridge."
+               :"WFP helper запускается через UAC; готовность внешнего SOCKS и WFP проверяются отдельно.");
+    note("Нативный helper запрошен для "+std::to_string(apps.size())+
+         " EXE; маршрут: "+(managed?"пользовательский SSH через локальный SOCKS":"внешний прокси")+
+         ". Драйвер/реальное перенаправление требуют отдельной проверки.");
 }
 void stopNativeCapture(){
     if(!nativeCapture.active()) {note("Нативный helper уже остановлен.");return;}
@@ -528,7 +568,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         label(L"Только ключ / SSH agent. Ключ сервера должен быть заранее проверен и добавлен в known_hosts. Пароли и обход проверки ключа не поддерживаются.",SshHelp,12);
         label(L"Внешний прокси управляется отдельно от FlowBridge.",SshSummary,1);
         add(L"BUTTON",L"Сохранить подключение",WS_TABSTOP,SaveDesktop,1);
-        label(L"Выберите EXE, затем «Нативный перехват». Для реальной маршрутизации требуется заранее установленный подписанный тестовый WFP-драйвер; автоматической установки драйвера нет.",AppsHelp,2);
+        label(L"Для SSH: сначала «Подключить» и дождитесь готовности, затем выберите EXE и «Нативный перехват». SSH остаётся без UAC. WFP-драйвер должен быть установлен отдельно.",AppsHelp,2);
         add(L"BUTTON",L"AI-приложения",WS_TABSTOP,PresetAI,2);add(L"BUTTON",L"Веб-браузеры",WS_TABSTOP,PresetWeb,2);add(L"BUTTON",L"AI + веб",WS_TABSTOP,PresetBoth,2);
         add(L"BUTTON",L"Найти приложения",WS_TABSTOP,Discover,2);add(L"BUTTON",L"Добавить EXE…",WS_TABSTOP,BrowseApp,2);
         label(L"Поиск локальный: App Paths, список установки, известные ярлыки и запущенные процессы.",ScanStatus,2);label(L"Найдено: 0 • Выбрано: 0",AppsSummary,2);
@@ -568,8 +608,15 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
                 else if(id==Theme){dark=!dark;applyTheme();try{saveDesktop();}catch(const std::exception& e){note(e.what());}}
                 else if(id==ExportDiagnostics){exportDiagnostics();}
                 else if(!busy){
-                    if(id==Start||id==Apply||id==SaveDesktop){workerError.clear();auto value=commandConfiguration();auto settings=desktopSettings();validateDesktop(settings);if(settings.value("managed_ssh",false))validateManagedRoute(value,settings["ssh"]);dispatch(id==Start?Start:Apply,std::move(value),std::move(settings));}
-                    else if(id==Stop){workerError.clear();dispatch(Stop);}
+                    if(id==Start||id==Apply||id==SaveDesktop){
+                         if(nativeCapture.active()||nativeCapture.stopping())
+                             throw std::runtime_error("Сначала остановите нативный перехват, затем меняйте или останавливайте SSH.");
+                         workerError.clear();auto value=commandConfiguration();auto settings=desktopSettings();validateDesktop(settings);if(settings.value("managed_ssh",false))validateManagedRoute(value,settings["ssh"]);dispatch(id==Start?Start:Apply,std::move(value),std::move(settings));}
+                    else if(id==Stop){
+                         if(nativeCapture.active()||nativeCapture.stopping())
+                             stopNativeCapture(); // first remove WFP filters, then user can stop SSH
+                         else {workerError.clear();dispatch(Stop);}
+                     }
                     else if(id==Open||id==Save)fileDialog(id==Save);
                     else if(id==BrowseKey||id==BrowseKnown){auto path=chooseFile(L"Все файлы\0*.*\0",false,L"");if(!path.empty())setText(GetDlgItem(h,id==BrowseKey?KeyPath:KnownHosts),discovery::utf8(path.wstring()));}
                     else if(id==Discover){captureSelections();setText(GetDlgItem(h,ScanStatus),"Ищем приложения локально… Сканирование ограничено по времени и объёму.");dispatch(DiscoverCommand,{},catalog);}
@@ -591,13 +638,14 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
             note(exitCode==0?"Нативный перехват остановлен.":"Нативный helper завершился с ошибкой: "+std::to_string(exitCode)+". Проверьте WFP-драйвер и журнал helper.");
             enableControls();
         }
-        if(!busy&&!closing)dispatch(PollCommand);
+        if(closing)finishCloseAfterCapture();
+        else if(!busy)dispatch(PollCommand);
         return 0;
     }
     case Completed: {
         std::unique_ptr<Result> result(reinterpret_cast<Result*>(l)); busy=false;pendingStart=result->waiting;
         if(result->exit) { DestroyWindow(h); return 0; }
-        if(closing) { dispatch(-1); return 0; }
+        if(closing) { finishCloseAfterCapture(); return 0; }
         try {
             if(!result->acceptedDesktop.is_null()&&!desktopPath.empty()){writeFile(desktopPath,result->acceptedDesktop.dump(2));desktop=result->acceptedDesktop;}
             if(!result->saved.empty()) {
@@ -614,7 +662,19 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         } catch(const std::exception& e) { note(std::string("Ошибка: ")+e.what()); }
         enableControls(); return 0;
     }
-    case WM_CLOSE: if(!closing) { nativeCapture.stop(); try{captureSelections();saveDesktop();}catch(const std::exception& e){note(e.what());} closing=true; KillTimer(h,1); setText(GetDlgItem(h,Status),"Останавливаем движок и SSH…"); enableControls(); if(!busy) dispatch(-1); } return 0;
+    case WM_CLOSE:
+        if(!closing) {
+            nativeCapture.stop();
+            try{captureSelections();saveDesktop();}catch(const std::exception& e){note(e.what());}
+            closing=true;
+            setText(GetDlgItem(h,Status),
+                    nativeCapture.active()||nativeCapture.stopping()
+                    ?"Ожидаем снятия WFP-фильтров перед остановкой пользовательского SSH…"
+                    :"Останавливаем движок и SSH…");
+            enableControls();
+            finishCloseAfterCapture();
+        }
+        return 0;
     case WM_ERASEBKGND:return 1;
     case WM_PAINT:{PAINTSTRUCT ps{};HDC dc=BeginPaint(h,&ps);RECT r{};GetClientRect(h,&r);FillRect(dc,&r,backgroundBrush);RECT side{0,0,212,r.bottom};FillRect(dc,&side,sidebarBrush);
         SetBkMode(dc,TRANSPARENT);SetTextColor(dc,RGB(237,243,255));SelectObject(dc,headingFont);RECT brand{27,36,197,70};DrawTextW(dc,L"FlowBridge",-1,&brand,DT_LEFT|DT_SINGLELINE);SelectObject(dc,smallFont);SetTextColor(dc,RGB(143,164,195));RECT tag{28,79,194,117};DrawTextW(dc,L"ЛИЧНЫЙ МАРШРУТ\nSSH / SOCKS5",-1,&tag,DT_LEFT);RECT version{28,r.bottom-203,195,r.bottom-158};DrawTextW(dc,L"v0.2.0\nЛокальный режим",-1,&version,DT_LEFT);
