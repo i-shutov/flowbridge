@@ -93,7 +93,9 @@ impl Pool {
                 return Err("managed SSH pool first worker must match the configured proxy".into());
             }
             if !unique.insert((endpoint.host.clone(), endpoint.port)) {
-                return Err("managed SSH pool contains duplicate loopback listener endpoints".into());
+                return Err(
+                    "managed SSH pool contains duplicate loopback listener endpoints".into(),
+                );
             }
             let budget = Budget::shared(&endpoint, limits.clone())?;
             workers.push(Worker {
@@ -156,8 +158,8 @@ impl Pool {
                 best = Some((index, available, free));
             }
         }
-        let (index, _, _) = best
-            .ok_or("all managed SSH pool workers are unavailable; no DIRECT fallback")?;
+        let (index, _, _) =
+            best.ok_or("all managed SSH pool workers are unavailable; no DIRECT fallback")?;
         let worker = &self.workers[index];
         Ok(Selected {
             endpoint: worker.endpoint.clone(),
@@ -203,8 +205,14 @@ mod tests {
         Pool::new(
             endpoint(49101),
             vec![
-                WorkerInput { endpoint: endpoint(49101), ready: ready[0] },
-                WorkerInput { endpoint: endpoint(49102), ready: ready[1] },
+                WorkerInput {
+                    endpoint: endpoint(49101),
+                    ready: ready[0],
+                },
+                WorkerInput {
+                    endpoint: endpoint(49102),
+                    ready: ready[1],
+                },
             ],
             limits(),
             4,
@@ -231,19 +239,72 @@ mod tests {
     #[test]
     fn rejects_duplicates_mismatched_primary_remote_and_aggregate_overcommit() {
         assert!(Pool::new(endpoint(49101), vec![], limits(), 4).is_err());
-        assert!(Pool::new(endpoint(49101), vec![
-            WorkerInput{endpoint:endpoint(49102),ready:true}],limits(),4).is_err());
-        assert!(Pool::new(endpoint(49101), vec![
-            WorkerInput{endpoint:endpoint(49101),ready:true},
-            WorkerInput{endpoint:endpoint(49101),ready:true}],limits(),4).is_err());
-        assert!(Pool::new(endpoint(49101), vec![
-            WorkerInput{endpoint:endpoint(49101),ready:true},
-            WorkerInput{endpoint:endpoint(49102),ready:true}],limits(),3).is_err());
-        assert!(Pool::new(endpoint(49101), vec![
-            WorkerInput{endpoint:Endpoint{host:"198.51.100.10".into(),port:49101},ready:true}],
-            limits(),4).is_err());
-        assert!(Pool::new(endpoint(49101), vec![
-            WorkerInput{endpoint:endpoint(49101),ready:false}],limits(),4)
-            .unwrap().select(0).is_err());
+        assert!(Pool::new(
+            endpoint(49101),
+            vec![WorkerInput {
+                endpoint: endpoint(49102),
+                ready: true
+            }],
+            limits(),
+            4
+        )
+        .is_err());
+        assert!(Pool::new(
+            endpoint(49101),
+            vec![
+                WorkerInput {
+                    endpoint: endpoint(49101),
+                    ready: true
+                },
+                WorkerInput {
+                    endpoint: endpoint(49101),
+                    ready: true
+                }
+            ],
+            limits(),
+            4
+        )
+        .is_err());
+        assert!(Pool::new(
+            endpoint(49101),
+            vec![
+                WorkerInput {
+                    endpoint: endpoint(49101),
+                    ready: true
+                },
+                WorkerInput {
+                    endpoint: endpoint(49102),
+                    ready: true
+                }
+            ],
+            limits(),
+            3
+        )
+        .is_err());
+        assert!(Pool::new(
+            endpoint(49101),
+            vec![WorkerInput {
+                endpoint: Endpoint {
+                    host: "198.51.100.10".into(),
+                    port: 49101
+                },
+                ready: true
+            }],
+            limits(),
+            4
+        )
+        .is_err());
+        assert!(Pool::new(
+            endpoint(49101),
+            vec![WorkerInput {
+                endpoint: endpoint(49101),
+                ready: false
+            }],
+            limits(),
+            4
+        )
+        .unwrap()
+        .select(0)
+        .is_err());
     }
 }
