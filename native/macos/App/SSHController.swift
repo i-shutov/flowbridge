@@ -24,6 +24,10 @@ struct DesktopSettings: Codable {
     var selectedApplications: [String] = []
     var selectedPreset = "ai_web"
     var appSelectionEnabled = false
+    // Optional fields preserve decoding of previously saved profiles.
+    var remoteDNS: Bool? = true
+    var remoteDNSResolver: String? = ""
+
 
     func sshJSON() throws -> String {
         guard !sshHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -93,6 +97,24 @@ final class SSHController: ObservableObject {
                 guard self.revision == version else { return }
                 self.state = failure == nil ? "stopped" : "failed"
                 self.message = failure ?? "SSH остановлен"; completion?()
+            }
+        }
+    }
+    func discoverDNS(completion: @escaping (Result<[String],Error>) -> Void) {
+        let version = revision
+        queue.async {
+            let id = self.handle
+            // Do not block the supervisor queue: Stop must cancel discovery.
+            DispatchQueue.global(qos:.utility).async {
+                let result: Result<[String],Error>
+                do {
+                    let value = try Bridge.consume(fb_ssh_remote_dns_json(id))
+                    guard let servers = value["servers"] as? [String], !servers.isEmpty else { throw Bridge.error("DNS-сервер не найден") }
+                    result = .success(servers)
+                } catch { result = .failure(error) }
+                DispatchQueue.main.async {
+                    guard self.revision == version else { return }; completion(result)
+                }
             }
         }
     }

@@ -48,6 +48,10 @@ char *fb_native_snapshot_json(uint64_t session_id);
 char *fb_native_stream_open_json(uint64_t session_id, const char *flow_json);
 char *fb_native_stream_open_wfp_json(uint64_t session_id, const char *flow_json,
                                    const uint8_t *records, size_t length);
+/* DNS wire query/answer arrays, no system settings changes or local fallback. */
+char *fb_native_dns_exchange_json(uint64_t session_id, const char *request_json);
+char *fb_native_dns_start_json(uint64_t session_id, const char *options_json);
+void fb_native_dns_stop(uint64_t session_id);
 void fb_native_destroy(uint64_t session_id);
 
 /* Stream open applies supplied flow policy and connects Direct/Proxy/Chain,
@@ -90,6 +94,8 @@ char *fb_ssh_create_json(const char *config_json);
 char *fb_ssh_start_json(uint64_t ssh_id);
 char *fb_ssh_stop_json(uint64_t ssh_id);
 char *fb_ssh_snapshot_json(uint64_t ssh_id);
+/* Authenticated read of remote /etc/resolv.conf; never guesses a public DNS. */
+char *fb_ssh_remote_dns_json(uint64_t ssh_id);
 void fb_ssh_destroy(uint64_t ssh_id);
 #ifdef __cplusplus
 }

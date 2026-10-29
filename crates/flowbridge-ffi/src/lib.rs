@@ -6,6 +6,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 
 mod diagnostics;
 mod native_context;
+mod native_dns;
 
 const MAX_INPUT_BYTES: usize = 1024 * 1024;
 
@@ -1002,6 +1003,26 @@ pub extern "C" fn fb_ssh_stop_json(id: u64) -> *mut c_char {
         with_ssh(id, |supervisor| {
             supervisor.stop().map(ssh_json).map_err(|e| e.to_string())
         })
+    })
+}
+/// Fixed read-only remote resolver discovery. Stop can cancel it concurrently.
+#[no_mangle]
+pub extern "C" fn fb_ssh_remote_dns_json(id: u64) -> *mut c_char {
+    guarded(|| {
+        let slot = locked(ssh_supervisors())
+            .get(&id)
+            .cloned()
+            .ok_or("invalid SSH handle")?;
+        if slot.destroyed.load(Ordering::Acquire) {
+            return Err("SSH supervisor destroyed".into());
+        }
+        let servers = slot
+            .supervisor
+            .remote_dns_servers()
+            .map_err(|e| e.to_string())?;
+        Ok(
+            json!({"ok":true,"servers":servers,"source":"remote_resolv_conf","local_fallback":false}),
+        )
     })
 }
 #[no_mangle]
