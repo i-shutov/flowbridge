@@ -42,6 +42,8 @@ def exact(sock, count):
 
 class Echo(socketserver.BaseRequestHandler):
     def handle(self):
+        with self.server.lock:
+            self.server.accepted += 1
         self.request.settimeout(8)
         try:
             while data := self.request.recv(65536):
@@ -59,6 +61,7 @@ class Server(socketserver.ThreadingTCPServer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.connects = 0
+        self.accepted = 0
         self.connects_by_family = {socket.AF_INET: 0, socket.AF_INET6: 0}
         self.deny = False
         self.lock = threading.Lock()
