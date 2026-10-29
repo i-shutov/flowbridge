@@ -529,7 +529,10 @@ std::filesystem::path chooseFile(const wchar_t* filter,bool saving,const wchar_t
 void exportDiagnostics(){
     auto engine=latestEngineSnapshot.is_object()?latestEngineSnapshot:Json::object();
     auto ssh=latestSshSnapshot.is_object()?latestSshSnapshot:Json::object();
-    auto request=Json{{"engine",{{"status",engine.value("status",Json::object())},{"managed_upstream",engine.value("managed_upstream",Json())}}},{"ssh",{{"status",ssh.value("status",Json::object())}}}}.dump();
+    auto request=Json{{"engine",{{"status",engine.value("status",Json::object())},
+        {"managed_upstream",engine.value("managed_upstream",Json())},
+        {"managed_pool",engine.value("managed_pool",Json())}}},
+        {"ssh",{{"status",ssh.value("status",Json::object())}}}}.dump();
     auto report=response(fb_diagnostic_report_json(request.c_str())).at("report");
     auto path=chooseFile(L"Диагностический JSON\0*.json\0",true);
     if(path.empty())return;
