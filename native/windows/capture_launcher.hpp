@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <stdexcept>
+#include "profile_integrity.hpp"
 
 // Unprivileged GUI owns the stop event and observes an elevated helper.
 // The helper also watches the GUI PID, so abnormal GUI exit removes dynamic
@@ -27,11 +28,15 @@ inline std::wstring quote(const std::wstring& input) {
     output.append(backslashes*2,L'\\');output.push_back(L'\"');
     return output;
 }
+inline std::wstring wideDigest(const std::string& digest) {
+    return std::wstring(digest.begin(),digest.end());
+}
 inline std::wstring arguments(const std::wstring& profile,
                              const std::wstring& ssh,
                              const std::vector<std::wstring>& apps,
                              DWORD owner, const std::wstring& eventName,
-                             const std::vector<std::wstring>& bypass={}) {
+                             const std::vector<std::wstring>& bypass,
+                             const std::string& profileDigest) {
     if (!owner || apps.empty() || apps.size()>64 || bypass.size()>16 ||
         !std::filesystem::path(profile).is_absolute())
         throw std::runtime_error("Native capture requires an owner, profile, and 1..64 EXE paths");
@@ -39,8 +44,10 @@ inline std::wstring arguments(const std::wstring& profile,
         throw std::runtime_error("SSH profile must be absolute");
     if(eventName.rfind(L"Local\\FlowBridgeCaptureStop-",0)!=0 || eventName.size()>128)
         throw std::runtime_error("Native capture stop event is invalid");
+    if(!profile_integrity::valid(profileDigest))
+        throw std::runtime_error("Native capture requires exact SHA-256 of its validated profile");
     std::wstring command=L"--console --profile "+quote(profile)+L" --gui-owner "+std::to_wstring(owner)+
-                         L" --stop-event "+quote(eventName);
+                         L" --stop-event "+quote(eventName)+L" --profile-sha256 "+wideDigest(profileDigest);
     if(!ssh.empty())command+=L" --ssh-profile "+quote(ssh);
     for(const auto& path:apps) {
         if(!std::filesystem::path(path).is_absolute() ||
@@ -86,7 +93,8 @@ public:
     void stop() noexcept {if(stop_){SetEvent(stop_);stopRequested_=true;}}
     void start(const std::wstring& profile,const std::wstring& ssh,
                const std::vector<std::wstring>& apps,
-               const std::vector<std::wstring>& bypass={}) {
+               const std::vector<std::wstring>& bypass,
+               const std::string& profileDigest) {
         if(process_)throw std::runtime_error("Native capture is already active or stopping");
         wchar_t module[32768]{};
         DWORD n=GetModuleFileNameW(nullptr,module,32768);
@@ -101,7 +109,7 @@ public:
         HANDLE control=CreateEventW(nullptr,TRUE,FALSE,name.c_str());
         if(!control||GetLastError()==ERROR_ALREADY_EXISTS){if(control)CloseHandle(control);throw std::runtime_error("Capture event creation failed");}
         try {
-            auto params=arguments(profile,ssh,apps,GetCurrentProcessId(),name,bypass);
+            auto params=arguments(profile,ssh,apps,GetCurrentProcessId(),name,bypass,profileDigest);
             SHELLEXECUTEINFOW launch{};
             launch.cbSize=sizeof(launch);
             launch.fMask=SEE_MASK_NOCLOSEPROCESS|SEE_MASK_FLAG_NO_UI;
