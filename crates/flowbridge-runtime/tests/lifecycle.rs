@@ -1,5 +1,5 @@
 use flowbridge_core::{Action, Config, Endpoint, Proxy, ProxyKind, Rule};
-use flowbridge_runtime::Engine;
+use flowbridge_runtime::{admission::Limits, Engine};
 use std::{
     io::{Read, Write},
     net::{Shutdown, SocketAddr, TcpListener, TcpStream},
@@ -78,8 +78,9 @@ fn managed_reconnect_waits_before_open_and_resumes_new_flow_without_replay() {
     let config = proxied_profile(proxy.local_addr().unwrap());
     let endpoint = config.proxies[0].endpoint.clone();
     let engine = Engine::new(config.clone()).unwrap();
+    let limits = Limits { max_flows: 2, max_opening: 1, max_queued: 2, wait_timeout_ms: 50 };
     engine
-        .set_upstream_gate(Some(endpoint.clone()), false, 2000)
+        .set_upstream_gate_with_limits(Some(endpoint.clone()), false, 2000, limits.clone())
         .unwrap();
     engine.start().unwrap();
     let client = thread::spawn(move || {
@@ -102,6 +103,10 @@ fn managed_reconnect_waits_before_open_and_resumes_new_flow_without_replay() {
         proxy.accept().unwrap_err().kind(),
         std::io::ErrorKind::WouldBlock
     );
+    // Regression: while SSH is restarting, the short 50ms *capacity*
+    // deadline must not override the separate 2s reconnect grace.
+    thread::sleep(Duration::from_millis(180));
+    assert!(engine.snapshot().connections.iter().any(|c| c.state == "waiting_for_tunnel"));
     proxy.set_nonblocking(false).unwrap();
     let server = thread::spawn(move || {
         let (mut stream, _) = proxy.accept().unwrap();
@@ -122,7 +127,7 @@ fn managed_reconnect_waits_before_open_and_resumes_new_flow_without_replay() {
         stream.write_all(b"received once").unwrap();
     });
     engine
-        .set_upstream_gate(Some(endpoint), true, 2000)
+        .set_upstream_gate_with_limits(Some(endpoint), true, 2000, limits)
         .unwrap();
     client.join().unwrap();
     server.join().unwrap();
