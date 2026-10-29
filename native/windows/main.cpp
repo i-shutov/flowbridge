@@ -25,7 +25,7 @@ using Json = nlohmann::json;
 namespace {
 constexpr size_t MaxBytes = 1024 * 1024;
 constexpr UINT Completed = WM_APP + 1;
-enum { Start=100, Stop, Apply, Open, Save, Proxy, Host, Port, Protocol, Config, Connections, Log, Status, Mode, QuickLabel, ConfigLabel, ConnectionsLabel, LogLabel, NavDashboard=200, NavConnection, NavApps, NavAdvanced, Theme=204, PageTitle=205, PageSubtitle=206, Badge=207, Metrics=208, DashboardHelp=209, SshHealth=210, ManagedMode=230, SshHost=231, SshPort=232, SshUser=233, KeyPath=234, KnownHosts=235, LocalPort=236, Compression=237, Keepalive=238, KeepaliveCount=239, SaveDesktop=240, BrowseKey=241, BrowseKnown=242, SshHelp=243, ConnectionSummary=244, Discover=260, AppsTable=261, PresetAI=262, PresetWeb=263, PresetBoth=264, BrowseApp=265, ExportNative=266, BlockOthers=267, AppsHelp=268, AppsSummary=269, ScanStatus=270, SshTitle=271, SshSummary=272, RetryInitial=245, RetryMax=246, Banner=280, ExportDiagnostics=281, StartCapture=282, StopCapture=283, CaptureStatus=284, RemoteDns=285 };
+enum { Start=100, Stop, Apply, Open, Save, Proxy, Host, Port, Protocol, Config, Connections, Log, Status, Mode, QuickLabel, ConfigLabel, ConnectionsLabel, LogLabel, NavDashboard=200, NavConnection, NavApps, NavAdvanced, Theme=204, PageTitle=205, PageSubtitle=206, Badge=207, Metrics=208, DashboardHelp=209, SshHealth=210, ManagedMode=230, SshHost=231, SshPort=232, SshUser=233, KeyPath=234, KnownHosts=235, LocalPort=236, Compression=237, Keepalive=238, KeepaliveCount=239, SaveDesktop=240, BrowseKey=241, BrowseKnown=242, SshHelp=243, ConnectionSummary=244, Discover=260, AppsTable=261, PresetAI=262, PresetWeb=263, PresetBoth=264, BrowseApp=265, ExportNative=266, BlockOthers=267, AppsHelp=268, AppsSummary=269, ScanStatus=270, SshTitle=271, SshSummary=272, RetryInitial=245, RetryMax=246, Banner=280, ExportDiagnostics=281, StartCapture=282, StopCapture=283, CaptureStatus=284, RemoteDns=285, SshExecutable=286, BrowseSsh=287 };
 constexpr int DiscoverCommand=900, PollCommand=999;
 std::map<int,int> pages; // -1 global; 0 dashboard; 1 connection; 2 applications; 3 advanced
 int activePage=0;
@@ -160,7 +160,7 @@ int integerField(int id,int minimum,int maximum) {
 }
 Json sshSettings() {
     auto optional=[](int id)->Json {auto value=utf8(GetDlgItem(window,id)); return value.empty()?Json(nullptr):Json(value);};
-    return {{"host",utf8(GetDlgItem(window,SshHost))},{"port",integerField(SshPort,1,65535)},{"user",utf8(GetDlgItem(window,SshUser))},{"identity_file",optional(KeyPath)},{"known_hosts_file",optional(KnownHosts)},{"local_port",integerField(LocalPort,1,65535)},{"compression",SendMessageW(GetDlgItem(window,Compression),BM_GETCHECK,0,0)==BST_CHECKED},{"server_alive_interval_secs",integerField(Keepalive,1,3600)},{"server_alive_count_max",integerField(KeepaliveCount,1,100)},{"restart_initial_delay_ms",integerField(RetryInitial,100,60000)},{"restart_max_delay_ms",integerField(RetryMax,100,300000)}};
+    return {{"host",utf8(GetDlgItem(window,SshHost))},{"port",integerField(SshPort,1,65535)},{"user",utf8(GetDlgItem(window,SshUser))},{"identity_file",optional(KeyPath)},{"known_hosts_file",optional(KnownHosts)},{"ssh_executable",optional(SshExecutable)},{"local_port",integerField(LocalPort,1,65535)},{"compression",SendMessageW(GetDlgItem(window,Compression),BM_GETCHECK,0,0)==BST_CHECKED},{"server_alive_interval_secs",integerField(Keepalive,1,3600)},{"server_alive_count_max",integerField(KeepaliveCount,1,100)},{"restart_initial_delay_ms",integerField(RetryInitial,100,60000)},{"restart_max_delay_ms",integerField(RetryMax,100,300000)}};
 }
 Json desktopSettings() {
     Json selected=Json::array();for(const auto& path:selectedApps)selected.push_back(path);
@@ -174,7 +174,15 @@ void validateDesktop(const Json& value) {
         throw std::runtime_error("Режим удалённого DNS должен быть логическим значением.");
     if((managed||!host.empty())&&(host.empty()||host.size()>253||host[0]=='-'||!allowed(host,".-:_[]%")))throw std::runtime_error("SSH-сервер: укажите hostname / IP без пробелов, URI и параметров командной строки.");
     if((managed||!user.empty())&&(user.empty()||user.size()>128||user[0]=='-'||!allowed(user,"._-")))throw std::runtime_error("SSH-пользователь: нужны ASCII буквы, цифры, точка, дефис или подчёркивание.");
-    for(const auto* key:{"identity_file","known_hosts_file"})if(!ssh.at(key).is_null()){auto path=ssh.at(key).get<std::string>();if(path.empty()||path.size()>4096||std::any_of(path.begin(),path.end(),[](unsigned char c){return c<32||c==127||c=='"';}))throw std::runtime_error("Путь ключа / known_hosts содержит недопустимые символы.");}
+    for(const auto* key:{"identity_file","known_hosts_file","ssh_executable"})if(!ssh.at(key).is_null()){auto path=ssh.at(key).get<std::string>();if(path.empty()||path.size()>4096||std::any_of(path.begin(),path.end(),[](unsigned char c){return c<32||c==127||c=='"';}))throw std::runtime_error("Путь ключа / known_hosts содержит недопустимые символы.");}
+    if(!ssh.at("ssh_executable").is_null()){
+        const auto raw=ssh.at("ssh_executable").get<std::string>();
+        const auto value=std::filesystem::path(wide(raw));
+        const auto path=value.wstring();
+        if(!value.is_absolute()||path.rfind(L"\\\\",0)==0||
+           _wcsicmp(value.extension().c_str(),L".exe")!=0)
+            throw std::runtime_error("Выбранный SSH-клиент должен быть локальным абсолютным путём к .exe, например C:\\\\Windows\\\\System32\\\\OpenSSH\\\\ssh.exe.");
+    }
     if(ssh.at("restart_max_delay_ms").get<int>()<ssh.at("restart_initial_delay_ms").get<int>())throw std::runtime_error("Максимальная пауза повтора не может быть меньше начальной.");
 }
 void saveDesktop() { if(desktopPath.empty())throw std::runtime_error("Недоступна папка настроек пользователя.");auto value=desktopSettings();validateDesktop(value);writeFile(desktopPath,value.dump(2));desktop=std::move(value); }
@@ -269,7 +277,7 @@ public:
     ~Worker(){if(thread.joinable())thread.join();}
 } worker;
 void enableControls() {
-    for(int id:{Start,Stop,StartCapture,StopCapture,Apply,Open,Save,Proxy,Host,Port,Protocol,Config,Discover,ExportNative,ManagedMode,SshHost,SshPort,SshUser,KeyPath,KnownHosts,LocalPort,Compression,Keepalive,KeepaliveCount,SaveDesktop,BrowseKey,BrowseKnown,BrowseApp,RetryInitial,RetryMax,PresetAI,PresetWeb,PresetBoth,BlockOthers,RemoteDns})EnableWindow(GetDlgItem(window,id),!busy&&!closing&&(!pendingStart||id==Stop||id==Discover||id==BrowseApp||id==PresetAI||id==PresetWeb||id==PresetBoth||id==BlockOthers));
+    for(int id:{Start,Stop,StartCapture,StopCapture,Apply,Open,Save,Proxy,Host,Port,Protocol,Config,Discover,ExportNative,ManagedMode,SshHost,SshPort,SshUser,KeyPath,KnownHosts,LocalPort,Compression,Keepalive,KeepaliveCount,SaveDesktop,BrowseKey,BrowseKnown,BrowseApp,RetryInitial,RetryMax,PresetAI,PresetWeb,PresetBoth,BlockOthers,RemoteDns,SshExecutable,BrowseSsh})EnableWindow(GetDlgItem(window,id),!busy&&!closing&&(!pendingStart||id==Stop||id==Discover||id==BrowseApp||id==PresetAI||id==PresetWeb||id==PresetBoth||id==BlockOthers));
     EnableWindow(GetDlgItem(window,Start),!busy&&!closing&&!engineRunning&&!pendingStart&&!nativeCapture.active());
     EnableWindow(GetDlgItem(window,StartCapture),!busy&&!closing&&!engineRunning&&!pendingStart&&!nativeCapture.active());
     EnableWindow(GetDlgItem(window,StopCapture),!closing&&nativeCapture.active());
@@ -507,7 +515,9 @@ void layout() {
     move(BrowseKey,x+w-142,355,118,28);
     move(2015,x+24,391,w-48,18);move(KnownHosts,x+24,413,w-182,28);
     move(BrowseKnown,x+w-142,413,118,28);
-    move(Compression,x+24,450,w-48,24);
+    move(Compression,x+24,450,175,24);
+    move(SshExecutable,x+215,449,w-385,28);
+    move(BrowseSsh,x+w-142,449,118,28);
     const int unit=(w-120)/4;
     const int labels[]={2016,2017,2019,2020};
     const int fields[]={Keepalive,KeepaliveCount,RetryInitial,RetryMax};
@@ -572,11 +582,14 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         label(L"FlowBridge не запускает внешний прокси. Убедитесь, что он доступен до подключения.",2003,11);
         label(L"SSH-сервер",2010,12);label(L"Пользователь",2011,12);label(L"Порт SSH",2012,12);label(L"Локальный SOCKS-порт",2013,12);
         label(L"Приватный ключ (пусто — SSH agent)",2014,12);label(L"known_hosts (пусто — стандартный файл OpenSSH)",2015,12);label(L"Keepalive, сек.",2016,12);label(L"Пропусков",2017,12);label(L"Повтор SSH, мс",2019,12);label(L"Макс. пауза, мс",2020,12);
-        for(int id:{SshHost,SshUser,KeyPath,KnownHosts})add(L"EDIT",L"",WS_BORDER|ES_AUTOHSCROLL|WS_TABSTOP,id,12);
+        for(int id:{SshHost,SshUser,KeyPath,KnownHosts,SshExecutable})add(L"EDIT",L"",WS_BORDER|ES_AUTOHSCROLL|WS_TABSTOP,id,12);
         for(int id:{SshPort,LocalPort,Keepalive,KeepaliveCount,RetryInitial,RetryMax})add(L"EDIT",L"",WS_BORDER|ES_NUMBER|WS_TABSTOP,id,12);
         add(L"BUTTON",L"Сжатие SSH (полезно не для всех нагрузок)",BS_AUTOCHECKBOX|WS_TABSTOP,Compression,12);
         add(L"BUTTON",L"Разрешать DNS на удалённом SSH-сервере",BS_AUTOCHECKBOX|WS_TABSTOP,RemoteDns,12);
+        SendMessageW(GetDlgItem(h,SshExecutable),EM_SETCUEBANNER,TRUE,
+                     reinterpret_cast<LPARAM>(L"Путь ssh.exe · пусто = PATH"));
         add(L"BUTTON",L"Выбрать…",WS_TABSTOP,BrowseKey,12);add(L"BUTTON",L"Выбрать…",WS_TABSTOP,BrowseKnown,12);
+        add(L"BUTTON",L"SSH exe…",WS_TABSTOP,BrowseSsh,12);
         label(L"SSH: ключ сервера проверьте в known_hosts. DNS: только hostname в явном SOCKS5; без галочки имена блокируются, локального обхода нет. Прозрачный WFP DNS не защищён.",SshHelp,12);
         label(L"Внешний прокси управляется отдельно от FlowBridge.",SshSummary,1);
         add(L"BUTTON",L"Сохранить подключение",WS_TABSTOP,SaveDesktop,1);
@@ -601,7 +614,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         try{PWSTR path=nullptr;if(FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_CREATE,nullptr,&path)))throw std::runtime_error("Не удалось найти Local AppData.");profile=std::filesystem::path(path)/L"FlowBridge"/L"profile.json";CoTaskMemFree(path);desktopPath=profile.parent_path()/L"desktop-settings.json";if(std::filesystem::exists(profile))value=readFile(profile);if(std::filesystem::exists(desktopPath))desktop=Json::parse(readFile(desktopPath));}catch(const std::exception& e){note(std::string("Не удалось загрузить настройки: ")+e.what());}
         if(!desktop.is_object())desktop=Json::object();
         auto settings=desktop.value("ssh",Json::object());if(!settings.is_object())settings=Json::object();auto setSetting=[&](int id,const char* key,const Json& fallback){auto field=settings.value(key,fallback);setText(GetDlgItem(window,id),field.is_string()?field.get<std::string>():field.is_null()?std::string():field.dump());};
-        setSetting(SshHost,"host","");setSetting(SshPort,"port",22);setSetting(SshUser,"user","");setSetting(KeyPath,"identity_file",nullptr);setSetting(KnownHosts,"known_hosts_file",nullptr);setSetting(LocalPort,"local_port",1080);setSetting(Keepalive,"server_alive_interval_secs",15);setSetting(KeepaliveCount,"server_alive_count_max",3);setSetting(RetryInitial,"restart_initial_delay_ms",1000);setSetting(RetryMax,"restart_max_delay_ms",30000);SendMessageW(GetDlgItem(window,Compression),BM_SETCHECK,settings.value("compression",false)?BST_CHECKED:BST_UNCHECKED,0);
+        setSetting(SshHost,"host","");setSetting(SshPort,"port",22);setSetting(SshUser,"user","");setSetting(KeyPath,"identity_file",nullptr);setSetting(KnownHosts,"known_hosts_file",nullptr);setSetting(SshExecutable,"ssh_executable",nullptr);setSetting(LocalPort,"local_port",1080);setSetting(Keepalive,"server_alive_interval_secs",15);setSetting(KeepaliveCount,"server_alive_count_max",3);setSetting(RetryInitial,"restart_initial_delay_ms",1000);setSetting(RetryMax,"restart_max_delay_ms",30000);SendMessageW(GetDlgItem(window,Compression),BM_SETCHECK,settings.value("compression",false)?BST_CHECKED:BST_UNCHECKED,0);
         // Existing desktop profiles migrate to checked-by-default behavior.
         const auto savedRemoteDns=desktop.value("remote_dns_via_ssh",Json(true));
         const bool remoteDnsEnabled=savedRemoteDns.is_boolean()?savedRemoteDns.get<bool>():true;
@@ -639,7 +652,10 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
                          else {workerError.clear();dispatch(Stop);}
                      }
                     else if(id==Open||id==Save)fileDialog(id==Save);
-                    else if(id==BrowseKey||id==BrowseKnown){auto path=chooseFile(L"Все файлы\0*.*\0",false,L"");if(!path.empty())setText(GetDlgItem(h,id==BrowseKey?KeyPath:KnownHosts),discovery::utf8(path.wstring()));}
+                    else if(id==BrowseKey||id==BrowseKnown||id==BrowseSsh){
+                         auto path=chooseFile(id==BrowseSsh?L"OpenSSH exe\0*.exe\0":L"Все файлы\0*.*\0",false,id==BrowseSsh?L"exe":L"");
+                         if(!path.empty())setText(GetDlgItem(h,id==BrowseKey?KeyPath:id==BrowseKnown?KnownHosts:SshExecutable),discovery::utf8(path.wstring()));
+                     }
                     else if(id==Discover){captureSelections();setText(GetDlgItem(h,ScanStatus),"Ищем приложения локально… Сканирование ограничено по времени и объёму.");dispatch(DiscoverCommand,{},catalog);}
                     else if(id==PresetAI||id==PresetWeb||id==PresetBoth)choosePreset(id==PresetAI?"ai":id==PresetWeb?"web":"ai_web");
                     else if(id==BrowseApp)browseApplication();
