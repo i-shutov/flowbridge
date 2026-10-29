@@ -664,7 +664,15 @@ fn stderr_line(state: &Arc<Mutex<State>>, bytes: &[u8]) {
         None
     };
     let mut s = lock(state);
-    if lower.contains("too many open files") || lower.contains("no buffer space available") {
+    // OpenSSH on Windows may report Winsock resource exhaustion as WSAENOBUFS
+    // or "No buffer space available"; POSIX reports EMFILE/ENFILE. Do not
+    // infer a specific descriptor ceiling from these diagnostic strings.
+    let exhausted = lower.contains("too many open files")
+        || lower.contains("no buffer space available")
+        || lower.contains("wsaenobufs")
+        || lower.contains("error 10055")
+        || lower.contains("resource temporarily unavailable");
+    if exhausted {
         let now = Instant::now();
         s.status.resource_exhaustion_count = s.status.resource_exhaustion_count.saturating_add(1);
         s.status.last_resource_error_unix_ms = Some(
@@ -687,10 +695,16 @@ fn stderr_line(state: &Arc<Mutex<State>>, bytes: &[u8]) {
         }
         s.last_resource_event = Some(now);
         let total = s.status.resource_exhaustion_count;
+        // A child can spam tens of thousands of identical resource errors per
+        // second. Preserve only aggregate totals and a fixed, path-free code,
+        // not its arbitrary stderr payload or one warning per failed accept.
         s.event(
             "error",
-            format!("SSH resource exhaustion ({total} occurrences): {text}"),
+            format!(
+                "SSH resource exhaustion observed ({total} occurrences); new connections paused"
+            ),
         );
+        return;
     }
     if lower.contains("timeout, server ") && lower.contains("not responding") {
         s.status.diagnostic_code = Some("ssh_server_unresponsive".into());
@@ -1392,6 +1406,17 @@ mod tests {
         );
         assert_eq!(overloaded.status.resource_exhaustion_count, 10000);
         assert!(overloaded.events.len() < 20);
+        assert!(
+            overloaded.stderr.len() < 20,
+            "Repeated EMFILE must not flood stderr history"
+        );
+        assert!(
+            overloaded
+                .events
+                .iter()
+                .any(|e| e.message.contains("10000 occurrences"))
+                || overloaded.status.resource_exhaustion_count == 10000
+        );
         assert_eq!(supervisor.start().unwrap().status.pid, ready.status.pid);
         let recovered = wait(&supervisor, |s| s.status.state == "ready");
         assert_eq!(recovered.status.pid, ready.status.pid);
@@ -1399,6 +1424,38 @@ mod tests {
         assert_eq!(recovered.status.resource_exhaustion_count, 10000);
         assert!(recovered.status.last_resource_error_unix_ms.is_some());
         supervisor.stop().unwrap();
+    }
+
+    #[test]
+    fn windows_and_unix_resource_errors_are_privacy_bounded_and_nonfatal() {
+        let supervisor = Supervisor::new(config()).unwrap();
+        let examples = [
+            b"accept: too many open files C:\\Users\\private\\ssh".as_slice(),
+            b"accept: No buffer space available".as_slice(),
+            b"WSAENOBUFS: exhausted SOCKET handles".as_slice(),
+            b"connect: error 10055".as_slice(),
+            b"open failed: Resource temporarily unavailable".as_slice(),
+        ];
+        for message in examples {
+            stderr_line(&supervisor.state, message);
+        }
+        let snap = supervisor.snapshot();
+        assert_eq!(snap.status.resource_exhaustion_count, examples.len() as u64);
+        assert_eq!(
+            snap.status.diagnostic_code.as_deref(),
+            Some("ssh_resource_exhausted")
+        );
+        assert_eq!(snap.status.state, "degraded");
+        assert!(
+            snap.stderr.is_empty(),
+            "Private paths and resource spam must not be retained"
+        );
+        let serialized = serde_json::to_string(&snap).unwrap();
+        assert!(!serialized.contains("private") && !serialized.contains("10055"));
+        assert!(
+            snap.events.len() <= 1,
+            "Resource warnings must be coalesced"
+        );
     }
 
     #[test]

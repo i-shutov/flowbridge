@@ -17,6 +17,29 @@ import time
 from ssh_real_integration import connect, exact, require, until
 
 
+def observed_process_resources(pid):
+    """Linux /proc observation only; never equate OS fds to SSH channels."""
+    proc = Path('/proc') / str(pid)
+    fds = proc / 'fd'
+    status = proc / 'status'
+    sample = {'source': 'linux_proc', 'os_fd_count': None, 'vm_rss_kb': None}
+    if os.name != 'posix' or not fds.is_dir():
+        sample['source'] = 'unavailable'
+        return sample
+    try:
+        sample['os_fd_count'] = len(list(fds.iterdir()))
+    except OSError:
+        pass
+    try:
+        for line in status.read_text(encoding='ascii').splitlines():
+            if line.startswith('VmRSS:'):
+                sample['vm_rss_kb'] = int(line.split()[1])
+                break
+    except (OSError, ValueError, IndexError):
+        pass
+    return sample
+
+
 def attempt(proxy_port, target_port):
     """One explicit SOCKS5 hostname connect; no local DNS or DIRECT fallback."""
     client = socket.create_connection(('127.0.0.1', proxy_port), timeout=8)
@@ -68,6 +91,8 @@ def run(abi, engine_id, listen_port, target_port, ssh_snapshot, *,
     try:
         before = ssh_snapshot()
         require(before['state'] == 'ready' and before['pid'], 'Actual OpenSSH not ready for capacity test')
+        report['resource_samples'] = {}
+        report['resource_samples']['before'] = observed_process_resources(before['pid'])
         report['ssh_backend'] = {
             'version': before.get('backend_version'),
             # backend path can contain private username / installation path;
@@ -88,6 +113,7 @@ def run(abi, engine_id, listen_port, target_port, ssh_snapshot, *,
         require(capacity['active_including_opening'] == held,
                 'Real OpenSSH streams did not consume all managed admissions')
         require(capacity['opening'] == 0, 'Real SSH handshake permit leaked after CONNECT')
+        report['resource_samples']['held_128'] = observed_process_resources(before['pid'])
         report['checks'].append('128 verified real SSH TCP channels held by a single managed backend')
 
         def rejected(_):
@@ -109,6 +135,7 @@ def run(abi, engine_id, listen_port, target_port, ssh_snapshot, *,
             require(ssh_snapshot()['pid'] == before['pid'],
                     'OpenSSH was unexpectedly restarted while configured capacity was full')
             report['checks'].append(f'{count} rejected new attempts; existing streams unchanged')
+        report['resource_samples']['overloaded'] = observed_process_resources(before['pid'])
         report['admission_at_peak'] = abi.call('fb_engine_snapshot_json', engine_id)['managed_upstream']
         require(report['admission_at_peak']['rejected'] >= report['attempted_after_capacity'],
                 'Overload rejection counter did not account for attempted opens')
@@ -120,7 +147,8 @@ def run(abi, engine_id, listen_port, target_port, ssh_snapshot, *,
         held_sockets.clear()
         until(lambda: abi.call('fb_engine_snapshot_json', engine_id)['managed_upstream']
               ['active_including_opening'] == 0, seconds=15)
-        report['checks'].append('Released 128 actual OpenSSH streams without descriptor growth across engine admissions')
+        report['resource_samples']['after_release'] = observed_process_resources(before['pid'])
+        report['checks'].append('Released 128 actual OpenSSH streams and verified admission permits are zero')
 
         if churn:
             def one_churn(i):
@@ -140,6 +168,15 @@ def run(abi, engine_id, listen_port, target_port, ssh_snapshot, *,
 
         require(ssh_snapshot()['pid'] == before['pid'],
                 'Real OpenSSH process did not survive bounded load and recovery')
+        report['resource_samples']['final'] = observed_process_resources(before['pid'])
+        initial_fd = report['resource_samples']['before']['os_fd_count']
+        final_fd = report['resource_samples']['final']['os_fd_count']
+        if initial_fd is not None and final_fd is not None:
+            # The SSH process may legitimately keep a few extra control/fd
+            # handles after churn; detect substantial unbounded retention.
+            require(final_fd <= initial_fd + 32,
+                    'Linux OpenSSH final OS descriptor count exceeded baseline + 32')
+            report['checks'].append('Measured Linux OS descriptors returned within baseline + 32')
         report['ssh_backend']['pid_at_end'] = before['pid']
         report['admission_final'] = abi.call('fb_engine_snapshot_json', engine_id)['managed_upstream']
         require(report['admission_final']['active_including_opening'] == 0 and

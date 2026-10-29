@@ -79,3 +79,63 @@ equating it to the internal FD table. If the chosen backend has a lower
 working ceiling, reduce its per-worker cap with reserve; do not blindly
 change OS or server limits. Repeat Stop/restart/recovery and confirm that
 all old TCP sessions are treated as interrupted, never replayed.
+
+
+## Quantitative descriptor and privacy checkpoint
+
+The regression now samples the **actual Linux child OpenSSH PID** at baseline,
+128 held channels, overload, after draining, and after churn. Each JSON report
+records `os_fd_count` from `/proc/<pid>/fd` and `vm_rss_kb` from
+`/proc/<pid>/status`; these are not inferred from engine session counts.
+The final FD count must be within a conservative +32 of the original baseline,
+in addition to all permits being released. Raw private executable paths and
+the SSH key remain excluded. If `/proc` is unavailable the report explicitly
+records an unavailable source and does **not** claim an OS FD measurement.
+
+The Rust SSH supervisor also recognizes Windows WSAENOBUFS/error 10055,
+EMFILE, and ENFILE resource errors, coalesces repeated warning events, and
+retains their aggregate counter without retaining raw potentially sensitive
+resource-error stderr. In a dedicated Rust regression 10,000 injected
+resource errors must not flood event or stderr history.
+
+This is **not a Windows OpenSSH FD ceiling acceptance**. It adds independent
+Linux process-resource evidence without claiming Windows process handles equal
+internal OpenSSH Win32 `select()` slots. The Windows backend and 10k-churn
+manual gates from above remain required.
+
+
+## Operator-only Windows local OpenSSH baseline script
+
+`tests/windows_openssh_capacity_vm.py` is a **new manual Windows VM probe**,
+not a successful execution claim. It requires `FLOWBRIDGE_SSH_VM=1`, a
+reviewed absolute `ssh.exe`, pre-enrolled disposable test identity and pinned
+`known_hosts`, and a separately prepared isolated sshd **bound to the
+same VM's 127.0.0.1**. It starts its own SSH `-D` transport with strict
+host key checks, BatchMode and ControlMaster disabled. It never modifies
+system DNS, firewall, WFP drivers or system service configuration.
+
+Example, **only after the VM operator prepares loopback sshd**:
+
+```powershell
+$env:FLOWBRIDGE_SSH_VM = "1"
+python tests/windows_openssh_capacity_vm.py `
+  --ssh "C:\Windows\System32\OpenSSH\ssh.exe" `
+  --identity "C:\VM-Test\id_ed25519" `
+  --known-hosts "C:\VM-Test\known_hosts" `
+  --user "flowbridge_qa" --ssh-port 22 --held 128 `
+  --output "build\verification\windows-ssh\baseline.json"
+```
+
+The probe records exact binary SHA-256 (without publishing private paths),
+actual OpenSSH version, the independently spawned process PID, successfully
+held channel counts at request tiers 64/128/192/256/512 (capped by the explicit
+`--held` ceiling), binary echo integrity and **Windows OS process HANDLE
+count** at baseline/load/release. It deliberately does **not** equate Windows
+HANDLE count to internal OpenSSH FD slots, assert backend capacity based on
+the request count, or claim shared FlowBridge per-worker admission. Operators
+must inspect this report and repeat with appropriate held limits and another
+approved backend if desired. No automatic execution on hosted CI occurs;
+the hosted matrix only syntax-checks the script.
+
+This is a useful precondition check, not completion of #7: production
+FlowBridge-managed SSH and WFP capture are not part of the bare backend probe.
