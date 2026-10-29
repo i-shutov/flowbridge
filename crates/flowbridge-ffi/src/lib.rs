@@ -945,6 +945,35 @@ pub unsafe extern "C" fn fb_engine_set_upstream_gate_json(
     })
 }
 
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PoolInput {
+    primary: flowbridge_core::Endpoint,
+    workers: Vec<flowbridge_runtime::pool::WorkerInput>,
+    limits: flowbridge_runtime::admission::Limits,
+    aggregate_max_flows: usize,
+}
+/// Explicit managed SSH pool. No process is launched by this call: the GUI
+/// must start and independently monitor each real OpenSSH child first.
+/// Every flow remains pinned to one selected worker for its full lifetime.
+/// # Safety
+/// `pool_json` must reference a live NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn fb_engine_set_upstream_pool_json(
+    id: u64,
+    pool_json: *const c_char,
+) -> *mut c_char {
+    guarded(|| {
+        let pool: PoolInput = serde_json::from_str(unsafe { input(pool_json) }?)
+            .map_err(|e| e.to_string())?;
+        with_engine(id, |engine| {
+            Ok(json!({"ok":true,"status":engine.set_upstream_pool_with_limits(
+                pool.primary,pool.workers,pool.limits,pool.aggregate_max_flows)
+                .map_err(|e|e.to_string())?}))
+        })
+    })
+}
+
 struct SshSlot {
     supervisor: flowbridge_tunnel::Supervisor,
     gate: Mutex<()>,
