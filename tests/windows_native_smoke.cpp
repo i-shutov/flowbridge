@@ -397,13 +397,20 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
         // This exe is NOT an OpenSSH client; it exercises only file picker
         // persistence, never launches the selected program as a tunnel.
         SetWindowTextW(GetDlgItem(window,286),explicitExe.c_str());
+        const int utf8Bytes=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,
+            explicitExe.data(),static_cast<int>(explicitExe.size()),nullptr,0,nullptr,nullptr);
+        need(utf8Bytes>0,"UTF-8 SSH executable test path invalid");
+        std::string expectedUtf8(static_cast<size_t>(utf8Bytes),'\0');
+        need(WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,
+             explicitExe.data(),static_cast<int>(explicitExe.size()),expectedUtf8.data(),
+             utf8Bytes,nullptr,nullptr)==utf8Bytes,"UTF-8 SSH executable conversion failed");
         click(window,240);
         waitFor([&]{
             try {
                 std::ifstream in(desktopFile,std::ios::binary);
                 if(!in)return false;
                 auto value=Json::parse(in);
-                return value["ssh"]["ssh_executable"]==std::string(explicitExe.begin(),explicitExe.end());
+                return value["ssh"]["ssh_executable"]==expectedUtf8;
             }catch(const std::exception&){return false;}
         },"User-selected absolute OpenSSH exe path was not persisted");
         edit(GetDlgItem(window,286),"");
