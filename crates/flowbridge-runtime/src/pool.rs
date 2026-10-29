@@ -150,7 +150,7 @@ impl Pool {
             let replace = match best {
                 None => true,
                 Some((_, previous_available, previous_free)) => {
-                    available > previous_available
+                    available && !previous_available
                         || (available == previous_available && free > previous_free)
                 }
             };
