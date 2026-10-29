@@ -316,11 +316,14 @@ void applyTheme(){
     InvalidateRect(window,nullptr,TRUE);RedrawWindow(window,nullptr,nullptr,RDW_INVALIDATE|RDW_ALLCHILDREN|RDW_ERASE);
 }
 void updateVisibility(){
-    bool managed=SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1;
-    for(const auto& pair:pages){bool visible=pair.second<0||pair.second==activePage;
-        if(pair.first>=Proxy&&pair.first<=Protocol)visible=activePage==1&&!managed;
-        if(pair.first>=SshHost&&pair.first<=KeepaliveCount)visible=activePage==1&&managed;
-        if(pair.first==BrowseKey||pair.first==BrowseKnown||pair.first==RetryInitial||pair.first==RetryMax)visible=activePage==1&&managed;
+    const bool managed=SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1;
+    // Connection controls use subpage 11 (external proxy) and 12 (managed
+    // SSH). Apply this to labels and help as well as input widgets: the
+    // previous ID-range check left all descriptive labels hidden.
+    for(const auto& pair:pages) {
+        bool visible=pair.second<0||pair.second==activePage;
+        if(pair.second==11) visible=activePage==1&&!managed;
+        if(pair.second==12) visible=activePage==1&&managed;
         ShowWindow(GetDlgItem(window,pair.first),visible?SW_SHOW:SW_HIDE);
     }
 }
