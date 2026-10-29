@@ -146,7 +146,9 @@ impl Config {
                 || path.starts_with("//")
                 || path.starts_with("\\\\")
                 || (cfg!(windows)
-                    && !executable.extension().and_then(|ext| ext.to_str())
+                    && !executable
+                        .extension()
+                        .and_then(|ext| ext.to_str())
                         .is_some_and(|ext| ext.eq_ignore_ascii_case("exe")))
             {
                 return Err(TunnelError(
@@ -155,7 +157,8 @@ impl Config {
             }
             if cfg!(target_os = "macos") && executable != std::path::Path::new("/usr/bin/ssh") {
                 return Err(TunnelError(
-                    "macOS native capture requires /usr/bin/ssh for its verified signing-ID bypass".into(),
+                    "macOS native capture requires /usr/bin/ssh for its verified signing-ID bypass"
+                        .into(),
                 ));
             }
         }
@@ -941,12 +944,16 @@ fn resolve_ssh(config: &Config) -> io::Result<std::path::PathBuf> {
     if let Some(explicit) = &config.ssh_executable {
         let path = std::fs::canonicalize(explicit)?;
         if !path.is_file() {
-            return Err(io::Error::new(io::ErrorKind::NotFound,
-                "The explicitly selected OpenSSH client is not a file"));
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "The explicitly selected OpenSSH client is not a file",
+            ));
         }
         if cfg!(target_os = "macos") && path != std::fs::canonicalize("/usr/bin/ssh")? {
-            return Err(io::Error::new(io::ErrorKind::PermissionDenied,
-                "macOS selected SSH backend does not match signed native capture bypass"));
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "macOS selected SSH backend does not match signed native capture bypass",
+            ));
         }
         return Ok(path);
     }
@@ -1445,16 +1452,27 @@ mod tests {
     fn explicit_ssh_backend_requires_absolute_local_path_without_auto_fallback() {
         let mut cfg = config();
         cfg.ssh_executable = Some("ssh.exe".into());
-        assert!(cfg.validate().is_err(), "Relative PATH resolution must not override OpenSSH");
+        assert!(
+            cfg.validate().is_err(),
+            "Relative PATH resolution must not override OpenSSH"
+        );
         cfg.ssh_executable = Some("//remote/share/ssh.exe".into());
-        assert!(cfg.validate().is_err(), "Network-share backend must be refused");
+        assert!(
+            cfg.validate().is_err(),
+            "Network-share backend must be refused"
+        );
         cfg.ssh_executable = Some("".into());
-        assert!(cfg.validate().is_err(), "Empty SSH override must not become PATH lookup");
+        assert!(
+            cfg.validate().is_err(),
+            "Empty SSH override must not become PATH lookup"
+        );
         let current = std::env::current_exe().unwrap().canonicalize().unwrap();
         cfg.ssh_executable = Some(current.to_string_lossy().into_owned());
         if cfg!(target_os = "macos") {
-            assert!(cfg.validate().is_err(),
-                "macOS must not silently change the signing-ID bypassed SSH binary");
+            assert!(
+                cfg.validate().is_err(),
+                "macOS must not silently change the signing-ID bypassed SSH binary"
+            );
         } else {
             cfg.validate().unwrap();
             assert_eq!(resolve_ssh(&cfg).unwrap(), current);
@@ -1463,7 +1481,10 @@ mod tests {
             let supervisor = Supervisor::new(cfg).unwrap();
             supervisor.start().unwrap();
             let failed = wait(&supervisor, |s| s.status.state == "failed");
-            assert!(failed.status.last_error.as_deref()
+            assert!(failed
+                .status
+                .last_error
+                .as_deref()
                 .is_some_and(|message| message.contains("did not identify itself as OpenSSH")));
             assert_eq!(failed.status.restarts, 0);
             assert_eq!(failed.status.pid, None);
