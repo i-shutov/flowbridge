@@ -54,6 +54,12 @@ inline std::wstring arguments(const std::wstring& profile,
         if(!std::filesystem::path(path).is_absolute() ||
            !std::filesystem::is_regular_file(path))
             throw std::runtime_error("Bypass executable must be an existing absolute path");
+        for(const auto& selected:apps) {
+            std::error_code ec;
+            if(std::filesystem::equivalent(std::filesystem::path(path),
+                                           std::filesystem::path(selected),ec))
+                throw std::runtime_error("Selected executable is the GUI/SSH bypass executable; deselect it");
+        }
         command+=L" --bypass "+quote(path);
     }
     return command;
