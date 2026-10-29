@@ -964,12 +964,14 @@ pub unsafe extern "C" fn fb_engine_set_upstream_pool_json(
     pool_json: *const c_char,
 ) -> *mut c_char {
     guarded(|| {
-        let pool: PoolInput = serde_json::from_str(unsafe { input(pool_json) }?)
-            .map_err(|e| e.to_string())?;
+        let pool: PoolInput =
+            serde_json::from_str(unsafe { input(pool_json) }?).map_err(|e| e.to_string())?;
         with_engine(id, |engine| {
-            Ok(json!({"ok":true,"status":engine.set_upstream_pool_with_limits(
+            Ok(
+                json!({"ok":true,"status":engine.set_upstream_pool_with_limits(
                 pool.primary,pool.workers,pool.limits,pool.aggregate_max_flows)
-                .map_err(|e|e.to_string())?}))
+                .map_err(|e|e.to_string())?}),
+            )
         })
     })
 }
