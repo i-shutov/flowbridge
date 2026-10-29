@@ -79,3 +79,26 @@ equating it to the internal FD table. If the chosen backend has a lower
 working ceiling, reduce its per-worker cap with reserve; do not blindly
 change OS or server limits. Repeat Stop/restart/recovery and confirm that
 all old TCP sessions are treated as interrupted, never replayed.
+
+
+## Quantitative descriptor and privacy checkpoint
+
+The regression now samples the **actual Linux child OpenSSH PID** at baseline,
+128 held channels, overload, after draining, and after churn. Each JSON report
+records `os_fd_count` from `/proc/<pid>/fd` and `vm_rss_kb` from
+`/proc/<pid>/status`; these are not inferred from engine session counts.
+The final FD count must be within a conservative +32 of the original baseline,
+in addition to all permits being released. Raw private executable paths and
+the SSH key remain excluded. If `/proc` is unavailable the report explicitly
+records an unavailable source and does **not** claim an OS FD measurement.
+
+The Rust SSH supervisor also recognizes Windows WSAENOBUFS/error 10055,
+EMFILE, and ENFILE resource errors, coalesces repeated warning events, and
+retains their aggregate counter without retaining raw potentially sensitive
+resource-error stderr. In a dedicated Rust regression 10,000 injected
+resource errors must not flood event or stderr history.
+
+This is **not a Windows OpenSSH FD ceiling acceptance**. It adds independent
+Linux process-resource evidence without claiming Windows process handles equal
+internal OpenSSH Win32 `select()` slots. The Windows backend and 10k-churn
+manual gates from above remain required.
