@@ -146,11 +146,14 @@ def main():
         thread = threading.Thread(target=listener.serve_forever, daemon=True)
         thread.start()
         forward_port = port_unused()
-        cmd = [str(ssh), "-N", "-T", "-D", f"127.0.0.1:{forward_port}",
+        cmd = [str(ssh), "-F", "none", "-N", "-T", "-D", f"127.0.0.1:{forward_port}",
                "-p", str(args.ssh_port), "-i", str(identity),
                "-o", f"UserKnownHostsFile={known_hosts}",
                "-o", "StrictHostKeyChecking=yes",
                "-o", "BatchMode=yes",
+               "-o", "IdentitiesOnly=yes",
+               "-o", "ProxyCommand=none",
+               "-o", "ProxyJump=none",
                "-o", "PasswordAuthentication=no",
                "-o", "KbdInteractiveAuthentication=no",
                "-o", "ExitOnForwardFailure=yes",
