@@ -37,6 +37,7 @@ private struct Dashboard: View {
     @State private var page: Page? = .connection
     @State private var showSSHOptions = false
     @State private var showLog = false
+    @State private var showRuleEditor = false
     private var routing: Bool { engine.running || native.active }
     private var locked: Bool { desktop.busy || routing || engine.busy || native.busy || ["starting", "ready", "reconnecting", "degraded"].contains(ssh.state) }
     private var healthy: Bool { !desktop.busy && routing && (!desktop.settings.integratedSSH || ssh.state == "ready") }
@@ -273,7 +274,7 @@ private struct Dashboard: View {
     }
     private var advanced: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack { Button("Открыть JSON…") { engine.open() }; Button("Сохранить JSON…") { engine.save() }; Spacer(); Button("Применить профиль") { engine.syncQuick(); desktop.apply() }.disabled(desktop.busy || engine.busy) }
+            HStack { Button("Правила…") { showRuleEditor = true }.disabled(desktop.busy || engine.busy); Button("Открыть JSON…") { engine.open() }; Button("Сохранить JSON…") { engine.save() }; Spacer(); Button("Применить профиль") { engine.syncQuick(); desktop.apply() }.disabled(desktop.busy || engine.busy) }
             Text("Полный профиль правил и цепочек. Режим встроенного SSH использует управляемый SOCKS-прокси flowbridge-ssh. Шаблон приложений заменяет список правил; настройки соединения меняйте после остановки.").font(.caption).foregroundStyle(.secondary)
             TextEditor(text: $engine.config).font(.system(.body, design: .monospaced)).padding(6).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
             Text(engine.message).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
@@ -282,6 +283,7 @@ private struct Dashboard: View {
             Text(native.message).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             Text("Native: proxy endpoints должны быть IP-адресами. Доменные правила могут не сработать, когда macOS передаёт только IP. Обход DNS не предотвращается. При выходе FlowBridge сначала останавливает маршрутизацию, затем свой SSH.").font(.caption).foregroundStyle(.secondary)
         }.padding(28)
+         .sheet(isPresented: $showRuleEditor) { NativeRuleEditor(config: $engine.config) }
     }
 }
 private struct ConnectionRow: Identifiable {
