@@ -41,6 +41,22 @@ int main(void) {
         return 6;
     }
     fb_string_free(ndis);
+    /* Invalid local ports MUST be rejected, on both Windows and non-Windows.
+     * These calls are read-only; a JSON return must not imply interception. */
+    char *udp = fb_windows_udp_owner_candidate_json("{\\\"local\\\":\\\"127.0.0.1:0\\\"}");
+    if (!udp || !strstr(udp, "\\\"ok\\\":false") ||
+        strstr(udp, "\\\"authorizes_capture\\\":true")) {
+        fb_string_free(udp);
+        return 7;
+    }
+    fb_string_free(udp);
+    char *tcp = fb_windows_tcp_owner_candidate_json("{\\\"local\\\":\\\"127.0.0.1:0\\\",\\\"remote\\\":\\\"127.0.0.1:443\\\"}");
+    if (!tcp || !strstr(tcp, "\\\"ok\\\":false") ||
+        strstr(tcp, "\\\"authorizes_capture\\\":true")) {
+        fb_string_free(tcp);
+        return 8;
+    }
+    fb_string_free(tcp);
     puts("C ABI smoke: 1000 validate/evaluate/free cycles and null handling passed");
     return 0;
 }
