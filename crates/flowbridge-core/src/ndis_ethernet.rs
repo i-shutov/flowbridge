@@ -199,7 +199,10 @@ mod tests {
                 assert_eq!(region.vlan_tags, tags);
                 assert_eq!(region.version, version);
                 assert_eq!(region.padding, pad);
-                assert_eq!(region.length, if version == IpVersion::V4 { 40 } else { 60 });
+                assert_eq!(
+                    region.length,
+                    if version == IpVersion::V4 { 40 } else { 60 }
+                );
             }
         }
     }
@@ -235,9 +238,7 @@ mod tests {
     #[test]
     fn vlan_truncation_unknown_media_and_oversize_fail_closed() {
         assert_eq!(inspect_l2_ip(&[0; 13]), Err(FrameError::Truncated));
-        let vlan_incomplete = [
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x81, 0x00, 0x00,
-        ];
+        let vlan_incomplete = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x81, 0x00, 0x00];
         assert_eq!(inspect_l2_ip(&vlan_incomplete), Err(FrameError::Truncated));
         let mut arp = fixture(IpVersion::V4, 0, 0);
         arp[12..14].copy_from_slice(&0x0806u16.to_be_bytes());
