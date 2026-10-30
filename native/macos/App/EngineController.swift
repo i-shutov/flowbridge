@@ -17,10 +17,11 @@ final class EngineController: ObservableObject {
     private var gateJSON = "{\"endpoint\":null,\"ready\":true,\"grace_ms\":30000}"
     private var ownedPoolJSON: String?
     private var timer: Timer?
-    private let profile = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("FlowBridge/profile.json")
+    private let profile: URL
 
-    init() {
+    init(profileURL: URL? = nil) {
+        profile = profileURL ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("FlowBridge/profile.json")
         if let text = try? Self.read(profile) { config = text }
         syncQuick()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.poll() }
@@ -59,6 +60,48 @@ final class EngineController: ObservableObject {
             message = "Quick settings updated in draft. Apply to use this profile."
         } catch { message = error.localizedDescription }
     }
+    // Accessed only on the serial engine queue. Never install a new pool
+    // against an old profile, or treat a failed pool update as a successful
+    // listener start. In particular, stopped->start must re-apply policy too.
+    private func applyRoutingPolicy() throws {
+        if let pool = ownedPoolJSON {
+            _ = try pool.withCString {
+                try Bridge.consume(fb_engine_sync_owned_ssh_pool_json(engine, $0))
+            }
+        } else {
+            _ = try gateJSON.withCString {
+                try Bridge.consume(fb_engine_set_upstream_gate_json(engine, $0))
+            }
+        }
+    }
+    private func clearLiveRoutingPolicy() throws {
+        guard engine != 0 else { return }
+        let withdrawn = "{\"endpoint\":null,\"ready\":false,\"grace_ms\":0}"
+        _ = try withdrawn.withCString {
+            try Bridge.consume(fb_engine_set_upstream_gate_json(engine, $0))
+        }
+    }
+    private func refreshRoutingPolicyWhileRunning() {
+        guard engine != 0 else { return }
+        do {
+            let current = try Bridge.consume(fb_engine_snapshot_json(engine))
+            guard (current["status"] as? [String: Any])?["running"] as? Bool == true else {
+                return // Defer until execute reloads the actual start profile.
+            }
+            try applyRoutingPolicy()
+        } catch {
+            // A stale/missing owned handle must not leave the last healthy
+            // snapshot admitting flows while SwiftUI only displays an error.
+            _ = try? Bridge.consume(fb_engine_stop_json(engine))
+            try? clearLiveRoutingPolicy()
+            let value = (try? Bridge.consume(fb_engine_snapshot_json(engine))) ?? [:]
+            let failure = error.localizedDescription
+            DispatchQueue.main.async {
+                self.accept(value)
+                self.message = "Маршрут остановлен: " + failure
+            }
+        }
+    }
     func execute(_ operation: String, completion: ((Bool) -> Void)? = nil) {
         guard !busy || operation == "stop" else { completion?(false); return }; busy = true
         let draft = config
@@ -70,20 +113,21 @@ final class EngineController: ObservableObject {
                     let result = try draft.withCString { try Bridge.consume(fb_engine_create_json($0)) }
                     guard let id = result["engine_id"] as? NSNumber else { throw Bridge.error("Missing engine handle") }
                     self.engine = id.uint64Value
-                    if let pool = self.ownedPoolJSON {
-                        _ = try pool.withCString {
-                            try Bridge.consume(fb_engine_sync_owned_ssh_pool_json(self.engine, $0))
-                        }
-                    } else {
-                        _ = try self.gateJSON.withCString {
-                            try Bridge.consume(fb_engine_set_upstream_gate_json(self.engine, $0))
-                        }
-                    }
                 }
                 if operation == "stop" {
                     if self.engine != 0 { _ = try Bridge.consume(fb_engine_stop_json(self.engine)) }
+                    try self.clearLiveRoutingPolicy()
+                    self.ownedPoolJSON = nil
+                    self.gateJSON = "{\"endpoint\":null,\"ready\":false,\"grace_ms\":0}"
                 } else {
                     _ = try draft.withCString { try Bridge.consume(fb_engine_reload_json(self.engine, $0)) }
+                    let current = try Bridge.consume(fb_engine_snapshot_json(self.engine))
+                    if (current["status"] as? [String: Any])?["running"] as? Bool != true {
+                        // Stopped engines have no live flows. Drop their old
+                        // budget references before changing worker limits.
+                        try self.clearLiveRoutingPolicy()
+                    }
+                    try self.applyRoutingPolicy() // failure MUST abort start
                     if operation == "start" { _ = try Bridge.consume(fb_engine_start_json(self.engine)) }
                     try self.persist(draft)
                 }
@@ -94,8 +138,15 @@ final class EngineController: ObservableObject {
                     completion?(true)
                 }
             } catch {
-                if operation == "start", self.engine != 0 { _ = try? Bridge.consume(fb_engine_stop_json(self.engine)) }
-                DispatchQueue.main.async { self.message = error.localizedDescription; self.busy = false; completion?(false) }
+                if operation == "start", self.engine != 0 {
+                    _ = try? Bridge.consume(fb_engine_stop_json(self.engine))
+                    try? self.clearLiveRoutingPolicy()
+                }
+                let value = self.engine == 0 ? [:] : (try? Bridge.consume(fb_engine_snapshot_json(self.engine))) ?? [:]
+                DispatchQueue.main.async {
+                    self.accept(value)
+                    self.message = error.localizedDescription; self.busy = false; completion?(false)
+                }
             }
         }
     }
@@ -106,9 +157,7 @@ final class EngineController: ObservableObject {
         queue.async {
             self.gateJSON = json
             self.ownedPoolJSON = nil
-            guard self.engine != 0 else { return }
-            do { _ = try json.withCString { try Bridge.consume(fb_engine_set_upstream_gate_json(self.engine, $0)) } }
-            catch { DispatchQueue.main.async { self.message = error.localizedDescription } }
+            self.refreshRoutingPolicyWhileRunning()
         }
     }
     /// Bind actual SSH supervisor handles. The FFI derives readiness and
@@ -135,16 +184,7 @@ final class EngineController: ObservableObject {
             let json = try Bridge.text(request)
             queue.async {
                 self.ownedPoolJSON = json
-                guard self.engine != 0 else { return }
-                do {
-                    _ = try json.withCString {
-                        try Bridge.consume(fb_engine_sync_owned_ssh_pool_json(self.engine, $0))
-                    }
-                } catch {
-                    DispatchQueue.main.async {
-                        self.message = "Ошибка SSH-пула: " + error.localizedDescription
-                    }
-                }
+                self.refreshRoutingPolicyWhileRunning()
             }
         } catch {
             message = error.localizedDescription

@@ -1,6 +1,7 @@
 name: rust-and-native-applications
 on:
   push:
+    branches: [main]
     paths-ignore: ['native/windows/wfp/driver/**', '.github/workflows/windows-driver.yml', 'docs/**']
   pull_request:
     paths-ignore: ['native/windows/wfp/driver/**', '.github/workflows/windows-driver.yml', 'docs/**']
@@ -15,7 +16,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
   cancel-in-progress: true
 env:
   PYTHONUTF8: '1'
@@ -170,6 +171,20 @@ jobs:
           python-version: '3.13'
       - run: brew install xcodegen
       - run: bash packaging/macos/build-pkg.sh local
+      - name: Actual Swift controller and owned-pool lifecycle regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/verification/macos
+          xcrun swiftc -swift-version 5 -O \
+            -import-objc-header native/include/flowbridge.h \
+            native/macos/Shared/Bridge.swift \
+            native/macos/App/EngineController.swift \
+            tests/macos_engine_pool_lifecycle.swift \
+            "native/macos/lib/$(uname -m)/libflowbridge_ffi.a" \
+            -framework Security -framework SystemConfiguration -liconv -lresolv \
+            -o build/macos/controller-pool-qa
+          build/macos/controller-pool-qa | tee build/verification/macos/controller-pool.json
       - name: Install, launch and upgrade the actual macOS package
         run: python tests/macos_installer_native.py --package-dir build/macos/local/packages --output build/verification/macos
       - uses: actions/upload-artifact@v7.0.0

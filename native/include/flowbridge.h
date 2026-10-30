@@ -42,7 +42,9 @@ char *fb_engine_set_upstream_gate_json(uint64_t engine_id, const char *gate_json
 char *fb_engine_set_upstream_pool_json(uint64_t engine_id, const char *pool_json);
 /* Preferred desktop-GUI API: derive ports, PIDs and readiness from live,
  * registered OpenSSH supervisors instead of caller-supplied ready flags.
- * Input: {"ssh_ids":[id1,id2], "limits":{...}, "aggregate_max_flows":128}.
+ * Input: {"ssh_ids":[id1,id2], "limits":{...}, "aggregate_max_flows":128,
+ *         "enabled":true}. Optional enabled defaults true; false masks every
+ * worker unready WITHOUT changing budgets or asserting process availability.
  * Duplicate/stale/missing handles are rejected atomically without changing
  * the active route. The GUI still owns process start/stop and error handling. */
 char *fb_engine_sync_owned_ssh_pool_json(uint64_t engine_id, const char *pool_json);

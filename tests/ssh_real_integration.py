@@ -80,6 +80,7 @@ class ABI:
             'fb_engine_snapshot_json': [ctypes.c_uint64],
             'fb_engine_set_upstream_gate_json': [ctypes.c_uint64, ctypes.c_char_p],
             'fb_engine_set_upstream_pool_json': [ctypes.c_uint64, ctypes.c_char_p],
+            'fb_engine_sync_owned_ssh_pool_json': [ctypes.c_uint64, ctypes.c_char_p],
         }
         for name, arguments in signatures.items():
             function = getattr(self.lib, name)
@@ -266,6 +267,14 @@ def main(repetition=0):
                     'primary_stream_survived_secondary_death': pool_result['existing_primary_stream_survived_peer_death'],
                     'all_workers_down_fail_closed': pool_result['new_connections_fail_closed_with_all_workers_down']}
                 passed('Two independent OpenSSH children: distributed channels, surviving streams, fail-closed and recovery')
+                from real_owned_pool_lifecycle import run as owned_lifecycle
+                owned_result = owned_lifecycle(
+                    abi, target_port, settings,
+                    output=args.output / 'real-owned-pool-lifecycle.json')
+                report['owned_pool_lifecycle'] = {
+                    'passed': owned_result['passed'],
+                    'distinct_child_pids': owned_result['distinct_child_pids']}
+                passed('Four real owned SSH processes: GUI pool lifecycle, limits, pause and restart')
             old_pid = ready['pid']
             gate(False)
             os.kill(old_pid, signal.SIGKILL)

@@ -19,6 +19,7 @@
 #include "nlohmann/json.hpp"
 #include "../native/windows/native_profile.hpp"
 #include "../native/windows/capture_launcher.hpp"
+#include "../native/windows/ssh_pool_policy.hpp"
 #include "../native/windows/wfp/listener_owner.hpp"
 
 using Json = nlohmann::json;
@@ -530,8 +531,68 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
     } catch (...) { if(window) PostMessageW(window,WM_CLOSE,0,0); if(WaitForSingleObject(process.hProcess,3000)!=WAIT_OBJECT_0) TerminateProcess(process.hProcess,99); CloseHandle(process.hThread); CloseHandle(process.hProcess); throw; }
     CloseHandle(process.hThread); CloseHandle(process.hProcess);
 }
+static void nativeOwnedPoolLifecycleTest() {
+    uint64_t engine=0;
+    std::vector<uint64_t> owned;
+    try {
+        Socket ingressSocket,primarySocket,secondarySocket;
+        const auto ingress=listenOn(ingressSocket);
+        const auto first=listenOn(primarySocket),second=listenOn(secondarySocket);
+        auto profile=config(ingress);
+        profile["proxies"]={{{"id","managed"},{"kind","socks5"},
+            {"endpoint",{{"host","127.0.0.1"},{"port",first}}}}};
+        profile["default_action"]={{"type","proxy"},{"id","managed"}};
+        engine=result(fb_engine_create_json(profile.dump().c_str())).at("engine_id").get<uint64_t>();
+        for(auto port:{first,second}) {
+            const Json settings={{"host","qa.invalid"},{"user","qa"},{"local_port",port}};
+            owned.push_back(result(fb_ssh_create_json(settings.dump().c_str())).at("ssh_id").get<uint64_t>());
+        }
+        // No SSH spawn: actual stopped supervisors must never appear ready.
+        // Before this fix the GUI initialized a default 128-slot gate first;
+        // its subsequent 64-slot pool failed with "different limits".
+        for(bool enabled:{false,true,false,true}) {
+            const auto request=ssh_pool_policy::ownedRequest(owned,enabled);
+            result(fb_engine_sync_owned_ssh_pool_json(engine,request.dump().c_str()));
+            const auto state=result(fb_engine_snapshot_json(engine));
+            need(state["managed_pool"]["workers"].size()==2,"owned GUI pool not installed");
+            need(state["managed_pool"]["ready_workers"]==0,"stopped SSH falsely marked ready");
+            for(const auto& item:state["managed_pool"]["workers"])
+                need(item["admission"]["limits"]["max_flows"]==64,"pause changed worker budget");
+        }
+        const Json clear={{"endpoint",nullptr},{"ready",false},{"grace_ms",0}};
+        result(fb_engine_set_upstream_gate_json(engine,clear.dump().c_str()));
+        const Json single={{"endpoint",{{"host","127.0.0.1"},{"port",first}}},
+                           {"ready",false},{"grace_ms",30000}};
+        result(fb_engine_set_upstream_gate_json(engine,single.dump().c_str()));
+        need(result(fb_engine_snapshot_json(engine))["managed_upstream"]["limits"]["max_flows"]==128,
+             "stopped pool budget not released before single-worker restart");
+        result(fb_engine_set_upstream_gate_json(engine,clear.dump().c_str()));
+        auto request=ssh_pool_policy::ownedRequest(owned,false);
+        result(fb_engine_sync_owned_ssh_pool_json(engine,request.dump().c_str()));
+        const auto stale=owned.back();fb_ssh_destroy(stale);owned.pop_back();
+        char* rejected=fb_engine_sync_owned_ssh_pool_json(engine,request.dump().c_str());
+        need(rejected!=nullptr,"stale response missing");
+        auto failure=Json::parse(rejected);fb_string_free(rejected);
+        need(!failure.value("ok",true),"destroyed supervisor accepted");
+        fb_engine_destroy(engine);engine=0;
+        for(auto id:owned)fb_ssh_destroy(id);owned.clear();
+    } catch(...) {
+        if(engine)fb_engine_destroy(engine);
+        for(auto id:owned)fb_ssh_destroy(id);
+        throw;
+    }
+    using ssh_pool_policy::captureAvailable;
+    need(captureAvailable(true,true,false,true,false,false,false,false),
+         "ready managed SSH prevents capture button from enabling");
+    need(!captureAvailable(true,false,false,true,false,false,false,false),"managed capture without running engine");
+    need(!captureAvailable(true,true,false,false,false,false,false,false),"managed capture without ready SSH");
+    need(captureAvailable(false,false,false,false,false,false,false,false),"external capture unavailable when stopped");
+    need(!captureAvailable(false,true,false,true,false,false,false,false),"external capture competes with engine");
+    need(!captureAvailable(true,true,false,true,false,false,false,true),"capture enabled while helper is stopping");
+    std::puts("PASS owned GUI pool: pause/resume limits, 2->1->2, stale IDs, managed capture button state");
+}
 int wmain(int argc,wchar_t** argv) {
     WSADATA data{}; if(WSAStartup(MAKEWORD(2,2),&data)) return 1;
-    try { abiTest();nativeTemplateTest();nativeGuiListenerOwnerTest();nativeUnelevatedSshProfileTest();nativeLauncherArgumentTest(); if(argc>=2) guiTest(argv[1],argc>=3?argv[2]:nullptr); WSACleanup(); return 0; }
+    try { abiTest();nativeOwnedPoolLifecycleTest();nativeTemplateTest();nativeGuiListenerOwnerTest();nativeUnelevatedSshProfileTest();nativeLauncherArgumentTest(); if(argc>=2) guiTest(argv[1],argc>=3?argv[2]:nullptr); WSACleanup(); return 0; }
     catch(const std::exception& error) { std::fprintf(stderr,"FAIL: %s\n",error.what()); WSACleanup(); return 1; }
 }
