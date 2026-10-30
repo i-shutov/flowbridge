@@ -35,6 +35,12 @@ def secure_test_file(path):
     subprocess.run(['icacls', str(path), '/inheritance:r', '/grant:r',
                     f'*{sid}:F', '*S-1-5-18:F', '*S-1-5-32-544:F'],
                    check=True, capture_output=True, timeout=10)
+    # Hosted temporary files may retain an EXPLICIT OWNER RIGHTS ACE even
+    # after inheritance is removed. OpenSSH correctly rejects that entry.
+    # Remove only that extra principal from this freshly generated file;
+    # retain the actual owner's SID, SYSTEM and Administrators permissions.
+    subprocess.run(['icacls', str(path), '/remove', '*S-1-3-4'],
+                   check=True, capture_output=True, timeout=10)
 
 
 def windows_resources(pid):
@@ -176,7 +182,8 @@ def main():
                     def redact(value):
                         text = str(value)
                         for private in (str(root), root.as_posix(), user, str(args.ssh), str(args.sshd)):
-                            text = text.replace(private, '<fixture>')
+                            for representation in (private, private.replace('\\', '\\\\')):
+                                text = text.replace(representation, '<fixture>')
                         return text[-4000:]
                     if supervisor:
                         observed = abi.call('fb_ssh_snapshot_json', supervisor)
