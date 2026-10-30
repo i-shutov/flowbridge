@@ -1335,8 +1335,12 @@ mod ssh_and_gate_tests {
                 false
             );
         }
-        let value =
-            CString::new(r#"{"endpoint":{"host":"127.0.0.1","port":1080},"ready":false}"#).unwrap();
+        // Use a test-only endpoint outside the other FFI pool fixtures
+        // (which reserve 127.0.0.1:1080 and :1082). Pool admission budgets
+        // are intentionally shared across engines in production; unrelated
+        // parallel tests must not compete for the same endpoint.
+        let value = CString::new(r#"{"endpoint":{"host":"127.0.0.1","port":11983},"ready":false}"#)
+            .unwrap();
         assert_eq!(
             unsafe { consume(fb_engine_set_upstream_gate_json(id, value.as_ptr())) }["ok"],
             true

@@ -865,7 +865,22 @@ async fn native_preparation_binds_the_actual_socket_before_connect() {
     )
     .await
     .unwrap();
-    let (_, peer) = listener.accept().unwrap();
+    // The async connect can complete before a nonblocking std listener's
+    // accept queue becomes observable on macOS. Poll only this readiness
+    // transition; retaining the strict pre-connect no-SYN assertion above.
+    let (_, peer) = timeout(Duration::from_secs(2), async {
+        loop {
+            match listener.accept() {
+                Ok(accepted) => break accepted,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    sleep(Duration::from_millis(5)).await;
+                }
+                Err(error) => panic!("Native test listener failed: {error}"),
+            }
+        }
+    })
+    .await
+    .expect("Native preparation connected but local accept never became ready");
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert_eq!(peer.port(), prepared_port.load(Ordering::SeqCst));
     assert_eq!(stream.local_addr().unwrap().port(), peer.port());
