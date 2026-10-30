@@ -54,6 +54,54 @@ class ProbeTests(unittest.TestCase):
             self.run_probe(lambda:candidate,echo=bad_echo)
         self.assertTrue(candidate.closed)
 
+    def test_new_open_ssh_channel_reset_at_ceiling_is_measured_not_masked(self):
+        sockets = []
+        def connect():
+            candidate = Socket()
+            sockets.append(candidate)
+            return candidate
+        def echo(sock, nonce):
+            if len(sockets) >= 3 and sock is sockets[2] and b'initial' in nonce:
+                raise ConnectionResetError(10054, 'new SSH channel reset at capacity')
+        report = self.run_probe(connect, echo=echo, held_limit=3, min_held=2,
+                                tiers=(1, 2, 3), recovery_count=2)
+        self.assertTrue(report['capacity_baseline_verified'])
+        self.assertEqual(report['peak_held'], 2)
+        self.assertEqual(report['attempts'][-1]['accepted_held'], 2)
+        self.assertEqual(report['attempts'][-1]['failed_new'], 1)
+        self.assertEqual(report['attempts'][-1]['failed_stage'], 'candidate_initial_echo')
+        self.assertEqual(report['attempts'][-1]['failed_error_type'], 'ConnectionResetError')
+        self.assertEqual(report['recovery_successes'], 2)
+        self.assertTrue(all(sock.closed for sock in sockets))
+
+    def test_new_channel_reset_before_minimum_cannot_pass(self):
+        sockets = []
+        def connect():
+            candidate = Socket()
+            sockets.append(candidate)
+            return candidate
+        def echo(_sock, nonce):
+            if b'initial' in nonce:
+                raise ConnectionResetError(10054, 'bare SSH backend unavailable')
+        with self.assertRaisesRegex(RuntimeError, 'Only 0 real channels'):
+            self.run_probe(connect, echo=echo, min_held=2, held_limit=3,
+                           tiers=(1, 2, 3), recovery_count=1)
+        self.assertTrue(all(sock.closed for sock in sockets))
+
+    def test_existing_held_connection_reset_is_still_hard_failure(self):
+        sockets = []
+        def connect():
+            candidate = Socket()
+            sockets.append(candidate)
+            return candidate
+        def echo(sock, nonce):
+            if b'held integrity' in nonce and sock is sockets[0]:
+                raise ConnectionResetError(10054, 'established flow lost bytes')
+        with self.assertRaises(ConnectionResetError):
+            self.run_probe(connect, echo=echo, min_held=1, held_limit=2,
+                           tiers=(1, 2), recovery_count=1)
+        self.assertTrue(all(sock.closed for sock in sockets))
+
     def test_process_alive_but_recovery_dead_is_not_accepted(self):
         values = iter([Socket(),Socket(),None])
         with self.assertRaisesRegex(RuntimeError,'did not recover'):
