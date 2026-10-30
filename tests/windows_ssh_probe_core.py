@@ -65,13 +65,27 @@ def probe_capacity(connect: Callable[[], Any], echo: Callable[[Any, bytes], None
                 report["actual_connection_attempts"] += 1
                 try:
                     candidate = connect()
-                except (OSError, EOFError, TimeoutError):
-                    candidate = None
+                except (OSError, EOFError, TimeoutError) as error:
+                    item["failed_new"] += 1
+                    item["failed_stage"] = "candidate_connect"
+                    item["failed_error_type"] = type(error).__name__
+                    break
                 if candidate is None:
                     item["failed_new"] += 1
+                    item["failed_stage"] = "socks_rejected"
                     break
                 try:
                     echo(candidate, b"FlowBridge initial real Windows SSH\x00\xff")
+                except (OSError, EOFError, TimeoutError) as error:
+                    # At the OpenSSH backend's own descriptor ceiling, SOCKS
+                    # may accept CONNECT and reset the *new* stream before its
+                    # first byte. This is an unaccepted capacity probe, not
+                    # corruption of the already-established held channels.
+                    candidate.close()
+                    item["failed_new"] += 1
+                    item["failed_stage"] = "candidate_initial_echo"
+                    item["failed_error_type"] = type(error).__name__
+                    break
                 except BaseException:
                     candidate.close()
                     raise
