@@ -82,6 +82,12 @@ fn parse(ip: &[u8]) -> Result<Parsed, PacketError> {
             if hlen < 20 || hlen > ip.len() {
                 return Err(PacketError::LengthMismatch);
             }
+            // No IPv4 option parser/semantic verification exists yet. In
+            // particular, LSRR/SSRR may alter forwarding after a tuple rewrite.
+            // Reject ALL option-bearing packets until that is implemented.
+            if hlen != 20 {
+                return Err(PacketError::Unsupported);
+            }
             let total = usize::from(u16::from_be_bytes([ip[2], ip[3]]));
             if total != ip.len() || total < hlen + 20 {
                 return Err(PacketError::LengthMismatch);
@@ -307,6 +313,31 @@ mod tests {
         let mut v6 = packet(Family::V6, b"");
         v6[6] = 44;
         assert_eq!(inspect_tcp(&v6), Err(PacketError::Unsupported));
+    }
+
+    #[test]
+    fn valid_ipv4_options_are_not_rewritten_or_forwardable() {
+        let tuple = inspect_tcp(&packet(Family::V4, b"hello")).unwrap().tuple;
+        // NOP, loose source route and strict source route. Even innocuous
+        // options remain unsupported until header semantics are implemented.
+        for options in [[1u8, 1, 1, 1], [0x83, 4, 4, 0], [0x89, 4, 4, 0]] {
+            let mut ip = packet(Family::V4, b"hello");
+            ip.splice(20..20, options);
+            ip[0] = 0x46;
+            let total = ip.len() as u16;
+            ip[2..4].copy_from_slice(&total.to_be_bytes());
+            ip[10..12].fill(0);
+            let checksum = finish_checksum(word_sum(&ip[..24]));
+            ip[10..12].copy_from_slice(&checksum.to_be_bytes());
+            assert_eq!(finish_checksum(word_sum(&ip[..24])), 0);
+            let original = ip.clone();
+            assert_eq!(inspect_tcp(&ip), Err(PacketError::Unsupported));
+            assert_eq!(
+                rewrite_tcp_tuple(&mut ip, tuple, tuple),
+                Err(PacketError::Unsupported)
+            );
+            assert_eq!(ip, original);
+        }
     }
 
     #[test]
