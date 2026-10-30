@@ -403,6 +403,17 @@ static void actualRuleEditorTest(HWND window, const wchar_t* screenshot) {
     }
     click(dialog,6116);
     waitFor([&]{return !IsWindow(dialog);},"Rule editor failed to close after Save");
+    // DestroyWindow occurs inside the modal handler, slightly BEFORE the
+    // parent command resumes and copies the validated draft into its EDIT.
+    // Reading WM_GETTEXTLENGTH from the old profile while WM_GETTEXT reads
+    // the new one can produce a truncated, falsely invalid JSON snapshot.
+    // Require publication of the new profile and a complete JSON message.
+    waitFor([&]{
+        const auto text=windowText(editor);
+        if(text.find(L"media-route")==std::wstring::npos)return false;
+        const std::string ascii(text.begin(),text.end());
+        return Json::accept(ascii);
+    },"Modal Save did not publish a complete route draft to the parent EDIT");
     const auto configured=windowText(editor);
     const auto utf8Configured=[&]{
         const int count=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,
