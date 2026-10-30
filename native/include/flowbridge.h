@@ -13,6 +13,10 @@ extern "C" {
 /* Offline, allowlist-redacted report from {engine:<snapshot>,ssh:<snapshot>}.
  * Contains no raw logs, profile, keys, paths or destination names. */
 char *fb_diagnostic_report_json(const char *snapshot_json);
+/* Read-only Windows Packet Filter / NDISRD API probe. Never installs or loads
+ * a driver, does not inspect signatures and never claims packet interception.
+ * Available on all builds; non-Windows reports supported:false. */
+char *fb_windows_packet_filter_status_json(void);
 char *fb_validate_json(const char *config_json);
 char *fb_evaluate_json(const char *config_json, const char *flow_json);
 void fb_string_free(char *value);

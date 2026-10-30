@@ -13,6 +13,8 @@
 //! Exact IP host criteria compare address identity. IPv4-mapped IPv6 addresses
 //! also match the corresponding IPv4 CIDR, while retaining IPv6 CIDR matches.
 
+pub mod capture_policy;
+
 use std::collections::HashSet;
 use std::net::{IpAddr, SocketAddr};
 

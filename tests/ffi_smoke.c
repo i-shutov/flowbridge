@@ -29,6 +29,18 @@ int main(void) {
     if (!error || !strstr(error, "\"ok\":false")) { fb_string_free(error); return 5; }
     fb_string_free(error);
     fb_string_free(NULL);
+    /* Rust NDISRD capability API is passive on Windows and disabled elsewhere.
+     * An ABI response must never imply driver install/signature/traffic PASS. */
+    char *ndis = fb_windows_packet_filter_status_json();
+    if (!ndis || !strstr(ndis, "\"backend\":\"ndisapi\"") ||
+        !strstr(ndis, "\"signature_status\":\"not_checked\"") ||
+        !strstr(ndis, "\"driver_installation_attempted\":false") ||
+        !strstr(ndis, "\"packet_capture_active\":false") ||
+        !strstr(ndis, "\"native_routing_accepted\":false")) {
+        fb_string_free(ndis);
+        return 6;
+    }
+    fb_string_free(ndis);
     puts("C ABI smoke: 1000 validate/evaluate/free cycles and null handling passed");
     return 0;
 }
