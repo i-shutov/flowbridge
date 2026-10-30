@@ -21,7 +21,7 @@ import threading
 import time
 
 from real_ssh_capacity import exact, require
-from windows_ssh_probe_core import ResourceErrors, probe_capacity
+from windows_ssh_probe_core import ResourceErrors, probe_capacity, expected_raw_backend_fd_saturation
 
 
 class Echo(socketserver.BaseRequestHandler):
@@ -112,11 +112,21 @@ def main():
     parser.add_argument("--min-held", type=int, default=128,
                         help="Minimum real concurrent byte-verified channels required to pass")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--characterize-ceiling", action="store_true",
+                        help="Opt-in diagnosis of raw SSH safety above 128 held streams")
+    parser.add_argument("--server-log", type=Path,
+                        help="Same-run isolated sshd stderr; only resource marker counts are extracted")
+    parser.add_argument("--server-log-offset", type=int, default=0)
     args = parser.parse_args()
     require(sys.platform == "win32" and os.environ.get("FLOWBRIDGE_SSH_VM") == "1",
             "Authorized Windows VM and explicit FLOWBRIDGE_SSH_VM=1 required")
     require(1 <= args.min_held <= args.held <= 512 and 1 <= args.ssh_port <= 65535,
             "Bounded capacity must be 1..512")
+    if args.characterize_ceiling:
+        require(args.server_log is not None and args.server_log.is_file()
+                and args.server_log_offset >= 0
+                and args.server_log_offset <= args.server_log.stat().st_size,
+                "Raw ceiling characterization requires same-run isolated sshd log offset")
     require(args.user.isascii() and args.user.replace("_", "").replace("-", "").isalnum()
             and not args.user.startswith("-"), "Invalid SSH user identity")
     ssh = args.ssh.resolve(strict=True)
@@ -134,7 +144,10 @@ def main():
               "actual_internal_fd_table_measured": False,
               "notes": ["OS HANDLE counts are not the internal Win32 OpenSSH FD table.",
                         "A hard OpenSSH socket ceiling is not inferred from an attempt count."],
-              "external_network": False}
+              "external_network": False,
+              "test_contract": "raw_ssh_ceiling_characterization" if args.characterize_ceiling else "strict_capacity",
+              "characterization_completed": False,
+              "unprotected_backend_512_stable": False}
     ssh_process = None
     resource_errors = ResourceErrors()
     stderr_thread = None
