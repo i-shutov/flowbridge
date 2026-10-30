@@ -158,8 +158,7 @@ mod tests {
 
         let mut pseudo = Vec::new();
         if version == IpVersion::V4 {
-            wire[ip_start + 2..ip_start + 4]
-                .copy_from_slice(&(ip_length as u16).to_be_bytes());
+            wire[ip_start + 2..ip_start + 4].copy_from_slice(&(ip_length as u16).to_be_bytes());
             wire[ip_start + 10..ip_start + 12].fill(0);
             let ip_checksum = checksum(&wire[ip_start..ip_start + 20]);
             wire[ip_start + 10..ip_start + 12].copy_from_slice(&ip_checksum.to_be_bytes());
@@ -168,8 +167,7 @@ mod tests {
             pseudo.extend_from_slice(&[0, 6]);
             pseudo.extend_from_slice(&(tcp_length as u16).to_be_bytes());
         } else {
-            wire[ip_start + 4..ip_start + 6]
-                .copy_from_slice(&(tcp_length as u16).to_be_bytes());
+            wire[ip_start + 4..ip_start + 6].copy_from_slice(&(tcp_length as u16).to_be_bytes());
             pseudo.extend_from_slice(&wire[ip_start + 8..ip_start + 40]);
             pseudo.extend_from_slice(&(tcp_length as u32).to_be_bytes());
             pseudo.extend_from_slice(&[0, 0, 0, 6]);
@@ -179,8 +177,7 @@ mod tests {
         let tcp_checksum = checksum(&pseudo);
         wire[tcp_start + 16..tcp_start + 18].copy_from_slice(&tcp_checksum.to_be_bytes());
         let checksum_start = pseudo.len() - tcp_length + 16;
-        pseudo[checksum_start..checksum_start + 2]
-            .copy_from_slice(&tcp_checksum.to_be_bytes());
+        pseudo[checksum_start..checksum_start + 2].copy_from_slice(&tcp_checksum.to_be_bytes());
         assert_eq!(checksum(&pseudo), 0);
         wire.extend(std::iter::repeat_n(0, 46usize.saturating_sub(ip_length)));
         assert_eq!(inspect_l2_ip(&wire).unwrap().length, ip_length);
@@ -297,21 +294,9 @@ mod tests {
                 let prior = inspect_ethernet_tcp(&wire).unwrap();
                 let next = replacement(version);
                 let mut scratch = [0u8; 256];
-                rewrite_ethernet_tcp_tuple(
-                    &mut wire,
-                    &mut scratch,
-                    prior.tcp.tuple,
-                    next,
-                )
-                .unwrap();
+                rewrite_ethernet_tcp_tuple(&mut wire, &mut scratch, prior.tcp.tuple, next).unwrap();
                 assert_eq!(inspect_ethernet_tcp(&wire).unwrap().tcp.tuple, next);
-                rewrite_ethernet_tcp_tuple(
-                    &mut wire,
-                    &mut scratch,
-                    next,
-                    prior.tcp.tuple,
-                )
-                .unwrap();
+                rewrite_ethernet_tcp_tuple(&mut wire, &mut scratch, next, prior.tcp.tuple).unwrap();
                 assert_eq!(wire, original);
             }
         }
@@ -323,13 +308,13 @@ mod tests {
         md5.extend_from_slice(&[0; 16]);
         md5.extend_from_slice(&[0, 0]);
         let cases = [
-            md5,                        // TCP-MD5
-            vec![29, 4, 1, 2],           // TCP-AO
-            vec![30, 4, 0x10, 0],        // MPTCP
-            vec![34, 4, 0, 1],           // TCP Fast Open
-            vec![253, 4, 0, 0],          // experimental
-            vec![8, 1, 0, 0],            // invalid option length
-            vec![0, 1, 1, 1],            // nonzero padding after EOL
+            md5,                  // TCP-MD5
+            vec![29, 4, 1, 2],    // TCP-AO
+            vec![30, 4, 0x10, 0], // MPTCP
+            vec![34, 4, 0, 1],    // TCP Fast Open
+            vec![253, 4, 0, 0],   // experimental
+            vec![8, 1, 0, 0],     // invalid option length
+            vec![0, 1, 1, 1],     // nonzero padding after EOL
         ];
         for options in cases {
             for version in [IpVersion::V4, IpVersion::V6] {
