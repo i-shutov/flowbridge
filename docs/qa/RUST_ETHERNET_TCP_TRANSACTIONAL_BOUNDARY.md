@@ -9,6 +9,12 @@
 - `rewrite_ethernet_tcp_tuple` is intentionally transactional. The caller must provide reusable scratch storage covering the validated datagram length; the function copies only the datagram into scratch, rewrites and revalidates **there**, and copies it back **only on success**. On any failure the input L2 frame is unchanged. Missing scratch produces `ScratchTooSmall`, not truncated output. Header, VLAN and Ethernet padding are never altered.
 - Scratch is bounded by the existing frame size ceiling, and no allocation occurs inside either public function. A future worker should allocate reusable, per-worker scratch outside its packet hot path; its capacity and cancellation policy must be part of native driver acceptance.
 
+## TCP option security integration (2026-10-31)
+
+This follow-up draft is **stacked on #51 exact HEAD `5ceefbf54bed969661eb49da37db1c08a772a81e`**. It integrates the existing original Rust TCP-option admission policy from #48 exact HEAD `319741e51217b42a7e2c01f505f7093d6f47177f` into the Ethernet/VLAN transactional boundary. No source or binaries from ProxiFyre (AGPL-3.0) were used. #48's independent tunnel CI-fixture change is **not** imported by this focused security branch; #50 tracks that separately.
+
+Supported TCP options: EOL with zero padding, NOP, MSS, window scale, SACK permitted, correctly sized SACK blocks, and timestamps. Authenticated/multipath/unknown/experimental options and malformed layouts return `PacketError::Unsupported` before any Ethernet frame update. Additional L2-level regressions build valid IPv4/IPv6 and TCP checksums, exercise 0/2 VLAN tags, and prove rejected frames remain byte-for-byte unchanged. A passing offline check is **not** an authorization to inject or to forward traffic outside the tunnel.
+
 ## Offline regression matrix
 
 | Case | Required result |

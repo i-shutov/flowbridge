@@ -71,6 +71,53 @@ fn pseudo_sum(ip: &[u8], family: Family, tcp_len: usize) -> u32 {
     }
 }
 
+/// Conservatively accept only TCP options whose wire meaning survives a
+/// four-tuple rewrite. Authenticated, multipath, experimental and unrecognised
+/// options are not safe to transparently rewrite without protocol-specific
+/// handling. Header bounds are verified by parse() before this function.
+fn validate_tcp_options(tcp: &[u8], header_len: usize) -> Result<(), PacketError> {
+    let options = &tcp[20..header_len];
+    let mut pos = 0;
+    while pos < options.len() {
+        match options[pos] {
+            0 => {
+                // After EOL the bytes are padding, not a second option list.
+                // Nonzero trailing bytes are ambiguous and fail closed.
+                if options[pos + 1..].iter().any(|byte| *byte != 0) {
+                    return Err(PacketError::Unsupported);
+                }
+                return Ok(());
+            }
+            1 => pos += 1, // NOP
+            kind => {
+                if pos + 2 > options.len() {
+                    return Err(PacketError::Unsupported);
+                }
+                let len = usize::from(options[pos + 1]);
+                if len < 2 || len > options.len() - pos {
+                    return Err(PacketError::Unsupported);
+                }
+                // MSS, window scale, SACK-permitted, SACK blocks, timestamps.
+                // TCP MD5 (19), TCP-AO (29), MPTCP (30), TFO (34) and
+                // unknown/experimental kinds need dedicated semantics.
+                let safe = match kind {
+                    2 => len == 4,
+                    3 => len == 3,
+                    4 => len == 2,
+                    5 => len >= 10 && (len - 2) % 8 == 0,
+                    8 => len == 10,
+                    _ => false,
+                };
+                if !safe {
+                    return Err(PacketError::Unsupported);
+                }
+                pos += len;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn parse(ip: &[u8]) -> Result<Parsed, PacketError> {
     let first = *ip.first().ok_or(PacketError::Truncated)?;
     let (family, tcp_start, source, destination) = match first >> 4 {
@@ -136,6 +183,7 @@ fn parse(ip: &[u8]) -> Result<Parsed, PacketError> {
     if hlen < 20 || hlen > tcp.len() {
         return Err(PacketError::LengthMismatch);
     }
+    validate_tcp_options(tcp, hlen)?;
     let src_port = u16::from_be_bytes([tcp[0], tcp[1]]);
     let dst_port = u16::from_be_bytes([tcp[2], tcp[3]]);
     if src_port == 0 || dst_port == 0 {
@@ -276,6 +324,98 @@ mod tests {
             );
             rewrite_tcp_tuple(&mut changed, next, current.tuple).unwrap();
             assert_eq!(changed, original);
+        }
+    }
+
+    fn with_tcp_options(mut ip: Vec<u8>, family: Family, options: &[u8]) -> Vec<u8> {
+        assert_eq!(options.len() % 4, 0);
+        let tcp_start = match family {
+            Family::V4 => 20,
+            Family::V6 => 40,
+        };
+        ip.splice(tcp_start + 20..tcp_start + 20, options.iter().copied());
+        let tcp_len = ip.len() - tcp_start;
+        ip[tcp_start + 12] = ((5 + options.len() / 4) as u8) << 4;
+        match family {
+            Family::V4 => {
+                let total = ip.len() as u16;
+                ip[2..4].copy_from_slice(&total.to_be_bytes());
+                ip[10..12].fill(0);
+                let sum = finish_checksum(word_sum(&ip[..tcp_start]));
+                ip[10..12].copy_from_slice(&sum.to_be_bytes());
+            }
+            Family::V6 => {
+                ip[4..6].copy_from_slice(&(tcp_len as u16).to_be_bytes());
+            }
+        }
+        ip[tcp_start + 16..tcp_start + 18].fill(0);
+        let sum = finish_checksum(pseudo_sum(&ip, family, tcp_len) + word_sum(&ip[tcp_start..]));
+        ip[tcp_start + 16..tcp_start + 18].copy_from_slice(&sum.to_be_bytes());
+        ip
+    }
+
+    #[test]
+    fn ordinary_tcp_options_survive_inverse_rewrite() {
+        // MSS, NOP, window scale, SACK-permitted, timestamps, EOL/padding.
+        let options = [
+            2, 4, 5, 180, 1, 3, 3, 7, 4, 2, 1, 1, 8, 10, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0,
+        ];
+        for family in [Family::V4, Family::V6] {
+            let original = with_tcp_options(packet(family, b"payload"), family, &options);
+            let parsed = inspect_tcp(&original).unwrap();
+            assert_eq!(parsed.data_bytes, 7);
+            let replacement = match family {
+                Family::V4 => TcpTuple {
+                    source: "127.0.0.1:40000".parse().unwrap(),
+                    destination: "127.0.0.1:10080".parse().unwrap(),
+                },
+                Family::V6 => TcpTuple {
+                    source: "[::1]:40000".parse().unwrap(),
+                    destination: "[::1]:10080".parse().unwrap(),
+                },
+            };
+            let mut changed = original.clone();
+            rewrite_tcp_tuple(&mut changed, parsed.tuple, replacement).unwrap();
+            rewrite_tcp_tuple(&mut changed, replacement, parsed.tuple).unwrap();
+            assert_eq!(changed, original);
+        }
+    }
+
+    #[test]
+    fn authenticated_multipath_unknown_and_malformed_tcp_options_fail_closed() {
+        let mut md5 = vec![19, 18]; // TCP MD5 signature (RFC 2385)
+        md5.extend_from_slice(&[0; 16]);
+        md5.extend_from_slice(&[0, 0]);
+        let cases = vec![
+            md5,
+            vec![29, 4, 1, 2],    // TCP-AO, address-authenticated
+            vec![30, 4, 0x10, 0], // MPTCP, path semantics
+            vec![34, 4, 0, 1],    // TCP Fast Open, not handled
+            vec![253, 4, 0, 0],   // experimental/unknown
+            vec![8, 1, 0, 0],     // invalid option length
+            vec![8, 10, 0, 0],    // truncated timestamp option
+            vec![2, 3, 0, 0],     // malformed MSS
+            vec![5, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], // malformed SACK
+            vec![0, 1, 1, 1],     // nonzero bytes after EOL
+        ];
+        for options in cases {
+            for family in [Family::V4, Family::V6] {
+                // Construct packets with valid IP/TCP checksums: rejection
+                // must depend on option semantics, not incidental corruption.
+                let mut packet_with_options =
+                    with_tcp_options(packet(family, b"data"), family, &options);
+                let original = packet_with_options.clone();
+                let expected = inspect_tcp(&packet(family, b"data")).unwrap().tuple;
+                assert_eq!(
+                    inspect_tcp(&packet_with_options),
+                    Err(PacketError::Unsupported)
+                );
+                assert_eq!(
+                    rewrite_tcp_tuple(&mut packet_with_options, expected, expected),
+                    Err(PacketError::Unsupported)
+                );
+                assert_eq!(packet_with_options, original);
+            }
         }
     }
 
