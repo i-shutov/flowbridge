@@ -46,12 +46,10 @@ struct Parsed {
 
 fn word_sum(bytes: &[u8]) -> u32 {
     let mut sum = 0u32;
-    let mut chunks = bytes.chunks_exact(2);
-    for word in &mut chunks {
-        sum += u32::from(u16::from_be_bytes([word[0], word[1]]));
-    }
-    if let [last] = chunks.remainder() {
-        sum += u32::from(*last) << 8;
+    for pair in bytes.chunks(2) {
+        let high = u32::from(pair[0]) << 8;
+        let low = pair.get(1).map_or(0, |value| u32::from(*value));
+        sum += high + low;
     }
     sum
 }
