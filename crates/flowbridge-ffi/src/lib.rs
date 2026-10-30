@@ -976,6 +976,63 @@ pub unsafe extern "C" fn fb_engine_set_upstream_pool_json(
     })
 }
 
+/// An owned-pool refresh derives availability and listener port from actual
+/// registered SSH supervisor handles rather than trusting a caller-provided
+/// "ready":true flag. It never launches or restarts an SSH process. The
+/// caller repeats this operation after supervisor status changes.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OwnedPoolInput {
+    ssh_ids: Vec<u64>,
+    limits: flowbridge_runtime::admission::Limits,
+    aggregate_max_flows: usize,
+}
+
+/// # Safety
+/// `pool_json` must reference live NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn fb_engine_sync_owned_ssh_pool_json(
+    id: u64,
+    pool_json: *const c_char,
+) -> *mut c_char {
+    guarded(|| {
+        let pool: OwnedPoolInput =
+            serde_json::from_str(unsafe { input(pool_json) }?).map_err(|e| e.to_string())?;
+        if !(1..=4).contains(&pool.ssh_ids.len()) {
+            return Err("owned SSH pool requires 1..=4 supervisor handles".into());
+        }
+        let mut unique = std::collections::HashSet::new();
+        let mut workers = Vec::with_capacity(pool.ssh_ids.len());
+        for ssh_id in &pool.ssh_ids {
+            if !unique.insert(*ssh_id) {
+                return Err("duplicate SSH supervisor handle in owned pool".into());
+            }
+            let status = with_ssh(*ssh_id, |supervisor| {
+                Ok(supervisor.snapshot().status)
+            })?;
+            workers.push(flowbridge_runtime::pool::WorkerInput {
+                endpoint: flowbridge_core::Endpoint {
+                    host: "127.0.0.1".into(),
+                    port: status.local_port,
+                },
+                ready: status.state == "ready" && status.pid.is_some(),
+            });
+        }
+        let primary = workers[0].endpoint.clone();
+        with_engine(id, |engine| {
+            let status = engine
+                .set_upstream_pool_with_limits(
+                    primary,
+                    workers,
+                    pool.limits,
+                    pool.aggregate_max_flows,
+                )
+                .map_err(|e| e.to_string())?;
+            Ok(json!({"ok":true,"status":status}))
+        })
+    })
+}
+
 struct SshSlot {
     supervisor: flowbridge_tunnel::Supervisor,
     gate: Mutex<()>,
