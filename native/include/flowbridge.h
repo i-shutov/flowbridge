@@ -15,6 +15,8 @@ extern "C" {
 char *fb_diagnostic_report_json(const char *snapshot_json);
 /* Read-only Windows Packet Filter / NDISRD API probe. Never installs or loads
  * a driver, does not inspect signatures and never claims packet interception.
+ * On Windows it also queries NDISRD service status via SCM read-only rights;
+ * service presence/running is not proof of signature, packet capture or routing.
  * Available on all builds; non-Windows reports supported:false. */
 char *fb_windows_packet_filter_status_json(void);
 /* Read-only IP Helper process-identity candidates. TCP matches exact local +
