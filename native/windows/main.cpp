@@ -280,24 +280,29 @@ class Worker {
     void gate(bool allowed) {
         if(!engine)return;
         const int base=activeSsh.value("local_port",1080);
-        if(managedActive&&activeWorkerCount>1) {
-            Json members=Json::array();
+        if(managedActive&&activeWorkerCount>1&&allowed) {
+            // Rust derives each worker's port, PID and readiness from a real
+            // registered supervisor. The GUI must not attest ready:true.
             const auto ids=sshIds();
-            for(size_t i=0;i<ids.size();++i) {
-                const auto status=response(fb_ssh_snapshot_json(ids[i])).at("status");
-                members.push_back({{"endpoint",{{"host","127.0.0.1"},{"port",base+2*static_cast<int>(i)}}},
-                                   {"ready",allowed&&status.value("state",std::string())=="ready"}});
-            }
+            if(ids.size()!=static_cast<size_t>(activeWorkerCount))
+                throw std::runtime_error("Неполный набор владельцев SSH-пула.");
             const int perWorker=128/activeWorkerCount;
-            const Json pool={{"primary",{{"host","127.0.0.1"},{"port",base}}},
-                {"workers",members},
+            const Json pool={{"ssh_ids",ids},
                 {"limits",{{"max_flows",perWorker},{"max_opening",std::min(16,perWorker)},
                            {"max_queued",64/activeWorkerCount},{"wait_timeout_ms",10000}}},
                 {"aggregate_max_flows",128}};
-            response(fb_engine_set_upstream_pool_json(engine,pool.dump().c_str()));
+            response(fb_engine_sync_owned_ssh_pool_json(engine,pool.dump().c_str()));
         } else {
+            // Keep the legacy single-worker 30s reconnect grace; a not-yet-
+            // ready multi-worker pool is withdrawn before admitting flows.
+            bool ready=allowed;
+            if(managedActive) {
+                const auto status=response(fb_ssh_snapshot_json(ssh)).at("status");
+                ready=allowed&&status.value("state",std::string())=="ready"&&
+                    status.contains("pid")&&status["pid"].is_number();
+            }
             const Json value={{"endpoint",managedActive?Json{{"host","127.0.0.1"},{"port",base}}:Json(nullptr)},
-                              {"ready",allowed},{"grace_ms",30000}};
+                              {"ready",ready},{"grace_ms",managedActive&&activeWorkerCount>1?0:30000}};
             response(fb_engine_set_upstream_gate_json(engine,value.dump().c_str()));
         }
     }
