@@ -404,7 +404,30 @@ static void actualRuleEditorTest(HWND window, const wchar_t* screenshot) {
     click(dialog,6116);
     waitFor([&]{return !IsWindow(dialog);},"Rule editor failed to close after Save");
     const auto configured=windowText(editor);
-    const auto parsed=Json::parse(std::string(configured.begin(),configured.end()));
+    const auto utf8Configured=[&]{
+        const int count=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,
+            configured.data(),static_cast<int>(configured.size()),nullptr,0,nullptr,nullptr);
+        need(count>0,"Edited profile is not convertible to UTF-8");
+        std::string out(static_cast<size_t>(count),'\0');
+        need(WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,
+            configured.data(),static_cast<int>(configured.size()),
+            out.data(),count,nullptr,nullptr)==count,
+            "Native edited profile UTF-8 conversion failed");
+        return out;
+    }();
+    Json parsed;
+    try {
+        parsed=Json::parse(utf8Configured);
+    } catch(const std::exception&) {
+        std::fprintf(stderr,
+            "visual-rule-profile-diagnostic: original_utf16=%zu edited_utf16=%zu bytes=%zu, "
+            "last_byte=0x%02x, trailing_brace=%d, contains_nul=%d\n",
+            original.size(),configured.size(),utf8Configured.size(),
+            utf8Configured.empty()?0:static_cast<unsigned char>(utf8Configured.back()),
+            !utf8Configured.empty()&&utf8Configured.back()=='}',
+            utf8Configured.find('\0')!=std::string::npos);
+        throw;
+    }
     need(parsed["rules"].size()==1,"Visual rule draft not returned to JSON editor");
     need(parsed["rules"][0]["id"]=="media-route"&&
          parsed["rules"][0]["ports"][1]["start"]==8000&&
