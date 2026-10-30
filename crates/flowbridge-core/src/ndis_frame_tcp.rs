@@ -92,12 +92,8 @@ mod tests {
             ip[4..6].copy_from_slice(&20u16.to_be_bytes());
             ip[6] = 6;
             ip[7] = 64;
-            ip[8..24].copy_from_slice(
-                &"2001:db8::10".parse::<Ipv6Addr>().unwrap().octets(),
-            );
-            ip[24..40].copy_from_slice(
-                &"2001:db8::20".parse::<Ipv6Addr>().unwrap().octets(),
-            );
+            ip[8..24].copy_from_slice(&"2001:db8::10".parse::<Ipv6Addr>().unwrap().octets());
+            ip[24..40].copy_from_slice(&"2001:db8::20".parse::<Ipv6Addr>().unwrap().octets());
         }
         ip[tcp_offset..tcp_offset + 2].copy_from_slice(&54321u16.to_be_bytes());
         ip[tcp_offset + 2..tcp_offset + 4].copy_from_slice(&443u16.to_be_bytes());
@@ -125,7 +121,11 @@ mod tests {
         let mut frame = vec![0u8; 14];
         frame[0..6].copy_from_slice(&[2, 0, 0, 0, 0, 1]);
         frame[6..12].copy_from_slice(&[2, 0, 0, 0, 0, 2]);
-        let ether = if version == IpVersion::V4 { 0x0800u16 } else { 0x86ddu16 };
+        let ether = if version == IpVersion::V4 {
+            0x0800u16
+        } else {
+            0x86ddu16
+        };
         if tags == 0 {
             frame[12..14].copy_from_slice(&ether.to_be_bytes());
         } else {
@@ -164,12 +164,15 @@ mod tests {
                 let info = inspect_ethernet_tcp(&original).unwrap();
                 let mut scratch = vec![0xa5u8; 128];
                 let next = replacement(version);
-                let changed = rewrite_ethernet_tcp_tuple(
-                    &mut original, &mut scratch, info.tcp.tuple, next,
-                ).unwrap();
+                let changed =
+                    rewrite_ethernet_tcp_tuple(&mut original, &mut scratch, info.tcp.tuple, next)
+                        .unwrap();
                 assert_eq!(changed.tcp.tuple, next);
                 let end = info.region.offset + info.region.length;
-                assert_eq!(&original[..info.region.offset], &before[..info.region.offset]);
+                assert_eq!(
+                    &original[..info.region.offset],
+                    &before[..info.region.offset]
+                );
                 assert_eq!(&original[end..], &before[end..]);
                 assert_eq!(inspect_ethernet_tcp(&original).unwrap().tcp.tuple, next);
                 rewrite_ethernet_tcp_tuple(&mut original, &mut scratch, next, info.tcp.tuple)
@@ -183,7 +186,9 @@ mod tests {
     fn insufficient_scratch_and_tuple_mismatch_never_mutate_frame() {
         let mut frame = frame(IpVersion::V4, 2);
         let before = frame.clone();
-        let tuple = inspect_ethernet_tcp(&frame).unwrap().tcp.tuple;
+        let tuple = inspect_ethernet_tcp(&frame).unwrap()
+            .tcp
+            .tuple;
         let replacement = replacement(IpVersion::V4);
         let mut tiny = [0u8; 39];
         assert_eq!(
@@ -209,7 +214,10 @@ mod tests {
             let mut scratch = [0u8; 128];
             assert_eq!(
                 rewrite_ethernet_tcp_tuple(
-                    &mut corrupt, &mut scratch, info.tcp.tuple, replacement(version)
+                    &mut corrupt,
+                    &mut scratch,
+                    info.tcp.tuple,
+                    replacement(version)
                 ),
                 Err(FrameTcpError::Packet(PacketError::Checksum))
             );
@@ -219,11 +227,16 @@ mod tests {
         *padded.last_mut().unwrap() = 0x55;
         let before = padded.clone();
         let tuple = inspect_ethernet_tcp(&frame(IpVersion::V4, 0))
-            .unwrap().tcp.tuple;
+            .unwrap()
+            .tcp
+            .tuple;
         let mut scratch = [0u8; 128];
         assert_eq!(
             rewrite_ethernet_tcp_tuple(
-                &mut padded, &mut scratch, tuple, replacement(IpVersion::V4)
+                &mut padded,
+                &mut scratch,
+                tuple,
+                replacement(IpVersion::V4)
             ),
             Err(FrameTcpError::Frame(FrameError::NonZeroPadding))
         );
@@ -236,11 +249,16 @@ mod tests {
         unknown[12..14].copy_from_slice(&0x0806u16.to_be_bytes());
         let before = unknown.clone();
         let tuple = inspect_ethernet_tcp(&frame(IpVersion::V4, 0))
-            .unwrap().tcp.tuple;
+            .unwrap()
+            .tcp
+            .tuple;
         let mut scratch = [0u8; 128];
         assert_eq!(
             rewrite_ethernet_tcp_tuple(
-                &mut unknown, &mut scratch, tuple, replacement(IpVersion::V4)
+                &mut unknown,
+                &mut scratch,
+                tuple,
+                replacement(IpVersion::V4)
             ),
             Err(FrameTcpError::Frame(FrameError::Unsupported))
         );
@@ -251,10 +269,15 @@ mod tests {
         extensions[ip_offset + 6] = 44; // IPv6 fragment header
         let before = extensions.clone();
         let tuple = inspect_ethernet_tcp(&frame(IpVersion::V6, 2))
-            .unwrap().tcp.tuple;
+            .unwrap()
+            .tcp
+            .tuple;
         assert_eq!(
             rewrite_ethernet_tcp_tuple(
-                &mut extensions, &mut scratch, tuple, replacement(IpVersion::V6)
+                &mut extensions,
+                &mut scratch,
+                tuple,
+                replacement(IpVersion::V6)
             ),
             Err(FrameTcpError::Packet(PacketError::Unsupported))
         );
