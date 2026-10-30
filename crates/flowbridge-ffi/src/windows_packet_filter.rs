@@ -119,6 +119,7 @@ pub(super) fn report() -> Value {
     };
     json!({
         "backend": "ndisapi",
+        "service": crate::windows_ndisrd_service::report(),
         "device_opened": device_opened,
         "api_compatible": api_compatible,
         "driver_api_version": version.map(|v| format!("0x{v:08x}")),
