@@ -7,7 +7,7 @@
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::ffi::c_void;
-use std::mem::{offset_of, size_of};
+use std::mem::{offset_of, size_of, size_of_val};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6};
 use std::ptr::{null_mut, read_unaligned};
 use windows_sys::Win32::Foundation::GetLastError;
@@ -110,7 +110,7 @@ fn decode_rows<R: Copy>(
     offset: usize,
     convert: impl Fn(R) -> UdpBindRow,
 ) -> Result<Vec<UdpBindRow>, String> {
-    if words.is_empty() || used < offset || used > words.len() * size_of::<u32>() {
+    if words.is_empty() || used < offset || used > size_of_val(words) {
         return Err("UDP table header truncated".into());
     }
     let count = words[0] as usize;
