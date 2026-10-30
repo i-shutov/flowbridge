@@ -140,7 +140,7 @@ final class SSHController: ObservableObject {
         }
     }
 
-    func stop(completion: (() -> Void)? = nil) {
+    func stop(completion: ((Bool) -> Void)? = nil) {
         revision += 1
         pending = nil
         let version = revision
@@ -154,11 +154,17 @@ final class SSHController: ObservableObject {
             DispatchQueue.main.async {
                 guard self.revision == version else { return }
                 self.state = failure == nil ? "stopped" : "failed"
-                self.message = failure ?? "Все процессы SSH остановлены."
-                self.workerStatuses = []
-                self.workerHandles = []
-                self.workerRevision &+= 1
-                completion?()
+                self.message = failure.map { "Не все процессы SSH остановлены: " + $0 }
+                    ?? "Все процессы SSH остановлены."
+                if failure == nil {
+                    self.workerStatuses = []
+                    self.workerHandles = []
+                    self.workerRevision &+= 1
+                }
+                // Failed stop leaves owned handles intact so the next poll
+                // can still attest which process is alive; do not announce
+                // success or drop WFP/SSH ownership evidence.
+                completion?(failure == nil)
             }
         }
     }
