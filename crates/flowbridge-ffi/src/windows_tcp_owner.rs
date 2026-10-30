@@ -381,12 +381,7 @@ mod tests {
         };
         assert_eq!(match_single_pid(&[row], &exact).unwrap(), Some(73));
         let wrong_scope = OwnerQuery {
-            local: SocketAddr::V6(SocketAddrV6::new(
-                "fe80::1".parse().unwrap(),
-                8080,
-                0,
-                8,
-            )),
+            local: SocketAddr::V6(SocketAddrV6::new("fe80::1".parse().unwrap(), 8080, 0, 8)),
             remote: exact.remote,
         };
         assert_eq!(match_single_pid(&[row], &wrong_scope).unwrap(), None);
@@ -413,7 +408,13 @@ mod tests {
         }
         assert!(match_single_pid(&[active, active], &query).is_err());
         assert!(match_single_pid(
-            &[active, TcpOwnerRow { state: 11, ..active }],
+            &[
+                active,
+                TcpOwnerRow {
+                    state: 11,
+                    ..active
+                }
+            ],
             &query
         )
         .is_err());
