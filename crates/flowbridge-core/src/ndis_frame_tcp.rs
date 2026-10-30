@@ -186,9 +186,7 @@ mod tests {
     fn insufficient_scratch_and_tuple_mismatch_never_mutate_frame() {
         let mut frame = frame(IpVersion::V4, 2);
         let before = frame.clone();
-        let tuple = inspect_ethernet_tcp(&frame).unwrap()
-            .tcp
-            .tuple;
+        let tuple = inspect_ethernet_tcp(&frame).unwrap().tcp.tuple;
         let replacement = replacement(IpVersion::V4);
         let mut tiny = [0u8; 39];
         assert_eq!(
