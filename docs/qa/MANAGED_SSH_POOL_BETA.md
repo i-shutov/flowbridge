@@ -114,6 +114,24 @@ this report. A green Rust unit test by itself is not proof of multiple real
 OpenSSH processes; use the report's `real_openssh_processes: 2`,
 distinct-child PID flag and pass/fail assertions.
 
+## Windows native desktop integration
+
+The separate Windows GUI beta work adds a persistent 1–4 worker count, with
+the default remaining one for existing desktop settings. Windows uses actual
+independent, unelevated `fb_ssh_create_json` supervisors on base SOCKS port
++ 2 × worker index. It updates per-worker readiness before selecting new
+connections, keeps the complete pool under an aggregate 128-flow allowance,
+and stops all SSH children after withdrawing engine routing. The compact
+connection form shows ready/total workers and worker SOCKS ports. Privacy-safe
+diagnostics expose each worker's admission counters without raw backend
+paths, credentials, or destination names.
+
+The elevated WFP capture helper, if separately installed/allowed on an
+authorized Windows VM, receives **only** the GUI-owned SOCKS listener. All
+attested live SSH executable paths are bypassed from application capture.
+This native GUI work must separately pass Windows compiled/screenshot QA
+before being considered integrated; Rust-only tests do not prove it.
+
 ## Remaining release and product integration gates
 
 - Full Win32/macOS GUI control to start/stop 2–4 workers, persist worker
