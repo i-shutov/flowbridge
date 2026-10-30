@@ -885,7 +885,15 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
                          if(nativeCapture.active()||nativeCapture.stopping())
                              throw std::runtime_error("Сначала остановите WFP-перехват, чтобы безопасно менять правила.");
                          auto edited=rule_editor::run(window,configuration());
-                         if(edited){setText(configEdit,*edited);fillQuick();note("Черновик правил проверен Rust; нажмите «Применить профиль» для изменения маршрута.");}
+                         if(edited){
+                             setText(configEdit,*edited);
+                             // The native EDIT control must contain all the validated
+                             // JSON. Fail rather than silently truncating a profile.
+                             if(Json::parse(utf8(configEdit))!=Json::parse(*edited))
+                                 throw std::runtime_error("Редактор Windows не сохранил весь JSON; проверьте размер профиля.");
+                             fillQuick();
+                             note("Черновик правил проверен Rust; нажмите «Применить профиль» для изменения маршрута.");
+                         }
                      }
                     else if(id==Open||id==Save)fileDialog(id==Save);
                     else if(id==BrowseKey||id==BrowseKnown||id==BrowseSsh){
