@@ -268,8 +268,8 @@ public:
         if(!RegisterClassW(&cls)&&GetLastError()!=ERROR_CLASS_ALREADY_EXISTS)
             throw std::runtime_error("Не удалось зарегистрировать окно правил.");
         RECT area{};SystemParametersInfoW(SPI_GETWORKAREA,0,&area,0);
-        int width=std::min(920,area.right-area.left-24);
-        int height=std::min(655,area.bottom-area.top-24);
+        int width=std::min(920,static_cast<int>(area.right-area.left-24));
+        int height=std::min(655,static_cast<int>(area.bottom-area.top-24));
         if(width<820||height<570)throw std::runtime_error("Недостаточно места для редактора при текущем DPI.");
         auto x=area.left+(area.right-area.left-width)/2,y=area.top+(area.bottom-area.top-height)/2;
         window_=CreateWindowExW(WS_EX_DLGMODALFRAME|WS_EX_CONTROLPARENT,WindowClass,
