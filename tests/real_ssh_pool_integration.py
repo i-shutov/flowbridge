@@ -27,6 +27,7 @@ def run(abi, engine, engine_port, target_port, primary_settings, snapshot,
     }
     secondary = None
     held = []
+    held_worker_ports = []
     primary = {'host': '127.0.0.1', 'port': primary_settings['local_port']}
     secondary_settings = dict(primary_settings, local_port=free_port())
     require(secondary_settings['local_port'] not in
@@ -64,6 +65,11 @@ def run(abi, engine, engine_port, target_port, primary_settings, snapshot,
             client.sendall(payload)
             require(exact(client, len(payload)) == payload, 'Pool stream data was changed')
             held.append(client)
+            now = abi.call('fb_engine_snapshot_json', engine)
+            matching = [c for c in now['connections'] if c['id'] > last_id and c['state'] == 'active' and c.get('worker_port')]
+            require(len(matching) == len(held),
+                    'Snapshot did not identify every held connection')
+            held_worker_ports.append(max(matching, key=lambda c: c['id'])['worker_port'])
 
         status = abi.call('fb_engine_snapshot_json', engine)
         active = [c for c in status['connections']
@@ -90,21 +96,11 @@ def run(abi, engine, engine_port, target_port, primary_settings, snapshot,
         # Previously established primary streams must be intact and pinned.
         os.kill(child['pid'], signal.SIGKILL)
         configure(True, False)
-        # Match streams by their unique SOCKS admission ID, not by a guessed
-        # ordering of the mutable connections snapshot. This matters when
-        # asynchronous handshakes complete out of submission order.
-        associated = sorted(active, key=lambda item: item['id'])
-        require(len(associated) == len(held),
-                'Cannot attest every held client to a real pool worker')
-        primary_count = counts[primary['port']]
-        require(primary_count >= 4, 'No primary-owned survivor streams')
-        # Independently verify ALL retained streams while secondary is down:
-        # only primary-owned connections are expected to survive; a secondary
-        # close is never replayed through primary.
-        primary_streams = []
-        for client, connection in zip(held, associated):
-            if connection['worker_port'] == primary['port']:
-                primary_streams.append(client)
+        # Preserve an explicit per-client worker mapping captured immediately
+        # after each successful connection; do not zip a mutable unordered
+        # snapshot with client sockets after one worker has been killed.
+        primary_streams = [client for client, worker_port in zip(held, held_worker_ports)
+                           if worker_port == primary['port']]
         require(len(primary_streams) >= 4, 'No primary-owned survivor streams')
         for i, client in enumerate(primary_streams):
             payload = b'primary-survives-peer-death\x00\xff' + bytes([i])
