@@ -68,12 +68,12 @@ fn read_version() -> Result<u32, ProbeProblem> {
         DeviceIoControl(
             handle,
             GET_VERSION_IOCTL,
-            Some((&input as *const u32).cast::<c_void>()),
-            4,
-            Some((&mut output as *mut u32).cast::<c_void>()),
-            4,
+            (&input as *const u32).cast::<c_void>(),
+            std::mem::size_of::<u32>() as u32,
+            (&mut output as *mut u32).cast::<c_void>(),
+            std::mem::size_of::<u32>() as u32,
             &mut returned,
-            None,
+            std::ptr::null_mut(),
         )
     };
     let error = if ok == 0 {
