@@ -1008,14 +1008,19 @@ pub unsafe extern "C" fn fb_engine_sync_owned_ssh_pool_json(
                 return Err("duplicate SSH supervisor handle in owned pool".into());
             }
             let status = with_ssh(*ssh_id, |supervisor| {
-                Ok(supervisor.snapshot().status)
+                serde_json::to_value(supervisor.snapshot().status)
+                    .map_err(|error| error.to_string())
             })?;
+            let port = status["local_port"].as_u64()
+                .and_then(|port| u16::try_from(port).ok())
+                .ok_or("invalid owned SSH supervisor listener port")?;
+            let ready = status["state"] == "ready" && status["pid"].is_number();
             workers.push(flowbridge_runtime::pool::WorkerInput {
                 endpoint: flowbridge_core::Endpoint {
                     host: "127.0.0.1".into(),
-                    port: status.local_port,
+                    port,
                 },
-                ready: status.state == "ready" && status.pid.is_some(),
+                ready,
             });
         }
         let primary = workers[0].endpoint.clone();
