@@ -19,13 +19,14 @@ mod windows_tcp_owner;
 /// query_json must be a live NUL-terminated UTF-8 string with keys local/remote.
 /// IP Helper tables are racy; this diagnostic NEVER authorizes packet capture.
 #[no_mangle]
-pub unsafe extern "C" fn fb_windows_tcp_owner_candidate_json(query_json: *const c_char) -> *mut c_char {
+pub unsafe extern "C" fn fb_windows_tcp_owner_candidate_json(
+    query_json: *const c_char,
+) -> *mut c_char {
     guarded(|| {
         #[cfg(windows)]
         {
-            let request = serde_json::from_str(
-                unsafe { input(query_json) }?
-            ).map_err(|e| e.to_string())?;
+            let request =
+                serde_json::from_str(unsafe { input(query_json) }?).map_err(|e| e.to_string())?;
             let candidate = windows_tcp_owner::lookup(request)?;
             Ok(json!({"ok": true, "candidate": candidate}))
         }
@@ -36,7 +37,6 @@ pub unsafe extern "C" fn fb_windows_tcp_owner_candidate_json(query_json: *const 
         }
     })
 }
-
 
 /// Passive NDISRD device/API check only; no install, signature claim, or traffic capture.
 #[no_mangle]
