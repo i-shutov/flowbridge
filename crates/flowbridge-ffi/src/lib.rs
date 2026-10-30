@@ -15,11 +15,17 @@ mod windows_packet_filter;
 pub extern "C" fn fb_windows_packet_filter_status_json() -> *mut c_char {
     guarded(|| {
         #[cfg(windows)]
-        { Ok(windows_packet_filter::report()) }
+        {
+            Ok(windows_packet_filter::report())
+        }
         #[cfg(not(windows))]
-        { Ok(json!({"backend":"ndisapi","supported":false,"device_opened":false,"api_compatible":false,
+        {
+            Ok(
+                json!({"backend":"ndisapi","supported":false,"device_opened":false,"api_compatible":false,
             "signature_status":"not_checked","packet_capture_active":false,"native_routing_accepted":false,
-            "driver_installation_attempted":false,"dns_leak_test_passed":false})) }
+            "driver_installation_attempted":false,"dns_leak_test_passed":false}),
+            )
+        }
     })
 }
 
