@@ -134,9 +134,10 @@ before being considered integrated; Rust-only tests do not prove it.
 
 ## Remaining release and product integration gates
 
-- Full Win32/macOS GUI control to start/stop 2–4 workers, persist worker
-  count, poll readiness, and expose bounded per-worker counts. The C ABI and
-  real SSH network implementation **do not by themselves complete that UI**.
+- Native Windows/macOS GUI control is implemented in the current integration
+  candidate, including 1–4 child process creation and lifecycle, saved worker
+  count, bounded metrics and supervisor-derived readiness. Exact-head CI and
+  real operating-system acceptance must pass before marking it verified.
 - Real Windows OpenSSH resource-exhaustion acceptance on a dedicated
   authorized VM, including handle/FD diagnostics at 251/252 channels and
   comparisons of explicitly chosen, trusted SSH binaries.
@@ -149,3 +150,28 @@ before being considered integrated; Rust-only tests do not prove it.
 These gates remain open until tested with the appropriate operating system
 and external prerequisites. Do not claim a public release from a green
 simulated or hosted user-mode integration alone.
+
+## Integration candidate — 2026-10-30
+
+The native GUI implementations were unified on post-#28 `main` rather than
+merging divergent feature branches: Windows ported its compact worker selector,
+process supervision, bypass of owned OpenSSH backend executables and Win32 GUI
+smoke tests; macOS ported its serial worker queue, worker-status polling,
+settings persistence and explicit-SOCKS-only pool. SwiftUI now exposes a 1–4
+worker selector. Transparent macOS Network Extension mode rejects 2–4 workers
+until separate native multiplexing validation is complete.
+
+Both platforms now call the *owned-supervisor* C API
+`fb_engine_sync_owned_ssh_pool_json`. No GUI field can manufacture a healthy
+worker or substitute a guessed local SOCKS endpoint: Rust derives the endpoint,
+actual PID and readiness from registered, live supervisor handles. A missing,
+duplicated or destroyed handle rejects the update atomically. The legacy
+single-worker gate retains 30-second bounded reconnect grace on Windows;
+multi-worker all-down fails closed. No active TCP stream is replayed or migrated.
+
+**Acceptance remains evidence-driven:** the code must pass exact-head Rust,
+Clippy, native Windows x64 GUI/installer, macOS ARM64/Intel and native DNS
+workflows. Hosted user-mode builds do not constitute a Windows signed/installed
+WFP-driver test, real Windows ssh.exe 251/252-channel saturation test, authorized
+macOS Network Extension activation test, or long-duration per-app transparent
+capture. Issue #7 remains open until actual Windows resource-load QA is run.
