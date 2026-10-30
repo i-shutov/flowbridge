@@ -109,9 +109,13 @@ pub(super) fn report() -> Value {
         Err(ProbeProblem::UnexpectedReplyLength(_)) => {
             (true, false, None, Some("invalid_version_reply"), None)
         }
-        Err(ProbeProblem::IncompatibleVersion(version)) => {
-            (true, false, Some(version), Some("incompatible_driver_api"), None)
-        }
+        Err(ProbeProblem::IncompatibleVersion(version)) => (
+            true,
+            false,
+            Some(version),
+            Some("incompatible_driver_api"),
+            None,
+        ),
     };
     json!({
         "backend": "ndisapi",
