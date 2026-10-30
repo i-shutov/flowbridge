@@ -36,7 +36,7 @@ pub(super) struct OwnerQuery {
     pub remote: SocketAddr,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct TcpOwnerRow {
     local: SocketAddr,
     remote: SocketAddr,
@@ -376,7 +376,7 @@ mod tests {
         assert_eq!(row.local.to_string(), "[fe80::1%7]:8080");
         assert_eq!(row.remote.to_string(), "[fe80::2%7]:443");
         let exact = OwnerQuery { local: row.local, remote: row.remote };
-        assert_eq!(match_single_pid(&[ipv6_row(original)], &exact).unwrap(), Some(73));
+        assert_eq!(match_single_pid(&[row], &exact).unwrap(), Some(73));
         let wrong_scope = OwnerQuery {
             local: SocketAddr::V6(SocketAddrV6::new(
                 "fe80::1".parse().unwrap(), 8080, 0, 8
