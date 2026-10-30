@@ -35,6 +35,43 @@ and [TCP port exhaustion troubleshooting](https://learn.microsoft.com/troublesho
   fail-after-budget, cleanup and normal non-Windows behaviour. These run
   **before** the Windows integration acceptance.
 
+## Follow-up: 10k passed; bare OpenSSH ceiling is observable
+
+[Exact-head follow-up run 41034072928](https://github.com/i-shutov/flowbridge/actions/runs/41034072928)
+proved that the explicit-bind test correction works: **128 actual concurrent
+authenticated channels**, **1,152 overload rejections**, **10,000/10,000**
+binary payload and half-close SSH churn sessions, **0 Winsock 10048 retries**,
+zero failed churn, and a functioning **four-process owned SSH pool**.
+Selected system client `OpenSSH_for_Windows_9.5p2` retained its PID.
+Its OS HANDLE count changed **166 → 292 held → 162 after recovery**, without
+using OS HANDLE counts to infer internal OpenSSH FD slots. The entire workflow
+remained **red** for a different, final *bare backend* probe.
+
+That final independent raw-SSH test requested tiers up to 512 and
+`min_held=128`. With an isolated external SSH process (no FlowBridge
+admission gate), one **new** SOCKS CONNECT candidate reset before its initial
+echo, and its subprocess aborted. The server log reported
+`pipe(notify_pipe) failed Too many open files` and
+`wait_until_can_do_something: ppoll: Not enough space` near the failure.
+These are server-side resource messages in the **isolated fixture**. They
+suggest an authentic Windows OpenSSH descriptor/resource limitation but
+do **not** measure the Windows system client's internal FD table or establish
+an exact 251/252 limit.
+
+The follow-up probe logic now records new-candidate CONNECT/initial-echo
+transport failure as `failed_new` and its stage/type, closes that candidate,
+then continues to assert binary integrity for **all existing** verified
+streams. A failure before the **minimum 128** still fails. Any loss of an
+established stream, byte corruption, child death, failure of recovery
+connections, or leak still fails the entire acceptance. Three negative
+regressions guard these distinctions.
+
+**No performance waiver:** a successful capacity probe describes observed
+safe baseline and observed saturation, not a claim that 512 simultaneous
+channels are safe. A 128-per-OpenSSH managed FlowBridge admission limit remains
+the reviewed conservative policy until dedicated Win10/11 evidence says
+otherwise.
+
 ## Safety and release boundaries
 
 No modification of Windows ephemeral-port range, `TcpTimedWaitDelay`, DNS,
