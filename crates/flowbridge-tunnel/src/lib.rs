@@ -1764,18 +1764,37 @@ mod tests {
     #[test]
     fn host_key_and_public_key_errors_are_actionable_and_do_not_retry() {
         for mode in ["hostkey", "auth"] {
-            let supervisor = supervisor(config(), mode);
-            supervisor.start().unwrap();
-            let failed = wait(&supervisor, |s| s.status.state == "failed");
-            assert_eq!(failed.status.attempt, 1);
-            assert_eq!(failed.status.restarts, 0);
-            let error = failed.status.last_error.unwrap();
-            assert!(error.contains(if mode == "hostkey" {
-                "fingerprint"
-            } else {
-                "SSH agent"
-            }));
-            supervisor.stop().unwrap();
+            let mut accepted = false;
+            // Fake children use test-only loopback ports. Another CI service
+            // may bind one after the configuration probe but before the child
+            // starts. Retry only that pre-launch fixture collision, never an
+            // actual host-key/authentication error or an SSH restart.
+            for _ in 0..4 {
+                let supervisor = supervisor(config(), mode);
+                supervisor.start().unwrap();
+                let failed = wait(&supervisor, |s| s.status.state == "failed");
+                if failed.status.attempt == 0 {
+                    let collision = failed.status.last_error.as_deref().is_some_and(|message| {
+                        message.starts_with("local SOCKS port ")
+                            && message.contains(" is unavailable:")
+                    });
+                    supervisor.stop().unwrap();
+                    assert!(collision, "Unexpected pre-launch SSH failure: {failed:?}");
+                    continue;
+                }
+                assert_eq!(failed.status.attempt, 1);
+                assert_eq!(failed.status.restarts, 0);
+                let error = failed.status.last_error.unwrap();
+                assert!(error.contains(if mode == "hostkey" {
+                    "fingerprint"
+                } else {
+                    "SSH agent"
+                }));
+                supervisor.stop().unwrap();
+                accepted = true;
+                break;
+            }
+            assert!(accepted, "Repeated test fixture port collisions");
         }
     }
     #[test]

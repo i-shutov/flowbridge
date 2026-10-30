@@ -121,6 +121,8 @@ jobs:
           Copy-Item target/release/flowbridge_ffi.dll build/windows/Release/
           New-Item -ItemType Directory -Force build/windows/Release/resources
           Copy-Item resources/presets.json build/windows/Release/resources/
+          & ./build/windows/Release/FlowBridgeRuleModelTest.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & ./build/windows/Release/FlowBridgeNativeSmoke.exe "$env:GITHUB_WORKSPACE/build/windows/Release/FlowBridge.exe"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build native WFP capture service

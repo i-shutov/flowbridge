@@ -1162,8 +1162,21 @@ mod ssh_and_gate_tests {
         unsafe { fb_string_free(pointer) };
         result
     }
+    // These two tests share the same bounded global SSH supervisor registry.
+    // Rust runs unit tests in parallel; holding the 16-slot test at the same
+    // time as the owned-pool test can manufacture an unrelated capacity FAIL.
+    // Serialize only the test fixtures, never the production supervisor.
+    fn serial_ssh_registry_tests() -> std::sync::MutexGuard<'static, ()> {
+        static GUARD: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+        GUARD
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+    }
+
     #[test]
     fn ssh_registry_is_bounded_checked_and_destroy_safe_without_starting_network() {
+        let _serial = serial_ssh_registry_tests();
         let invalid =
             CString::new(r#"{"host":"server","user":"alice","password":"forbidden"}"#).unwrap();
         assert_eq!(
@@ -1250,6 +1263,7 @@ mod ssh_and_gate_tests {
 
     #[test]
     fn owned_pool_cannot_claim_stopped_ssh_is_ready_or_accept_stale_handles() {
+        let _serial = serial_ssh_registry_tests();
         let profile = CString::new(include_str!("../../../examples/ssh-socks.json")).unwrap();
         let engine = unsafe { consume(fb_engine_create_json(profile.as_ptr())) };
         let id = engine["engine_id"].as_u64().unwrap();
