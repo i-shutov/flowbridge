@@ -1326,7 +1326,10 @@ mod tests {
             })
     }
 
-    fn started_mock_with_preflight_retry(mut cfg: Config, mode: &'static str) -> (Supervisor, usize) {
+    fn started_mock_with_preflight_retry(
+        mut cfg: Config,
+        mode: &'static str,
+    ) -> (Supervisor, usize) {
         const MAX_PREFLIGHT_RETRIES: usize = 3;
         for retries in 0..=MAX_PREFLIGHT_RETRIES {
             let candidate = supervisor(cfg.clone(), mode);
