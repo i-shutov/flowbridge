@@ -1308,6 +1308,102 @@ mod tests {
             thread::sleep(Duration::from_millis(10));
         }
     }
+    // GitHub-hosted macOS may give a port to another process between
+    // config()'s bind/release probe and the mock child's preflight bind.
+    // Only retry a failed *pre-child* bind. Real SSH failures, health failures,
+    // authentication and a lost running child must never be retried here.
+    fn mock_preflight_bind_collision(snapshot: &Snapshot, port: u16) -> bool {
+        snapshot.status.state == "failed"
+            && snapshot.status.pid.is_none()
+            && snapshot.status.attempt == 0
+            && snapshot.status.restarts == 0
+            && snapshot.status.last_error.as_deref().is_some_and(|error| {
+                error.starts_with(&format!("local SOCKS port {port} is unavailable: "))
+                    && (error.contains("Address already in use")
+                        || error.contains("os error 48")
+                        || error.contains("os error 98")
+                        || error.contains("os error 10048"))
+            })
+    }
+
+    fn started_mock_with_preflight_retry(
+        mut cfg: Config,
+        mode: &'static str,
+    ) -> (Supervisor, usize) {
+        const MAX_PREFLIGHT_RETRIES: usize = 3;
+        for retries in 0..=MAX_PREFLIGHT_RETRIES {
+            let candidate = supervisor(cfg.clone(), mode);
+            candidate.start().unwrap();
+            let snapshot = wait(&candidate, |s| {
+                s.status.state == "ready" || s.status.state == "failed"
+            });
+            if snapshot.status.state == "ready" {
+                return (candidate, retries);
+            }
+            assert!(
+                mock_preflight_bind_collision(&snapshot, cfg.local_port),
+                "unrelated mock SSH failure must not be retried: {snapshot:?}"
+            );
+            assert!(
+                retries < MAX_PREFLIGHT_RETRIES,
+                "mock SSH preflight port collisions exhausted {MAX_PREFLIGHT_RETRIES} retries: {snapshot:?}"
+            );
+            // Dropping the failed supervisor joins its worker. Retry only the
+            // test fixture on another checked port, never production routing.
+            drop(candidate);
+            cfg.local_port = config().local_port;
+        }
+        unreachable!("bounded preflight loop returns or fails")
+    }
+
+    #[test]
+    fn mock_preflight_collision_retries_before_spawning_child() {
+        let cfg = config();
+        let occupied = cfg.local_port;
+        let held = TcpListener::bind(("127.0.0.1", occupied)).unwrap();
+        let (candidate, retries) = started_mock_with_preflight_retry(cfg, "ready");
+        let ready = candidate.snapshot();
+        assert_eq!(retries, 1);
+        assert_eq!(ready.status.state, "ready");
+        assert_eq!(ready.status.attempt, 1);
+        assert_eq!(ready.status.restarts, 0);
+        assert_ne!(ready.status.local_port, occupied);
+        assert!(ready.status.pid.is_some());
+        candidate.stop().unwrap();
+        drop(held);
+    }
+
+    #[test]
+    fn mock_preflight_collision_filter_rejects_unrelated_failures() {
+        let cfg = config();
+        let mut snapshot = Supervisor::new(cfg.clone()).unwrap().snapshot();
+        snapshot.status.state = "failed".into();
+        snapshot.status.last_error = Some(format!(
+            "local SOCKS port {} is unavailable: Address already in use (os error 48); choose a free port",
+            cfg.local_port
+        ));
+        assert!(mock_preflight_bind_collision(&snapshot, cfg.local_port));
+        snapshot.status.attempt = 1;
+        assert!(!mock_preflight_bind_collision(&snapshot, cfg.local_port));
+        snapshot.status.attempt = 0;
+        snapshot.status.pid = Some(42);
+        assert!(!mock_preflight_bind_collision(&snapshot, cfg.local_port));
+        snapshot.status.pid = None;
+        snapshot.status.last_error = Some(format!(
+            "local SOCKS port {} is unavailable: Permission denied",
+            cfg.local_port
+        ));
+        assert!(!mock_preflight_bind_collision(&snapshot, cfg.local_port));
+        snapshot.status.last_error =
+            Some("SOCKS health probe failed; confirming before restarting SSH".into());
+        assert!(!mock_preflight_bind_collision(&snapshot, cfg.local_port));
+        snapshot.status.last_error = Some(format!(
+            "local SOCKS port {} is unavailable: Address already in use (os error 48)",
+            cfg.local_port + 1
+        ));
+        assert!(!mock_preflight_bind_collision(&snapshot, cfg.local_port));
+    }
+
     #[test]
     fn fake_child_entry() {
         let Ok(mode) = std::env::var("FLOWBRIDGE_FAKE_SSH_MODE") else {
@@ -1462,9 +1558,8 @@ mod tests {
     fn overloaded_live_child_is_not_killed_when_health_probes_fail() {
         let mut cfg = config();
         cfg.overload_quiet_ms = 100;
-        let supervisor = supervisor(cfg, "ready_then_stall");
-        supervisor.start().unwrap();
-        let ready = wait(&supervisor, |s| s.status.state == "ready");
+        let (supervisor, _) = started_mock_with_preflight_retry(cfg, "ready_then_stall");
+        let ready = supervisor.snapshot();
         stderr_line(&supervisor.state, b"accept: Too many open files");
         thread::sleep(Duration::from_millis(900));
         let degraded = supervisor.snapshot();
