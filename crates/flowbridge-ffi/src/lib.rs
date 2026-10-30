@@ -13,6 +13,35 @@ mod windows_packet_filter;
 #[cfg(windows)]
 mod windows_tcp_owner;
 
+#[cfg(windows)]
+mod windows_udp_owner;
+
+/// Read-only IPv4/IPv6 Windows UDP LOCAL bind PID candidate only.
+/// UDP tables do not contain a remote address, and this API never authorizes
+/// packet capture, DNS claims or protected routing.
+///
+/// # Safety
+/// query_json is a live NUL-terminated UTF-8 string with one key: "local".
+#[no_mangle]
+pub unsafe extern "C" fn fb_windows_udp_owner_candidate_json(
+    query_json: *const c_char,
+) -> *mut c_char {
+    guarded(|| {
+        #[cfg(windows)]
+        {
+            let request = serde_json::from_str(unsafe { input(query_json) }?)
+                .map_err(|e| e.to_string())?;
+            let candidate = windows_udp_owner::lookup(request)?;
+            Ok(json!({"ok": true, "candidate": candidate}))
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = query_json;
+            Err("Windows IP Helper UDP bind lookup is unavailable on this platform".into())
+        }
+    })
+}
+
 /// Read-only Windows IP Helper process candidate for an exact IPv4/v6 TCP tuple.
 ///
 /// # Safety
