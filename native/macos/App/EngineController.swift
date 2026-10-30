@@ -15,6 +15,7 @@ final class EngineController: ObservableObject {
     private let queue = DispatchQueue(label: "FlowBridge.engine")
     private var engine: UInt64 = 0 // accessed only on queue
     private var gateJSON = "{\"endpoint\":null,\"ready\":true,\"grace_ms\":30000}"
+    private var ownedPoolJSON: String?
     private var timer: Timer?
     private let profile = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("FlowBridge/profile.json")
@@ -69,7 +70,15 @@ final class EngineController: ObservableObject {
                     let result = try draft.withCString { try Bridge.consume(fb_engine_create_json($0)) }
                     guard let id = result["engine_id"] as? NSNumber else { throw Bridge.error("Missing engine handle") }
                     self.engine = id.uint64Value
-                    _ = try self.gateJSON.withCString { try Bridge.consume(fb_engine_set_upstream_gate_json(self.engine, $0)) }
+                    if let pool = self.ownedPoolJSON {
+                        _ = try pool.withCString {
+                            try Bridge.consume(fb_engine_sync_owned_ssh_pool_json(self.engine, $0))
+                        }
+                    } else {
+                        _ = try self.gateJSON.withCString {
+                            try Bridge.consume(fb_engine_set_upstream_gate_json(self.engine, $0))
+                        }
+                    }
                 }
                 if operation == "stop" {
                     if self.engine != 0 { _ = try Bridge.consume(fb_engine_stop_json(self.engine)) }
@@ -96,11 +105,52 @@ final class EngineController: ObservableObject {
         guard let json = try? Bridge.text(["endpoint": endpoint, "ready": ready, "grace_ms": 30000]) else { return }
         queue.async {
             self.gateJSON = json
+            self.ownedPoolJSON = nil
             guard self.engine != 0 else { return }
             do { _ = try json.withCString { try Bridge.consume(fb_engine_set_upstream_gate_json(self.engine, $0)) } }
             catch { DispatchQueue.main.async { self.message = error.localizedDescription } }
         }
     }
+    /// Bind actual SSH supervisor handles. The FFI derives readiness and
+    /// loopback ports from owned process snapshots; no readiness JSON is
+    /// accepted from SwiftUI. Transparent NE stays single-worker.
+    func setUpstreamPool(sshIDs: [UInt64]) {
+        guard (2...4).contains(sshIDs.count), !sshIDs.contains(0),
+              Set(sshIDs).count == sshIDs.count else {
+            DispatchQueue.main.async {
+                self.message = "Недопустимые или повторяющиеся SSH supervisor handles."
+            }
+            return
+        }
+        let perWorker = 128 / sshIDs.count
+        let request: [String: Any] = [
+            "ssh_ids": sshIDs,
+            "limits": [
+                "max_flows": perWorker, "max_opening": min(16, perWorker),
+                "max_queued": 64 / sshIDs.count, "wait_timeout_ms": 10000
+            ],
+            "aggregate_max_flows": 128
+        ]
+        do {
+            let json = try Bridge.text(request)
+            queue.async {
+                self.ownedPoolJSON = json
+                guard self.engine != 0 else { return }
+                do {
+                    _ = try json.withCString {
+                        try Bridge.consume(fb_engine_sync_owned_ssh_pool_json(self.engine, $0))
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        self.message = "Ошибка SSH-пула: " + error.localizedDescription
+                    }
+                }
+            }
+        } catch {
+            message = error.localizedDescription
+        }
+    }
+
     func persist(_ text: String) throws {
         try FileManager.default.createDirectory(at: profile.deletingLastPathComponent(), withIntermediateDirectories: true,
                                               attributes: [.posixPermissions: 0o700])

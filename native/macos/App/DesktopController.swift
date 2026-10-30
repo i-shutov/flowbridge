@@ -15,6 +15,9 @@ final class DesktopController: ObservableObject {
     private var waitingForNative = false
     private var pendingNativeProfile: String?
     private var previousSSHState = ""
+    private var previousWorkerRevision: UInt64 = 0
+    private var livePoolWorkers = 1
+    private var activeSshBasePort = 1080
     private let file = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("FlowBridge/desktop.json")
     init() {
@@ -41,8 +44,14 @@ final class DesktopController: ObservableObject {
         }
         object["listen"] = engine.listen
         if settings.integratedSSH {
-            guard Int(engine.listen.split(separator: ":").last ?? "") != settings.localPort else {
-                throw Bridge.error("Порт SSH SOCKS должен отличаться от входного порта FlowBridge.")
+            let count = settings.sshWorkers ?? 1
+            let ingress = Int(engine.listen.split(separator: ":").last ?? "")
+            guard (1...4).contains(count), settings.localPort > 0,
+                  settings.localPort + 2 * (count - 1) <= 65535 else {
+                throw Bridge.error("Пул SSH: от 1 до 4 процессов. Проверьте диапазон портов.")
+            }
+            guard !(0..<count).contains(where: { ingress == settings.localPort + 2 * $0 }) else {
+                throw Bridge.error("Порт FlowBridge пересекается с SOCKS-портом SSH-пула.")
             }
             var proxies = object["proxies"] as? [[String: Any]] ?? []
             proxies.removeAll { $0["id"] as? String == "flowbridge-ssh" }
@@ -84,8 +93,17 @@ final class DesktopController: ObservableObject {
     func start() {
         guard !busy, !engine.running, !native.active else { return }
         do {
-            guard saveSettings() else { return }
+            let count = settings.sshWorkers ?? 1
+            guard (1...4).contains(count) else {
+                throw Bridge.error("Поддерживается от одного до четырёх SSH-процессов.")
+            }
+            if settings.mode == 1 && settings.integratedSSH && count > 1 {
+                throw Bridge.error("На macOS пул SSH доступен пока только в явном SOCKS5. Прозрачный Network Extension должен использовать один проверенный SSH-процесс.")
+            }
             var profile = try configuredProfile()
+            guard saveSettings() else { return }
+            livePoolWorkers = settings.integratedSSH ? count : 1
+            activeSshBasePort = settings.localPort
             native.remoteDNS = nil
             let remoteDNS = settings.mode == 1 && (settings.remoteDNS ?? true)
             if remoteDNS {
@@ -134,7 +152,11 @@ final class DesktopController: ObservableObject {
                 ssh.start(settings) { success in
                     guard self.revision == version else { return }
                     if success {
-                        self.engine.setUpstreamGate(port:self.settings.localPort,ready:true)
+                        if self.livePoolWorkers > 1 && self.settings.mode == 0 {
+                            self.engine.setUpstreamPool(sshIDs: self.ssh.workerHandles)
+                        } else {
+                            self.engine.setUpstreamGate(port: self.activeSshBasePort, ready: true)
+                        }
                         let useResolver: (String) -> Void = { resolver in
                             guard self.revision == version else { return }
                             self.native.remoteDNS = ["resolver":["host":resolver,"port":53],"timeout_ms":5000]
@@ -160,9 +182,17 @@ final class DesktopController: ObservableObject {
     }
     private func tick() {
         native.upstreamReady = !settings.integratedSSH || ssh.state == "ready"
-        if ssh.state != previousSSHState {
+        if livePoolWorkers > 1 && settings.mode == 0 {
+            if ssh.workerRevision != previousWorkerRevision {
+                previousWorkerRevision = ssh.workerRevision
+                if engine.running && ssh.workerHandles.count == livePoolWorkers {
+                    engine.setUpstreamPool(sshIDs: ssh.workerHandles)
+                }
+            }
+        } else if ssh.state != previousSSHState {
             previousSSHState = ssh.state
-            engine.setUpstreamGate(port: settings.integratedSSH ? settings.localPort : nil, ready: !settings.integratedSSH || ssh.state == "ready")
+            engine.setUpstreamGate(port: settings.integratedSSH ? activeSshBasePort : nil,
+                                   ready: !settings.integratedSSH || ssh.state == "ready")
         }
         guard waitingForNative else { return }
         if native.active {
@@ -191,7 +221,18 @@ final class DesktopController: ObservableObject {
         let stopSSH = { (success: Bool) in
             guard self.revision == version else { return }
             guard success else { self.busy = false; self.message = "Остановка маршрутизации не подтверждена. SSH сохранён."; completion?(false); return }
-            self.ssh.stop { guard self.revision == version else { return }; self.busy = false; self.message = "Подключение остановлено."; completion?(true) }
+            self.engine.setUpstreamGate(port: nil, ready: false)
+            self.ssh.stop { sshStopped in
+                guard self.revision == version else { return }
+                self.busy = false
+                if sshStopped {
+                    self.livePoolWorkers = 1
+                    self.message = "Подключение остановлено."
+                } else {
+                    self.message = "Маршрутизация остановлена, но остановка SSH не подтверждена: " + self.ssh.message
+                }
+                completion?(sshStopped)
+            }
         }
         native.stopAndWait { success in
             guard self.revision == version else { return }
@@ -203,6 +244,11 @@ final class DesktopController: ObservableObject {
         guard !busy, !engine.busy, !native.busy else { return }
         guard saveSettings() else { return }
         do {
+            if engine.running && settings.integratedSSH &&
+               ((settings.sshWorkers ?? 1) != livePoolWorkers ||
+                settings.localPort != activeSshBasePort) {
+                throw Bridge.error("Число SSH-процессов и SOCKS-порты меняются только после остановки подключения.")
+            }
             if settings.mode == 1 {
                 guard native.active else { message = "Настройки сохранены. Правила приложений применятся после готовности macOS при подключении."; return }
                 let profile = settings.appSelectionEnabled ? try appProfile(configuredProfile()) : try configuredProfile()

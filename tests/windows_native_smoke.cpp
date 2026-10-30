@@ -303,10 +303,16 @@ static void assertCompactLayout(HWND window,const wchar_t* screenshot) {
     const auto sshExe=inside(286);
     const auto browseSsh=inside(287);
     const auto compression=inside(237);
-    need(IsWindowVisible(GetDlgItem(window,286))&&IsWindowVisible(GetDlgItem(window,287)),
-         "Optional OpenSSH executable input/picker is missing on managed SSH page");
-    need(compression.right+6<=sshExe.left && sshExe.right+6<=browseSsh.left,
-         "Explicit SSH executable selector overlaps compression or Browse at 980x680");
+    const auto workerLabel=inside(2030);
+    const auto workerCount=inside(288);
+    need(IsWindowVisible(GetDlgItem(window,286))&&IsWindowVisible(GetDlgItem(window,287))&&
+         IsWindowVisible(GetDlgItem(window,288)),
+         "OpenSSH executable or worker count control missing on managed SSH page");
+    need(compression.right+6<=workerLabel.left &&
+         workerLabel.right<=workerCount.left &&
+         workerCount.right+6<=sshExe.left &&
+         sshExe.right+6<=browseSsh.left,
+         "SSH worker pool, executable and Browse controls overlap at 980x680");
     const auto dnsToggle=inside(285);
     need(IsWindowVisible(GetDlgItem(window,285)),
          "Remote SSH DNS control was not shown for managed SSH");
@@ -390,6 +396,22 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
         SendMessageW(GetDlgItem(window,285),BM_SETCHECK,BST_UNCHECKED,0);
         click(window,285);
         need(!savedDns(),"Unchecked remote DNS was not saved to desktop profile");
+        HWND poolCount=GetDlgItem(window,288);
+        need(IsWindowVisible(poolCount) &&
+             SendMessageW(poolCount,CB_GETCURSEL,0,0)==0,
+             "New desktop profile must select a single SSH worker by default");
+        SendMessageW(poolCount,CB_SETCURSEL,1,0);
+        click(window,240);
+        auto savedWorkers=[&] {
+            std::ifstream in(desktopFile,std::ios::binary);
+            need(in.good(),"Desktop pool settings not persisted");
+            Json saved=Json::parse(in);
+            return saved.value("ssh_workers",0);
+        };
+        need(savedWorkers()==2,"Two SSH workers were not saved to desktop profile");
+        SendMessageW(poolCount,CB_SETCURSEL,0,0);
+        click(window,240);
+        need(savedWorkers()==1,"Single-worker desktop setting was not restored");
         waitFor([&]{return IsWindowEnabled(GetDlgItem(window,285));},
                 "Remote DNS checkbox remained busy");
         SendMessageW(GetDlgItem(window,285),BM_SETCHECK,BST_CHECKED,0);
@@ -486,7 +508,16 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
         click(window,stopId); waitFor([&]{ return windowText(GetDlgItem(window,statusId)).find(L"Остановлено |")!=std::wstring::npos; },"GUI Stop failed");
         SendMessageW(GetDlgItem(window,modeId),CB_SETCURSEL,1,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(modeId,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,modeId)));
         edit(GetDlgItem(window,231),"server.example");edit(GetDlgItem(window,233),"testuser");edit(GetDlgItem(window,236),std::to_string(port));click(window,startId);
-        need(windowText(GetDlgItem(window,280)).find(L"должны отличаться")!=std::wstring::npos,"managed SSH allowed ingress/local-port collision");need(IsWindowEnabled(GetDlgItem(window,startId)),"collision rejection left start pending");
+        need(windowText(GetDlgItem(window,280)).find(L"пересекается")!=std::wstring::npos,
+             "managed SSH allowed ingress/primary-local-port collision");
+        need(IsWindowEnabled(GetDlgItem(window,startId)),"collision rejection left start pending");
+        // The second worker has its own port (base + 2); it too must be
+        // excluded from the GUI's ingress listener before launching SSH.
+        SendMessageW(GetDlgItem(window,288),CB_SETCURSEL,1,0);
+        edit(GetDlgItem(window,236),std::to_string(port-2));click(window,startId);
+        need(windowText(GetDlgItem(window,280)).find(L"пересекается")!=std::wstring::npos,
+             "managed SSH pool allowed ingress/secondary-port recursion");
+        SendMessageW(GetDlgItem(window,288),CB_SETCURSEL,0,0);
         edit(GetDlgItem(window,236),"1080");SendMessageW(GetDlgItem(window,modeId),CB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(modeId,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,modeId)));edit(GetDlgItem(window,editorId),changed.dump());
         click(window,202);need(IsWindow(GetDlgItem(window,282))&&IsWindow(GetDlgItem(window,283))&&IsWindow(GetDlgItem(window,284)),"Native capture GUI controls absent");
         waitFor([&]{return IsWindowEnabled(GetDlgItem(window,260));},"bounded application discovery did not finish");

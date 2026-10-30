@@ -16,6 +16,15 @@ The prepared VM-only scripts now cover IPv4/IPv6 ALE redirect, TCP-only/UDP bypa
 * Build Rust FFI + native helper and `FlowBridgeWfpScopeQA.exe`; place `flowbridge_ffi.dll` beside the helper. Then run `FLOWBRIDGE_WFP_VM=1 python tests/windows_wfp_redirect_runtime.py --helper <absolute-helper> --probe <absolute-test-exe> --output <report.json>` from an elevated terminal. The optional GitHub Actions job uses the self-hosted `flowbridge-wfp-vm` runner label.
 * Save reports and reproduce both stop and forced GUI termination. Inspect WFP filters after exit. Revert the VM snapshot on failure rather than testing on a daily-use machine.
 
+### Independent user-owned SSH pool handoff
+
+A Windows GUI-managed 2–4 SSH pool (if configured) still runs in the
+unelevated GUI owner; WFP capture routes only through the normal FlowBridge
+SOCKS listener. The GUI verifies actual ready worker executable paths
+and supplies them as bypasses to avoid self-interception. Existing flows
+remain pinned to their original worker. A green hosted Windows GUI smoke
+or installer test is **not** a loaded-driver WFP capture acceptance.
+
 ### Boundaries and follow-up gates
 
 * A green ordinary GitHub CI run proves *build/install/GUI preflight/explicit SOCKS*; it **does not prove kernel driver loading, real TCP redirect, unselected QUIC restrictions, remote DNS interception, or macOS extension activation**. This boundary is present in the CLI preflight and package manifest.
