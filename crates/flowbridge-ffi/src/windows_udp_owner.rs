@@ -12,13 +12,11 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6};
 use std::ptr::{null_mut, read_unaligned};
 use windows_sys::Win32::Foundation::GetLastError;
 use windows_sys::Win32::NetworkManagement::IpHelper::{
-    GetExtendedUdpTable, MIB_UDP6ROW_OWNER_PID, MIB_UDP6TABLE_OWNER_PID,
-    MIB_UDPROW_OWNER_PID, MIB_UDPTABLE_OWNER_PID, UDP_TABLE_OWNER_PID,
+    GetExtendedUdpTable, MIB_UDP6ROW_OWNER_PID, MIB_UDP6TABLE_OWNER_PID, MIB_UDPROW_OWNER_PID,
+    MIB_UDPTABLE_OWNER_PID, UDP_TABLE_OWNER_PID,
 };
 use windows_sys::Win32::Networking::WinSock::{AF_INET, AF_INET6};
-use windows_sys::Win32::System::Threading::{
-    OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
-};
+use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
 
 use super::windows_tcp_owner::{process_evidence, OwnedProcess};
 
@@ -68,16 +66,8 @@ fn read_table(af: u32) -> Result<(Vec<u32>, usize), String> {
     let mut needed = 0u32;
     // SAFETY: Null output with valid sizing pointer is the documented
     // GetExtendedUdpTable two-call protocol; no system configuration changes.
-    let first = unsafe {
-        GetExtendedUdpTable(
-            null_mut(),
-            &mut needed,
-            0,
-            af,
-            UDP_TABLE_OWNER_PID,
-            0,
-        )
-    };
+    let first =
+        unsafe { GetExtendedUdpTable(null_mut(), &mut needed, 0, af, UDP_TABLE_OWNER_PID, 0) };
     if first != ERROR_INSUFFICIENT_BUFFER || needed < 4 {
         return Err(format!("UDP IP Helper sizing failed: {first}"));
     }
@@ -139,11 +129,8 @@ fn decode_rows<R: Copy>(
         let byte_index = offset + index * row_size;
         // SAFETY: The checked length and offset keep every row in the u32
         // allocation; unaligned read accounts for SDK table padding.
-        let raw = unsafe {
-            read_unaligned(
-                words.as_ptr().cast::<u8>().add(byte_index).cast::<R>(),
-            )
-        };
+        let raw =
+            unsafe { read_unaligned(words.as_ptr().cast::<u8>().add(byte_index).cast::<R>()) };
         rows.push(convert(raw));
     }
     Ok(rows)
@@ -267,7 +254,10 @@ mod tests {
     use std::net::UdpSocket;
 
     fn row(local: &str, pid: u32) -> UdpBindRow {
-        UdpBindRow { local: local.parse().unwrap(), pid }
+        UdpBindRow {
+            local: local.parse().unwrap(),
+            pid,
+        }
     }
 
     #[test]
@@ -290,7 +280,10 @@ mod tests {
         let v6row = ipv6_row(v6);
         assert_eq!(v6row.local.to_string(), "[::1]:53");
         assert_eq!(v6row.pid, 44);
-        assert_eq!(unique_bind_pid(&[v6row], "[::1]:53".parse().unwrap()).unwrap(), Some(44));
+        assert_eq!(
+            unique_bind_pid(&[v6row], "[::1]:53".parse().unwrap()).unwrap(),
+            Some(44)
+        );
     }
 
     #[test]
@@ -298,13 +291,16 @@ mod tests {
         let local: SocketAddr = "0.0.0.0:51000".parse().unwrap();
         assert_eq!(unique_bind_pid(&[], local).unwrap(), None);
         assert!(unique_bind_pid(&[row("0.0.0.0:51000", 0)], local).is_err());
-        assert!(unique_bind_pid(
-            &[row("0.0.0.0:51000", 10), row("0.0.0.0:51000", 10)], local
-        ).is_err());
-        assert!(unique_bind_pid(
-            &[row("0.0.0.0:51000", 10), row("0.0.0.0:51000", 11)], local
-        ).is_err());
-        assert_eq!(unique_bind_pid(&[row("127.0.0.1:51000", 10)], local).unwrap(), None);
+        assert!(
+            unique_bind_pid(&[row("0.0.0.0:51000", 10), row("0.0.0.0:51000", 10)], local).is_err()
+        );
+        assert!(
+            unique_bind_pid(&[row("0.0.0.0:51000", 10), row("0.0.0.0:51000", 11)], local).is_err()
+        );
+        assert_eq!(
+            unique_bind_pid(&[row("127.0.0.1:51000", 10)], local).unwrap(),
+            None
+        );
         assert!(require_stable_bind(&[], local, 10).is_err());
         assert!(require_stable_bind(&[row("0.0.0.0:51000", 11)], local, 10).is_err());
         assert!(require_stable_bind(&[row("0.0.0.0:51000", 10)], local, 10).is_ok());
@@ -321,7 +317,10 @@ mod tests {
     #[test]
     fn live_windows_udp_bind_returns_pid_but_never_packet_authorization() {
         let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
-        let result = lookup(UdpOwnerQuery { local: socket.local_addr().unwrap() }).unwrap();
+        let result = lookup(UdpOwnerQuery {
+            local: socket.local_addr().unwrap(),
+        })
+        .unwrap();
         assert_eq!(result["found"], true, "{result}");
         assert_eq!(result["pid"], std::process::id());
         assert!(result["process_creation_100ns"].as_u64().unwrap() > 0);
@@ -336,7 +335,11 @@ mod tests {
     fn invalid_query_remote_key_and_zero_port_are_denied() {
         assert!(serde_json::from_str::<UdpOwnerQuery>(
             r#"{"local":"127.0.0.1:53","remote":"192.0.2.1:443"}"#
-        ).is_err());
-        assert!(lookup(UdpOwnerQuery { local: "127.0.0.1:0".parse().unwrap() }).is_err());
+        )
+        .is_err());
+        assert!(lookup(UdpOwnerQuery {
+            local: "127.0.0.1:0".parse().unwrap()
+        })
+        .is_err());
     }
 }
