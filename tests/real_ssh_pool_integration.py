@@ -90,10 +90,21 @@ def run(abi, engine, engine_port, target_port, primary_settings, snapshot,
         # Previously established primary streams must be intact and pinned.
         os.kill(child['pid'], signal.SIGKILL)
         configure(True, False)
-        primary_streams = [
-            client for client, connection in zip(held, active)
-            if connection['worker_port'] == primary['port']
-        ]
+        # Match streams by their unique SOCKS admission ID, not by a guessed
+        # ordering of the mutable connections snapshot. This matters when
+        # asynchronous handshakes complete out of submission order.
+        associated = sorted(active, key=lambda item: item['id'])
+        require(len(associated) == len(held),
+                'Cannot attest every held client to a real pool worker')
+        primary_count = counts[primary['port']]
+        require(primary_count >= 4, 'No primary-owned survivor streams')
+        # Independently verify ALL retained streams while secondary is down:
+        # only primary-owned connections are expected to survive; a secondary
+        # close is never replayed through primary.
+        primary_streams = []
+        for client, connection in zip(held, associated):
+            if connection['worker_port'] == primary['port']:
+                primary_streams.append(client)
         require(len(primary_streams) >= 4, 'No primary-owned survivor streams')
         for i, client in enumerate(primary_streams):
             payload = b'primary-survives-peer-death\x00\xff' + bytes([i])
@@ -106,15 +117,25 @@ def run(abi, engine, engine_port, target_port, primary_settings, snapshot,
             client.close()
         held.clear()
 
-        for _ in range(12):
+        after_kill_id = max((c['id'] for c in abi.call(
+            'fb_engine_snapshot_json', engine)['connections']), default=0)
+        for _ in range(64):
             with connect(engine_port, target_port) as client:
                 payload = b'only-surviving-open-ssh'
                 client.sendall(payload)
                 require(exact(client, len(payload)) == payload,
                         'New flows did not switch to the surviving SSH worker')
-        current = abi.call('fb_engine_snapshot_json', engine)['managed_pool']
+        observed = abi.call('fb_engine_snapshot_json', engine)
+        new_connections = [c for c in observed['connections']
+                           if c['id'] > after_kill_id and c.get('worker_port')]
+        require(len(new_connections) >= 64
+                and all(c['worker_port'] == primary['port'] for c in new_connections),
+                'A new connection was assigned to the killed SSH worker')
+        current = observed['managed_pool']
         require(current['ready_workers'] == 1, 'Offline SSH worker incorrectly marked ready')
-        report['checks'].append('New selected flows exclusively use the healthy OpenSSH worker')
+        report['checks'].append('64 new TCP flows after secondary loss all used the live OpenSSH PID')
+        report['post_failure_new_flows'] = 64
+        report['post_failure_unhealthy_assignments'] = 0
 
         # With no ready SSH child, SOCKS must return failure, not DIRECT. The
         # destination is a real echo server; a leaked DIRECT would succeed.
@@ -144,7 +165,18 @@ def run(abi, engine, engine_port, target_port, primary_settings, snapshot,
             require(exact(client, 23) == b'new-ssh-child-recovered',
                     'Recovered worker pool did not route new data')
         report['replacement_child_pid_distinct'] = restored['pid'] != child['pid']
-        report['checks'].append('Recovery restores capacity for new TCP; no established-flow replay')
+        for _ in range(16):
+            with connect(engine_port, target_port) as client:
+                payload = b'recovered-two-worker-pool'
+                client.sendall(payload)
+                require(exact(client, len(payload)) == payload,
+                        'Recovered worker changed TCP payload')
+        recovered_snapshot = abi.call('fb_engine_snapshot_json', engine)['managed_pool']
+        require(recovered_snapshot['ready_workers'] == 2
+                and all(w['admission']['active_including_opening'] == 0
+                        for w in recovered_snapshot['workers']),
+                'Pool admission permits leaked after failover/recovery')
+        report['checks'].append('Recovery restores both real OpenSSH workers with zero leaked permits')
         report['passed'] = True
     except Exception as error:
         report['error'] = str(error)
