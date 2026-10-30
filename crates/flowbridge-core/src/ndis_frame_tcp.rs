@@ -145,7 +145,8 @@ mod tests {
     // Build a complete Ethernet frame with a correctly checksummed TCP option
     // header; unsupported-option tests must fail for semantics, not bad bytes.
     fn frame_with_tcp_options(version: IpVersion, tags: u8, options: &[u8]) -> Vec<u8> {
-        assert!(!options.is_empty() && options.chunks_exact(4).remainder().is_empty());
+        // TCP data offset is in 32-bit words; bit-mask avoids newer std APIs.
+        assert!(!options.is_empty() && (options.len() & 3) == 0);
         let mut wire = frame(version, tags);
         let region = inspect_l2_ip(&wire).unwrap();
         wire.truncate(region.offset + region.length);
