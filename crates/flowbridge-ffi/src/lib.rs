@@ -986,6 +986,15 @@ struct OwnedPoolInput {
     ssh_ids: Vec<u64>,
     limits: flowbridge_runtime::admission::Limits,
     aggregate_max_flows: usize,
+    // A caller can withdraw admissions, never assert a child's readiness.
+    // Keep the same budgets while paused; switching to a default single-child
+    // gate would conflict with a pool's different per-worker limits.
+    #[serde(default = "default_owned_pool_enabled")]
+    enabled: bool,
+}
+
+fn default_owned_pool_enabled() -> bool {
+    true
 }
 
 /// # Safety
@@ -1015,7 +1024,9 @@ pub unsafe extern "C" fn fb_engine_sync_owned_ssh_pool_json(
                 .as_u64()
                 .and_then(|port| u16::try_from(port).ok())
                 .ok_or("invalid owned SSH supervisor listener port")?;
-            let ready = status["state"] == "ready" && status["pid"].is_number();
+            let ready = pool.enabled
+                && status["state"] == "ready"
+                && status["pid"].as_u64().is_some_and(|pid| pid > 0);
             workers.push(flowbridge_runtime::pool::WorkerInput {
                 endpoint: flowbridge_core::Endpoint {
                     host: "127.0.0.1".into(),
@@ -1274,6 +1285,8 @@ mod ssh_and_gate_tests {
             json!({"ssh_ids":[a,0],"limits":payload["limits"],"aggregate_max_flows":4}),
             json!({"ssh_ids":[],"limits":payload["limits"],"aggregate_max_flows":4}),
             json!({"ssh_ids":[a,b],"limits":payload["limits"],"aggregate_max_flows":3}),
+            json!({"ssh_ids":[a,b],"limits":payload["limits"],"aggregate_max_flows":4,"enabled":"yes"}),
+            json!({"ssh_ids":[a,b],"limits":payload["limits"],"aggregate_max_flows":4,"ready":true}),
         ] {
             let value = CString::new(bad.to_string()).unwrap();
             assert_eq!(

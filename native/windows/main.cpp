@@ -18,6 +18,7 @@
 #include "discovery.hpp"
 #include "native_profile.hpp"
 #include "capture_launcher.hpp"
+#include "ssh_pool_policy.hpp"
 #include "flowbridge.h"
 #include "nlohmann/json.hpp"
 
@@ -280,21 +281,20 @@ class Worker {
     void gate(bool allowed) {
         if(!engine)return;
         const int base=activeSsh.value("local_port",1080);
-        if(managedActive&&activeWorkerCount>1&&allowed) {
+        if(managedActive&&activeWorkerCount>1) {
             // Rust derives each worker's port, PID and readiness from a real
             // registered supervisor. The GUI must not attest ready:true.
             const auto ids=sshIds();
             if(ids.size()!=static_cast<size_t>(activeWorkerCount))
                 throw std::runtime_error("Неполный набор владельцев SSH-пула.");
-            const int perWorker=128/activeWorkerCount;
-            const Json pool={{"ssh_ids",ids},
-                {"limits",{{"max_flows",perWorker},{"max_opening",std::min(16,perWorker)},
-                           {"max_queued",64/activeWorkerCount},{"wait_timeout_ms",10000}}},
-                {"aggregate_max_flows",128}};
+            // Pause in-place with the SAME pool budgets. A temporary single
+            // gate with the default 128 slots prevents the 64/42/32-slot pool
+            // from being installed even before its first connection.
+            const Json pool=ssh_pool_policy::ownedRequest(ids,allowed);
             response(fb_engine_sync_owned_ssh_pool_json(engine,pool.dump().c_str()));
         } else {
-            // Keep the legacy single-worker 30s reconnect grace; a not-yet-
-            // ready multi-worker pool is withdrawn before admitting flows.
+            // Preserve the legacy single-worker 30s reconnect grace.
+            // Multi-worker pause never enters this branch.
             bool ready=allowed;
             if(managedActive) {
                 const auto status=response(fb_ssh_snapshot_json(ssh)).at("status");
@@ -438,7 +438,10 @@ public:
 void enableControls() {
     for(int id:{Start,Stop,StartCapture,StopCapture,Apply,Open,Save,Proxy,Host,Port,Protocol,Config,Discover,ExportNative,ManagedMode,SshHost,SshPort,SshUser,KeyPath,KnownHosts,LocalPort,Compression,Keepalive,KeepaliveCount,SaveDesktop,BrowseKey,BrowseKnown,BrowseApp,RetryInitial,RetryMax,PresetAI,PresetWeb,PresetBoth,BlockOthers,RemoteDns,SshExecutable,BrowseSsh,SshPoolWorkers})EnableWindow(GetDlgItem(window,id),!busy&&!closing&&(!pendingStart||id==Stop||id==Discover||id==BrowseApp||id==PresetAI||id==PresetWeb||id==PresetBoth||id==BlockOthers));
     EnableWindow(GetDlgItem(window,Start),!busy&&!closing&&!engineRunning&&!pendingStart&&!nativeCapture.active());
-    EnableWindow(GetDlgItem(window,StartCapture),!busy&&!closing&&!engineRunning&&!pendingStart&&!nativeCapture.active());
+    const bool managed=SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1;
+    EnableWindow(GetDlgItem(window,StartCapture),ssh_pool_policy::captureAvailable(
+        managed,engineRunning,pendingStart,tunnelReady,busy,closing,
+        nativeCapture.active(),nativeCapture.stopping()));
     EnableWindow(GetDlgItem(window,StopCapture),!closing&&nativeCapture.active());
     setText(GetDlgItem(window,Start),pendingStart?"Подключаем…":engineRunning?"Подключено":"Подключить");
 }
@@ -849,7 +852,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
             if((id==Host||id==Port)&&event==EN_CHANGE&&!filling)quickDirty=true;
             if(id==Protocol&&event==CBN_SELCHANGE&&!filling)quickDirty=true;
             if(id==Proxy&&event==CBN_SELCHANGE)selectedProxy();
-            if(id==ManagedMode&&event==CBN_SELCHANGE){updateVisibility();layout();InvalidateRect(h,nullptr,TRUE);}
+            if(id==ManagedMode&&event==CBN_SELCHANGE){updateVisibility();layout();enableControls();InvalidateRect(h,nullptr,TRUE);}
             if(event==BN_CLICKED&&!closing){
                 if(id>=NavDashboard&&id<=NavAdvanced)switchPage(id-NavDashboard);
                 else if(id==Theme){dark=!dark;applyTheme();try{saveDesktop();}catch(const std::exception& e){note(e.what());}}
