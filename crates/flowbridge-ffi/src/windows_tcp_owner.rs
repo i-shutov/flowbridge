@@ -45,13 +45,13 @@ struct TcpOwnerRow {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-struct ProcessEvidence {
-    pid: u32,
-    created_100ns: u64,
-    path: String,
+pub(super) struct ProcessEvidence {
+    pub(super) pid: u32,
+    pub(super) created_100ns: u64,
+    pub(super) path: String,
 }
 
-struct OwnedProcess(HANDLE);
+pub(super) struct OwnedProcess(pub(super) HANDLE);
 impl Drop for OwnedProcess {
     fn drop(&mut self) {
         // SAFETY: OpenProcess returned a non-null owned handle.
@@ -229,7 +229,7 @@ fn require_stable_pid(
     Ok(())
 }
 
-fn process_evidence(process: HANDLE, pid: u32) -> Result<ProcessEvidence, String> {
+pub(super) fn process_evidence(process: HANDLE, pid: u32) -> Result<ProcessEvidence, String> {
     let mut created = FILETIME {
         dwLowDateTime: 0,
         dwHighDateTime: 0,
