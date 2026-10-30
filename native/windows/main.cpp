@@ -17,6 +17,7 @@
 #include <vector>
 #include "discovery.hpp"
 #include "native_profile.hpp"
+#include "proxifyre_export.hpp"
 #include "capture_launcher.hpp"
 #include "ssh_pool_policy.hpp"
 #include "rule_editor_win32.hpp"
@@ -637,10 +638,20 @@ void stopNativeCapture(){
     setText(GetDlgItem(window,CaptureStatus),"Останавливаем helper: снимаются WFP-фильтры и закрываются соединения.");
     note("Запрошена остановка нативного перехвата.");
 }
-void exportNative(){captureSelections();if(selectedApps.empty())throw std::runtime_error("Сначала отметьте приложения для экспорта.");auto config=Json::parse(commandConfiguration());
-    std::string target=SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1?"managed-ssh":selectedProxyId;if(target.empty())throw std::runtime_error("Добавьте и выберите upstream-прокси в разделе подключения.");
-    config=native_profile::build(std::move(config),std::vector<std::string>(selectedApps.begin(),selectedApps.end()),target,SendMessageW(GetDlgItem(window,BlockOthers),BM_GETCHECK,0,0)==BST_CHECKED);
-    response(fb_validate_json(config.dump().c_str()));auto path=chooseFile(L"Нативный профиль JSON\0*.json\0",true);if(path.empty())return;writeFile(path,config.dump(2));saveDesktop();note("Нативный профиль экспортирован; запуск перехвата производится отдельной кнопкой при доступном подписанном WFP-драйвере.");
+void exportProxiFyre() {
+    captureSelections();
+    if(selectedApps.empty())
+        throw std::runtime_error("Сначала отметьте приложения для экспорта в ProxiFyre.");
+    const auto source=commandConfiguration();
+    response(fb_validate_json(source.c_str()));
+    auto output=proxifyre_export::build(Json::parse(source),
+        std::vector<std::string>(selectedApps.begin(),selectedApps.end()),
+        SendMessageW(GetDlgItem(window,BlockOthers),BM_GETCHECK,0,0)==BST_CHECKED);
+    auto path=chooseFile(L"ProxiFyre app-config JSON\0*.json\0",true);
+    if(path.empty())return;
+    writeFile(path,output.dump(2));
+    saveDesktop();
+    note("Экспорт ProxiFyre завершён. Установите официальный ProxiFyre/Windows Packet Filter отдельно. Только выбранные TCP; DNS и UDP/QUIC не защищены.");
 }
 void showSsh(const Json& ssh,bool waiting){
     latestSshSnapshot=ssh;
@@ -811,17 +822,17 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         label(L"SSH: ключ сервера проверьте в known_hosts. DNS: только hostname в явном SOCKS5; без галочки имена блокируются, локального обхода нет. Прозрачный WFP DNS не защищён.",SshHelp,12);
         label(L"Внешний прокси управляется отдельно от FlowBridge.",SshSummary,1);
         add(L"BUTTON",L"Сохранить подключение",WS_TABSTOP,SaveDesktop,1);
-        label(L"Для SSH: сначала «Подключить» и дождитесь готовности, затем выберите EXE и «Нативный перехват». SSH остаётся без UAC. WFP-драйвер должен быть установлен отдельно.",AppsHelp,2);
+        label(L"Windows: подключите SSH, отметьте EXE и экспортируйте профиль для ProxiFyre. Microsoft-подписанный Windows Packet Filter устанавливается отдельно; WFP FlowBridge — экспериментальный.",AppsHelp,2);
         add(L"BUTTON",L"AI-приложения",WS_TABSTOP,PresetAI,2);add(L"BUTTON",L"Веб-браузеры",WS_TABSTOP,PresetWeb,2);add(L"BUTTON",L"AI + веб",WS_TABSTOP,PresetBoth,2);
         add(L"BUTTON",L"Найти приложения",WS_TABSTOP,Discover,2);add(L"BUTTON",L"Добавить EXE…",WS_TABSTOP,BrowseApp,2);
         label(L"Поиск локальный: App Paths, список установки, известные ярлыки и запущенные процессы.",ScanStatus,2);label(L"Найдено: 0 • Выбрано: 0",AppsSummary,2);
         HWND apps=add(WC_LISTVIEWW,L"",WS_BORDER|LVS_REPORT|LVS_SINGLESEL|WS_TABSTOP,AppsTable,2);ListView_SetExtendedListViewStyle(apps,LVS_EX_FULLROWSELECT|LVS_EX_CHECKBOXES|LVS_EX_DOUBLEBUFFER);
         const wchar_t* appTitles[]={L"Приложение",L"Обнаруженный путь",L"Источник",L"Уверенность"};int appWidths[]={160,420,150,160};for(int i=0;i<4;++i){LVCOLUMNW col{};col.mask=LVCF_TEXT|LVCF_WIDTH;col.pszText=const_cast<wchar_t*>(appTitles[i]);col.cx=appWidths[i];ListView_InsertColumn(apps,i,&col);}
-        label(L"В нативном профиле выбранные EXE идут через прокси; остальные — напрямую. Имена EXE не подтверждают издателя.",2018,2);
-        add(L"BUTTON",L"Блокировать остальные приложения вместо Direct",BS_AUTOCHECKBOX|WS_TABSTOP,BlockOthers,2);add(L"BUTTON",L"Экспорт профиля…",WS_TABSTOP,ExportNative,2);
-        add(L"BUTTON",L"Нативный перехват…",WS_TABSTOP,StartCapture,2);
-        add(L"BUTTON",L"Остановить перехват",WS_TABSTOP,StopCapture,2);
-        label(L"Нативный helper остановлен. Веб/AI-приложения идут напрямую, если не настроен их собственный прокси.",CaptureStatus,2);
+        label(L"ProxiFyre: выбранные EXE через SOCKS, остальные — напрямую. DNS/UDP/QUIC не защищены; сопоставление пути — подстрока.",2018,2);
+        add(L"BUTTON",L"Блокировать остальные приложения вместо Direct",BS_AUTOCHECKBOX|WS_TABSTOP,BlockOthers,2);add(L"BUTTON",L"Экспорт ProxiFyre…",WS_TABSTOP,ExportNative,2);
+        add(L"BUTTON",L"Экспериментальный WFP…",WS_TABSTOP,StartCapture,2);
+        add(L"BUTTON",L"Остановить WFP",WS_TABSTOP,StopCapture,2);
+        label(L"Перехват не запущен. Для Windows 10/11 используйте отдельно установленный ProxiFyre; собственный WFP-драйвер не входит в пакет.",CaptureStatus,2);
         add(L"BUTTON",L"Применить профиль",WS_TABSTOP,Apply,3);add(L"BUTTON",L"Правила…",WS_TABSTOP,VisualRules,3);add(L"BUTTON",L"Открыть JSON…",WS_TABSTOP,Open,3);add(L"BUTTON",L"Экспорт JSON…",WS_TABSTOP,Save,3);
         label(L"Полный профиль • правила / цепочки / listener. Критерии приложений неприменимы в локальном SOCKS-режиме.",ConfigLabel,3);
         configEdit=add(L"EDIT",L"",WS_BORDER|WS_VSCROLL|WS_HSCROLL|ES_MULTILINE|ES_AUTOVSCROLL|ES_AUTOHSCROLL|ES_WANTRETURN|WS_TABSTOP,Config,3);SendMessageW(configEdit,EM_SETLIMITTEXT,MaxBytes,0);
@@ -903,7 +914,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
                     else if(id==Discover){captureSelections();setText(GetDlgItem(h,ScanStatus),"Ищем приложения локально… Сканирование ограничено по времени и объёму.");dispatch(DiscoverCommand,{},catalog);}
                     else if(id==PresetAI||id==PresetWeb||id==PresetBoth)choosePreset(id==PresetAI?"ai":id==PresetWeb?"web":"ai_web");
                     else if(id==BrowseApp)browseApplication();
-                    else if(id==ExportNative)exportNative();
+                    else if(id==ExportNative)exportProxiFyre();
                     else if(id==StartCapture)startNativeCapture();
                     else if(id==StopCapture)stopNativeCapture();
                     else if(id==BlockOthers)saveDesktop();
