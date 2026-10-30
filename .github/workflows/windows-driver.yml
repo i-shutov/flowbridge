@@ -5,10 +5,16 @@ on:
     paths:
       - 'native/windows/wfp/**'
       - '.github/workflows/windows-driver.yml'
+      - 'tools/wfp_signing_package.py'
+      - 'tests/test_wfp_signing_package.py'
+      - 'docs/qa/WFP_MICROSOFT_SIGNING.md'
   pull_request:
     paths:
       - 'native/windows/wfp/**'
       - '.github/workflows/windows-driver.yml'
+      - 'tools/wfp_signing_package.py'
+      - 'tests/test_wfp_signing_package.py'
+      - 'docs/qa/WFP_MICROSOFT_SIGNING.md'
 permissions:
   contents: read
 concurrency:
@@ -58,6 +64,25 @@ jobs:
           } finally { Pop-Location }
           if (-not (Test-Path build/wfp-driver/FlowBridgeWfp.sys)) { throw 'Driver binary was not produced' }
           Get-FileHash build/wfp-driver/FlowBridgeWfp.sys -Algorithm SHA256 | Format-List
+      - name: Prepare and verify unsigned CAB input (never sign or install)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tests -p 'test_wfp_signing_package.py' -v
+          if ($LASTEXITCODE -ne 0) { throw "WFP signing-input regressions failed" }
+          python tools/wfp_signing_package.py --package-dir build/wfp-driver/FlowBridgeWfp --pdb build/wfp-driver/FlowBridgeWfp.pdb --out-dir build/wfp-signing-input --commit "$env:GITHUB_SHA"
+          if ($LASTEXITCODE -ne 0) { throw "Unsigned WFP submission-input verification failed" }
+          $report = Get-Content build/wfp-signing-input/wfp-signing-input.json -Raw | ConvertFrom-Json
+          if (-not $report.cabinet_generated_and_byte_verified -or $report.microsoft_hardware_signature_verified) {
+            throw "Wrong unsigned WFP signing-input classification"
+          }
+      - name: Upload unsigned Partner Center input (NOT signed or loadable)
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: FlowBridge-WFP-UNSIGNED-SIGNING-INPUT
+          path: build/wfp-signing-input/
+          if-no-files-found: error
+          retention-days: 14
       - name: Upload unsigned development driver
         uses: actions/upload-artifact@v7.0.0
         with:
