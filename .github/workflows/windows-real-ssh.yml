@@ -1,0 +1,77 @@
+name: Real Windows OpenSSH acceptance
+on:
+  pull_request:
+    paths:
+      - 'tests/*ssh*'
+      - 'tests/real_owned_pool_lifecycle.py'
+      - 'crates/flowbridge-tunnel/**'
+      - 'crates/flowbridge-runtime/**'
+      - 'crates/flowbridge-ffi/**'
+      - '.github/workflows/windows-real-ssh.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tests/*ssh*'
+      - 'tests/real_owned_pool_lifecycle.py'
+      - 'crates/flowbridge-tunnel/**'
+      - 'crates/flowbridge-runtime/**'
+      - 'crates/flowbridge-ffi/**'
+      - '.github/workflows/windows-real-ssh.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: windows-real-ssh-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  PYTHONUTF8: '1'
+  FLOWBRIDGE_HOSTED_WINDOWS_SSH: '1'
+jobs:
+  windows-openssh:
+    runs-on: windows-2025
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Reject false-positive capacity probes
+        run: python -m unittest discover -s tests -p test_windows_ssh_probe.py -v
+      - run: cargo build --locked -p flowbridge-ffi
+      - name: Fetch pinned official sshd without installing a system service
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 'flowbridge-openssh-fixture'
+          New-Item -ItemType Directory -Force $root | Out-Null
+          $archive = Join-Path $root 'OpenSSH-Win64.zip'
+          Invoke-WebRequest 'https://github.com/PowerShell/Win32-OpenSSH/releases/download/10.4.0.0p1-Preview/OpenSSH-Win64.zip' -OutFile $archive
+          $expected = 'b67ff8becd203502190ec42ac7787c24c2cd3325ed7700485fe7a1c83d2a7957'
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'Official fixture ZIP hash mismatch' }
+          Expand-Archive $archive -DestinationPath $root
+          $server = Join-Path $root 'OpenSSH-Win64/sshd.exe'
+          $client = Join-Path $env:WINDIR 'System32/OpenSSH/ssh.exe'
+          $keygen = Join-Path $env:WINDIR 'System32/OpenSSH/ssh-keygen.exe'
+          foreach ($path in @($server, $client, $keygen)) {
+            if (-not (Test-Path $path -PathType Leaf)) { throw 'Required explicitly selected binary missing; no fallback' }
+            $signature = Get-AuthenticodeSignature $path
+            if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft') { throw 'Microsoft signature verification failed' }
+          }
+          "FLOWBRIDGE_TEST_SSHD=$server" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "FLOWBRIDGE_TEST_SSH=$client" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "FLOWBRIDGE_TEST_KEYGEN=$keygen" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          New-Item -ItemType Directory -Force build/verification/windows-real-ssh | Out-Null
+          @{fixture_server_release='10.4.0.0p1-Preview'; server_zip_sha256=$expected; microsoft_signatures_valid=$true; system_ssh_client=$true; system_service_installed=$false} | ConvertTo-Json | Set-Content build/verification/windows-real-ssh/provenance.json
+      - name: Actual Windows SSH 128 held flows, 10k churn, four-worker lifecycle and backend ceiling
+        shell: pwsh
+        run: |
+          python tests/windows_real_ssh_hosted.py --ssh "$env:FLOWBRIDGE_TEST_SSH" --sshd "$env:FLOWBRIDGE_TEST_SSHD" --keygen "$env:FLOWBRIDGE_TEST_KEYGEN" --library target/debug/flowbridge_ffi.dll --output build/verification/windows-real-ssh --churn 10000
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v7.0.0
+        if: always()
+        with:
+          name: FlowBridge-real-Windows-OpenSSH
+          path: build/verification/windows-real-ssh/*.json
+          if-no-files-found: warn
+          retention-days: 14

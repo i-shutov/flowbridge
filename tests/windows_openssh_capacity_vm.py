@@ -21,11 +21,12 @@ import threading
 import time
 
 from real_ssh_capacity import exact, require
+from windows_ssh_probe_core import ResourceErrors, probe_capacity
 
 
 class Echo(socketserver.BaseRequestHandler):
     def handle(self):
-        self.request.settimeout(15)
+        self.request.settimeout(180)
         try:
             while data := self.request.recv(8192):
                 self.request.sendall(data)
@@ -108,11 +109,13 @@ def main():
     parser.add_argument("--user", required=True, help="User account on isolated loopback sshd")
     parser.add_argument("--ssh-port", type=int, default=22)
     parser.add_argument("--held", type=int, default=128)
+    parser.add_argument("--min-held", type=int, default=128,
+                        help="Minimum real concurrent byte-verified channels required to pass")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     require(sys.platform == "win32" and os.environ.get("FLOWBRIDGE_SSH_VM") == "1",
             "Authorized Windows VM and explicit FLOWBRIDGE_SSH_VM=1 required")
-    require(1 <= args.held <= 512 and 1 <= args.ssh_port <= 65535,
+    require(1 <= args.min_held <= args.held <= 512 and 1 <= args.ssh_port <= 65535,
             "Bounded capacity must be 1..512")
     require(args.user.isascii() and args.user.replace("_", "").replace("-", "").isalnum()
             and not args.user.startswith("-"), "Invalid SSH user identity")
@@ -133,7 +136,8 @@ def main():
                         "A hard OpenSSH socket ceiling is not inferred from an attempt count."],
               "external_network": False}
     ssh_process = None
-    held = []
+    resource_errors = ResourceErrors()
+    stderr_thread = None
     listener = None
     thread = None
     try:
@@ -162,8 +166,14 @@ def main():
                "-o", "ServerAliveCountMax=3",
                "-l", args.user, "127.0.0.1"]
         ssh_process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
-                                       stderr=subprocess.DEVNULL,
+                                       stderr=subprocess.PIPE,
                                        creationflags=subprocess.CREATE_NO_WINDOW)
+        def collect_stderr():
+            # Bounded readline: no raw line, hostname, key path or user saved.
+            while line := ssh_process.stderr.readline(8192):
+                resource_errors.observe(line)
+        stderr_thread = threading.Thread(target=collect_stderr, daemon=True)
+        stderr_thread.start()
         report["ssh_pid"] = ssh_process.pid
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
@@ -175,40 +185,34 @@ def main():
                 time.sleep(0.1)
         else:
             raise AssertionError("Real Windows OpenSSH SOCKS listener did not start")
-        sample = lambda stage: report["windows_handle_samples"].append(
-            {"stage": stage, "os_handle_count": windows_handle_count(ssh_process.pid)})
-        sample("baseline")
-        for size in (64, 128, 192, 256, 512):
-            wanted = min(size, args.held)
-            while len(held) < wanted:
-                try:
-                    candidate = connect(forward_port, listener.server_address[1])
-                except (OSError, EOFError, TimeoutError):
-                    candidate = None
-                if candidate is None:
-                    break
-                held.append(candidate)
-            sample(f"target_{size}")
-            if held:
-                for index in (0, len(held) // 2, len(held) - 1):
-                    verify_echo(held[index], b"FlowBridge Windows real OpenSSH\x00\xff" + bytes([index % 256]))
-            require(ssh_process.poll() is None, "OpenSSH unexpectedly exited under load")
-            report["attempts"].append({"requested_total": size,
-                                       "accepted_held": len(held),
-                                       "capacity_enforced_by_flowbridge": False})
-        for client in held:
-            client.close()
-        held.clear()
-        time.sleep(1)
-        sample("after_release")
+        def sample(stage):
+            count = windows_handle_count(ssh_process.pid)
+            require(count is not None, "Actual Windows process handle measurement unavailable")
+            report["windows_handle_samples"].append({"stage": stage, "os_handle_count": count})
+            return count
+        baseline = sample("baseline")
+        probe_capacity(lambda: connect(forward_port, listener.server_address[1]),
+                       verify_echo, lambda: ssh_process.poll() is None, sample, report,
+                       held_limit=args.held, min_held=args.min_held)
+        # OS handles and OpenSSH internal descriptor slots remain distinct.
+        deadline = time.monotonic() + 15
+        while True:
+            count = windows_handle_count(ssh_process.pid)
+            require(count is not None, "Cannot observe process handles after release")
+            if count <= baseline + 32:
+                break
+            require(time.monotonic() < deadline, "OpenSSH HANDLE count failed to return near baseline")
+            time.sleep(0.1)
+        sample("after_recovery")
+        report["resource_recovery_verified"] = True
+        report["minimum_required_held"] = args.min_held
+        report["selected_held_ceiling"] = args.held
         require(ssh_process.poll() is None, "OpenSSH exited after release")
         report["passed"] = True
     except Exception as error:
         report["error"] = str(error)
         raise
     finally:
-        for client in held:
-            client.close()
         if ssh_process:
             ssh_process.terminate()
             try:
@@ -216,6 +220,11 @@ def main():
             except subprocess.TimeoutExpired:
                 ssh_process.kill()
                 ssh_process.wait(timeout=8)
+        if stderr_thread:
+            stderr_thread.join(timeout=5)
+        if ssh_process and ssh_process.stderr:
+            ssh_process.stderr.close()
+        report["resource_error_counts"] = resource_errors.snapshot()
         if listener:
             listener.shutdown()
             listener.server_close()
