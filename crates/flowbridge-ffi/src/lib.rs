@@ -1011,7 +1011,8 @@ pub unsafe extern "C" fn fb_engine_sync_owned_ssh_pool_json(
                 serde_json::to_value(supervisor.snapshot().status)
                     .map_err(|error| error.to_string())
             })?;
-            let port = status["local_port"].as_u64()
+            let port = status["local_port"]
+                .as_u64()
                 .and_then(|port| u16::try_from(port).ok())
                 .ok_or("invalid owned SSH supervisor listener port")?;
             let ready = status["state"] == "ready" && status["pid"].is_number();
@@ -1241,12 +1242,16 @@ mod ssh_and_gate_tests {
         let profile = CString::new(include_str!("../../../examples/ssh-socks.json")).unwrap();
         let engine = unsafe { consume(fb_engine_create_json(profile.as_ptr())) };
         let id = engine["engine_id"].as_u64().unwrap();
-        let first = CString::new(r#"{"host":"test.invalid","user":"qa","local_port":1080}"#).unwrap();
-        let second = CString::new(r#"{"host":"test.invalid","user":"qa","local_port":1082}"#).unwrap();
+        let first =
+            CString::new(r#"{"host":"test.invalid","user":"qa","local_port":1080}"#).unwrap();
+        let second =
+            CString::new(r#"{"host":"test.invalid","user":"qa","local_port":1082}"#).unwrap();
         let a = unsafe { consume(fb_ssh_create_json(first.as_ptr())) }["ssh_id"]
-            .as_u64().unwrap();
+            .as_u64()
+            .unwrap();
         let b = unsafe { consume(fb_ssh_create_json(second.as_ptr())) }["ssh_id"]
-            .as_u64().unwrap();
+            .as_u64()
+            .unwrap();
         let payload = json!({
             "ssh_ids":[a,b],
             "limits":{"max_flows":2,"max_opening":1,"max_queued":2,"wait_timeout_ms":100},
@@ -1260,7 +1265,10 @@ mod ssh_and_gate_tests {
         let state = unsafe { consume(fb_engine_snapshot_json(id)) };
         assert_eq!(state["managed_pool"]["ready_workers"], 0);
         assert_eq!(state["managed_pool"]["workers"][0]["ready"], false);
-        assert_eq!(state["managed_pool"]["workers"][1]["endpoint"]["port"], 1082);
+        assert_eq!(
+            state["managed_pool"]["workers"][1]["endpoint"]["port"],
+            1082
+        );
         for bad in [
             json!({"ssh_ids":[a,a],"limits":payload["limits"],"aggregate_max_flows":4}),
             json!({"ssh_ids":[a,0],"limits":payload["limits"],"aggregate_max_flows":4}),
