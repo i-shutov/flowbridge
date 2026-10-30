@@ -77,11 +77,17 @@ fn parse(ip: &[u8]) -> Result<Parsed, PacketError> {
     let first = *ip.first().ok_or(PacketError::Truncated)?;
     let (family, tcp_start, source, destination) = match first >> 4 {
         4 => {
-            if ip.len() < 20 { return Err(PacketError::Truncated); }
+            if ip.len() < 20 {
+                return Err(PacketError::Truncated);
+            }
             let hlen = usize::from(first & 15) * 4;
-            if hlen < 20 || hlen > ip.len() { return Err(PacketError::LengthMismatch); }
+            if hlen < 20 || hlen > ip.len() {
+                return Err(PacketError::LengthMismatch);
+            }
             let total = usize::from(u16::from_be_bytes([ip[2], ip[3]]));
-            if total != ip.len() || total < hlen + 20 { return Err(PacketError::LengthMismatch); }
+            if total != ip.len() || total < hlen + 20 {
+                return Err(PacketError::LengthMismatch);
+            }
             // DF is permitted, reserved flag/MF/fragment-offset are not.
             if u16::from_be_bytes([ip[6], ip[7]]) & 0xbfff != 0 || ip[9] != 6 {
                 return Err(PacketError::Unsupported);
@@ -94,9 +100,13 @@ fn parse(ip: &[u8]) -> Result<Parsed, PacketError> {
             (Family::V4, hlen, IpAddr::V4(src), IpAddr::V4(dst))
         }
         6 => {
-            if ip.len() < 40 { return Err(PacketError::Truncated); }
+            if ip.len() < 40 {
+                return Err(PacketError::Truncated);
+            }
             // IPv6 extension headers, fragments and jumbograms not yet supported.
-            if ip[6] != 6 { return Err(PacketError::Unsupported); }
+            if ip[6] != 6 {
+                return Err(PacketError::Unsupported);
+            }
             let payload = usize::from(u16::from_be_bytes([ip[4], ip[5]]));
             if payload < 20 || 40 + payload != ip.len() {
                 return Err(PacketError::LengthMismatch);
@@ -105,17 +115,28 @@ fn parse(ip: &[u8]) -> Result<Parsed, PacketError> {
             let mut dst = [0u8; 16];
             src.copy_from_slice(&ip[8..24]);
             dst.copy_from_slice(&ip[24..40]);
-            (Family::V6, 40, IpAddr::V6(Ipv6Addr::from(src)), IpAddr::V6(Ipv6Addr::from(dst)))
+            (
+                Family::V6,
+                40,
+                IpAddr::V6(Ipv6Addr::from(src)),
+                IpAddr::V6(Ipv6Addr::from(dst)),
+            )
         }
         _ => return Err(PacketError::Unsupported),
     };
     let tcp = &ip[tcp_start..];
-    if tcp.len() < 20 { return Err(PacketError::Truncated); }
+    if tcp.len() < 20 {
+        return Err(PacketError::Truncated);
+    }
     let hlen = usize::from(tcp[12] >> 4) * 4;
-    if hlen < 20 || hlen > tcp.len() { return Err(PacketError::LengthMismatch); }
+    if hlen < 20 || hlen > tcp.len() {
+        return Err(PacketError::LengthMismatch);
+    }
     let src_port = u16::from_be_bytes([tcp[0], tcp[1]]);
     let dst_port = u16::from_be_bytes([tcp[2], tcp[3]]);
-    if src_port == 0 || dst_port == 0 { return Err(PacketError::InvalidPort); }
+    if src_port == 0 || dst_port == 0 {
+        return Err(PacketError::InvalidPort);
+    }
     if finish_checksum(pseudo_sum(ip, family, tcp.len()) + word_sum(tcp)) != 0 {
         return Err(PacketError::Checksum);
     }
@@ -148,7 +169,9 @@ pub fn rewrite_tcp_tuple(
     replacement: TcpTuple,
 ) -> Result<TcpPacket, PacketError> {
     let parsed = parse(ip)?;
-    if parsed.packet.tuple != expected { return Err(PacketError::TupleMismatch); }
+    if parsed.packet.tuple != expected {
+        return Err(PacketError::TupleMismatch);
+    }
     if replacement.source.port() == 0 || replacement.destination.port() == 0 {
         return Err(PacketError::InvalidPort);
     }
@@ -156,7 +179,9 @@ pub fn rewrite_tcp_tuple(
         Family::V4 => replacement.source.is_ipv4() && replacement.destination.is_ipv4(),
         Family::V6 => replacement.source.is_ipv6() && replacement.destination.is_ipv6(),
     };
-    if !same_family { return Err(PacketError::AddressFamilyMismatch); }
+    if !same_family {
+        return Err(PacketError::AddressFamilyMismatch);
+    }
     match (replacement.source.ip(), replacement.destination.ip()) {
         (IpAddr::V4(src), IpAddr::V4(dst)) => {
             ip[12..16].copy_from_slice(&src.octets());
@@ -185,7 +210,10 @@ mod tests {
     use super::*;
 
     fn packet(family: Family, data: &[u8]) -> Vec<u8> {
-        let t = match family { Family::V4 => 20, Family::V6 => 40 };
+        let t = match family {
+            Family::V4 => 20,
+            Family::V6 => 40,
+        };
         let mut ip = vec![0u8; t + 20 + data.len()];
         let len = ip.len();
         match family {
@@ -236,7 +264,12 @@ mod tests {
                     destination: "[::1]:10080".parse().unwrap(),
                 },
             };
-            assert_eq!(rewrite_tcp_tuple(&mut changed, current.tuple, next).unwrap().tuple, next);
+            assert_eq!(
+                rewrite_tcp_tuple(&mut changed, current.tuple, next)
+                    .unwrap()
+                    .tuple,
+                next
+            );
             rewrite_tcp_tuple(&mut changed, next, current.tuple).unwrap();
             assert_eq!(changed, original);
         }
@@ -251,7 +284,10 @@ mod tests {
             *bad.last_mut().unwrap() ^= 1;
             assert_eq!(inspect_tcp(&bad), Err(PacketError::Checksum));
             let before = bad.clone();
-            assert_eq!(rewrite_tcp_tuple(&mut bad, tuple, tuple), Err(PacketError::Checksum));
+            assert_eq!(
+                rewrite_tcp_tuple(&mut bad, tuple, tuple),
+                Err(PacketError::Checksum)
+            );
             assert_eq!(bad, before);
             let mut trailing = original.clone();
             trailing.push(0);
@@ -284,13 +320,28 @@ mod tests {
             destination: "127.0.0.1:10080".parse().unwrap(),
         };
         let mut ip = original.clone();
-        assert_eq!(rewrite_tcp_tuple(&mut ip, target, t), Err(PacketError::TupleMismatch));
+        assert_eq!(
+            rewrite_tcp_tuple(&mut ip, target, t),
+            Err(PacketError::TupleMismatch)
+        );
         assert_eq!(ip, original);
-        let invalid = TcpTuple { destination: "[::1]:10080".parse().unwrap(), ..target };
-        assert_eq!(rewrite_tcp_tuple(&mut ip, t, invalid), Err(PacketError::AddressFamilyMismatch));
+        let invalid = TcpTuple {
+            destination: "[::1]:10080".parse().unwrap(),
+            ..target
+        };
+        assert_eq!(
+            rewrite_tcp_tuple(&mut ip, t, invalid),
+            Err(PacketError::AddressFamilyMismatch)
+        );
         assert_eq!(ip, original);
-        let zero = TcpTuple { destination: "127.0.0.1:0".parse().unwrap(), ..target };
-        assert_eq!(rewrite_tcp_tuple(&mut ip, t, zero), Err(PacketError::InvalidPort));
+        let zero = TcpTuple {
+            destination: "127.0.0.1:0".parse().unwrap(),
+            ..target
+        };
+        assert_eq!(
+            rewrite_tcp_tuple(&mut ip, t, zero),
+            Err(PacketError::InvalidPort)
+        );
         assert_eq!(ip, original);
     }
 
