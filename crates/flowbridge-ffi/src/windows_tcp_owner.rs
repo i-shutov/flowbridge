@@ -13,8 +13,8 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6};
 use std::ptr::{null_mut, read_unaligned};
 use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, FILETIME, HANDLE};
 use windows_sys::Win32::NetworkManagement::IpHelper::{
-    GetExtendedTcpTable, MIB_TCP6ROW_OWNER_PID, MIB_TCP6TABLE_OWNER_PID,
-    MIB_TCPROW_OWNER_PID, MIB_TCPTABLE_OWNER_PID, TCP_TABLE_OWNER_PID_CONNECTIONS,
+    GetExtendedTcpTable, MIB_TCP6ROW_OWNER_PID, MIB_TCP6TABLE_OWNER_PID, MIB_TCPROW_OWNER_PID,
+    MIB_TCPTABLE_OWNER_PID, TCP_TABLE_OWNER_PID_CONNECTIONS,
 };
 use windows_sys::Win32::Networking::WinSock::{AF_INET, AF_INET6};
 use windows_sys::Win32::System::Threading::{
@@ -120,7 +120,9 @@ fn decode_rows<R: Copy>(
     }
     let count = words[0] as usize;
     if count > MAX_TABLE_ROWS
-        || count.checked_mul(row_bytes).and_then(|n| n.checked_add(offset))
+        || count
+            .checked_mul(row_bytes)
+            .and_then(|n| n.checked_add(offset))
             .is_none_or(|end| end > used_bytes)
     {
         return Err("IP Helper table row count exceeds buffer".into());
@@ -130,9 +132,8 @@ fn decode_rows<R: Copy>(
         let byte_index = offset + i * row_bytes;
         // SAFETY: Bounds were checked using count * size_of::<R>() + offset.
         // read_unaligned avoids assumptions about the table's row padding.
-        let row = unsafe {
-            read_unaligned(words.as_ptr().cast::<u8>().add(byte_index).cast::<R>())
-        };
+        let row =
+            unsafe { read_unaligned(words.as_ptr().cast::<u8>().add(byte_index).cast::<R>()) };
         rows.push(convert(row));
     }
     Ok(rows)
@@ -174,10 +175,16 @@ fn read_rows(af: u32) -> Result<Vec<TcpOwnerRow>, String> {
     let (data, used) = table_buffer(af)?;
     match af {
         x if x == AF_INET as u32 => decode_rows(
-            &data, used, offset_of!(MIB_TCPTABLE_OWNER_PID, table), ipv4_row,
+            &data,
+            used,
+            offset_of!(MIB_TCPTABLE_OWNER_PID, table),
+            ipv4_row,
         ),
         x if x == AF_INET6 as u32 => decode_rows(
-            &data, used, offset_of!(MIB_TCP6TABLE_OWNER_PID, table), ipv6_row,
+            &data,
+            used,
+            offset_of!(MIB_TCP6TABLE_OWNER_PID, table),
+            ipv6_row,
         ),
         _ => Err("Unsupported IP address family".into()),
     }
@@ -212,16 +219,30 @@ fn require_stable_pid(
 }
 
 fn process_evidence(process: HANDLE, pid: u32) -> Result<ProcessEvidence, String> {
-    let mut created = FILETIME { dwLowDateTime: 0, dwHighDateTime: 0 };
-    let mut exited = FILETIME { dwLowDateTime: 0, dwHighDateTime: 0 };
-    let mut kernel = FILETIME { dwLowDateTime: 0, dwHighDateTime: 0 };
-    let mut user = FILETIME { dwLowDateTime: 0, dwHighDateTime: 0 };
+    let mut created = FILETIME {
+        dwLowDateTime: 0,
+        dwHighDateTime: 0,
+    };
+    let mut exited = FILETIME {
+        dwLowDateTime: 0,
+        dwHighDateTime: 0,
+    };
+    let mut kernel = FILETIME {
+        dwLowDateTime: 0,
+        dwHighDateTime: 0,
+    };
+    let mut user = FILETIME {
+        dwLowDateTime: 0,
+        dwHighDateTime: 0,
+    };
     // SAFETY: Live process handle with query rights and four writable FILETIMEs.
     if unsafe { GetProcessTimes(process, &mut created, &mut exited, &mut kernel, &mut user) } == 0 {
-        return Err(format!("GetProcessTimes failed: {}", unsafe { GetLastError() }));
+        return Err(format!("GetProcessTimes failed: {}", unsafe {
+            GetLastError()
+        }));
     }
-    let created_100ns = (u64::from(created.dwHighDateTime) << 32)
-        | u64::from(created.dwLowDateTime);
+    let created_100ns =
+        (u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime);
     if created_100ns == 0 {
         return Err("Invalid process creation timestamp".into());
     }
@@ -229,14 +250,20 @@ fn process_evidence(process: HANDLE, pid: u32) -> Result<ProcessEvidence, String
     let mut len = name.len() as u32;
     // SAFETY: Query into an allocated and bounded UTF-16 buffer.
     if unsafe { QueryFullProcessImageNameW(process, 0, name.as_mut_ptr(), &mut len) } == 0 {
-        return Err(format!("QueryFullProcessImageNameW failed: {}", unsafe { GetLastError() }));
+        return Err(format!("QueryFullProcessImageNameW failed: {}", unsafe {
+            GetLastError()
+        }));
     }
     if len == 0 || len as usize > name.len() {
         return Err("Invalid process image name length".into());
     }
     let path = String::from_utf16(&name[..len as usize])
         .map_err(|_| "Invalid UTF-16 process image name")?;
-    Ok(ProcessEvidence { pid, created_100ns, path })
+    Ok(ProcessEvidence {
+        pid,
+        created_100ns,
+        path,
+    })
 }
 
 /// A diagnostic-only read. The returned identity MUST NOT be used to authorize
@@ -248,20 +275,28 @@ pub(super) fn lookup(query: OwnerQuery) -> Result<Value, String> {
     if query.local.port() == 0 || query.remote.port() == 0 {
         return Err("TCP owner lookup requires nonzero ports".into());
     }
-    let af = if query.local.is_ipv4() { AF_INET } else { AF_INET6 } as u32;
+    let af = if query.local.is_ipv4() {
+        AF_INET
+    } else {
+        AF_INET6
+    } as u32;
     let first = read_rows(af)?;
     let pid = match match_single_pid(&first, &query)? {
         Some(pid) => pid,
-        None => return Ok(json!({
-            "found": false, "authorizes_capture": false, "source": "iphelper_tcp_snapshot"
-        })),
+        None => {
+            return Ok(json!({
+                "found": false, "authorizes_capture": false, "source": "iphelper_tcp_snapshot"
+            }))
+        }
     };
     // SAFETY: PROCESS_QUERY_LIMITED_INFORMATION, no modification access,
     // no handle inheritance. This handle pins the process object through the
     // second ownership observation, independently of later PID recycling.
     let raw = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
     if raw.is_null() {
-        return Err(format!("OpenProcess query denied: {}", unsafe { GetLastError() }));
+        return Err(format!("OpenProcess query denied: {}", unsafe {
+            GetLastError()
+        }));
     }
     let handle = OwnedProcess(raw);
     let before = process_evidence(handle.0, pid)?;
@@ -302,7 +337,10 @@ mod tests {
         let row = ipv4_row(v4);
         assert_eq!(row.local.to_string(), "127.0.0.1:80");
         assert_eq!(row.remote.ip().to_string(), "192.0.2.8");
-        let query = OwnerQuery { local: row.local, remote: row.remote };
+        let query = OwnerQuery {
+            local: row.local,
+            remote: row.remote,
+        };
         assert_eq!(match_single_pid(&[row], &query).unwrap(), Some(42));
         let wrong = OwnerQuery {
             local: query.local,
@@ -317,24 +355,48 @@ mod tests {
             local: "127.0.0.1:12345".parse().unwrap(),
             remote: "127.0.0.1:23456".parse().unwrap(),
         };
-        let first = TcpOwnerRow { local: query.local, remote: query.remote, pid: 3 };
-        let second = TcpOwnerRow { local: query.local, remote: query.remote, pid: 4 };
+        let first = TcpOwnerRow {
+            local: query.local,
+            remote: query.remote,
+            pid: 3,
+        };
+        let second = TcpOwnerRow {
+            local: query.local,
+            remote: query.remote,
+            pid: 4,
+        };
         assert!(match_single_pid(&[first, second], &query).is_err());
         assert!(require_stable_pid(
-            &[TcpOwnerRow { local: query.local, remote: query.remote, pid: 4 }],
-            &query, 3
-        ).is_err());
+            &[TcpOwnerRow {
+                local: query.local,
+                remote: query.remote,
+                pid: 4
+            }],
+            &query,
+            3
+        )
+        .is_err());
         assert!(require_stable_pid(&[], &query, 3).is_err());
         assert!(require_stable_pid(
-            &[TcpOwnerRow { local: query.local, remote: query.remote, pid: 3 }],
-            &query, 3
-        ).is_ok());
-        assert!(match_single_pid(&[TcpOwnerRow {
-            local: query.local, remote: query.remote, pid: 0,
-        }], &query).is_err());
-        let truncated = decode_rows::<MIB_TCPROW_OWNER_PID>(
-            &[500], 4, 4, ipv4_row,
-        );
+            &[TcpOwnerRow {
+                local: query.local,
+                remote: query.remote,
+                pid: 3
+            }],
+            &query,
+            3
+        )
+        .is_ok());
+        assert!(match_single_pid(
+            &[TcpOwnerRow {
+                local: query.local,
+                remote: query.remote,
+                pid: 0,
+            }],
+            &query
+        )
+        .is_err());
+        let truncated = decode_rows::<MIB_TCPROW_OWNER_PID>(&[500], 4, 4, ipv4_row);
         assert!(truncated.is_err());
     }
 
@@ -351,7 +413,11 @@ mod tests {
         assert_eq!(result["found"], true);
         assert_eq!(result["pid"], std::process::id());
         assert!(result["process_creation_100ns"].as_u64().unwrap() > 0);
-        assert!(result["executable_path"].as_str().unwrap().to_ascii_lowercase().ends_with(".exe"));
+        assert!(result["executable_path"]
+            .as_str()
+            .unwrap()
+            .to_ascii_lowercase()
+            .ends_with(".exe"));
         assert_eq!(result["authorizes_capture"], false);
         assert_eq!(result["native_packet_attribution_proved"], false);
     }
