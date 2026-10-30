@@ -9,6 +9,8 @@ mod native_context;
 mod native_dns;
 #[cfg(windows)]
 mod windows_packet_filter;
+#[cfg(windows)]
+mod windows_ndisrd_service;
 
 #[cfg(windows)]
 mod windows_tcp_owner;
