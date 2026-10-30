@@ -318,18 +318,25 @@ mod tests {
     #[test]
     fn valid_ipv4_options_are_not_rewritten_or_forwardable() {
         let tuple = inspect_tcp(&packet(Family::V4, b"hello")).unwrap().tuple;
-        // NOP, loose source route and strict source route. Even innocuous
-        // options remain unsupported until header semantics are implemented.
-        for options in [[1u8, 1, 1, 1], [0x83, 4, 4, 0], [0x89, 4, 4, 0]] {
+        // NOP, valid loose and strict source routes with a single address.
+        // Even innocuous options remain unsupported until header semantics
+        // are implemented. LSRR=0x83, SSRR=0x89, len=7, pointer=4.
+        let cases: &[&[u8]] = &[
+            &[1, 1, 1, 1],
+            &[0x83, 7, 4, 203, 0, 113, 9, 0],
+            &[0x89, 7, 4, 203, 0, 113, 9, 0],
+        ];
+        for &options in cases {
             let mut ip = packet(Family::V4, b"hello");
-            ip.splice(20..20, options);
-            ip[0] = 0x46;
+            ip.splice(20..20, options.iter().copied());
+            ip[0] = 0x40 | (5 + options.len() / 4) as u8;
             let total = ip.len() as u16;
             ip[2..4].copy_from_slice(&total.to_be_bytes());
             ip[10..12].fill(0);
-            let checksum = finish_checksum(word_sum(&ip[..24]));
+            let header_len = 20 + options.len();
+            let checksum = finish_checksum(word_sum(&ip[..header_len]));
             ip[10..12].copy_from_slice(&checksum.to_be_bytes());
-            assert_eq!(finish_checksum(word_sum(&ip[..24])), 0);
+            assert_eq!(finish_checksum(word_sum(&ip[..header_len])), 0);
             let original = ip.clone();
             assert_eq!(inspect_tcp(&ip), Err(PacketError::Unsupported));
             assert_eq!(
