@@ -111,7 +111,22 @@ private struct Dashboard: View {
                         TextField("Пользователь", text: $desktop.settings.sshUser, prompt: Text("Имя на SSH-сервере"))
                         fileField("Приватный ключ", path: $desktop.settings.identityFile, placeholder: "SSH agent / стандартные ключи")
                         fileField("known_hosts", path: $desktop.settings.knownHostsFile, placeholder: "Стандартный файл OpenSSH")
-                        TextField("Локальный порт SSH SOCKS", value: $desktop.settings.localPort, format: .number)
+                        HStack {
+                            TextField("Локальный порт SSH SOCKS", value: $desktop.settings.localPort, format: .number)
+                            Picker("Процессов SSH", selection: Binding<Int>(
+                                get: { desktop.settings.sshWorkers ?? 1 },
+                                set: { desktop.settings.sshWorkers = $0 }
+                            )) {
+                                Text("1").tag(1)
+                                Text("2").tag(2)
+                                Text("3").tag(3)
+                                Text("4").tag(4)
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(maxWidth: 290)
+                        }
+                        Text("2–4 процесса работают только в локальном SOCKS5; прозрачный режим macOS использует один SSH.")
+                            .font(.caption).foregroundStyle(.secondary)
                         Text("Ключ или SSH agent; парольные запросы отключены. Новый сервер должен присутствовать в проверенном known_hosts. Ключ хоста не принимается автоматически.")
                             .font(.caption).foregroundStyle(.secondary)
                         DisclosureGroup("Устойчивость и параметры SSH", isExpanded: $showSSHOptions) {
