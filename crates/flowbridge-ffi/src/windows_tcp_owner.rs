@@ -200,6 +200,17 @@ fn match_single_pid(rows: &[TcpOwnerRow], query: &OwnerQuery) -> Result<Option<u
     Ok(candidate)
 }
 
+fn require_stable_pid(
+    rows: &[TcpOwnerRow],
+    query: &OwnerQuery,
+    expected: u32,
+) -> Result<(), String> {
+    if match_single_pid(rows, query)? != Some(expected) {
+        return Err("TCP ownership changed during snapshot verification".into());
+    }
+    Ok(())
+}
+
 fn process_evidence(process: HANDLE, pid: u32) -> Result<ProcessEvidence, String> {
     let mut created = FILETIME { dwLowDateTime: 0, dwHighDateTime: 0 };
     let mut exited = FILETIME { dwLowDateTime: 0, dwHighDateTime: 0 };
@@ -255,9 +266,7 @@ pub(super) fn lookup(query: OwnerQuery) -> Result<Value, String> {
     let handle = OwnedProcess(raw);
     let before = process_evidence(handle.0, pid)?;
     let second = read_rows(af)?;
-    if match_single_pid(&second, &query)? != Some(pid) {
-        return Err("TCP ownership changed during snapshot verification".into());
-    }
+    require_stable_pid(&second, &query, pid)?;
     let after = process_evidence(handle.0, pid)?;
     if before != after {
         return Err("Process identity changed during lookup".into());
@@ -311,6 +320,15 @@ mod tests {
         let first = TcpOwnerRow { local: query.local, remote: query.remote, pid: 3 };
         let second = TcpOwnerRow { local: query.local, remote: query.remote, pid: 4 };
         assert!(match_single_pid(&[first, second], &query).is_err());
+        assert!(require_stable_pid(
+            &[TcpOwnerRow { local: query.local, remote: query.remote, pid: 4 }],
+            &query, 3
+        ).is_err());
+        assert!(require_stable_pid(&[], &query, 3).is_err());
+        assert!(require_stable_pid(
+            &[TcpOwnerRow { local: query.local, remote: query.remote, pid: 3 }],
+            &query, 3
+        ).is_ok());
         assert!(match_single_pid(&[TcpOwnerRow {
             local: query.local, remote: query.remote, pid: 0,
         }], &query).is_err());
