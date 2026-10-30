@@ -54,6 +54,7 @@ final class SSHController: ObservableObject {
     @Published private(set) var status: [String: Any] = [:]
     @Published private(set) var workerStatuses: [[String: Any]] = []
     @Published private(set) var workerRevision: UInt64 = 0
+    @Published private(set) var workerHandles: [UInt64] = [] // immutable main-thread publication
     @Published private(set) var events: [[String: Any]] = []
     @Published private(set) var message = "SSH остановлен"
 
@@ -90,6 +91,7 @@ final class SSHController: ObservableObject {
             let version = revision
             pending = completion
             state = "starting"
+            workerHandles = []
             message = "Запускаем \(count) независимых SSH-процессов…"
             workerStatuses = []
             queue.async {
@@ -113,6 +115,7 @@ final class SSHController: ObservableObject {
                     }
                     DispatchQueue.main.async {
                         guard self.revision == version else { return }
+                        self.workerHandles = created
                         self.acceptWorkers(snapshots)
                     }
                 } catch {
@@ -121,6 +124,7 @@ final class SSHController: ObservableObject {
                     self.handles = []
                     DispatchQueue.main.async {
                         guard self.revision == version else { return }
+                        self.workerHandles = []
                         self.state = "failed"
                         self.message = error.localizedDescription
                         let callback = self.pending
@@ -152,6 +156,7 @@ final class SSHController: ObservableObject {
                 self.state = failure == nil ? "stopped" : "failed"
                 self.message = failure ?? "Все процессы SSH остановлены."
                 self.workerStatuses = []
+                self.workerHandles = []
                 self.workerRevision &+= 1
                 completion?()
             }
