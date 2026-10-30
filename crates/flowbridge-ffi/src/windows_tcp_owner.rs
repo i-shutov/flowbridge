@@ -25,6 +25,9 @@ const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
 const MAX_TABLE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_TABLE_ROWS: usize = 100_000;
 const MAX_PROCESS_PATH_U16: usize = 32768;
+// A stale TIME_WAIT/CLOSED/LISTEN row is not a live TCP owner candidate.
+const FIRST_ACTIVE_TCP_STATE: u32 = 3; // SYN_SENT
+const LAST_ACTIVE_TCP_STATE: u32 = 10; // LAST_ACK
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -33,10 +36,11 @@ pub(super) struct OwnerQuery {
     pub remote: SocketAddr,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct TcpOwnerRow {
     local: SocketAddr,
     remote: SocketAddr,
+    state: u32,
     pid: u32,
 }
 
@@ -149,6 +153,7 @@ fn ipv4_row(row: MIB_TCPROW_OWNER_PID) -> TcpOwnerRow {
             IpAddr::V4(Ipv4Addr::from(row.dwRemoteAddr.to_ne_bytes())),
             port(row.dwRemotePort),
         ),
+        state: row.dwState,
         pid: row.dwOwningPid,
     }
 }
@@ -167,6 +172,7 @@ fn ipv6_row(row: MIB_TCP6ROW_OWNER_PID) -> TcpOwnerRow {
             0,
             u32::from_be(row.dwRemoteScopeId),
         )),
+        state: row.dwState,
         pid: row.dwOwningPid,
     }
 }
@@ -196,11 +202,16 @@ fn match_single_pid(rows: &[TcpOwnerRow], query: &OwnerQuery) -> Result<Option<u
         if row.local != query.local || row.remote != query.remote {
             continue;
         }
+        if !(FIRST_ACTIVE_TCP_STATE..=LAST_ACTIVE_TCP_STATE).contains(&row.state) {
+            return Err("Matching TCP tuple is not in an active connection state".into());
+        }
         if row.pid == 0 {
             return Err("Zero PID in matching endpoint".into());
         }
-        if candidate.is_some_and(|existing| existing != row.pid) {
-            return Err("Ambiguous owning PIDs for the same TCP tuple".into());
+        // Duplicate tuples cannot prove a unique active connection, even
+        // when the reported PID agrees: reject snapshot/reuse ambiguity.
+        if candidate.is_some() {
+            return Err("Duplicate TCP tuple, even with identical PID".into());
         }
         candidate = Some(row.pid);
     }
@@ -350,6 +361,66 @@ mod tests {
     }
 
     #[test]
+    fn ipv6_scope_and_port_matching_is_exact() {
+        let original = MIB_TCP6ROW_OWNER_PID {
+            ucLocalAddr: "fe80::1".parse::<Ipv6Addr>().unwrap().octets(),
+            dwLocalScopeId: 7_u32.to_be(),
+            dwLocalPort: 0x901f, // network-order port 8080 on little-endian Windows
+            ucRemoteAddr: "fe80::2".parse::<Ipv6Addr>().unwrap().octets(),
+            dwRemoteScopeId: 7_u32.to_be(),
+            dwRemotePort: 0xbb01, // 443
+            dwState: 5,
+            dwOwningPid: 73,
+        };
+        let row = ipv6_row(original);
+        assert_eq!(row.local.to_string(), "[fe80::1%7]:8080");
+        assert_eq!(row.remote.to_string(), "[fe80::2%7]:443");
+        let exact = OwnerQuery {
+            local: row.local,
+            remote: row.remote,
+        };
+        assert_eq!(match_single_pid(&[row], &exact).unwrap(), Some(73));
+        let wrong_scope = OwnerQuery {
+            local: SocketAddr::V6(SocketAddrV6::new("fe80::1".parse().unwrap(), 8080, 0, 8)),
+            remote: exact.remote,
+        };
+        assert_eq!(match_single_pid(&[row], &wrong_scope).unwrap(), None);
+    }
+
+    #[test]
+    fn stale_states_and_duplicate_exact_tuples_are_ambiguous() {
+        let query = OwnerQuery {
+            local: "127.0.0.1:12345".parse().unwrap(),
+            remote: "127.0.0.1:23456".parse().unwrap(),
+        };
+        let active = TcpOwnerRow {
+            local: query.local,
+            remote: query.remote,
+            state: 5,
+            pid: 73,
+        };
+        assert_eq!(match_single_pid(&[active], &query).unwrap(), Some(73));
+        for state in [1, 2, 11, 12, u32::MAX] {
+            assert!(
+                match_single_pid(&[TcpOwnerRow { state, ..active }], &query).is_err(),
+                "state {state} must not produce an active owner"
+            );
+        }
+        assert!(match_single_pid(&[active, active], &query).is_err());
+        assert!(match_single_pid(
+            &[
+                active,
+                TcpOwnerRow {
+                    state: 11,
+                    ..active
+                }
+            ],
+            &query
+        )
+        .is_err());
+    }
+
+    #[test]
     fn ambiguous_pid_and_bad_buffer_fail_closed() {
         let query = OwnerQuery {
             local: "127.0.0.1:12345".parse().unwrap(),
@@ -358,11 +429,13 @@ mod tests {
         let first = TcpOwnerRow {
             local: query.local,
             remote: query.remote,
+            state: 5,
             pid: 3,
         };
         let second = TcpOwnerRow {
             local: query.local,
             remote: query.remote,
+            state: 5,
             pid: 4,
         };
         assert!(match_single_pid(&[first, second], &query).is_err());
@@ -370,6 +443,7 @@ mod tests {
             &[TcpOwnerRow {
                 local: query.local,
                 remote: query.remote,
+                state: 5,
                 pid: 4
             }],
             &query,
@@ -381,6 +455,7 @@ mod tests {
             &[TcpOwnerRow {
                 local: query.local,
                 remote: query.remote,
+                state: 5,
                 pid: 3
             }],
             &query,
@@ -391,6 +466,7 @@ mod tests {
             &[TcpOwnerRow {
                 local: query.local,
                 remote: query.remote,
+                state: 5,
                 pid: 0,
             }],
             &query
