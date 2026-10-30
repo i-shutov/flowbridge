@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Capacity acceptance against the actual managed OpenSSH -D process.
 
-Invoked only by ssh_real_integration.py after its disposable localhost sshd
-and ephemeral-key authentication have been verified. This is NOT Windows
-OpenSSH acceptance: Windows-specific MAX_FDS behavior requires its own run.
+Invoked after a disposable localhost sshd and ephemeral-key authentication
+have been verified. Linux /proc is the default resource sampler; the isolated
+Windows fixture explicitly injects actual Windows process HANDLE observation.
 No remote endpoints, user SSH credentials or system DNS changes are used.
 """
 import concurrent.futures
@@ -68,7 +68,7 @@ def exchange(client, payload):
 
 
 def run(abi, engine_id, listen_port, target_port, ssh_snapshot, *,
-        output, held=128, max_workers=32, churn=200):
+        output, held=128, max_workers=32, churn=200, resource_sampler=None):
     """Hold 128 real SSH streams; exercise exact 64/128/192/256/512 failed opens.
 
     Global 128 per-SSH admission is configured on the caller's managed engine
@@ -85,6 +85,7 @@ def run(abi, engine_id, listen_port, target_port, ssh_snapshot, *,
         'checks': [], 'no_external_network': True,
         'windows_fd_limit_verified': False, 'multi_worker_pool_verified': False,
     }
+    measure_resources = resource_sampler or observed_process_resources
     held_sockets = []
     start_time = time.monotonic()
     output = Path(output)
@@ -92,15 +93,12 @@ def run(abi, engine_id, listen_port, target_port, ssh_snapshot, *,
         before = ssh_snapshot()
         require(before['state'] == 'ready' and before['pid'], 'Actual OpenSSH not ready for capacity test')
         report['resource_samples'] = {}
-        report['resource_samples']['before'] = observed_process_resources(before['pid'])
+        report['resource_samples']['before'] = measure_resources(before['pid'])
         report['ssh_backend'] = {
             'version': before.get('backend_version'),
-            # backend path can contain private username / installation path;
-            # preserve a boolean, not raw local path, in uploaded reports.
             'absolute_path_observed': bool(before.get('backend_path')),
             'pid_at_start': before['pid'],
         }
-        # Parallel opens are real OpenSSH channel allocations, not mock SOCKS.
         def open_one(_):
             client = attempt(listen_port, target_port)
             require(client is not None, 'Real SSH could not hold the intended baseline')
@@ -113,7 +111,7 @@ def run(abi, engine_id, listen_port, target_port, ssh_snapshot, *,
         require(capacity['active_including_opening'] == held,
                 'Real OpenSSH streams did not consume all managed admissions')
         require(capacity['opening'] == 0, 'Real SSH handshake permit leaked after CONNECT')
-        report['resource_samples']['held_128'] = observed_process_resources(before['pid'])
+        report['resource_samples']['held_128'] = measure_resources(before['pid'])
         report['checks'].append('128 verified real SSH TCP channels held by a single managed backend')
 
         def rejected(_):
@@ -135,7 +133,7 @@ def run(abi, engine_id, listen_port, target_port, ssh_snapshot, *,
             require(ssh_snapshot()['pid'] == before['pid'],
                     'OpenSSH was unexpectedly restarted while configured capacity was full')
             report['checks'].append(f'{count} rejected new attempts; existing streams unchanged')
-        report['resource_samples']['overloaded'] = observed_process_resources(before['pid'])
+        report['resource_samples']['overloaded'] = measure_resources(before['pid'])
         report['admission_at_peak'] = abi.call('fb_engine_snapshot_json', engine_id)['managed_upstream']
         require(report['admission_at_peak']['rejected'] >= report['attempted_after_capacity'],
                 'Overload rejection counter did not account for attempted opens')
@@ -147,7 +145,7 @@ def run(abi, engine_id, listen_port, target_port, ssh_snapshot, *,
         held_sockets.clear()
         until(lambda: abi.call('fb_engine_snapshot_json', engine_id)['managed_upstream']
               ['active_including_opening'] == 0, seconds=15)
-        report['resource_samples']['after_release'] = observed_process_resources(before['pid'])
+        report['resource_samples']['after_release'] = measure_resources(before['pid'])
         report['checks'].append('Released 128 actual OpenSSH streams and verified admission permits are zero')
 
         if churn:
@@ -168,15 +166,19 @@ def run(abi, engine_id, listen_port, target_port, ssh_snapshot, *,
 
         require(ssh_snapshot()['pid'] == before['pid'],
                 'Real OpenSSH process did not survive bounded load and recovery')
-        report['resource_samples']['final'] = observed_process_resources(before['pid'])
+        report['resource_samples']['final'] = measure_resources(before['pid'])
         initial_fd = report['resource_samples']['before']['os_fd_count']
         final_fd = report['resource_samples']['final']['os_fd_count']
         if initial_fd is not None and final_fd is not None:
-            # The SSH process may legitimately keep a few extra control/fd
-            # handles after churn; detect substantial unbounded retention.
             require(final_fd <= initial_fd + 32,
                     'Linux OpenSSH final OS descriptor count exceeded baseline + 32')
             report['checks'].append('Measured Linux OS descriptors returned within baseline + 32')
+        initial_handles = report['resource_samples']['before'].get('os_handle_count')
+        final_handles = report['resource_samples']['final'].get('os_handle_count')
+        if initial_handles is not None:
+            require(final_handles is not None and final_handles <= initial_handles + 32,
+                    'Windows OpenSSH final OS HANDLE count exceeded baseline + 32')
+            report['checks'].append('Measured Windows OS HANDLE count returned within baseline + 32; not internal FD slots')
         report['ssh_backend']['pid_at_end'] = before['pid']
         report['admission_final'] = abi.call('fb_engine_snapshot_json', engine_id)['managed_upstream']
         require(report['admission_final']['active_including_opening'] == 0 and
