@@ -103,14 +103,12 @@ def main():
                 f'AllowUsers {user}', 'PasswordAuthentication no',
                 'PubkeyAuthentication yes', 'AuthenticationMethods publickey',
                 'AllowTcpForwarding local', 'GatewayPorts no',
-                'PermitOpen localhost:* 127.0.0.1:* [::1]:*', 'LogLevel ERROR',
+                'PermitOpen localhost:* 127.0.0.1:* [::1]:*', 'LogLevel VERBOSE',
                 'MaxStartups 10:30:20', 'MaxSessions 10', ''
             ]), encoding='ascii')
             secure_test_file(config)
             subprocess.run([str(args.sshd), '-t', '-f', str(config)],
                            check=True, capture_output=True, timeout=15)
-            # Local raw server log lives only in temporary fixture directory;
-            # no private keys, paths, auth log or known_hosts in published QA.
             with (root / 'sshd.log').open('wb') as server_log:
                 try:
                     daemon = subprocess.Popen([str(args.sshd), '-D', '-e', '-f', str(config)],
@@ -130,13 +128,17 @@ def main():
                                 'identity_file':str(root/'client_key'), 'known_hosts_file':str(known),
                                 'health_check_interval_ms':250,'health_check_timeout_ms':1000,
                                 'startup_timeout_ms':15000,'restart_initial_delay_ms':250,
-                                'restart_max_delay_ms':1000}
+                                'restart_max_delay_ms':1000,'max_restarts':3,'verbose_diagnostics':True}
                     supervisor = abi.call('fb_ssh_create_json',settings)['ssh_id']
                     abi.call('fb_ssh_start_json',supervisor)
                     def snapshot():
                         return abi.call('fb_ssh_snapshot_json',supervisor)['status']
-                    until(lambda: s if (s:=snapshot())['state']=='ready' and s['pid'] else False,
-                          seconds=30)
+                    def client_ready():
+                        status = snapshot()
+                        if status['state'] == 'failed':
+                            raise RuntimeError('Windows SSH supervisor failed before readiness')
+                        return status['state'] == 'ready' and status['pid']
+                    until(client_ready, seconds=30)
                     endpoint = {'host':'127.0.0.1','port':socks_port}
                     profile = {'version':1,'listen':f'127.0.0.1:{ingress}',
                                'proxies':[{'id':'ssh','kind':'socks5','endpoint':endpoint}],
@@ -161,8 +163,6 @@ def main():
                     report['owned_pool'] = {'passed':result['passed'],'independent_children':4}
                     abi.lib.fb_engine_destroy(engine); engine = 0
                     abi.lib.fb_ssh_destroy(supervisor); supervisor = 0
-                    # Bare backend capacity is characterized separately from
-                    # FlowBridge's enforced 128-flow production admission cap.
                     command = [sys.executable, str(Path(__file__).with_name('windows_openssh_capacity_vm.py')),
                                '--ssh',str(args.ssh),'--identity',str(root/'client_key'),
                                '--known-hosts',str(known),'--user',user,'--ssh-port',str(ssh_port),
@@ -172,19 +172,35 @@ def main():
                     subprocess.run(command, env=env, check=True, timeout=180)
                     report['bare_backend_probe_passed'] = True
                     report['passed'] = True
+                except Exception:
+                    def redact(value):
+                        text = str(value)
+                        for private in (str(root), root.as_posix(), user, str(args.ssh), str(args.sshd)):
+                            text = text.replace(private, '<fixture>')
+                        return text[-4000:]
+                    if supervisor:
+                        observed = abi.call('fb_ssh_snapshot_json', supervisor)
+                        report['supervisor_failure'] = {
+                            key: observed['status'].get(key) for key in
+                            ('state','pid','restarts','attempt','diagnostic_code','backend_version')}
+                        report['supervisor_failure']['redacted_stderr'] = redact('\n'.join(observed.get('stderr',[])))
+                        report['supervisor_failure']['last_error'] = redact(observed['status'].get('last_error'))
+                    server_log.flush()
+                    with (root/'sshd.log').open('rb') as diagnostics:
+                        diagnostics.seek(0,2)
+                        diagnostics.seek(max(0, diagnostics.tell()-8192))
+                        report['fixture_server_failure'] = redact(diagnostics.read().decode('utf-8',errors='replace'))
+                    raise
                 finally:
                     if engine:
                         abi.lib.fb_engine_destroy(engine); engine = 0
                     if supervisor:
                         abi.lib.fb_ssh_destroy(supervisor); supervisor = 0
                     if daemon and daemon.poll() is None:
-                        # Restrict termination to the PID we created and its
-                        # children, never Stop-Service or taskkill /IM sshd.
                         subprocess.run(['taskkill','/PID',str(daemon.pid),'/T','/F'],
                                        capture_output=True,timeout=15,check=False)
                         daemon.wait(timeout=10)
     except Exception as error:
-        # Deliberately do not publish command argv containing test key paths.
         report['error_type'] = type(error).__name__
         report['error'] = str(error) if not isinstance(error,subprocess.CalledProcessError) else 'Fixture subprocess failed'
         raise
