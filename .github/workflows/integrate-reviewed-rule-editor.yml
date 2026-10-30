@@ -2,7 +2,7 @@ name: Integrate checksum-verified Win32 rule editor
 on:
   push:
     branches: [feat/win32-visual-rule-editor-20261030]
-    paths: [tools/checkpoints/visual-rule-editor.patch]
+    paths: [tools/checkpoints/visual-rule-editor.patch, .github/workflows/integrate-reviewed-rule-editor.yml]
 permissions:
   contents: write
 concurrency:
@@ -42,7 +42,8 @@ jobs:
           subprocess.run(['git','diff','--cached','--check'],check=True)
           print('Reviewed source SHA-256:',expected)
           PY
-          git rm -- .github/workflows/integrate-reviewed-rule-editor.yml tools/checkpoints/visual-rule-editor.patch
+          git restore --staged --worktree .github/workflows/ci.yml
+          git rm -- tools/checkpoints/visual-rule-editor.patch
           git diff --cached --check
           test "$(git ls-remote origin "$GITHUB_REF" | cut -f1)" = "$GITHUB_SHA"
           git config user.name "FlowBridge Integration"
