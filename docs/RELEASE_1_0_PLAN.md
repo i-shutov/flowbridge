@@ -3,6 +3,44 @@
 **Срез:** 30 октября 2026. **Исходная база:** `main` @ `6401b40b02fa00d5ae3f84aec2ac1916c266e6ea`.
 **Текущий подтверждённый уровень:** локальная SOCKS5-бета, Windows x64 + macOS universal, собственные GUI, управляемый SSH-пул 1–4 процесса; проверенные 5/5 native/Rust jobs и 3/3 DNS jobs на exact PR head `a38fd84e`. [Checkpoint](qa/NATIVE_BETA_CHECKPOINT_20261030.md), [CI](https://github.com/i-shutov/flowbridge/actions/runs/41005277502), [DNS](https://github.com/i-shutov/flowbridge/actions/runs/41005277446).
 
+## Актуальная контрольная точка: 30 октября, после PR #33
+
+Эта секция является **живым реестром**, тогда как ссылки выше фиксируют
+исторические подтверждения на исходных SHA. CI предыдущего коммита не является
+доказательством работоспособности новой ветки.
+
+| Gate | Состояние | Основание / необходимое действие |
+|---|---|---|
+| G0 — локальные TCP SOCKS5, Rust + нативные сборки | **Есть доказанные прежние PASS, перепроверять на каждом новом SHA** | 5-job CI и DNS, точные run IDs в верхнем checkpoint |
+| G1 — нативные правила Windows | **Влито в main** | [PR #33](https://github.com/i-shutov/flowbridge/pull/33), squash `9cc3b1be`, нативный GUI smoke и строгая Rust validation |
+| G2 — правила macOS | **PR открыт, CI верифицируется** | [PR #35](https://github.com/i-shutov/flowbridge/pull/35), SwiftUI sheet / cancel-safe draft; настоящая Mac GUI/VoiceOver приёмка отдельна |
+| G3 — Windows SSH 10k churn | **PR открыт, не принят** | [PR #34](https://github.com/i-shutov/flowbridge/pull/34): предыдущий run #41027933355 остановился на 636/10000 при Winsock 10048, 3922 TIME_WAIT; починка только test harness |
+| G4 — настоящий Windows WFP | **P0, BLOCKED до driver-loaded Win10/11 evidence** | [Issue #1](https://github.com/i-shutov/flowbridge/issues/1), идентичность процесса, рабочий redirect, удаление фильтров при Stop |
+| G5 — настоящий macOS NE | **P0, BLOCKED до sign/install/approve на Mac** | [Issue #2](https://github.com/i-shutov/flowbridge/issues/2); CI-компиляция не включает entitlement |
+| G6 — удалённый DNS без утечек | **Частично; P0 native capture не принят** | [Issue #5](https://github.com/i-shutov/flowbridge/issues/5), packet evidence на обеих ОС |
+| G7 — DPI/доступность/инсталляторы | **Частично; P1 не принят** | [Issue #6](https://github.com/i-shutov/flowbridge/issues/6), реальные VM DPI и клавиатурная QA |
+
+### Разделить две контрольные цели
+
+**BETA-C (внутренняя полностью функциональная бета)**:
+пользователь на *обеих* ОС выбирает приложение и визуально задаёт
+правила, запускает собственный SSH и получает действительный перехваченный
+TCP маршрут с журналом; Start/Stop/Apply/rollback/host-key/remote-DNS
+проверены на реальном железе/VM. Для внутренней подписанной девелоперской
+сборки допускается документированный developer signing при условии,
+что system safeguards НЕ отключаются и все системные расширения действительно
+активированы. Без G4/G5/G6 не выдавать локальную explicit SOCKS-бету за BETA-C.
+
+**RC-1.0**: BETA-C плюс все R00–R10, выпускные сертификаты,
+материализованные подписанные/нотаризованные установщики, OS matrix,
+реальные TCP/DNS traces, 10k/24h ресурсная QA, ноль P0 SKIP/UNKNOWN.
+Нельзя переименовать непринятую beta в 1.0.
+
+Каждая принятая вертикаль обязана иметь `branch/head SHA → workflow run/job →
+действительный тестовый сценарий → JSON/pcap/screenshot artifact + SHA-256 →
+обнаруженные ограничения`. При изменении HEAD статус exact-head CI снова
+становится **PENDING**; статус безопасности не наследуется автоматически.
+
 **Принцип:** «1.0» обозначает проверенное приложение с реальным прозрачным TCP-перехватом на **обеих** платформах, а не число коммитов или успешно собранный WFP/NE модуль. Ни один обязательный ручной тест нельзя заменить зелёным hosted CI.
 
 ## 0. Контракт релиза 1.0 (scope freeze)
