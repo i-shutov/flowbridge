@@ -57,9 +57,6 @@ int main(void) {
         return 8;
     }
     fb_string_free(tcp);
-        return 8;
-    }
-    fb_string_free(tcp);
     puts("C ABI smoke: 1000 validate/evaluate/free cycles and null handling passed");
     return 0;
 }
