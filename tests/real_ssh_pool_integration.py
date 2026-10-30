@@ -167,11 +167,14 @@ def run(abi, engine, engine_port, target_port, primary_settings, snapshot,
                 client.sendall(payload)
                 require(exact(client, len(payload)) == payload,
                         'Recovered worker changed TCP payload')
-        recovered_snapshot = abi.call('fb_engine_snapshot_json', engine)['managed_pool']
-        require(recovered_snapshot['ready_workers'] == 2
-                and all(w['admission']['active_including_opening'] == 0
-                        for w in recovered_snapshot['workers']),
-                'Pool admission permits leaked after failover/recovery')
+        recovered_snapshot = until(
+            lambda: p if (p := abi.call('fb_engine_snapshot_json', engine)['managed_pool'])
+            ['ready_workers'] == 2
+            and all(w['admission']['active_including_opening'] == 0
+                    for w in p['workers']) else False,
+            seconds=15)
+        require(recovered_snapshot['ready_workers'] == 2,
+                'Pool did not restore two ready OpenSSH workers')
         report['checks'].append('Recovery restores both real OpenSSH workers with zero leaked permits')
         report['passed'] = True
     except Exception as error:
