@@ -2,7 +2,9 @@
 
 Нативное приложение для маршрутизации TCP через SOCKS5, SOCKS4a и HTTP CONNECT, с общим ядром на Rust, Win32-интерфейсом и SwiftUI-интерфейсом. Самостоятельная реализация функций, исследованных на примере Proxifier 4.14.
 
-**Этот выпуск содержит собранное приложение и установщик Windows x64 для локального SOCKS-режима. Полная прозрачная замена Proxifier пока не готова к установке: Windows WFP требует сборки/подписи драйвера и испытаний, macOS — сборки Xcode и проверки расширения на Mac.** Исходники этих модулей включены; режимы не выдаются за проверенные по факту наличия кода.
+**Внутренняя бета локального SOCKS5:** нативные Windows x64 и macOS universal `.pkg` действительно собраны, установлены, запущены и проверены в GitHub Actions. На обеих платформах реализовано управление пулом из 1–4 независимых SSH-процессов. **Полноценная прозрачная замена Proxifier пока НЕ принята:** Windows требует подписанного/установленного WFP-драйвера и реальных VM-испытаний, macOS — утверждённой и проверенной Network Extension. Релизные пакеты не подписаны издателем и не объявляются production-ready.**
+
+**Чекпойнт 30 октября 2026:** [итоговые доказательства и незакрытые gates](docs/qa/NATIVE_BETA_CHECKPOINT_20261030.md); [PR #29](https://github.com/i-shutov/flowbridge/pull/29) в `main`; [5/5 Windows/macOS/Linux CI](https://github.com/i-shutov/flowbridge/actions/runs/41005277502) и [3/3 Native DNS CI](https://github.com/i-shutov/flowbridge/actions/runs/41005277446) — SUCCESS. Артефакты доступны в GitHub Actions в пределах срока хранения.
 
 ## Установка на Windows
 
@@ -14,7 +16,9 @@
 
 OpenSSH client должен быть установлен в системе. В этом выпуске поддержаны key/agent authentication и строгая проверка host key; неизвестный/изменившийся серверный ключ требует проверки fingerprint и регистрации в known_hosts. Парольная форма, первый trust wizard и secret stores пока не реализованы. Параметры не передаются shell, пароли в desktop JSON не сохраняются.
 
-Во время переподключения локальный SOCKS остаётся на `127.0.0.1:1081`. **Новые** соединения могут ждать до 30 секунд; старые TCP/AI streams при полном разрыве SSH могут оборваться. Прикладные запросы не повторяются автоматически. Для сохранения старых TCP нужен дополнительный remote relay — он спроектирован, но ещё не реализован. Подробно: [SSH_AND_RECONNECT.md](docs/SSH_AND_RECONNECT.md).
+В интерфейсах Windows/macOS можно выбрать **1–4 независимых SSH-процесса** с отдельными SOCKS-портами `1080`, `1082`, `1084`, `1086` (при базе 1080). Пул распределяет **новые** соединения по доступным процессам и ограничен общим бюджетом в 128 одновременных потоков. На macOS многопроцессный пул доступен только в явном режиме SOCKS5, без заявлений о прозрачном NE.
+
+Во время переподключения локальный SOCKS остаётся на `127.0.0.1:1081`. При **одном** SSH-процессе новые соединения могут ждать до 30 секунд. При **нескольких** SSH-процессах новые потоки переходят на здорового участника пула, а когда все недоступны — отвергаются без DIRECT. Старые TCP/AI streams, связанные с потерянным SSH-процессом, могут оборваться; действующие потоки других процессов сохраняют исходное соединение. Прикладные запросы не повторяются автоматически. Для восстановления старых TCP-сессий нужен дополнительный remote relay — пока не реализован. Подробно: [SSH_AND_RECONNECT.md](docs/SSH_AND_RECONNECT.md).
 
 ### Уже существующий прокси
 
@@ -55,13 +59,13 @@ Reload атомарный: ошибочный профиль оставляет 
 | Direct / Block / Proxy / Chain | Правила по порядку, hosts, CIDR, ports; приложение только при достоверной платформенной идентичности |
 | Аутентификация upstream | SOCKS5 username/password, HTTP Basic; `password_env` вместо пароля в JSON |
 | Управление движком | Start / Stop / atomic reload / live counters, общий runtime для CLI и GUI |
-| Управляемый SSH | Нативный OpenSSH child, watchdog, keepalive/backoff, readiness, Stop, ожидание новых local connections при reconnect |
+| Управляемый SSH | 1–4 отдельных нативных OpenSSH supervisor, отслеживание PID/readiness, watchdog, bounded per-worker admission и общий лимит 128 новых/живых потоков, Stop; живые TCP не мигрируют между SSH-процессами |
 | Шаблоны и discovery | AI / Web / AI + Web, локальный поиск, выбор приложений и системный профиль с честным scope |
 | Windows GUI и установщик | Реальные PE32+ x64, Win32, Rust DLL, NSIS; точные результаты проверки в VERIFICATION |
 | Windows WFP | Собственные исходники драйвера/SCM-службы; C ABI передаёт redirect records до connect; не активируется поставляемым установщиком |
-| macOS | SwiftUI, TCP Network Extension, activation manager, scripts для universal `.app`/`.pkg`; Apple SDK build/run ещё не выполнялся |
+| macOS | SwiftUI, проверенная сборка универсального local `.pkg`, установка/запуск/обновление на macOS CI; код TCP Network Extension собирается через Xcode, но реальная активация/подпись/системный перехват ещё не приняты |
 | UDP/QUIC, системный DNS, kill switch | Не реализованы; не обещаются |
-| TLS до upstream, failover, PPF/PPX import | Не реализованы |
+| TLS до upstream, перенос уже установленных TCP-сессий, PPF/PPX import | Не реализованы; new-flow failover между здоровыми SSH-процессами реализован |
 
 Ошибка выбранного прокси завершает соединение, без автоматического Direct fallback. Это свойство маршрута, а не системный kill switch: неохваченный трафик и другие приложения используют обычную сеть ОС. Самоподключение первого TCP hop блокируется после проверки полного DNS-набора; удалённый localhost за SSH/другим прокси сохраняет удалённую семантику. Циклы через неправильно настроенные сторонние локальные прокси нужно исключать конфигурацией.
 
@@ -73,7 +77,7 @@ Reload атомарный: ошибочный профиль оставляет 
 ./packaging/macos/build-pkg.sh local
 ```
 
-Сценарий собирает universal Rust-библиотеку, SwiftUI `.app`, затем настоящий `.pkg`. Local-схема не включает Network Extension. Она использует ad hoc подпись и остаётся development-сборкой. Готовый Mac-инсталлятор в текущем Linux-окружении не создан.
+Сценарий собирает universal Rust-библиотеку, SwiftUI `.app`, затем настоящий `.pkg`. Этот local-пакет уже собран, установлен и проверен на macOS-15 GitHub runner: артефакт `FlowBridge-macos-universal-local` в [успешном CI](https://github.com/i-shutov/flowbridge/actions/runs/41005277502). Local-схема **не включает активированный Network Extension**, использует ad hoc подпись и остаётся development-сборкой, а не подписанным публичным релизом.
 
 Для native-схемы нужны ваши реальные Team ID, App ID и provisioning/signing. Команды и проверяемые gates: [packaging/macos/README.md](packaging/macos/README.md). Ключи/сертификаты не нужно помещать в исходники.
 
@@ -110,10 +114,11 @@ cargo run --locked --release -p flowbridge-cli -- serve --config examples/ssh-so
 python3 tools/verify.py --cross --c-abi
 ```
 
-Без установленных cross targets: `python3 tools/verify.py`. `--c-abi` предназначен для GCC/Linux. `tests/windows_native_smoke.cpp` проверяет DLL и настоящий Win32 GUI; запускайте только в одноразовом пользователе/VM или изолированном Wine prefix, поскольку GUI сохраняет тестовый профиль. Наличие CI workflow не означает, что удалённые runners запускались.
+Без установленных cross targets: `python3 tools/verify.py`. `--c-abi` предназначен для GCC/Linux. `tests/windows_native_smoke.cpp` проверяет DLL и настоящий Win32 GUI; запускайте только в одноразовом пользователе/VM или изолированном Wine prefix, поскольку GUI сохраняет тестовый профиль. Настоящие удалённые Windows/macOS/Linux runners выполнены на точном коммите PR #29; результат и ограничения испытаний см. в [проверенном чекпойнте](docs/qa/NATIVE_BETA_CHECKPOINT_20261030.md).
 
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) — архитектура и первичные источники.
 - [PLAN.md](docs/PLAN.md) — задачи, агенты и оставшиеся gates.
+- [NATIVE_BETA_CHECKPOINT_20261030.md](docs/qa/NATIVE_BETA_CHECKPOINT_20261030.md) — текущий состав внутренней беты, CI/artifacts и системные блокеры.
 - [SSH_AND_RECONNECT.md](docs/SSH_AND_RECONNECT.md) — watchdog, ограничения и архитектура resumable relay.
 - [CLOUD_BUILDS.md](docs/CLOUD_BUILDS.md) — реальные Windows/macOS runners, доступ к репозиторию и отдельные требования драйвера/подписи.
 - [REFERENCE_REVIEW.md](docs/REFERENCE_REVIEW.md) — статическое изучение предоставленного архива.
