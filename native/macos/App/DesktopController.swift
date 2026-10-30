@@ -153,8 +153,7 @@ final class DesktopController: ObservableObject {
                     guard self.revision == version else { return }
                     if success {
                         if self.livePoolWorkers > 1 && self.settings.mode == 0 {
-                            self.engine.setUpstreamPool(basePort: self.activeSshBasePort,
-                                                        states: self.ssh.workerStatuses)
+                            self.engine.setUpstreamPool(sshIDs: self.ssh.workerHandles)
                         } else {
                             self.engine.setUpstreamGate(port: self.activeSshBasePort, ready: true)
                         }
@@ -186,9 +185,8 @@ final class DesktopController: ObservableObject {
         if livePoolWorkers > 1 && settings.mode == 0 {
             if ssh.workerRevision != previousWorkerRevision {
                 previousWorkerRevision = ssh.workerRevision
-                if engine.running && ssh.workerStatuses.count == livePoolWorkers {
-                    engine.setUpstreamPool(basePort: activeSshBasePort,
-                                           states: ssh.workerStatuses)
+                if engine.running && ssh.workerHandles.count == livePoolWorkers {
+                    engine.setUpstreamPool(sshIDs: ssh.workerHandles)
                 }
             }
         } else if ssh.state != previousSSHState {
