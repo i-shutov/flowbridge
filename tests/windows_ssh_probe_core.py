@@ -22,6 +22,7 @@ class ResourceErrors:
             "too_many_open_files": (b"too many open files", b"emfile", b"enfile"),
             "no_buffer_space": (b"no buffer space", b"10055", b"wsaenobufs"),
             "allocation_failure": (b"cannot allocate memory", b"out of memory"),
+            "not_enough_space": (b"not enough space",),
         }.items():
             if any(value in text for value in patterns):
                 with self._lock:
