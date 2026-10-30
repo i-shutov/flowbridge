@@ -49,8 +49,11 @@ remained **red** for a different, final *bare backend* probe.
 
 That final independent raw-SSH test requested tiers up to 512 and
 `min_held=128`. With an isolated external SSH process (no FlowBridge
-admission gate), one **new** SOCKS CONNECT candidate reset before its initial
-echo, and its subprocess aborted. The server log reported
+admission gate), tiers **64, 128 and 192** passed. During expansion towards
+256, **244 actual streams were admitted** but one of those *existing held*
+streams reset on its next integrity check; the standalone diagnostic
+subprocess aborted. This is an observed unsafe **244 held** point, **not**
+a measured maximum safe FD table size. The server log reported
 `pipe(notify_pipe) failed Too many open files` and
 `wait_until_can_do_something: ppoll: Not enough space` near the failure.
 These are server-side resource messages in the **isolated fixture**. They
@@ -58,13 +61,22 @@ suggest an authentic Windows OpenSSH descriptor/resource limitation but
 do **not** measure the Windows system client's internal FD table or establish
 an exact 251/252 limit.
 
-The follow-up probe logic now records new-candidate CONNECT/initial-echo
-transport failure as `failed_new` and its stage/type, closes that candidate,
-then continues to assert binary integrity for **all existing** verified
-streams. A failure before the **minimum 128** still fails. Any loss of an
-established stream, byte corruption, child death, failure of recovery
-connections, or leak still fails the entire acceptance. Three negative
-regressions guard these distinctions.
+The follow-up probe distinguishes **two different contracts**. The
+**managed production path** continues to fail immediately on lost existing
+flows, byte corruption, child exit, missing recovery, or any failure of its
+128/1152/10000/four-worker requirements. The independent *unprotected raw
+OpenSSH* exploratory probe may complete its **diagnostic classification**
+(with `passed=false` for raw 512 stability) only after proving an intact
+128-channel floor, recording the exact higher-tier existing-flow failure
+(192 last fully verified; 244 at failure), and confirming a **fresh
+same-run sshd resource-exhaustion marker**. No old stderr, arbitrary reset,
+early 128 failure or invented requested tier can satisfy the classifier.
+
+Three initial-flow negative tests and additional false-positive classification
+regressions guard the two contracts. The parent hosted workflow must retain
+`bare_backend.unprotected_backend_512_stable=false` and a separate
+`unsafe_held_loss_above_managed_limit=true` in its report. Never turn a
+raw-descriptor safety failure into a claim that 512 streams work.
 
 **No performance waiver:** a successful capacity probe describes observed
 safe baseline and observed saturation, not a claim that 512 simultaneous
