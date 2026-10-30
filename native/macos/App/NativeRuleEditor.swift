@@ -115,7 +115,7 @@ struct NativeRuleEditor: View {
                             .font(.caption).foregroundStyle(.secondary)
                         if !message.isEmpty {
                             Text(message).font(.caption)
-                                .foregroundStyle(message.hasPrefix("Ошибка") ? .red : .secondary)
+                                .foregroundStyle(message.hasPrefix("Ошибка") ? Color.red : Color.secondary)
                                 .textSelection(.enabled)
                         }
                     }.textFieldStyle(.roundedBorder).frame(maxWidth: .infinity, alignment: .leading)
