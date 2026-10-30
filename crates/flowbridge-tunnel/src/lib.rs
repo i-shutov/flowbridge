@@ -1358,9 +1358,12 @@ mod tests {
 
     #[test]
     fn mock_preflight_collision_retries_before_spawning_child() {
-        let cfg = config();
-        let occupied = cfg.local_port;
-        let held = TcpListener::bind(("127.0.0.1", occupied)).unwrap();
+        let mut cfg = config();
+        // Hold the exact OS-assigned port instead of probe-close-rebind:
+        // parallel CI workers can otherwise claim the released socket.
+        let held = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let occupied = held.local_addr().unwrap().port();
+        cfg.local_port = occupied;
         let (candidate, retries) = started_mock_with_preflight_retry(cfg, "ready");
         let ready = candidate.snapshot();
         assert_eq!(retries, 1);
@@ -1894,8 +1897,11 @@ mod tests {
     }
     #[test]
     fn occupied_local_port_fails_before_any_child_is_launched() {
-        let config = config();
-        let _occupied = TcpListener::bind(("127.0.0.1", config.local_port)).unwrap();
+        let mut config = config();
+        // Bind atomically and retain the listener for the complete negative:
+        // any contender sees a genuinely occupied OS-assigned socket.
+        let _occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        config.local_port = _occupied.local_addr().unwrap().port();
         let calls = Arc::new(AtomicUsize::new(0));
         let count = calls.clone();
         let supervisor = Supervisor::with_launcher(
