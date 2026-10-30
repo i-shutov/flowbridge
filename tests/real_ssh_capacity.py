@@ -116,7 +116,7 @@ def run(abi,engine_id,listen_port,target_port,ssh_snapshot,*,
         report['ssh_backend'] = {'version':before.get('backend_version'),
             'absolute_path_observed':bool(before.get('backend_path')),'pid_at_start':before['pid']}
         def open_one(_):
-            client = attempt(listen_port,target_port)
+            client = attempt(listen_port,target_port,dialer=dialer)
             require(client is not None,'Real SSH could not hold intended baseline')
             return client
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
@@ -128,7 +128,7 @@ def run(abi,engine_id,listen_port,target_port,ssh_snapshot,*,
         report['resource_samples']['held_128'] = measure(before['pid'])
         report['checks'].append('128 verified real SSH TCP channels held by a single managed backend')
         def rejected(_):
-            client = attempt(listen_port,target_port)
+            client = attempt(listen_port,target_port,dialer=dialer)
             if client is not None:
                 client.close()
                 raise RuntimeError('Managed engine bypassed full SSH budget')
