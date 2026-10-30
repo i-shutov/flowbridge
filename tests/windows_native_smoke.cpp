@@ -20,6 +20,7 @@
 #include "../native/windows/native_profile.hpp"
 #include "../native/windows/capture_launcher.hpp"
 #include "../native/windows/ssh_pool_policy.hpp"
+#include "../native/windows/rule_model.hpp"
 #include "../native/windows/wfp/listener_owner.hpp"
 
 using Json = nlohmann::json;
@@ -342,7 +343,7 @@ static void assertCompactLayout(HWND window,const wchar_t* screenshot) {
     need(exported.bottom<=client.bottom,"Native capture actions are clipped");
     evidence(L"apps");
     click(window,203);
-    inside(109);inside(111); // JSON editor and log
+    inside(109);inside(111);inside(289); // JSON, log and actual rule editor action
     evidence(L"advanced");
     click(window,200);
     // Opening the Applications page can launch the real bounded discovery
@@ -354,6 +355,80 @@ static void assertCompactLayout(HWND window,const wchar_t* screenshot) {
                IsWindowEnabled(GetDlgItem(window,260));
     },"Compact layout triggered discovery which did not return to idle");
     std::puts("PASS compact Windows GUI: SSH, apps, native capture actions and diagnostics fit 980x680");
+}
+static void actualRuleEditorTest(HWND window, const wchar_t* screenshot) {
+    click(window,203);
+    HWND editor=GetDlgItem(window,109);
+    const auto original=windowText(editor);
+    need(PostMessageW(window,WM_COMMAND,MAKEWPARAM(289,BN_CLICKED),
+               reinterpret_cast<LPARAM>(GetDlgItem(window,289)))!=0,
+         "Could not post native rule editor command");
+    HWND dialog=nullptr;
+    waitFor([&]{dialog=FindWindowW(L"FlowBridgeNativeRulesV1",nullptr);return dialog!=nullptr;},
+            "Native visual rule editor did not open");
+    RECT r{};need(GetWindowRect(dialog,&r)!=0,"Native rule window cannot be measured");
+    MONITORINFO monitor{sizeof(MONITORINFO)};
+    need(GetMonitorInfoW(MonitorFromWindow(dialog,MONITOR_DEFAULTTONEAREST),&monitor)!=0,
+         "Rule editor monitor work area unavailable");
+    need(r.left>=monitor.rcWork.left&&r.top>=monitor.rcWork.top&&
+         r.right<=monitor.rcWork.right&&r.bottom<=monitor.rcWork.bottom,
+         "Native rule editor is outside the monitor's work area");
+    need(IsWindowVisible(GetDlgItem(dialog,6100)),"Native rule list not shown");
+    click(dialog,6108);
+    need(SendMessageW(GetDlgItem(dialog,6100),LB_GETCOUNT,0,0)==1,
+         "Add rule did not mutate actual modal model");
+    need(SendMessageW(GetDlgItem(dialog,6107),BM_GETCHECK,0,0)!=BST_CHECKED,
+         "New catch-all rule must be initially disabled");
+    edit(GetDlgItem(dialog,6101),"media-route");
+    edit(GetDlgItem(dialog,6103),"*.film.example; media.example");
+    edit(GetDlgItem(dialog,6105),"443; 8000-8010");
+    SendMessageW(GetDlgItem(dialog,6107),BM_SETCHECK,BST_CHECKED,0);
+    need(SendMessageW(GetDlgItem(dialog,6106),CB_GETCOUNT,0,0)>=4,
+         "Proxy/chain actions missing from visual rule editor");
+    SendMessageW(GetDlgItem(dialog,6106),CB_SETCURSEL,2,0); // proxy a
+    click(dialog,6113);
+    need(windowText(GetDlgItem(dialog,6118)).find(L"проверено")!=std::wstring::npos,
+         "Valid visual rule did not pass real Rust strict validation");
+    need(windowText(editor)==original,
+         "Modal editing changed parent profile before explicit confirmation");
+    edit(GetDlgItem(dialog,6105),"70000");
+    click(dialog,6113);
+    need(windowText(GetDlgItem(dialog,6118)).find(L"Ошибка")!=std::wstring::npos,
+         "Invalid 70000 port was accepted or did not report an error");
+    edit(GetDlgItem(dialog,6105),"443; 8000-8010");
+    click(dialog,6113);
+    if(screenshot){
+        const std::filesystem::path path(screenshot);
+        captureWindow(dialog,path.parent_path()/(path.stem().wstring()+L"-visual-rules"+path.extension().wstring()));
+    }
+    click(dialog,6116);
+    waitFor([&]{return !IsWindow(dialog);},"Rule editor failed to close after Save");
+    const auto configured=windowText(editor);
+    const auto parsed=Json::parse(std::string(configured.begin(),configured.end()));
+    need(parsed["rules"].size()==1,"Visual rule draft not returned to JSON editor");
+    need(parsed["rules"][0]["id"]=="media-route"&&
+         parsed["rules"][0]["ports"][1]["start"]==8000&&
+         parsed["rules"][0]["ports"][1]["end"]==8010&&
+         parsed["rules"][0]["action"]["type"]=="proxy"&&
+         parsed["rules"][0]["action"]["id"]=="a",
+         "Visual editor lost route action, ranges, order, or ID");
+    need(parsed["proxies"].size()==2,"Rule editor destroyed unrelated proxy definitions");
+    const std::string flow=R"({"application":null,"destination":{"host":"media.example","port":443},"resolved_ip":null})";
+    auto decision=result(fb_evaluate_json(parsed.dump().c_str(),flow.c_str()));
+    need(decision["decision"]["rule_id"]=="media-route"&&
+         decision["decision"]["action"]["type"]=="proxy",
+         "Real Rust policy evaluation disagreed with visual rule edit");
+    // Cancellation is atomic even after an Add: parent draft remains byte-identical.
+    need(PostMessageW(window,WM_COMMAND,MAKEWPARAM(289,BN_CLICKED),
+               reinterpret_cast<LPARAM>(GetDlgItem(window,289)))!=0,
+         "Could not reopen rule editor for Cancel regression");
+    HWND second=nullptr;
+    waitFor([&]{second=FindWindowW(L"FlowBridgeNativeRulesV1",nullptr);return second!=nullptr;},
+            "Rule editor did not reopen");
+    click(second,6108);click(second,6117);
+    waitFor([&]{return !IsWindow(second);},"Cancel did not close modal");
+    need(windowText(editor)==configured,"Cancel leaked uncommitted rules to profile");
+    std::puts("PASS Win32 rule editor: real modal controls, Rust validation/evaluation, cancel, responsive bounds and preserved routes");
 }
 static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
     STARTUPINFOW start{}; start.cb=sizeof(start); PROCESS_INFORMATION process{};
@@ -496,7 +571,9 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
         click(window,203);need(IsWindowVisible(GetDlgItem(window,editorId)),"advanced page did not show full profile");
         unsigned short port=unusedPort(); auto profile=config(port);
         profile["proxies"]={{{"id","a"},{"kind","socks4a"},{"endpoint",{{"host","127.0.0.1"},{"port",1080}}},{"username",nullptr},{"password_env",nullptr}},{{"id","b"},{"kind","socks5"},{"endpoint",{{"host","127.0.0.1"},{"port",2080}}},{"username",nullptr},{"password_env",nullptr}}};
-        edit(GetDlgItem(window,editorId),profile.dump()); click(window,applyId);
+        edit(GetDlgItem(window,editorId),profile.dump());
+        actualRuleEditorTest(window,screenshot);
+        click(window,applyId);
         waitFor([&]{ return windowText(GetDlgItem(window,statusId)).find(L"Остановлено |")!=std::wstring::npos; },"GUI Apply failed");
         need(SendMessageW(GetDlgItem(window,protocolId),CB_GETCURSEL,0,0)==2,"SOCKS4a display changed protocol");
         edit(GetDlgItem(window,hostId),"192.0.2.1");
