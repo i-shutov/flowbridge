@@ -7,6 +7,21 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 mod diagnostics;
 mod native_context;
 mod native_dns;
+#[cfg(windows)]
+mod windows_packet_filter;
+
+/// Passive NDISRD device/API check only; no install, signature claim, or traffic capture.
+#[no_mangle]
+pub extern "C" fn fb_windows_packet_filter_status_json() -> *mut c_char {
+    guarded(|| {
+        #[cfg(windows)]
+        { Ok(windows_packet_filter::report()) }
+        #[cfg(not(windows))]
+        { Ok(json!({"backend":"ndisapi","supported":false,"device_opened":false,"api_compatible":false,
+            "signature_status":"not_checked","packet_capture_active":false,"native_routing_accepted":false,
+            "driver_installation_attempted":false,"dns_leak_test_passed":false})) }
+    })
+}
 
 const MAX_INPUT_BYTES: usize = 1024 * 1024;
 
