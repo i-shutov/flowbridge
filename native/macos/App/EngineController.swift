@@ -15,7 +15,7 @@ final class EngineController: ObservableObject {
     private let queue = DispatchQueue(label: "FlowBridge.engine")
     private var engine: UInt64 = 0 // accessed only on queue
     private var gateJSON = "{\"endpoint\":null,\"ready\":true,\"grace_ms\":30000}"
-    private var poolJSON: String?
+    private var ownedPoolJSON: String?
     private var timer: Timer?
     private let profile = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("FlowBridge/profile.json")
@@ -70,9 +70,9 @@ final class EngineController: ObservableObject {
                     let result = try draft.withCString { try Bridge.consume(fb_engine_create_json($0)) }
                     guard let id = result["engine_id"] as? NSNumber else { throw Bridge.error("Missing engine handle") }
                     self.engine = id.uint64Value
-                    if let pool = self.poolJSON {
+                    if let pool = self.ownedPoolJSON {
                         _ = try pool.withCString {
-                            try Bridge.consume(fb_engine_set_upstream_pool_json(self.engine, $0))
+                            try Bridge.consume(fb_engine_sync_owned_ssh_pool_json(self.engine, $0))
                         }
                     } else {
                         _ = try self.gateJSON.withCString {
@@ -105,45 +105,40 @@ final class EngineController: ObservableObject {
         guard let json = try? Bridge.text(["endpoint": endpoint, "ready": ready, "grace_ms": 30000]) else { return }
         queue.async {
             self.gateJSON = json
-            self.poolJSON = nil
+            self.ownedPoolJSON = nil
             guard self.engine != 0 else { return }
             do { _ = try json.withCString { try Bridge.consume(fb_engine_set_upstream_gate_json(self.engine, $0)) } }
             catch { DispatchQueue.main.async { self.message = error.localizedDescription } }
         }
     }
-    /// Keep independent OpenSSH child membership bounded and readiness honest.
-    /// Only the explicit SOCKS5 engine uses the pool; transparent NE routing
-    /// is deliberately not advertised as supporting this beta feature.
-    func setUpstreamPool(basePort: Int, states: [[String: Any]]) {
-        guard (2...4).contains(states.count),
-              basePort > 0, basePort + 2 * (states.count - 1) <= 65535 else {
-            DispatchQueue.main.async { self.message = "Недопустимые порты/число процессов SSH." }
+    /// Bind actual SSH supervisor handles. The FFI derives readiness and
+    /// loopback ports from owned process snapshots; no readiness JSON is
+    /// accepted from SwiftUI. Transparent NE stays single-worker.
+    func setUpstreamPool(sshIDs: [UInt64]) {
+        guard (2...4).contains(sshIDs.count), !sshIDs.contains(0),
+              Set(sshIDs).count == sshIDs.count else {
+            DispatchQueue.main.async {
+                self.message = "Недопустимые или повторяющиеся SSH supervisor handles."
+            }
             return
         }
-        let perWorker = 128 / states.count
-        let workers: [[String: Any]] = states.enumerated().map { index, worker in
-            [
-                "endpoint": ["host": "127.0.0.1", "port": basePort + 2 * index],
-                "ready": (worker["state"] as? String) == "ready"
-            ]
-        }
+        let perWorker = 128 / sshIDs.count
         let request: [String: Any] = [
-            "primary": ["host": "127.0.0.1", "port": basePort],
-            "workers": workers,
+            "ssh_ids": sshIDs,
             "limits": [
                 "max_flows": perWorker, "max_opening": min(16, perWorker),
-                "max_queued": 64 / states.count, "wait_timeout_ms": 10000
+                "max_queued": 64 / sshIDs.count, "wait_timeout_ms": 10000
             ],
             "aggregate_max_flows": 128
         ]
         do {
             let json = try Bridge.text(request)
             queue.async {
-                self.poolJSON = json
+                self.ownedPoolJSON = json
                 guard self.engine != 0 else { return }
                 do {
                     _ = try json.withCString {
-                        try Bridge.consume(fb_engine_set_upstream_pool_json(self.engine, $0))
+                        try Bridge.consume(fb_engine_sync_owned_ssh_pool_json(self.engine, $0))
                     }
                 } catch {
                     DispatchQueue.main.async {
