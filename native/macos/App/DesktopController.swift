@@ -222,12 +222,16 @@ final class DesktopController: ObservableObject {
             guard self.revision == version else { return }
             guard success else { self.busy = false; self.message = "Остановка маршрутизации не подтверждена. SSH сохранён."; completion?(false); return }
             self.engine.setUpstreamGate(port: nil, ready: false)
-            self.ssh.stop {
+            self.ssh.stop { sshStopped in
                 guard self.revision == version else { return }
                 self.busy = false
-                self.livePoolWorkers = 1
-                self.message = "Подключение остановлено."
-                completion?(true)
+                if sshStopped {
+                    self.livePoolWorkers = 1
+                    self.message = "Подключение остановлено."
+                } else {
+                    self.message = "Маршрутизация остановлена, но остановка SSH не подтверждена: " + self.ssh.message
+                }
+                completion?(sshStopped)
             }
         }
         native.stopAndWait { success in
