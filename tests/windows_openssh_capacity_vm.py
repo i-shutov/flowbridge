@@ -21,7 +21,7 @@ import threading
 import time
 
 from real_ssh_capacity import exact, require
-from windows_ssh_probe_core import ResourceErrors, probe_capacity
+from windows_ssh_probe_core import ResourceErrors, probe_capacity, expected_raw_backend_fd_saturation
 
 
 class Echo(socketserver.BaseRequestHandler):
@@ -112,11 +112,21 @@ def main():
     parser.add_argument("--min-held", type=int, default=128,
                         help="Minimum real concurrent byte-verified channels required to pass")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--characterize-ceiling", action="store_true",
+                        help="Opt-in diagnosis of raw SSH safety above 128 held streams")
+    parser.add_argument("--server-log", type=Path,
+                        help="Same-run isolated sshd stderr; only resource marker counts are extracted")
+    parser.add_argument("--server-log-offset", type=int, default=0)
     args = parser.parse_args()
     require(sys.platform == "win32" and os.environ.get("FLOWBRIDGE_SSH_VM") == "1",
             "Authorized Windows VM and explicit FLOWBRIDGE_SSH_VM=1 required")
     require(1 <= args.min_held <= args.held <= 512 and 1 <= args.ssh_port <= 65535,
             "Bounded capacity must be 1..512")
+    if args.characterize_ceiling:
+        require(args.server_log is not None and args.server_log.is_file()
+                and args.server_log_offset >= 0
+                and args.server_log_offset <= args.server_log.stat().st_size,
+                "Raw ceiling characterization requires same-run isolated sshd log offset")
     require(args.user.isascii() and args.user.replace("_", "").replace("-", "").isalnum()
             and not args.user.startswith("-"), "Invalid SSH user identity")
     ssh = args.ssh.resolve(strict=True)
@@ -134,7 +144,10 @@ def main():
               "actual_internal_fd_table_measured": False,
               "notes": ["OS HANDLE counts are not the internal Win32 OpenSSH FD table.",
                         "A hard OpenSSH socket ceiling is not inferred from an attempt count."],
-              "external_network": False}
+              "external_network": False,
+              "test_contract": "raw_ssh_ceiling_characterization" if args.characterize_ceiling else "strict_capacity",
+              "characterization_completed": False,
+              "unprotected_backend_512_stable": False}
     ssh_process = None
     resource_errors = ResourceErrors()
     stderr_thread = None
@@ -191,9 +204,40 @@ def main():
             report["windows_handle_samples"].append({"stage": stage, "os_handle_count": count})
             return count
         baseline = sample("baseline")
-        probe_capacity(lambda: connect(forward_port, listener.server_address[1]),
-                       verify_echo, lambda: ssh_process.poll() is None, sample, report,
-                       held_limit=args.held, min_held=args.min_held)
+        try:
+            probe_capacity(lambda: connect(forward_port, listener.server_address[1]),
+                           verify_echo, lambda: ssh_process.poll() is None, sample, report,
+                           held_limit=args.held, min_held=args.min_held)
+        except (OSError, EOFError, TimeoutError):
+            if not args.characterize_ceiling:
+                raise
+            # A deliberately destructive independent bare-ssh diagnostic,
+            # never a waiver for dropped managed FlowBridge connections.
+            # Require fresh same-run sshd resource markers, not old churn logs.
+            markers = {}
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                counters = ResourceErrors()
+                with args.server_log.open("rb") as source:
+                    source.seek(0, os.SEEK_END)
+                    end = source.tell()
+                    source.seek(max(args.server_log_offset, end - 65536))
+                    for line in source.read(65536).splitlines():
+                        counters.observe(line)
+                markers = counters.snapshot()
+                if expected_raw_backend_fd_saturation(report, markers, args.min_held):
+                    break
+                time.sleep(0.1)
+            require(expected_raw_backend_fd_saturation(report, markers, args.min_held),
+                    "Bare SSH lost a held channel without proven safe 128 tier and fresh resource exhaustion")
+            report["server_resource_error_counts"] = markers
+            report["unsafe_held_loss_above_product_limit"] = True
+            report["raw_backend_saturation_seen"] = True
+            report["characterization_completed"] = True
+            report["safe_floor_verified"] = args.min_held
+            # Raw SSH 512-target stability failed. Keep passed=false and
+            # resource_recovery_verified=false, even when diagnosis is complete.
+            return
         # OS handles and OpenSSH internal descriptor slots remain distinct.
         deadline = time.monotonic() + 15
         while True:
@@ -209,6 +253,10 @@ def main():
         report["selected_held_ceiling"] = args.held
         require(ssh_process.poll() is None, "OpenSSH exited after release")
         report["passed"] = True
+        report["characterization_completed"] = args.characterize_ceiling
+        report["unprotected_backend_512_stable"] = (
+            args.held == 512 and report["peak_held"] == 512
+            and not any(item["failed_new"] for item in report["attempts"]))
     except Exception as error:
         report["error"] = str(error)
         raise

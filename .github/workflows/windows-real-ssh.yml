@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'tests/*ssh*'
+      - 'tests/*churn*'
       - 'tests/real_owned_pool_lifecycle.py'
       - 'crates/flowbridge-tunnel/**'
       - 'crates/flowbridge-runtime/**'
@@ -12,6 +13,7 @@ on:
     branches: [main]
     paths:
       - 'tests/*ssh*'
+      - 'tests/*churn*'
       - 'tests/real_owned_pool_lifecycle.py'
       - 'crates/flowbridge-tunnel/**'
       - 'crates/flowbridge-runtime/**'
@@ -36,8 +38,10 @@ jobs:
         with:
           python-version: '3.13'
       - uses: dtolnay/rust-toolchain@stable
-      - name: Reject false-positive capacity probes
-        run: python -m unittest discover -s tests -p test_windows_ssh_probe.py -v
+      - name: Reject false-positive capacity probes and collision masking
+        run: |
+          python -m unittest discover -s tests -p test_windows_ssh_probe.py -v
+          python -m unittest discover -s tests -p test_loopback_churn_dialer.py -v
       - run: cargo build --locked -p flowbridge-ffi
       - name: Fetch pinned official sshd without installing a system service
         shell: pwsh

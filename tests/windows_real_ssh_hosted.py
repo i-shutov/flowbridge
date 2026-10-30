@@ -174,9 +174,44 @@ def main():
                                '--known-hosts',str(known),'--user',user,'--ssh-port',str(ssh_port),
                                '--held','512','--min-held','128',
                                '--output',str(args.output/'bare-backend-capacity.json')]
+                    # Explicitly distinguish the managed 128-safe baseline from
+                    # a deliberately destructive independent 512 raw-SSH probe.
+                    # Only allowlist fresh resource lines AFTER this point.
+                    server_log.flush()
+                    server_offset = (root / 'sshd.log').stat().st_size
+                    command += ['--characterize-ceiling', '--server-log', str(root / 'sshd.log'),
+                                '--server-log-offset', str(server_offset)]
                     env = dict(os.environ, FLOWBRIDGE_SSH_VM='1')
                     subprocess.run(command, env=env, check=True, timeout=180)
-                    report['bare_backend_probe_passed'] = True
+                    bare = json.loads((args.output/'bare-backend-capacity.json').read_text(encoding='utf-8'))
+                    require(bare.get('characterization_completed') is True,
+                            'Raw SSH ceiling diagnostic did not complete')
+                    require(bare.get('capacity_baseline_verified') is True and
+                            bare.get('peak_held',0) >= 128,
+                            'Raw SSH did not demonstrate 128 stable real channels')
+                    if bare.get('passed') is True:
+                        require(bare.get('unprotected_backend_512_stable') is True,
+                                'Unexpected raw SSH success without all 512 verified and recovered')
+                        report['bare_backend'] = {'characterization_completed':True,
+                            'unprotected_backend_512_stable':True,
+                            'safe_floor_verified':128}
+                    else:
+                        require(bare.get('unsafe_held_loss_above_product_limit') is True
+                                and bare.get('last_good_verified_held',0) >= 128
+                                and bare.get('peak_held',0) > 128
+                                and any(bare.get('server_resource_error_counts',{}).get(key,0)>0
+                                        for key in ('too_many_open_files','not_enough_space','no_buffer_space')),
+                                'Unexplained raw SSH failure cannot be classified as FD-limited')
+                        report['bare_backend'] = {
+                            'characterization_completed': True,
+                            'unprotected_backend_512_stable': False,
+                            'unsafe_held_loss_above_managed_limit': True,
+                            'safe_floor_verified': 128,
+                            'last_good_verified_held': bare['last_good_verified_held'],
+                            'first_failing_held': bare['held_integrity_failure']['held_at_failure'],
+                            'resource_error_types': sorted(bare['server_resource_error_counts']),
+                            'internal_fd_table_measured': False,
+                        }
                     report['passed'] = True
                 except Exception:
                     def redact(value):
