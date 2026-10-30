@@ -388,15 +388,15 @@ mod tests {
         md5.extend_from_slice(&[0, 0]);
         let cases = vec![
             md5,
-            vec![29, 4, 1, 2],             // TCP-AO, address-authenticated
-            vec![30, 4, 0x10, 0],          // MPTCP, path semantics
-            vec![34, 4, 0, 1],             // TCP Fast Open, not handled
-            vec![253, 4, 0, 0],           // experimental/unknown
-            vec![8, 1, 0, 0],             // invalid option length
-            vec![8, 10, 0, 0],            // truncated timestamp option
-            vec![2, 3, 0, 0],             // malformed MSS
+            vec![29, 4, 1, 2],    // TCP-AO, address-authenticated
+            vec![30, 4, 0x10, 0], // MPTCP, path semantics
+            vec![34, 4, 0, 1],    // TCP Fast Open, not handled
+            vec![253, 4, 0, 0],   // experimental/unknown
+            vec![8, 1, 0, 0],     // invalid option length
+            vec![8, 10, 0, 0],    // truncated timestamp option
+            vec![2, 3, 0, 0],     // malformed MSS
             vec![5, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], // malformed SACK
-            vec![0, 1, 1, 1],             // nonzero bytes after EOL
+            vec![0, 1, 1, 1],     // nonzero bytes after EOL
         ];
         for options in cases {
             for family in [Family::V4, Family::V6] {
