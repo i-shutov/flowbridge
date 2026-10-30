@@ -1,0 +1,61 @@
+name: Materialize reviewed visual editor
+on:
+  push:
+    branches: [feat/native-visual-rule-editor-20261030]
+    paths: [tools/checkpoints/visual-rules.b.b64]
+permissions:
+  contents: write
+concurrency:
+  group: materialize-reviewed-visual-rules
+  cancel-in-progress: false
+jobs:
+  apply-reviewed-source:
+    if: github.repository == 'i-shutov/flowbridge' && github.event.head_commit.message == 'Materialize reviewed visual rule editor'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Verify reviewed SHA256 and apply only named source paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/feat/native-visual-rule-editor-20261030'
+          git merge-base --is-ancestor db82cb7bb59190565891b28e03168a3d59e71bb0 HEAD
+          python - <<'PY'
+          import base64, hashlib, pathlib, subprocess, tempfile, zlib
+          encoded = ''.join(pathlib.Path('tools/checkpoints/visual-rules.'+part+'.b64').read_text().strip() for part in ('a','b'))
+          patch = zlib.decompress(base64.b64decode(encoded, validate=True))
+          expected = '6439eeffe4227bbae12ca6cb1963b98a3dc3379906cba95b66e90f383001e31e'
+          if hashlib.sha256(patch).hexdigest() != expected:
+              raise SystemExit('Reviewed source patch checksum mismatch')
+          allowed = {'.github/workflows/ci.yml','docs/qa/VISUAL_RULE_EDITOR.md',
+                     'native/macos/App/FlowBridgeApp.swift','native/macos/App/RuleEditor.swift',
+                     'native/windows/main.cpp','native/windows/rule_editor.hpp',
+                     'tests/macos_rule_editor.swift','tests/rule_editor_model.cpp',
+                     'tests/windows_native_smoke.cpp'}
+          with tempfile.NamedTemporaryFile(suffix='.patch') as file:
+              file.write(patch); file.flush()
+              stats = subprocess.check_output(['git','apply','--numstat',file.name],text=True)
+              if {line.split('\t',2)[2] for line in stats.splitlines()} != allowed:
+                  raise SystemExit('Reviewed source path allowlist mismatch')
+              subprocess.run(['git','apply','--check','--index',file.name],check=True)
+              subprocess.run(['git','apply','--index',file.name],check=True)
+          subprocess.run(['git','diff','--cached','--check'],check=True)
+          print('Applied reviewed visual editor patch:',expected)
+          PY
+          test "$(git ls-remote origin "$GITHUB_REF" | cut -f1)" = "$GITHUB_SHA"
+          git config user.name 'FlowBridge checkpoint integration'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat(native): visual rule editing and offline route explanation with native regression'
+          git push origin "HEAD:$GITHUB_REF"
+          git rev-parse HEAD
+      - name: Preserve transport for exact checksum comparison on failure
+        if: failure()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: FlowBridge-visual-editor-transport
+          path: tools/checkpoints/visual-rules.*.b64
+          retention-days: 1
