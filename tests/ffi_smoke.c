@@ -40,6 +40,17 @@ int main(void) {
         fb_string_free(ndis);
         return 6;
     }
+#ifdef _WIN32
+    /* SCM observation must not become an install/signature/route attestation. */
+    if (!strstr(ndis, "\"service_name\":\"NDISRD\"") ||
+        !strstr(ndis, "\"read_only\":true") ||
+        !strstr(ndis, "\"driver_signing_verified\":false") ||
+        !strstr(ndis, "\"adapter_binding_verified\":false") ||
+        !strstr(ndis, "\"capture_authorized\":false")) {
+        fb_string_free(ndis);
+        return 9;
+    }
+#endif
     fb_string_free(ndis);
     /* Invalid local ports MUST be rejected, on both Windows and non-Windows.
      * These calls are read-only; a JSON return must not imply interception. */
