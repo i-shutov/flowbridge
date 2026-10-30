@@ -40,6 +40,12 @@ char *fb_engine_set_upstream_gate_json(uint64_t engine_id, const char *gate_json
  * Caller owns/monitors separate SSH processes; this does not launch SSH,
  * alter local DNS or migrate/replay established streams. */
 char *fb_engine_set_upstream_pool_json(uint64_t engine_id, const char *pool_json);
+/* Preferred desktop-GUI API: derive ports, PIDs and readiness from live,
+ * registered OpenSSH supervisors instead of caller-supplied ready flags.
+ * Input: {"ssh_ids":[id1,id2], "limits":{...}, "aggregate_max_flows":128}.
+ * Duplicate/stale/missing handles are rejected atomically without changing
+ * the active route. The GUI still owns process start/stop and error handling. */
+char *fb_engine_sync_owned_ssh_pool_json(uint64_t engine_id, const char *pool_json);
 void fb_engine_destroy(uint64_t engine_id);
 
 /* Native capture session: caller attests application identity. Upstream readiness
