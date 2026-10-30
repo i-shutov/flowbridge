@@ -27,6 +27,7 @@ def run(abi, engine, engine_port, target_port, primary_settings, snapshot,
     }
     secondary = None
     held = []
+    held_worker_ports = []
     primary = {'host': '127.0.0.1', 'port': primary_settings['local_port']}
     secondary_settings = dict(primary_settings, local_port=free_port())
     require(secondary_settings['local_port'] not in
@@ -64,6 +65,11 @@ def run(abi, engine, engine_port, target_port, primary_settings, snapshot,
             client.sendall(payload)
             require(exact(client, len(payload)) == payload, 'Pool stream data was changed')
             held.append(client)
+            now = abi.call('fb_engine_snapshot_json', engine)
+            matching = [c for c in now['connections'] if c['id'] > last_id and c['state'] == 'active' and c.get('worker_port')]
+            require(len(matching) == len(held),
+                    'Snapshot did not identify every held connection')
+            held_worker_ports.append(max(matching, key=lambda c: c['id'])['worker_port'])
 
         status = abi.call('fb_engine_snapshot_json', engine)
         active = [c for c in status['connections']
@@ -90,10 +96,11 @@ def run(abi, engine, engine_port, target_port, primary_settings, snapshot,
         # Previously established primary streams must be intact and pinned.
         os.kill(child['pid'], signal.SIGKILL)
         configure(True, False)
-        primary_streams = [
-            client for client, connection in zip(held, active)
-            if connection['worker_port'] == primary['port']
-        ]
+        # Preserve an explicit per-client worker mapping captured immediately
+        # after each successful connection; do not zip a mutable unordered
+        # snapshot with client sockets after one worker has been killed.
+        primary_streams = [client for client, worker_port in zip(held, held_worker_ports)
+                           if worker_port == primary['port']]
         require(len(primary_streams) >= 4, 'No primary-owned survivor streams')
         for i, client in enumerate(primary_streams):
             payload = b'primary-survives-peer-death\x00\xff' + bytes([i])
@@ -106,15 +113,25 @@ def run(abi, engine, engine_port, target_port, primary_settings, snapshot,
             client.close()
         held.clear()
 
-        for _ in range(12):
+        after_kill_id = max((c['id'] for c in abi.call(
+            'fb_engine_snapshot_json', engine)['connections']), default=0)
+        for _ in range(64):
             with connect(engine_port, target_port) as client:
                 payload = b'only-surviving-open-ssh'
                 client.sendall(payload)
                 require(exact(client, len(payload)) == payload,
                         'New flows did not switch to the surviving SSH worker')
-        current = abi.call('fb_engine_snapshot_json', engine)['managed_pool']
+        observed = abi.call('fb_engine_snapshot_json', engine)
+        new_connections = [c for c in observed['connections']
+                           if c['id'] > after_kill_id and c.get('worker_port')]
+        require(len(new_connections) >= 64
+                and all(c['worker_port'] == primary['port'] for c in new_connections),
+                'A new connection was assigned to the killed SSH worker')
+        current = observed['managed_pool']
         require(current['ready_workers'] == 1, 'Offline SSH worker incorrectly marked ready')
-        report['checks'].append('New selected flows exclusively use the healthy OpenSSH worker')
+        report['checks'].append('64 new TCP flows after secondary loss all used the live OpenSSH PID')
+        report['post_failure_new_flows'] = 64
+        report['post_failure_unhealthy_assignments'] = 0
 
         # With no ready SSH child, SOCKS must return failure, not DIRECT. The
         # destination is a real echo server; a leaked DIRECT would succeed.
@@ -144,7 +161,21 @@ def run(abi, engine, engine_port, target_port, primary_settings, snapshot,
             require(exact(client, 23) == b'new-ssh-child-recovered',
                     'Recovered worker pool did not route new data')
         report['replacement_child_pid_distinct'] = restored['pid'] != child['pid']
-        report['checks'].append('Recovery restores capacity for new TCP; no established-flow replay')
+        for _ in range(16):
+            with connect(engine_port, target_port) as client:
+                payload = b'recovered-two-worker-pool'
+                client.sendall(payload)
+                require(exact(client, len(payload)) == payload,
+                        'Recovered worker changed TCP payload')
+        recovered_snapshot = until(
+            lambda: p if (p := abi.call('fb_engine_snapshot_json', engine)['managed_pool'])
+            ['ready_workers'] == 2
+            and all(w['admission']['active_including_opening'] == 0
+                    for w in p['workers']) else False,
+            seconds=15)
+        require(recovered_snapshot['ready_workers'] == 2,
+                'Pool did not restore two ready OpenSSH workers')
+        report['checks'].append('Recovery restores both real OpenSSH workers with zero leaked permits')
         report['passed'] = True
     except Exception as error:
         report['error'] = str(error)
