@@ -123,6 +123,8 @@ jobs:
           Copy-Item resources/presets.json build/windows/Release/resources/
           & ./build/windows/Release/FlowBridgeRuleModelTest.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & ./build/windows/Release/FlowBridgeProxiFyreExportTest.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & ./build/windows/Release/FlowBridgeNativeSmoke.exe "$env:GITHUB_WORKSPACE/build/windows/Release/FlowBridge.exe"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build native WFP capture service
