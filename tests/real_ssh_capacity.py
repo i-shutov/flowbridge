@@ -17,6 +17,7 @@ import time
 
 from ssh_real_integration import exact, require, until
 from churn_pacing import StartPacer
+from loopback_churn_dialer import LoopbackDialer
 
 
 def observed_process_resources(pid):
@@ -60,8 +61,8 @@ def windows_tcp_states():
     return result
 
 
-def attempt(proxy_port,target_port):
-    client = socket.create_connection(('127.0.0.1',proxy_port),timeout=8)
+def attempt(proxy_port,target_port,*,dialer=None):
+    client = (dialer or LoopbackDialer()).connect(proxy_port,timeout=8)
     try:
         client.settimeout(8)
         client.sendall(b'\x05\x01\x00')
@@ -94,6 +95,7 @@ def run(abi,engine_id,listen_port,target_port,ssh_snapshot,*,
     # pool. Do not change OS limits to hide that artificial test constraint.
     # Baseline and overload remain unpaced; only long recycling is paced.
     churn_rate = 15.0 if os.name == 'nt' and churn > 500 else 0.0
+    dialer = LoopbackDialer()
     report = {'passed':False,'commit':os.environ.get('GITHUB_SHA'),
               'real_openssh':True,'open_ssh_connections_held':held,
               'attempted_after_capacity':0,'churn_attempts':0,
@@ -165,7 +167,7 @@ def run(abi,engine_id,listen_port,target_port,ssh_snapshot,*,
                 with lock:
                     report['churn_started'] += 1
                 try:
-                    client = attempt(listen_port,target_port)
+                    client = attempt(listen_port,target_port,dialer=dialer)
                     require(client is not None,'Actual SSH did not recover new capacity after draining')
                     with client:
                         exchange(client,b'churn\x00\xff'+index.to_bytes(4,'big'))
@@ -184,6 +186,8 @@ def run(abi,engine_id,listen_port,target_port,ssh_snapshot,*,
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
                 list(pool.map(one_churn,range(churn)))
             require(report['churn_attempts'] == churn,'Did not complete all requested real channels')
+            require(dialer.snapshot()['addrinuse_retries'] <= max(16,(churn+held+1152)//100),
+                    'Excess Windows loopback source-port collisions; fixture is not an accepted load test')
             until(lambda: abi.call('fb_engine_snapshot_json',engine_id)['managed_upstream']
                   ['active_including_opening'] == 0,seconds=15)
             report['checks'].append(f'{churn} authenticated SSH channels churned with binary echo and half-close')
@@ -244,5 +248,6 @@ def run(abi,engine_id,listen_port,target_port,ssh_snapshot,*,
             client.close()
         report['elapsed_seconds'] = round(time.monotonic()-start,3)
         output.parent.mkdir(parents=True,exist_ok=True)
+        report['loopback_socket_dialer'] = dialer.snapshot()
         output.write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
         print(json.dumps({'real_ssh_load':report},ensure_ascii=False),flush=True)
