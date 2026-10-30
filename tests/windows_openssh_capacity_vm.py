@@ -253,6 +253,10 @@ def main():
         report["selected_held_ceiling"] = args.held
         require(ssh_process.poll() is None, "OpenSSH exited after release")
         report["passed"] = True
+        report["characterization_completed"] = args.characterize_ceiling
+        report["unprotected_backend_512_stable"] = (
+            args.held == 512 and report["peak_held"] == 512
+            and not any(item["failed_new"] for item in report["attempts"]))
     except Exception as error:
         report["error"] = str(error)
         raise
