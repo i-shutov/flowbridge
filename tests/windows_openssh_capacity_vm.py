@@ -204,9 +204,40 @@ def main():
             report["windows_handle_samples"].append({"stage": stage, "os_handle_count": count})
             return count
         baseline = sample("baseline")
-        probe_capacity(lambda: connect(forward_port, listener.server_address[1]),
-                       verify_echo, lambda: ssh_process.poll() is None, sample, report,
-                       held_limit=args.held, min_held=args.min_held)
+        try:
+            probe_capacity(lambda: connect(forward_port, listener.server_address[1]),
+                           verify_echo, lambda: ssh_process.poll() is None, sample, report,
+                           held_limit=args.held, min_held=args.min_held)
+        except (OSError, EOFError, TimeoutError):
+            if not args.characterize_ceiling:
+                raise
+            # A deliberately destructive independent bare-ssh diagnostic,
+            # never a waiver for dropped managed FlowBridge connections.
+            # Require fresh same-run sshd resource markers, not old churn logs.
+            markers = {}
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                counters = ResourceErrors()
+                with args.server_log.open("rb") as source:
+                    source.seek(0, os.SEEK_END)
+                    end = source.tell()
+                    source.seek(max(args.server_log_offset, end - 65536))
+                    for line in source.read(65536).splitlines():
+                        counters.observe(line)
+                markers = counters.snapshot()
+                if expected_raw_backend_fd_saturation(report, markers, args.min_held):
+                    break
+                time.sleep(0.1)
+            require(expected_raw_backend_fd_saturation(report, markers, args.min_held),
+                    "Bare SSH lost a held channel without proven safe 128 tier and fresh resource exhaustion")
+            report["server_resource_error_counts"] = markers
+            report["unsafe_held_loss_above_product_limit"] = True
+            report["raw_backend_saturation_seen"] = True
+            report["characterization_completed"] = True
+            report["safe_floor_verified"] = args.min_held
+            # Raw SSH 512-target stability failed. Keep passed=false and
+            # resource_recovery_verified=false, even when diagnosis is complete.
+            return
         # OS handles and OpenSSH internal descriptor slots remain distinct.
         deadline = time.monotonic() + 15
         while True:
