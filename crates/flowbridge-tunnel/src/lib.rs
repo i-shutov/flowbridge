@@ -1774,14 +1774,10 @@ mod tests {
                 supervisor.start().unwrap();
                 let failed = wait(&supervisor, |s| s.status.state == "failed");
                 if failed.status.attempt == 0 {
-                    let collision = failed
-                        .status
-                        .last_error
-                        .as_deref()
-                        .is_some_and(|message| {
-                            message.starts_with("local SOCKS port ")
-                                && message.contains(" is unavailable:")
-                        });
+                    let collision = failed.status.last_error.as_deref().is_some_and(|message| {
+                        message.starts_with("local SOCKS port ")
+                            && message.contains(" is unavailable:")
+                    });
                     supervisor.stop().unwrap();
                     assert!(collision, "Unexpected pre-launch SSH failure: {failed:?}");
                     continue;
