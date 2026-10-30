@@ -375,11 +375,17 @@ mod tests {
         let row = ipv6_row(original);
         assert_eq!(row.local.to_string(), "[fe80::1%7]:8080");
         assert_eq!(row.remote.to_string(), "[fe80::2%7]:443");
-        let exact = OwnerQuery { local: row.local, remote: row.remote };
+        let exact = OwnerQuery {
+            local: row.local,
+            remote: row.remote,
+        };
         assert_eq!(match_single_pid(&[row], &exact).unwrap(), Some(73));
         let wrong_scope = OwnerQuery {
             local: SocketAddr::V6(SocketAddrV6::new(
-                "fe80::1".parse().unwrap(), 8080, 0, 8
+                "fe80::1".parse().unwrap(),
+                8080,
+                0,
+                8,
             )),
             remote: exact.remote,
         };
@@ -393,15 +399,24 @@ mod tests {
             remote: "127.0.0.1:23456".parse().unwrap(),
         };
         let active = TcpOwnerRow {
-            local: query.local, remote: query.remote, state: 5, pid: 73,
+            local: query.local,
+            remote: query.remote,
+            state: 5,
+            pid: 73,
         };
         assert_eq!(match_single_pid(&[active], &query).unwrap(), Some(73));
         for state in [1, 2, 11, 12, u32::MAX] {
-            assert!(match_single_pid(&[TcpOwnerRow { state, ..active }], &query).is_err(),
-                "state {state} must not produce an active owner");
+            assert!(
+                match_single_pid(&[TcpOwnerRow { state, ..active }], &query).is_err(),
+                "state {state} must not produce an active owner"
+            );
         }
         assert!(match_single_pid(&[active, active], &query).is_err());
-        assert!(match_single_pid(&[active, TcpOwnerRow { state: 11, ..active }], &query).is_err());
+        assert!(match_single_pid(
+            &[active, TcpOwnerRow { state: 11, ..active }],
+            &query
+        )
+        .is_err());
     }
 
     #[test]
