@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Capacity acceptance against the actual managed OpenSSH -D process.
 
-The Linux default resource sampler uses /proc. The isolated Windows fixture
-injects actual Windows process HANDLE observation. Never conflate OS handles,
-TCP TIME_WAIT entries, active channel budgets or OpenSSH internal FD slots.
+The Linux default sampler uses /proc. Windows injects actual process HANDLE
+observation. OS handles, TCP TIME_WAIT, active budgets and internal SSH FD
+slots are distinct. Long Windows churn is explicitly paced, not a rate claim.
 """
 import concurrent.futures
 from collections import Counter
@@ -16,6 +16,7 @@ import threading
 import time
 
 from ssh_real_integration import exact, require, until
+from churn_pacing import StartPacer
 
 
 def observed_process_resources(pid):
@@ -39,7 +40,7 @@ def observed_process_resources(pid):
 
 
 def windows_tcp_states():
-    """Aggregate read-only numeric TCP counters, never publish endpoints/PIDs."""
+    """Aggregate read-only numeric TCP counters; never publish endpoints."""
     allowed = {'LISTENING','ESTABLISHED','SYN_SENT','SYN_RECEIVED','FIN_WAIT_1',
                'FIN_WAIT_2','CLOSE_WAIT','CLOSING','LAST_ACK','TIME_WAIT','DELETE_TCB','BOUND'}
     result = {'available':False,'counts':{}}
@@ -89,10 +90,16 @@ def run(abi,engine_id,listen_port,target_port,ssh_snapshot,*,
         output,held=128,max_workers=32,churn=200,resource_sampler=None):
     require(held == 128 and 1 <= max_workers <= 64 and 0 <= churn <= 10000,
             'Real SSH acceptance must use bounded reviewed limits')
+    # All three loopback TCP hops share one Windows machine's ephemeral-port
+    # pool. Do not change OS limits to hide that artificial test constraint.
+    # Baseline and overload remain unpaced; only long recycling is paced.
+    churn_rate = 15.0 if os.name == 'nt' and churn > 500 else 0.0
     report = {'passed':False,'commit':os.environ.get('GITHUB_SHA'),
               'real_openssh':True,'open_ssh_connections_held':held,
               'attempted_after_capacity':0,'churn_attempts':0,
               'churn_started':0,'churn_failed':0,'checks':[],
+              'churn_start_limit_per_second':churn_rate,
+              'churn_is_throughput_benchmark':False,
               'no_external_network':True,'windows_fd_limit_verified':False,
               'multi_worker_pool_verified':False}
     measure = resource_sampler or observed_process_resources
@@ -151,8 +158,9 @@ def run(abi,engine_id,listen_port,target_port,ssh_snapshot,*,
         if churn:
             lock = threading.Lock()
             failed = threading.Event()
+            pacer = StartPacer(churn_rate)
             def one_churn(index):
-                if failed.is_set():
+                if failed.is_set() or failed.wait(pacer.delay()):
                     return
                 with lock:
                     report['churn_started'] += 1
@@ -165,6 +173,9 @@ def run(abi,engine_id,listen_port,target_port,ssh_snapshot,*,
                         require(client.recv(1) == b'','Churn EOF/half-close failed')
                     with lock:
                         report['churn_attempts'] += 1
+                        if report['churn_attempts'] % 1000 == 0:
+                            print(json.dumps({'churn_completed':report['churn_attempts'],
+                                              'start_rate_limit':churn_rate}),flush=True)
                 except Exception:
                     failed.set()
                     with lock:
@@ -199,7 +210,26 @@ def run(abi,engine_id,listen_port,target_port,ssh_snapshot,*,
         report['error'] = str(error)
         report['tcp_states_at_failure'] = windows_tcp_states()
         if before:
-            report.setdefault('resource_samples',{})['failure'] = measure(before['pid'])
+            try:
+                report.setdefault('resource_samples',{})['failure'] = measure(before['pid'])
+            except Exception as measurement:
+                report['resource_measurement_error'] = type(measurement).__name__
+        # Compare autobind and explicit bind to distinguish exhausted Windows
+        # source-port reservations; diagnostics never retry the failed request.
+        phase = 'socket'
+        try:
+            with socket.socket() as probe:
+                probe.settimeout(2)
+                phase = 'bind'
+                probe.bind(('127.0.0.1',0))
+                phase = 'connect'
+                probe.connect(('127.0.0.1',target_port))
+                exchange(probe,b'fixture-bind-then-connect\x00\xff')
+                report['fixture_explicit_bind_health'] = True
+        except OSError as error:
+            report['fixture_explicit_bind_health'] = False
+            report['fixture_explicit_bind_error'] = {'phase':phase,'winerror':getattr(error,'winerror',None),
+                                                     'errno':error.errno}
         try:
             report['admission_failure'] = abi.call('fb_engine_snapshot_json',engine_id)['managed_upstream']
             with socket.create_connection(('127.0.0.1',target_port),timeout=2) as direct:
