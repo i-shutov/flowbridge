@@ -29,8 +29,8 @@ pub unsafe extern "C" fn fb_windows_udp_owner_candidate_json(
     guarded(|| {
         #[cfg(windows)]
         {
-            let request = serde_json::from_str(unsafe { input(query_json) }?)
-                .map_err(|e| e.to_string())?;
+            let request =
+                serde_json::from_str(unsafe { input(query_json) }?).map_err(|e| e.to_string())?;
             let candidate = windows_udp_owner::lookup(request)?;
             Ok(json!({"ok": true, "candidate": candidate}))
         }
