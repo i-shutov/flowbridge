@@ -976,6 +976,69 @@ pub unsafe extern "C" fn fb_engine_set_upstream_pool_json(
     })
 }
 
+/// An owned-pool refresh derives availability and listener port from actual
+/// registered SSH supervisor handles rather than trusting a caller-provided
+/// "ready":true flag. It never launches or restarts an SSH process. The
+/// caller repeats this operation after supervisor status changes.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OwnedPoolInput {
+    ssh_ids: Vec<u64>,
+    limits: flowbridge_runtime::admission::Limits,
+    aggregate_max_flows: usize,
+}
+
+/// # Safety
+/// `pool_json` must reference live NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn fb_engine_sync_owned_ssh_pool_json(
+    id: u64,
+    pool_json: *const c_char,
+) -> *mut c_char {
+    guarded(|| {
+        let pool: OwnedPoolInput =
+            serde_json::from_str(unsafe { input(pool_json) }?).map_err(|e| e.to_string())?;
+        if !(1..=4).contains(&pool.ssh_ids.len()) {
+            return Err("owned SSH pool requires 1..=4 supervisor handles".into());
+        }
+        let mut unique = std::collections::HashSet::new();
+        let mut workers = Vec::with_capacity(pool.ssh_ids.len());
+        for ssh_id in &pool.ssh_ids {
+            if !unique.insert(*ssh_id) {
+                return Err("duplicate SSH supervisor handle in owned pool".into());
+            }
+            let status = with_ssh(*ssh_id, |supervisor| {
+                serde_json::to_value(supervisor.snapshot().status)
+                    .map_err(|error| error.to_string())
+            })?;
+            let port = status["local_port"]
+                .as_u64()
+                .and_then(|port| u16::try_from(port).ok())
+                .ok_or("invalid owned SSH supervisor listener port")?;
+            let ready = status["state"] == "ready" && status["pid"].is_number();
+            workers.push(flowbridge_runtime::pool::WorkerInput {
+                endpoint: flowbridge_core::Endpoint {
+                    host: "127.0.0.1".into(),
+                    port,
+                },
+                ready,
+            });
+        }
+        let primary = workers[0].endpoint.clone();
+        with_engine(id, |engine| {
+            let status = engine
+                .set_upstream_pool_with_limits(
+                    primary,
+                    workers,
+                    pool.limits,
+                    pool.aggregate_max_flows,
+                )
+                .map_err(|e| e.to_string())?;
+            Ok(json!({"ok":true,"status":status}))
+        })
+    })
+}
+
 struct SshSlot {
     supervisor: flowbridge_tunnel::Supervisor,
     gate: Mutex<()>,
@@ -1171,6 +1234,61 @@ mod ssh_and_gate_tests {
             let after = unsafe { consume(fb_engine_snapshot_json(id)) };
             assert_eq!(after["managed_pool"]["ready_workers"], 1);
         }
+        fb_engine_destroy(id);
+    }
+
+    #[test]
+    fn owned_pool_cannot_claim_stopped_ssh_is_ready_or_accept_stale_handles() {
+        let profile = CString::new(include_str!("../../../examples/ssh-socks.json")).unwrap();
+        let engine = unsafe { consume(fb_engine_create_json(profile.as_ptr())) };
+        let id = engine["engine_id"].as_u64().unwrap();
+        let first =
+            CString::new(r#"{"host":"test.invalid","user":"qa","local_port":1080}"#).unwrap();
+        let second =
+            CString::new(r#"{"host":"test.invalid","user":"qa","local_port":1082}"#).unwrap();
+        let a = unsafe { consume(fb_ssh_create_json(first.as_ptr())) }["ssh_id"]
+            .as_u64()
+            .unwrap();
+        let b = unsafe { consume(fb_ssh_create_json(second.as_ptr())) }["ssh_id"]
+            .as_u64()
+            .unwrap();
+        let payload = json!({
+            "ssh_ids":[a,b],
+            "limits":{"max_flows":2,"max_opening":1,"max_queued":2,"wait_timeout_ms":100},
+            "aggregate_max_flows":4
+        });
+        let arg = CString::new(payload.to_string()).unwrap();
+        assert_eq!(
+            unsafe { consume(fb_engine_sync_owned_ssh_pool_json(id, arg.as_ptr())) }["ok"],
+            true
+        );
+        let state = unsafe { consume(fb_engine_snapshot_json(id)) };
+        assert_eq!(state["managed_pool"]["ready_workers"], 0);
+        assert_eq!(state["managed_pool"]["workers"][0]["ready"], false);
+        assert_eq!(
+            state["managed_pool"]["workers"][1]["endpoint"]["port"],
+            1082
+        );
+        for bad in [
+            json!({"ssh_ids":[a,a],"limits":payload["limits"],"aggregate_max_flows":4}),
+            json!({"ssh_ids":[a,0],"limits":payload["limits"],"aggregate_max_flows":4}),
+            json!({"ssh_ids":[],"limits":payload["limits"],"aggregate_max_flows":4}),
+            json!({"ssh_ids":[a,b],"limits":payload["limits"],"aggregate_max_flows":3}),
+        ] {
+            let value = CString::new(bad.to_string()).unwrap();
+            assert_eq!(
+                unsafe { consume(fb_engine_sync_owned_ssh_pool_json(id, value.as_ptr())) }["ok"],
+                false
+            );
+            let unchanged = unsafe { consume(fb_engine_snapshot_json(id)) };
+            assert_eq!(unchanged["managed_pool"]["ready_workers"], 0);
+        }
+        fb_ssh_destroy(b);
+        assert_eq!(
+            unsafe { consume(fb_engine_sync_owned_ssh_pool_json(id, arg.as_ptr())) }["ok"],
+            false
+        );
+        fb_ssh_destroy(a);
         fb_engine_destroy(id);
     }
 
