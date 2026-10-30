@@ -47,6 +47,7 @@ def probe_capacity(connect: Callable[[], Any], echo: Callable[[Any, bytes], None
     held = []
     report.update(attempts=[], actual_connection_attempts=0, successful_connections=0,
                   peak_held=0, recovery_successes=0, capacity_baseline_verified=False,
+                  last_good_verified_held=0, held_integrity_failure=None,
                   resource_recovery_verified=False, capacity_enforced_by_flowbridge=False)
     try:
         for tier in tiers:
@@ -96,7 +97,21 @@ def probe_capacity(connect: Callable[[], Any], echo: Callable[[Any, bytes], None
             item["accepted_held"] = len(held)
             sample(f"tier_{tier}")
             for index, client in enumerate(held):
-                echo(client, b"FlowBridge held integrity\x00\xff" + index.to_bytes(2, "big"))
+                try:
+                    echo(client, b"FlowBridge held integrity\x00\xff" + index.to_bytes(2, "big"))
+                except (OSError, EOFError, TimeoutError) as error:
+                    # An *existing* channel failed after excessive raw SSH
+                    # admission. Never relabel this as a successful 512-tier.
+                    report["held_integrity_failure"] = {
+                        "requested_tier": tier,
+                        "held_at_failure": len(held),
+                        "failed_stream_index": index,
+                        "error_type": type(error).__name__,
+                    }
+                    raise
+            report["last_good_verified_held"] = len(held)
+            if len(held) >= min_held:
+                report["capacity_baseline_verified"] = True
             if not child_alive():
                 raise RuntimeError("OpenSSH child exited under held load")
         if len(held) < min_held:
@@ -120,3 +135,38 @@ def probe_capacity(connect: Callable[[], Any], echo: Callable[[Any, bytes], None
             client.close()
         report["successful_connections"] += 1
         report["recovery_successes"] += 1
+
+
+def expected_raw_backend_fd_saturation(report: dict, resource_counts: dict,
+                                       min_held: int) -> bool:
+    """Classify a *failed diagnostic*, never claim bare 512-channel success.
+
+    Require a completed safe baseline, real attempted held streams above that
+    minimum, an observed existing-stream OS transport failure, and fresh
+    server-side resource evidence from the same isolated high-tier probe.
+    Cannot classify a new-flow-only error, byte-integrity mismatch, or an
+    unverified 128-channel baseline as successful diagnostic coverage.
+    """
+    failure = report.get("held_integrity_failure")
+    if not isinstance(failure, dict) or not isinstance(resource_counts, dict):
+        return False
+    try:
+        good = report.get("last_good_verified_held", 0)
+        failed_held = failure.get("held_at_failure", 0)
+        peak = report.get("peak_held", 0)
+        if any(type(x) is not int for x in (good, failed_held, peak, min_held)):
+            return False
+        if not (1 <= min_held <= good < failed_held <= peak <= 512):
+            return False
+        if report.get("capacity_baseline_verified") is not True:
+            return False
+        if failure.get("error_type") not in ("ConnectionResetError", "ConnectionAbortedError",
+                                             "BrokenPipeError", "TimeoutError", "EOFError"):
+            return False
+        if failure.get("requested_tier", 0) <= min_held:
+            return False
+        return (resource_counts.get("too_many_open_files", 0) > 0 or
+                resource_counts.get("no_buffer_space", 0) > 0 or
+                resource_counts.get("not_enough_space", 0) > 0)
+    except (TypeError, ValueError):
+        return False
