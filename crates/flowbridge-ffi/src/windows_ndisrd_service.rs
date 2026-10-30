@@ -163,10 +163,7 @@ mod tests {
         assert_eq!(missing["service_registered"], false);
         assert_eq!(missing["service_error"], "service_not_installed");
 
-        for failure in [
-            QueryFailure::ScmOpen(5),
-            QueryFailure::ServiceOpen(5),
-        ] {
+        for failure in [QueryFailure::ScmOpen(5), QueryFailure::ServiceOpen(5)] {
             let blocked = classify(Err(failure));
             assert!(blocked["service_registered"].is_null());
             assert_eq!(blocked["win32_error"], 5);
