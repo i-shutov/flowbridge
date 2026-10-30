@@ -1,0 +1,11 @@
+# Hosted Windows SSH churn: bounded loopback 10048 recovery
+
+Scope: **test-only** robustness for disposable loopback client sockets, with no changes to production networking, OpenSSH configuration, registry, firewall, signing or transport admission.
+
+On 30 October 2026 a previous Windows hosted probe hit Winsock `WSAEADDRINUSE` (10048) during repetitive local TCP connections after 636 authenticated sessions. A separate later run on main (`5b5afc2feeda2195f302380e615ba003d4906e09`, [run 41042087357](https://github.com/i-shutov/flowbridge/actions/runs/41042087357)) completed 128 simultaneous authenticated channels, 1,152 admission-budget rejections, 10,000/10,000 verified churn connections, and four independent SSH child processes. The flake remains worth handling without relaxing any transport requirement.
+
+The disposable test dialer on Windows explicitly binds to `127.0.0.1:0` and retries **only** address collision error 10048 (at most six short retries); the failed socket is always closed. Any other Winsock error, SOCKS reply error, SSH transport error, payload mismatch, half-close error, process failure or failed recovery remains a hard test failure. Retries exceeding approximately one percent of observed load also fail CI; all 10,000 real successful sessions remain required. The test report includes actual logical TCP connects, address collisions, exhausted attempts and retry ceiling. Unit regressions test the retry budget, cleanup and non-10048 immediate failure.
+
+This is not an assertion of Windows 10/11 real WFP driver interception or DNS leak protection. Hosted CI currently executes on Windows Server 2025 for test infrastructure only. The 128-flow admission cap is FlowBridge's conservative managed-backend policy; it is **not** a measurement of a 128-socket maximum inside Windows OpenSSH. Separate unprotected backend saturation is diagnostic and must never claim 512 stable connections without actual evidence.
+
+The older [PR #34](https://github.com/i-shutov/flowbridge/pull/34) contains experimental raw-backend changes that fail its strict final 512-stability assertion despite verifying the managed 128/1152/10000/four-worker path. This patch intentionally transplants **only** the bounded 10048 test-client correction and leaves raw backend classification untouched.
