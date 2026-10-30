@@ -10,6 +10,34 @@ mod native_dns;
 #[cfg(windows)]
 mod windows_packet_filter;
 
+#[cfg(windows)]
+mod windows_tcp_owner;
+
+/// Read-only Windows IP Helper process candidate for an exact IPv4/v6 TCP tuple.
+///
+/// # Safety
+/// query_json must be a live NUL-terminated UTF-8 string with keys local/remote.
+/// IP Helper tables are racy; this diagnostic NEVER authorizes packet capture.
+#[no_mangle]
+pub unsafe extern "C" fn fb_windows_tcp_owner_candidate_json(
+    query_json: *const c_char,
+) -> *mut c_char {
+    guarded(|| {
+        #[cfg(windows)]
+        {
+            let request =
+                serde_json::from_str(unsafe { input(query_json) }?).map_err(|e| e.to_string())?;
+            let candidate = windows_tcp_owner::lookup(request)?;
+            Ok(json!({"ok": true, "candidate": candidate}))
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = query_json;
+            Err("Windows IP Helper owner lookup is unavailable on this platform".into())
+        }
+    })
+}
+
 /// Passive NDISRD device/API check only; no install, signature claim, or traffic capture.
 #[no_mangle]
 pub extern "C" fn fb_windows_packet_filter_status_json() -> *mut c_char {
