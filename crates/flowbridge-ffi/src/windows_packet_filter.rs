@@ -118,6 +118,7 @@ struct AdapterList {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AdapterQueryProblem {
+    #[cfg(not(target_pointer_width = "64"))]
     UnsupportedArchitecture,
     Open(u32),
     Query(u32),
@@ -150,7 +151,7 @@ fn validate_adapter_reply(
         }
         let name = std::str::from_utf8(&bytes[..end])
             .map_err(|_| AdapterQueryProblem::Name(index))?;
-        if names.iter().any(|existing| existing == name) {
+        if names.iter().any(|existing| existing.as_str() == name) {
             return Err(AdapterQueryProblem::Name(index));
         }
         names.push(name.to_owned());
@@ -324,10 +325,10 @@ mod tests {
             Err(AdapterQueryProblem::Name(0))
         );
         reply.names[0] = [0; ADAPTER_NAME_BYTES];
-        reply.names[0][..14].copy_from_slice(br"\\DEVICE\\{TEST}");
+        reply.names[0][..14].copy_from_slice(br"\DEVICE\{TEST}");
         assert_eq!(
             validate_adapter_reply(&reply, full).unwrap(),
-            vec![r"\\DEVICE\\{TEST}".to_owned()]
+            vec![r"\DEVICE\{TEST}".to_owned()]
         );
         reply.count = 2;
         reply.names[1] = reply.names[0];
