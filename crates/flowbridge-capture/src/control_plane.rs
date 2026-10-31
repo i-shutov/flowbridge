@@ -190,7 +190,10 @@ mod tests {
     struct ConfigFile(PathBuf);
     impl ConfigFile {
         fn new(config: &Config) -> Self {
-            let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+            let nanos = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
             let path = std::env::temp_dir().join(format!(
                 "flowbridge-control-{}-{}-{}.json",
                 std::process::id(),
@@ -227,8 +230,13 @@ mod tests {
         let mut socket = tokio::net::TcpStream::connect(config.listen).await.unwrap();
         socket.write_all(&[5, 1, 0]).await.unwrap();
         let mut response = [0_u8; 2];
-        tokio::time::timeout(std::time::Duration::from_secs(3), socket.read_exact(&mut response))
-            .await.unwrap().unwrap();
+        tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            socket.read_exact(&mut response),
+        )
+        .await
+        .unwrap()
+        .unwrap();
         assert_eq!(response, [5, 0]);
         drop(socket);
 
@@ -275,7 +283,11 @@ mod tests {
         let (stopped, exit) = controller.execute(br#"{"command":"stop"}"#);
         assert!(exit);
         assert_eq!(stopped["engine"]["running"], false);
-        assert!(std::net::TcpStream::connect_timeout(&config.listen, std::time::Duration::from_millis(100)).is_err());
+        assert!(std::net::TcpStream::connect_timeout(
+            &config.listen,
+            std::time::Duration::from_millis(100)
+        )
+        .is_err());
     }
 
     #[test]
@@ -298,8 +310,13 @@ mod tests {
         }
         let mut incompatible = config();
         incompatible.rules.push(Rule {
-            id: "app".into(), enabled: true, applications: vec![r"C:\Apps\A.exe".into()],
-            hosts: vec![], networks: vec![], ports: vec![], action: Action::Block,
+            id: "app".into(),
+            enabled: true,
+            applications: vec![r"C:\Apps\A.exe".into()],
+            hosts: vec![],
+            networks: vec![],
+            ports: vec![],
+            action: Action::Block,
         });
         file.write(&incompatible);
         assert!(load_explicit_profile(&file.0).is_err());

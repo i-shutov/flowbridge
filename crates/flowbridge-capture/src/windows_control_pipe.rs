@@ -152,12 +152,10 @@ pub(super) async fn client(action: &str) -> Result<Value, String> {
     .await
     .map_err(|_| "local control deadline exceeded".to_owned())??;
     if response["ok"] != true {
-        return Err(
-            response["error"]
-                .as_str()
-                .unwrap_or("local control command rejected")
-                .to_owned(),
-        );
+        return Err(response["error"]
+            .as_str()
+            .unwrap_or("local control command rejected")
+            .to_owned());
     }
     Ok(response)
 }

@@ -147,6 +147,7 @@ version = "0.2.0"
 dependencies = [
  "flowbridge-core",
  "flowbridge-net",
+ "flowbridge-runtime",
  "serde",
  "serde_json",
  "tokio",
