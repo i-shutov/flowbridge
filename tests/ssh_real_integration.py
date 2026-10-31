@@ -42,6 +42,13 @@ def distinct_free_ports(count):
         for sock in held:
             sock.close()
 
+    
+def free_port():
+    # Retain the historical test helper API for native_dns_integration.py.
+    # Multi-port fixtures requiring mutual uniqueness must use the held-
+    # socket distinct_free_ports(count) allocator above.
+    return distinct_free_ports(1)[0]
+
 
 def until(predicate, seconds=30):
     deadline = time.monotonic() + seconds
