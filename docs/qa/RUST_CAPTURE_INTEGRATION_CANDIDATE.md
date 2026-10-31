@@ -170,3 +170,63 @@ validations and real Rust Engine lifecycle without claiming native Windows
 driver evidence. An actual Windows SCM service, restricted unauthenticated
 GUI views, crash recovery, authenticated owner binding, selected-app packet
 capture, protected DNS/UDP and Win10/11 installation remain OPEN.
+
+
+## Native signed-driver proof on VDSina, 2026-10-31 (R1 read-only/RX partial)
+
+This is **actual separately installed signed Windows Packet Filter NDISRD 3.6.2.1
+on the owner's VDSina Windows Server 2025 VM**, driven by the original Rust
+FlowBridge agent built for prior PR head
+`51bdc3b16f46e6bee99ec3bf213ca47276335450` / hosted merge
+`3b2f5867b7b6ee55f50dc3826008184a68e1d447`. It is **not**
+Windows 10/11 acceptance. The owner's independent provider VNC was tested, the
+self-hosted Windows x64 runner was elevated, Defender real-time remained active,
+and neither secure boot nor memory integrity was disabled or claimed verified.
+
+- Official separately installed MSI SHA-256
+  `9c388c0b7f189f7fa98720bae2caecf7d64f30910838b80b438ecf8956b8502c`;
+  Microsoft WHCP-signed driver SHA-256
+  `8623a9c34531cf73de4286ad518b84af03a331c78959769a1ca38723e3258984`.
+  No driver/ProxiFyre binaries are included in the FlowBridge candidate.
+- The original independent Rust agent SHA-256
+  `bd74827262da07c538c9a78ea6c96d048aa6a1df49026cf56e691435cd4ce92e`
+  actually opened the NDISRD device and executed its real version/adapter
+  query IOCTLs. Real API version `0x06023000`; one adapter, native
+  packed adapter wire inventory 8836 bytes; invalid-consent lab request
+  rejected. Exact self-hosted
+  [read-only PASS](https://github.com/i-shutov/flowbridge-vps-qa/actions/runs/41182781861),
+  with sanitized private [proof](https://github.com/i-shutov/flowbridge-vps-qa/issues/1#issuecomment-6540906999).
+- **First real Rust NDISRD LISTEN-only RX PASS**:
+  [self-hosted run 41183317849](https://github.com/i-shutov/flowbridge-vps-qa/actions/runs/41183317849),
+  private workflow source SHA
+  `4e2d14f45e60d28a885047ae9ae4f578d7f2e0de`.
+  Native copy-only LISTEN_BOTH mode received 55 real packets in 5500 ms
+  (28 outbound, 27 inbound), with **0 reinjections**, real Rust process exit
+  code 0, successful loop, explicit verified restoration to adapter mode 0,
+  working outbound network and active Defender after the test. A local SYSTEM
+  scheduled emergency driver-uninstall watchdog was armed immediately before
+  any adapter mode change and safely disarmed only after restoration and
+  security/network checks. The driver remained installed. No packet payload,
+  IP address, MAC, adapter name, SSH keys, or secrets entered artifacts.
+  [Private JSON evidence](https://github.com/i-shutov/flowbridge-vps-qa/issues/1#issuecomment-6540972621);
+  downloaded outer artifact ZIP SHA-256
+  `052d5f6d6e03882a5251e3cc6934dc4087f29b8f41be2a7fca647819edf0e92a`,
+  independently verified against GitHub artifact and JSON assertions.
+- Prior native observations (70 and 62 real packets) already proved read-only
+  device RX and mode-0 restoration, but private workflow verdicts were
+  **FAIL because of Windows PowerShell harness Process.ExitCode handling**.
+  Independent signed-driver/agent/status checks and healthy networking/
+  Defender permitted safe rescue disarm; the final run above fixed the
+  test harness without relaxing its exit-zero or rollback gates. Do not
+  retroactively mark those earlier runs PASS.
+
+This establishes **native signed-driver -> original Rust DeviceIoControl ->
+packet copy-only receipt -> verified normal-network rollback**. It does
+**not** close native packet divert/injection, process/PID creation-epoch
+binding, packet-to-Rust-local-relay-to-SOCKS/SSH-selected-app routing and
+reverse flow, persistent protected fail-closed, IPv4/IPv6 DNS/UDP/QUIC
+containment, GUI/SCM/installer, or actual Win10/11 protected acceptance.
+Returning to adapter mode 0 resumes **ordinary** connectivity and is not
+a protective kill switch. No release or DNS-leak-free claim follows from
+this result. See [issue #41](https://github.com/i-shutov/flowbridge/issues/41)
+for the detailed independent evidence checkpoint.
