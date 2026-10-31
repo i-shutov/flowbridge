@@ -312,7 +312,7 @@ Exact GitHub CI run, PR HEAD/merge SHA and independently checked artifact
 digests will be added only after verification; no PASS from source alone.
 
 
-## Bounded native NDISRD-to-IP Helper candidate observation (new integration block; CI pending)
+## Bounded native NDISRD-to-IP Helper candidate observation (Windows Server native evidence; NOT PacketBound)
 
 The **same** native x64 Rust PacketSession now offers a copy-only packet
 observer that is explicitly denied in divert/passthrough mode. An additional
@@ -335,3 +335,12 @@ No selected-app route, fail-closed safety, DNS leak-free or Windows 10/11
 acceptance is claimed. Dangerous protected operation is not enabled. A VPS
 native run, if performed, requires pre-armed independent rescue and owner-
 confirmed emergency VNC; no unsolicited divert, installer or kernel changes.
+
+### Exact-head GitHub and real NDISRD outcome, 2026-10-31
+
+- Original Rust integration source: PR #56 HEAD `f8951bf2af69fbbfbd6cd8ccfbb662c8d65a735f`, tested pull-request merge `8a6dc373c809f06419964c1865ca7866ad09be20`. Strict hosted [capture integration 41193920767](https://github.com/i-shutov/flowbridge/actions/runs/41193920767) 3/3 PASS; [Rust/native 41193920774](https://github.com/i-shutov/flowbridge/actions/runs/41193920774) 5/5 PASS; [DNS 41193920895](https://github.com/i-shutov/flowbridge/actions/runs/41193920895) 3/3 PASS. Windows SSH 41193920780 was still running at this checkpoint; no overall pass claimed early.
+- Independently downloaded hosted Windows capture artifact #13039838605: outer ZIP SHA-256 `318038b34a28f98e0aebb353c32ce2f1687c63bc0aa460ae12d318161dfbefe7`; nested four-file allowlisted Rust-only candidate ZIP `97076498b274c243e24e61f0deabb26150f3d4b9ca8d10947026319cc8deb95f`; original `flowbridge-agent.exe` `491f1a07fb610b0ca75b2c94f8e8da49c252390f2242e59ace6eed28887fe922`. All manifest payload hashes independently matched, PR HEAD and tested merge both matched.
+- Real VDSina Windows Server 2025 Standard build 26100, signed separately installed NDISRD, Defender active, owner-confirmed VNC, independently prearmed SYSTEM recovery, **copy-only LISTEN_BOTH**: [private native Actions 41194272084](https://github.com/i-shutov/flowbridge-vps-qa/actions/runs/41194272084), private workflow SHA `42b8ff7820dc42f779799dd0398c383814ac49d4`. 6504 ms, **71 actual driver frames (31 outbound / 40 inbound), zero injected**, 24 bounded live IP Helper double-snapshot queries: **18 consistent process candidates, 4 absent, 2 indeterminate**. The adapter was restored to mode 0; in-session capture completed, network and Defender checked healthy, independent rescue DISARMED, no MSI uninstall. Only aggregate counts were written.
+- Independently downloaded private sanitized evidence artifact #13040235105: ZIP SHA-256 `f0c1ad2d7b0ae42b37cc261725d3a5c3e461f4dfab914bba22dc2c2b08ab362d`; internal `listen-only.json` SHA-256 `c70d5800131c152e139e2fdd86174e12fd7db907867d0a837b3cfdc46303c679`. Both source/merge SHA and mandatory rollback/no-reinjection security booleans checked against downloaded bytes. Evidence is also copied to private [VPS issue #1](https://github.com/i-shutov/flowbridge-vps-qa/issues/1#issuecomment-6542425846).
+
+**Important:** Even 18 consistent IP Helper PID + creation-time snapshots are temporal *candidate associations*, NOT kernel-authenticated assignment of NDISRD frames to process identity. The implementation does not synthesize `PacketBound` or authorize a selected app, and cannot yet route intercepted TCP through the SOCKS/SSH relay. No protected fail-closed, DNS/UDP/IPv6 leak containment, Windows 10/11 native acceptance, complete service/installer, macOS NE acceptance or release is proved. Mode 0 returns to ordinary networking, NOT a protected kill switch. Raw unprotected OpenSSH 512-channel stability is still not established.
