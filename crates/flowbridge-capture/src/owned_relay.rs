@@ -193,8 +193,16 @@ pub async fn connect_owned(
         Err(error) => {
             // False activation retires the reservation (and never enables a
             // connection). If that cleanup itself fails, halt all leases.
-            let _ = state.activate(ticket, identity.evidence(), now_ms, false);
-            if state.active_records() != 0 {
+            let retired = state.activate(ticket, identity.evidence(), now_ms, false);
+            // The expected UpstreamUnavailable result proves this specific
+            // reservation was removed. Other unrelated owned streams must
+            // survive a single refused SOCKS connection.
+            if !matches!(
+                retired,
+                Err(PipelineError::Lease(
+                    flowbridge_core::tcp_flow_lease::LeaseError::UpstreamUnavailable
+                ))
+            ) {
                 state.revoke_all();
             }
             pending.armed = false;
@@ -372,14 +380,12 @@ mod tests {
                 let mut byte = [0u8; 1];
                 let _ = socket.read(&mut byte).await.unwrap();
             });
-            let connected = connect_owned(
-                &pool,
-                pipeline.clone(),
-                new_ticket,
-                context(4),
-                watch::channel(false).1,
-            )
-            .await;
+            // Bind both halves explicitly: temporary sender lifetime extends
+            // over .await in an argument expression, falsely keeping it alive.
+            let (closed_supervisor, receiver) = watch::channel(false);
+            drop(closed_supervisor);
+            let connected =
+                connect_owned(&pool, pipeline.clone(), new_ticket, context(4), receiver).await;
             // The supervisor sender was dropped immediately: fail closed,
             // either before or after SOCKS opens. No pending ticket survives.
             match connected {
@@ -391,6 +397,66 @@ mod tests {
             assert_eq!(pool.active(), 0);
             accepted.abort();
             drop(supervisor);
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn failing_one_owned_connect_keeps_unrelated_lease_alive() {
+        timeout(DEADLINE, async {
+            let first = tuple(false);
+            let second = TcpTuple {
+                source: "192.0.2.1:40002".parse().unwrap(),
+                destination: first.destination,
+            };
+            let pipeline = Arc::new(Mutex::new(setup_with_idle(20_000)));
+            let (failed, unaffected) = {
+                let mut state = pipeline.lock().unwrap();
+                let failed = state
+                    .begin(context(1), &frame(first, 2), alias(first))
+                    .unwrap();
+                let unaffected = state
+                    .begin(
+                        context(2),
+                        &frame(second, 2),
+                        TcpTuple {
+                            source: second.destination,
+                            destination: "192.0.2.1:18081".parse().unwrap(),
+                        },
+                    )
+                    .unwrap();
+                (failed, unaffected)
+            };
+            let proxy = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let native = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let pool = RelayPool::new(
+                proxy.local_addr().unwrap(),
+                native.local_addr().unwrap(),
+                1,
+                DEADLINE,
+                DEADLINE,
+                DEADLINE,
+            )
+            .unwrap();
+            let (supervisor, receiver) = watch::channel(false);
+            drop(supervisor);
+            assert!(matches!(
+                connect_owned(&pool, pipeline.clone(), failed, context(3), receiver).await,
+                Err(OwnedRelayError::Transport(RelayError::Cancelled))
+            ));
+            let mut state = pipeline.lock().unwrap();
+            assert_eq!(state.active_records(), 1);
+            state
+                .activate(unaffected, context(4).owner, 4, true)
+                .unwrap();
+            let mut frame = frame(second, 0x10);
+            state
+                .rewrite(unaffected, context(5), Leg::ApplicationToRelay, &mut frame)
+                .unwrap();
+            state.finish_relay(unaffected, context(5).owner).unwrap();
+            assert_eq!(state.active_records(), 0);
+            assert_eq!(pool.active(), 0);
         })
         .await
         .unwrap();
