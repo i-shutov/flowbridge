@@ -669,6 +669,13 @@ async fn native(request: Request) -> Result<Value, String> {
     }
     let stats = session.stats();
     let cleanup = session.close();
+    let [self_epoch, child_epoch, powershell_epoch, external_epoch] =
+        crate::self_redirect::owner_evidence_flags(
+            native_candidate_checked,
+            request.spawned_child,
+            request.powershell_child,
+            request.external_client.is_some(),
+        );
     let transport = if request.expect_denied {
         probe.upstream_failed && !probe.upstream_connected && !probe.valid_http_reply
     } else {
@@ -697,10 +704,10 @@ async fn native(request: Request) -> Result<Value, String> {
         "selected_frames_dropped":reflect.counters.selected_dropped,
         "selected_checksum_or_options_rejected":reflect.counters.checksums_or_options_rejected,
         "unsolicited_wire_replies_dropped":reflect.counters.unsolicited_wire_replies_dropped,
-        "self_owned_socket_pid_epoch_consistent":native_candidate_checked && !request.spawned_child && !request.powershell_child,
-        "spawned_child_socket_pid_epoch_consistent":native_candidate_checked && request.spawned_child,
-        "powershell_child_socket_pid_epoch_consistent":native_candidate_checked && request.powershell_child,
-        "external_sibling_socket_pid_epoch_consistent":native_candidate_checked && request.external_client.is_some(),
+        "self_owned_socket_pid_epoch_consistent":self_epoch,
+        "spawned_child_socket_pid_epoch_consistent":child_epoch,
+        "powershell_child_socket_pid_epoch_consistent":powershell_epoch,
+        "external_sibling_socket_pid_epoch_consistent":external_epoch,
         "external_process_exit_confirmed":external_exited,
         "source_authority":if request.external_client.is_some() {
             "independently_launched_fixed_os_powershell_bound_socket_not_packetbound"

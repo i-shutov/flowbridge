@@ -102,6 +102,30 @@ impl Request {
     }
 }
 
+
+#[cfg(any(all(windows, target_pointer_width = "64"), test))]
+pub(crate) fn owner_evidence_flags(
+    checked: bool,
+    spawned_child: bool,
+    powershell_child: bool,
+    external_client: bool,
+) -> [bool; 4] {
+    // Only one explicitly validated LAB authority can be reported. The
+    // independent OS process must never inherit the parent-owned evidence
+    // flag merely because both spawned_child and powershell_child are false.
+    // Conflicting/ambiguous modes produce no positive ownership evidence.
+    if !checked {
+        return [false; 4];
+    }
+    match (spawned_child, powershell_child, external_client) {
+        (false, false, false) => [true, false, false, false],
+        (true, false, false) => [false, true, false, false],
+        (false, true, false) => [false, false, true, false],
+        (false, false, true) => [false, false, false, true],
+        _ => [false; 4],
+    }
+}
+
 pub fn run(request: Request) -> Result<Value, String> {
     request.validate()?;
     #[cfg(all(windows, target_pointer_width = "64"))]
@@ -429,6 +453,47 @@ mod tests {
         r.consent = "NATIVE_SPAWNED_CHILD_TCP_REFLECT".into();
         r.target = "127.0.0.1:80".parse().unwrap();
         assert!(r.validate().is_err());
+    }
+    #[test]
+    fn lab_owner_epoch_evidence_is_mutually_exclusive_and_never_packetbound() {
+        assert_eq!(
+            owner_evidence_flags(true, false, false, false),
+            [true, false, false, false]
+        );
+        assert_eq!(
+            owner_evidence_flags(true, true, false, false),
+            [false, true, false, false]
+        );
+        assert_eq!(
+            owner_evidence_flags(true, false, true, false),
+            [false, false, true, false]
+        );
+        assert_eq!(
+            owner_evidence_flags(true, false, false, true),
+            [false, false, false, true],
+            "independent PowerShell cannot masquerade as the Rust parent"
+        );
+        for spawned in [false, true] {
+            for powershell in [false, true] {
+                for external in [false, true] {
+                    let flags = owner_evidence_flags(true, spawned, powershell, external);
+                    assert!(flags.iter().filter(|flag| **flag).count() <= 1);
+                    assert_eq!(
+                        owner_evidence_flags(false, spawned, powershell, external),
+                        [false; 4],
+                        "unconfirmed IP Helper snapshots cannot claim an owner"
+                    );
+                    if [spawned, powershell, external]
+                        .into_iter()
+                        .filter(|selected| *selected)
+                        .count()
+                        > 1
+                    {
+                        assert_eq!(flags, [false; 4]);
+                    }
+                }
+            }
+        }
     }
     #[test]
     fn native_reflection_has_bidirectional_exact_tuple_and_swapped_mac() {
