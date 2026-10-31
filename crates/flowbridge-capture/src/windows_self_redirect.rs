@@ -362,7 +362,10 @@ async fn native(request: Request) -> Result<Value, String> {
                     "FLOWBRIDGE_LAB_TARGET_IPV4",
                     request.target.ip().to_string(),
                 )
-                .env("FLOWBRIDGE_LAB_TARGET_PORT", request.target.port().to_string());
+                .env(
+                    "FLOWBRIDGE_LAB_TARGET_PORT",
+                    request.target.port().to_string(),
+                );
             command
         } else {
             let binary = std::env::current_exe()
