@@ -336,7 +336,11 @@ pub fn validate_pinned_tcp_owner(
     if !pinned.is_active()? || &pinned.evidence()? != expected {
         return Err("Pinned TCP process identity is no longer active".into());
     }
-    let af = if query.local.is_ipv4() { AF_INET } else { AF_INET6 } as u32;
+    let af = if query.local.is_ipv4() {
+        AF_INET
+    } else {
+        AF_INET6
+    } as u32;
     require_stable_pid(&read_rows(af)?, query, expected.pid)?;
     require_stable_pid(&read_rows(af)?, query, expected.pid)?;
     if !pinned.is_active()? || &pinned.evidence()? != expected {
