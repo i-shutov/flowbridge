@@ -836,3 +836,23 @@ The initial new per-packet two-snapshot IP Helper owner-candidate requirement pr
 
 ## Explicit Rust SSH identification-order A/B diagnostic (NOT a protected route)
 Run `flowbridge ssh-diagnose --endpoint 192.0.2.10:22 --timeout-ms 2000 --consent DIRECT_SSH_DIAGNOSTIC`. It creates two explicitly consented DIRECT TCP connections to an IP literal, server-first and client-first identification; it neither authenticates nor alters OpenSSH, driver modes or packet routing. Bounded banners and binary packet-header checks produce only stage/timing JSON, not endpoint, identification, credentials or payload. A header is NOT KEX completion, and a differential result is NOT proof a banner-gate workaround helps the user's SSH stall. Cross-platform CI executes compiled CLI against a separate live loopback server plus no-consent negative. Native protected routing, DNS safety and Win10/11 acceptance remain open.
+
+## 2026-11-01: explicit managed Rust SSH Banner Gate — integrated vertical, evidence pending
+
+FlowBridge's existing independently implemented SSH Supervisor can now optionally
+launch its original Rust `flowbridge` CLI as an OpenSSH `ProxyCommand` using
+`banner_gate_executable`, `banner_gate_consent=BANNER_FIRST_EXPERIMENTAL` and
+`banner_gate_timeout_ms` (100..10000). No implicit enablement, no fallback to
+DIRECT, no KEX rewriting, no password storage and no host-key relaxation.
+The helper path is absolute, local, shell-inert, basename constrained, without
+untrusted substitutions. Host must be a numeric IP. macOS remains denied until
+additional helper capture-carrier NE exclusion is reviewed. This provides a
+bounded compatibility experiment, not a fix proved on the owner's SSH host.
+
+Independent real-SSH fixtures now exercise the **actual Rust FFI Supervisor**
+with that config, authenticating against a real isolated OpenSSH sshd via the
+original Rust helper and verifying SOCKS binary half-close, both on hosted
+Windows and Linux. Prior standalone CLI and ordinary supervisor routes,
+native NDISRD QA, protected status, DNS and raw-512 assertions are not modified.
+The new exact-HEAD CI, merge-SHA and artifact evidence must be checked before
+accepting this end-to-end block. Windows Server 2025 is not Win10/11 acceptance.

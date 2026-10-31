@@ -44,6 +44,10 @@ pub struct Config {
     /// Opt-in, absolute path to a user-reviewed OpenSSH-compatible client.
     /// Never auto-switch to another backend after authentication or overload.
     pub ssh_executable: Option<String>,
+    /// Explicit experimental Rust CLI for OpenSSH ProxyCommand.
+    pub banner_gate_executable: Option<String>,
+    pub banner_gate_consent: Option<String>,
+    pub banner_gate_timeout_ms: u64,
     pub compression: bool,
     pub verbose_diagnostics: bool,
     pub server_alive_interval_secs: u64,
@@ -68,6 +72,9 @@ impl Default for Config {
             identity_file: None,
             known_hosts_file: None,
             ssh_executable: None,
+            banner_gate_executable: None,
+            banner_gate_consent: None,
+            banner_gate_timeout_ms: 5000,
             compression: false,
             verbose_diagnostics: false,
             server_alive_interval_secs: 15,
@@ -177,6 +184,43 @@ impl Config {
                 ));
             }
         }
+        if !(100..=10000).contains(&self.banner_gate_timeout_ms) {
+            return Err(TunnelError("Experimental SSH gate timeout must be 100..=10000 ms".into()));
+        }
+        match (&self.banner_gate_executable, &self.banner_gate_consent) {
+            (None, None) => {}
+            (Some(path), Some(consent)) if consent == "BANNER_FIRST_EXPERIMENTAL" => {
+                // OpenSSH executes ProxyCommand through a shell. No hostnames,
+                // shell metacharacters, percent expansion or arbitrary binaries.
+                if cfg!(target_os = "macos") {
+                    return Err(TunnelError("macOS extra carrier requires NE exclusion review".into()));
+                }
+                let host: std::net::IpAddr = self.host.parse().map_err(|_| {
+                    TunnelError("Banner gate requires a numeric SSH host IP".into())
+                })?;
+                if host.is_unspecified() || host.is_multicast() {
+                    return Err(TunnelError("Banner gate host IP is invalid".into()));
+                }
+                let file = std::path::Path::new(path);
+                let basename = if cfg!(windows) { "flowbridge.exe" } else { "flowbridge" };
+                if path.is_empty()
+                    || path.len() > 4096
+                    || !file.is_absolute()
+                    || !path.chars().all(|c| c.is_ascii_alphanumeric()
+                        || matches!(c, '/' | '\\' | '.' | '_' | '-' | ':'))
+                    || file.components().any(|c| matches!(
+                        c, std::path::Component::ParentDir | std::path::Component::CurDir
+                    ))
+                    || !file.file_name().and_then(|n| n.to_str())
+                        .is_some_and(|n| n.eq_ignore_ascii_case(basename))
+                {
+                    return Err(TunnelError("Banner gate requires shell-inert absolute local FlowBridge CLI path".into()));
+                }
+            }
+            _ => return Err(TunnelError(
+                "Banner gate requires an explicit executable and exact consent".into()
+            )),
+        }
         for (name, value, min, max) in [
             (
                 "server_alive_interval_secs",
@@ -247,7 +291,8 @@ impl Config {
         args.push("printf 'FLOWBRIDGE_DNS_BEGIN\\n' >&2; cat /etc/resolv.conf >&2; printf '\\nFLOWBRIDGE_DNS_END\\n' >&2".into());
         args
     }
-    /// Arguments are passed directly to OpenSSH; no command shell is involved.
+    /// Args go directly to OpenSSH. Optional ProxyCommand is shell-executed by
+    /// OpenSSH but composed only from strictly validated inert tokens.
     pub fn arguments(&self) -> Vec<String> {
         let mut args = vec![
             "-F".into(),
@@ -305,6 +350,21 @@ impl Config {
                 path.replace('\\', "\\\\")
             };
             args.extend(["-o".into(), format!("UserKnownHostsFile=\"{path}\"")]);
+        }
+        if let Some(path) = &self.banner_gate_executable {
+            // Host is numeric and path contains only inert shell characters.
+            // OpenSSH authenticates normally; Rust gate only waits for banner.
+            let target = std::net::SocketAddr::new(
+                self.host.parse().expect("validated numeric gate host"),
+                self.port,
+            );
+            let command = format!(
+                "{} ssh-banner-gate --endpoint {} --timeout-ms {} --consent BANNER_FIRST_EXPERIMENTAL",
+                path.replace('\\', "/"),
+                target,
+                self.banner_gate_timeout_ms
+            );
+            args.extend(["-o".into(), format!("ProxyCommand={command}")]);
         }
         args.push(self.host.clone());
         args
@@ -1712,6 +1772,52 @@ mod tests {
             assert!(Config::from_json(text).is_err(), "must reject {text}");
         }
     }
+    #[test]
+    fn managed_banner_gate_requires_consent_safe_local_executable_and_numeric_host() {
+        let mut cfg = config();
+        assert!(!cfg.arguments().iter().any(|x| x.starts_with("ProxyCommand=")));
+        cfg.host = "127.0.0.1".into();
+        cfg.banner_gate_executable = Some(if cfg!(windows) {
+            "C:/FlowBridge/bin/flowbridge.exe".into()
+        } else {
+            "/opt/flowbridge/flowbridge".into()
+        });
+        assert!(cfg.validate().is_err(), "no implicit consent");
+        cfg.banner_gate_consent = Some("BANNER_FIRST_EXPERIMENTAL".into());
+        if cfg!(target_os = "macos") {
+            assert!(cfg.validate().is_err(), "macOS NE carrier not accepted");
+            return;
+        }
+        cfg.validate().unwrap();
+        let args = cfg.arguments();
+        assert!(args.iter().any(|x| x.starts_with("ProxyCommand=")
+            && x.contains("--endpoint 127.0.0.1:22")
+            && x.contains("--consent BANNER_FIRST_EXPERIMENTAL")));
+        for required in ["-F", "none", "StrictHostKeyChecking=yes",
+            "BatchMode=yes", "PasswordAuthentication=no",
+            "PreferredAuthentications=publickey"] {
+            assert!(args.iter().any(|x| x == required));
+        }
+        cfg.host = "example.com".into();
+        assert!(cfg.validate().is_err());
+        cfg.host = "127.0.0.1".into();
+        for bad in ["/tmp/a & b/flowbridge", "/tmp/a$(whoami)/flowbridge",
+            "/tmp/../flowbridge", "flowbridge", "//server/share/flowbridge"] {
+            cfg.banner_gate_executable = Some(bad.into());
+            assert!(cfg.validate().is_err(), "dangerous path: {bad}");
+        }
+        cfg.banner_gate_executable = Some(if cfg!(windows) {
+            "C:/FlowBridge/bin/flowbridge.exe".into()
+        } else {
+            "/opt/flowbridge/flowbridge".into()
+        });
+        cfg.banner_gate_consent = Some("DIRECT_SSH_DIAGNOSTIC".into());
+        assert!(cfg.validate().is_err());
+        cfg.banner_gate_consent = Some("BANNER_FIRST_EXPERIMENTAL".into());
+        cfg.banner_gate_timeout_ms = 10001;
+        assert!(cfg.validate().is_err());
+    }
+
     #[test]
     fn readiness_requires_child_and_socks_and_stop_reaps_without_restart() {
         let config = config();

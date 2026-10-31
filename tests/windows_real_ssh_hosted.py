@@ -138,6 +138,14 @@ def main():
                         report['banner_first_real_ssh'] = real_authenticated_ssh(
                             Path('target/debug/flowbridge.exe'), args.ssh, root / 'client_key',
                             known, user, ssh_port, echo.server_address[1], free_port())
+                        from ssh_banner_gate import real_supervised_banner_gate
+                        report['supervised_banner_first_real_ssh'] = real_supervised_banner_gate(
+                            abi, Path('target/debug/flowbridge.exe'),
+                            {'host':'127.0.0.1', 'port':ssh_port, 'user':user,
+                             'ssh_executable':str(args.ssh),
+                             'identity_file':str(root / 'client_key'),
+                             'known_hosts_file':str(known)},
+                            echo.server_address[1], free_port())
                         settings = {'host':'127.0.0.1','port':ssh_port,'user':user,
                                     'local_port':socks_port,'ssh_executable':str(args.ssh),
                                     'identity_file':str(root/'client_key'), 'known_hosts_file':str(known),

@@ -213,6 +213,34 @@ def real_authenticated_ssh(cli, ssh, identity, known, user, ssh_port, echo_port,
             child.wait(timeout=5)
 
 
+def real_supervised_banner_gate(abi, cli, settings, echo_port, socks_port):
+    """Real Rust Supervisor -> OpenSSH -> original Rust gate -> real SOCKS."""
+    from ssh_real_integration import round_trip, until
+    cli = Path(cli).resolve(strict=True)
+    require(all(c.isascii() and (c.isalnum() or c in '/\\._:-') for c in str(cli)),
+            'Managed gate requires shell-inert local CLI')
+    settings = dict(settings, local_port=socks_port,
+                    banner_gate_executable=str(cli),
+                    banner_gate_consent='BANNER_FIRST_EXPERIMENTAL',
+                    banner_gate_timeout_ms=5000, startup_timeout_ms=15000,
+                    max_restarts=0)
+    ssh_id = abi.call('fb_ssh_create_json', settings)['ssh_id']
+    try:
+        abi.call('fb_ssh_start_json', ssh_id)
+        def ready():
+            state = abi.call('fb_ssh_snapshot_json', ssh_id)['status']
+            require(state['state'] != 'failed', 'Supervised SSH gate failed before readiness')
+            return state['state'] == 'ready' and state['pid']
+        until(ready, seconds=20)
+        round_trip(socks_port, echo_port)
+        return {'managed_banner_first_socks_passed': True,
+                'real_authenticated_openssh': True,
+                'binary_half_close': True, 'manual_proxycommand_not_required': True,
+                'cli_sha256': hashlib.sha256(cli.read_bytes()).hexdigest()}
+    finally:
+        abi.lib.fb_ssh_destroy(ssh_id)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)

@@ -222,6 +222,15 @@ def main(repetition=0):
                 Path('target/debug/flowbridge'), 'ssh', root / 'client_key', known,
                 getpass.getuser(), ssh_port, target_port, distinct_free_ports(1)[0])
             passed('Rust banner-first adapter -> real authenticated OpenSSH -> binary SOCKS')
+            if repetition == 0:
+                from ssh_banner_gate import real_supervised_banner_gate
+                report['supervised_banner_first_real_ssh'] = real_supervised_banner_gate(
+                    abi, Path('target/debug/flowbridge'),
+                    {'host': '127.0.0.1', 'port': ssh_port, 'user': getpass.getuser(),
+                     'identity_file': str(root / 'client_key'),
+                     'known_hosts_file': str(known)},
+                    target_port, distinct_free_ports(1)[0])
+                passed('Managed Rust SSH Supervisor + Rust gate + authenticated OpenSSH')
             settings = {'host': '127.0.0.1', 'port': ssh_port, 'user': getpass.getuser(),
                         'local_port': socks_port, 'verbose_diagnostics': False, 'identity_file': str(root / 'client_key'),
                         'known_hosts_file': str(known), 'server_alive_interval_secs': 15,
