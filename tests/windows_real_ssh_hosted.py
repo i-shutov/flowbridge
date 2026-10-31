@@ -157,6 +157,20 @@ def main():
                         'limits':{'max_flows':128,'max_opening':16,'max_queued':64,'wait_timeout_ms':500}})
                     abi.call('fb_engine_start_json',engine)
                     round_trip(ingress,echo.server_address[1])
+                    if os.environ.get('FLOWBRIDGE_CAPTURE_AGENT'):
+                        from capture_real_ssh import run as capture_relay
+
+                        def capture_gate(ready):
+                            # Explicit denial, not a queued reconnect-grace request.
+                            abi.call('fb_engine_set_upstream_gate_json', engine, {
+                                'endpoint': endpoint, 'ready': ready,
+                                'grace_ms': 15000 if ready else 0,
+                                'limits': {'max_flows': 128, 'max_opening': 16,
+                                           'max_queued': 64, 'wait_timeout_ms': 500}})
+
+                        report['capture_relay'] = capture_relay(
+                            Path(os.environ['FLOWBRIDGE_CAPTURE_AGENT']), ingress, capture_gate,
+                            snapshot()['pid'], args.output / 'capture-relay-real-ssh.json')
                     from real_ssh_capacity import run as capacity
                     result = capacity(abi,engine,ingress,echo.server_address[1],snapshot,
                                       output=args.output/'managed-capacity.json',churn=args.churn,

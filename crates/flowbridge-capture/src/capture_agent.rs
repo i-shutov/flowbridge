@@ -12,7 +12,7 @@ pub fn capabilities() -> Value {
         "vendor_driver_bundled":false, "custom_wfp_required":false,
         "native_owner_binding_accepted":false, "protected_redirect_available":false,
         "dns_leak_free":false, "release_accepted":false,
-        "modes":["status","observe_lab","passthrough_lab"],
+        "modes":["status","observe_lab","passthrough_lab","relay_loopback_probe"],
         "abi":{"adapters":ndis_wire::ADAPTER_LIST_BYTES,"mode":ndis_wire::MODE_BYTES,
             "request":ndis_wire::REQUEST_BYTES,"packet_header":ndis_wire::PACKET_HEADER_BYTES,
             "packet_capacity":ndis_wire::PACKET_BUFFER_BYTES}

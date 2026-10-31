@@ -95,3 +95,17 @@ FlowBridge SOCKS -> SSH native trace; carrier exclusion; protected crash failure
 IPv4/IPv6 DNS/UDP/QUIC no-leak evidence; secure service/IPC/GUI and installer
 upgrade/uninstall/rollback; native resource soak. macOS NE remains independent.
 Do not mark 1.0 or DNS leak-free without evidence and owner approval.
+
+## Real Rust relay coupled to supervised OpenSSH (still NOT native packet proof)
+
+The existing isolated Linux and hosted Windows SSH fixtures now run the Rust
+agent's explicitly consented `relay-probe` through the actual FlowBridge SOCKS
+listener backed by a separately supervised OpenSSH process and a counted
+loopback echo destination. The probe validates 4,097 exact binary bytes,
+TCP half-close, release of the admission permit, denial with the upstream gate
+closed (zero reconnect grace and zero target connections), and recovery after
+the gate is reopened. It records the real SSH PID, exact source SHA and agent
+binary SHA-256 in machine-readable evidence. Existing 128/1152/10000/4 and
+raw-512 assertions remain intact. The helper may **never** claim driver
+interception, packet-to-PID authority, DNS containment or Windows 10/11
+acceptance, irrespective of the probe result.

@@ -233,6 +233,19 @@ def main(repetition=0):
             gate(True)
             round_trip(engine_port, target_port)
             passed('Actual OpenSSH authentication, strict enrolled host key, binary traffic and half-close')
+            if repetition == 0 and os.environ.get('FLOWBRIDGE_CAPTURE_AGENT'):
+                from capture_real_ssh import run as capture_relay
+
+                def capture_gate(ready):
+                    # Explicitly closed gate: zero reconnect grace.
+                    abi.call('fb_engine_set_upstream_gate_json', engine,
+                             {'endpoint': endpoint, 'ready': ready,
+                              'grace_ms': 15000 if ready else 0, 'limits': ssh_limits})
+
+                report['capture_relay'] = capture_relay(
+                    Path(os.environ['FLOWBRIDGE_CAPTURE_AGENT']), engine_port, capture_gate,
+                    ready['pid'], args.output / 'capture-relay-real-ssh.json')
+                passed('Rust relay -> FlowBridge SOCKS -> real OpenSSH: half-close, deny and recovery')
             from native_vertical_integration import actual_ssh
             actual_ssh(abi, profile, endpoint, target_port, limits=ssh_limits)
             passed('Native capture ABI: selected application -> real SSH -> target, without SOCKS ingress')

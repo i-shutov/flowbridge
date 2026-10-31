@@ -10,7 +10,12 @@ fn main() {
         [command, request] if command == "lab" && request.len() <= 4096 => {
             serde_json::from_str(request).map_err(|e| e.to_string()).and_then(capture_agent::run_lab)
         }
-        _ => Err("Usage: flowbridge-agent status | capabilities | lab <bounded JSON>. Protected redirect is not yet accepted.".to_owned()),
+        [command, request] if command == "relay-probe" && request.len() <= 4096 => {
+            serde_json::from_str(request)
+                .map_err(|e| e.to_string())
+                .and_then(flowbridge_capture::relay_probe::run)
+        }
+        _ => Err("Usage: flowbridge-agent status | capabilities | lab <bounded JSON> | relay-probe <loopback JSON>. Protected redirect is not yet accepted.".to_owned()),
     };
     match result {
         Ok(value) => {

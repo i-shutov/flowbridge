@@ -72,6 +72,12 @@ def verify(agent: pathlib.Path, output: pathlib.Path) -> None:
     ):
         agent_json(agent, "lab", json.dumps(request), success=False)
     agent_json(agent, "protected", success=False)
+    for request in (
+        {"upstream": "192.0.2.1:1080", "target": "127.0.0.1:443", "consent": "LOOPBACK_TCP_PROBE"},
+        {"upstream": "127.0.0.1:1080", "target": "127.0.0.1:443", "consent": ""},
+        {"upstream": "127.0.0.1:0", "target": "127.0.0.1:443", "consent": "LOOPBACK_TCP_PROBE"},
+    ):
+        agent_json(agent, "relay-probe", json.dumps(request), success=False)
     status = agent_json(agent, "status")  # read only; no mode-changing request
     report = {
         "passed": True, "test_kind": "read_only_agent_cli_and_independent_abi",

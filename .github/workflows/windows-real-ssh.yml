@@ -7,6 +7,7 @@ on:
       - 'crates/flowbridge-tunnel/**'
       - 'crates/flowbridge-runtime/**'
       - 'crates/flowbridge-ffi/**'
+      - 'crates/flowbridge-capture/**'
       - '.github/workflows/windows-real-ssh.yml'
   push:
     branches: [main]
@@ -16,6 +17,7 @@ on:
       - 'crates/flowbridge-tunnel/**'
       - 'crates/flowbridge-runtime/**'
       - 'crates/flowbridge-ffi/**'
+      - 'crates/flowbridge-capture/**'
       - '.github/workflows/windows-real-ssh.yml'
   workflow_dispatch:
 permissions:
@@ -26,6 +28,7 @@ concurrency:
 env:
   PYTHONUTF8: '1'
   FLOWBRIDGE_HOSTED_WINDOWS_SSH: '1'
+  FLOWBRIDGE_CAPTURE_AGENT: target/debug/flowbridge-agent.exe
 jobs:
   windows-openssh:
     runs-on: windows-2025
@@ -38,7 +41,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Reject false-positive capacity probes
         run: python -m unittest discover -s tests -p test_windows_ssh_probe.py -v
-      - run: cargo build --locked -p flowbridge-ffi
+      - run: cargo build --locked -p flowbridge-ffi -p flowbridge-capture
       - name: Fetch pinned official sshd without installing a system service
         shell: pwsh
         run: |

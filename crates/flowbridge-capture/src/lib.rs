@@ -5,6 +5,7 @@ pub mod capture_pipeline;
 pub mod ndis_session;
 pub mod ndis_wire;
 pub mod relay;
+pub mod relay_probe;
 
 #[cfg(all(windows, target_pointer_width = "64"))]
 mod windows_ndis_device;
