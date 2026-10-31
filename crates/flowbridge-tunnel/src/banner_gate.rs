@@ -80,8 +80,18 @@ pub fn run(endpoint: SocketAddr, timeout: Duration) -> io::Result<()> {
         let _ = io::copy(&mut inbound, &mut to_remote);
         let _ = to_remote.shutdown(Shutdown::Write);
     });
-    io::copy(&mut remote, &mut outbound)?;
-    outbound.flush()?;
+    // StdoutLock may be line-buffered even when it is a binary pipe.
+    // SSH KEX packets have no newline: io::copy followed by a final flush
+    // deadlocks real OpenSSH at SSH2_MSG_KEXINIT. Flush EACH received chunk.
+    let mut buffer = [0u8; 8192];
+    loop {
+        let amount = remote.read(&mut buffer)?;
+        if amount == 0 {
+            break;
+        }
+        outbound.write_all(&buffer[..amount])?;
+        outbound.flush()?;
+    }
     Ok(())
 }
 

@@ -100,6 +100,80 @@ def timeout_fixture(cli):
     return True
 
 
+def interactive_kex_fixture(cli):
+    """Server sends binary KEX and waits for the next CLIENT packet before FIN.
+
+    A final-flush-only stdout pump deadlocks here. Use a bounded reader thread
+    so a broken bridge cannot hang this CI test or falsely pass at EOF.
+    """
+    import queue
+    client_ident = b"SSH-2.0-InteractiveClient\r\n"
+    server_ident = b"SSH-2.0-InteractiveServer\r\n"
+    server_kex = b"\x00\x00\x00\x0c\x08\x00\xff"
+    client_kex = b"\x01\x02\x00\xff\x03"
+    final_packet = b"\x07\x08\x00\x09"
+    errors = []
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    listener.settimeout(5)
+
+    def exact(connection, count):
+        data = bytearray()
+        while len(data) < count:
+            chunk = connection.recv(count - len(data))
+            if not chunk:
+                raise RuntimeError("EOF before interactive KEX completion")
+            data.extend(chunk)
+        return bytes(data)
+
+    def server():
+        try:
+            connection, _ = listener.accept()
+            with connection:
+                connection.settimeout(4)
+                connection.sendall(server_ident)
+                require(exact(connection, len(client_ident)) == client_ident,
+                        "Client identification changed")
+                connection.sendall(server_kex)
+                require(exact(connection, len(client_kex)) == client_kex,
+                        "Client KEX packet changed")
+                connection.sendall(final_packet)
+                connection.shutdown(socket.SHUT_WR)
+        except Exception as error:
+            errors.append(type(error).__name__)
+
+    server_thread = threading.Thread(target=server, daemon=True)
+    server_thread.start()
+    process = subprocess.Popen([str(cli), "ssh-banner-gate",
+                                "--endpoint", "127.0.0.1:" + str(listener.getsockname()[1]),
+                                "--consent", "BANNER_FIRST_EXPERIMENTAL"],
+                               stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL)
+    try:
+        process.stdin.write(client_ident)
+        process.stdin.flush()
+        result = queue.Queue(maxsize=1)
+        read_thread = threading.Thread(
+            target=lambda: result.put(process.stdout.read(len(server_ident) + len(server_kex))),
+            daemon=True)
+        read_thread.start()
+        require(result.get(timeout=3) == server_ident + server_kex,
+                "KEX binary bytes were buffered without an immediate flush")
+        process.stdin.write(client_kex)
+        process.stdin.close()
+        require(process.stdout.read() == final_packet, "Subsequent KEX packet changed")
+        require(process.wait(timeout=4) == 0, "Interactive bridge exited abnormally")
+        server_thread.join(timeout=4)
+        require(not server_thread.is_alive() and not errors, "Interactive peer did not finish")
+        return True
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=3)
+        listener.close()
+
+
 def real_authenticated_ssh(cli, ssh, identity, known, user, ssh_port, echo_port, socks_port):
     """Strict host-key, ephemeral public-key auth, real SOCKS/half-close via gate."""
     from ssh_real_integration import round_trip, until
@@ -150,6 +224,7 @@ def main():
               "win10_11_acceptance": False, "source_sha": os.getenv("GITHUB_SHA")}
     try:
         report["binary"] = binary_fixture(cli)
+        report["interactive_kex_no_line_buffer_deadlock"] = interactive_kex_fixture(cli)
         report["absent_banner_rejects_no_client_leak"] = timeout_fixture(cli)
         report["passed"] = True
     finally:
