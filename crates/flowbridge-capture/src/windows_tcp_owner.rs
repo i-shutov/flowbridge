@@ -45,17 +45,43 @@ struct TcpOwnerRow {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub(super) struct ProcessEvidence {
-    pub(super) pid: u32,
-    pub(super) created_100ns: u64,
-    pub(super) path: String,
+pub struct ProcessEvidence {
+    pub pid: u32,
+    pub created_100ns: u64,
+    pub path: String,
 }
 
-pub(super) struct OwnedProcess(pub(super) HANDLE);
+/// Query-only OS process handle that pins one actual process object across
+/// two table snapshots. No caller can forge a handle or change the PID.
+pub struct OwnedProcess {
+    handle: HANDLE,
+    pid: u32,
+}
+
+impl OwnedProcess {
+    pub fn query(pid: u32) -> Result<Self, String> {
+        if pid == 0 {
+            return Err("Zero PID is not a process owner candidate".into());
+        }
+        // SAFETY: Query-only process information, non-inheritable handle.
+        let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+        if handle.is_null() {
+            return Err(format!("OpenProcess query denied: {}", unsafe {
+                GetLastError()
+            }));
+        }
+        Ok(Self { handle, pid })
+    }
+
+    pub fn evidence(&self) -> Result<ProcessEvidence, String> {
+        process_evidence(self.handle, self.pid)
+    }
+}
+
 impl Drop for OwnedProcess {
     fn drop(&mut self) {
         // SAFETY: OpenProcess returned a non-null owned handle.
-        unsafe { CloseHandle(self.0) };
+        unsafe { CloseHandle(self.handle) };
     }
 }
 
@@ -300,20 +326,13 @@ pub fn lookup(query: OwnerQuery) -> Result<Value, String> {
             }))
         }
     };
-    // SAFETY: PROCESS_QUERY_LIMITED_INFORMATION, no modification access,
-    // no handle inheritance. This handle pins the process object through the
-    // second ownership observation, independently of later PID recycling.
-    let raw = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
-    if raw.is_null() {
-        return Err(format!("OpenProcess query denied: {}", unsafe {
-            GetLastError()
-        }));
-    }
-    let handle = OwnedProcess(raw);
-    let before = process_evidence(handle.0, pid)?;
+    // Query-only handle pins the process object across both observations,
+    // independently of later PID recycling; never a packet ownership token.
+    let handle = OwnedProcess::query(pid)?;
+    let before = handle.evidence()?;
     let second = read_rows(af)?;
     require_stable_pid(&second, &query, pid)?;
-    let after = process_evidence(handle.0, pid)?;
+    let after = handle.evidence()?;
     if before != after {
         return Err("Process identity changed during lookup".into());
     }
@@ -328,7 +347,6 @@ pub fn lookup(query: OwnerQuery) -> Result<Value, String> {
         "native_packet_attribution_proved": false
     }))
 }
-
 
 /// Actual Windows TCP socket -> two IP Helper table observations -> process
 /// creation-time probe. Only a self-created loopback TCP connection is used.
@@ -564,7 +582,10 @@ mod tests {
         let evidence = self_test().unwrap();
         assert_eq!(evidence["ok"], true);
         assert_eq!(evidence["two_snapshots_consistent"], true);
-        assert_eq!(evidence["candidate_matches_current_process_and_creation_epoch"], true);
+        assert_eq!(
+            evidence["candidate_matches_current_process_and_creation_epoch"],
+            true
+        );
         assert_eq!(evidence["packet_owner_bound"], false);
         assert_eq!(evidence["authorizes_capture"], false);
         assert_eq!(evidence["protected_redirect_available"], false);
@@ -572,5 +593,4 @@ mod tests {
         assert!(evidence.get("executable_path").is_none());
         assert!(evidence.get("process_creation_100ns").is_none());
     }
-
 }
