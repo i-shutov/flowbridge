@@ -174,7 +174,10 @@ fn validate_adapter_reply(
         }
         let name =
             std::str::from_utf8(&bytes[..end]).map_err(|_| AdapterQueryProblem::Name(index))?;
-        if adapters.iter().any(|existing| existing.name == name) {
+        if adapters
+            .iter()
+            .any(|existing| existing.name.eq_ignore_ascii_case(name))
+        {
             return Err(AdapterQueryProblem::Name(index));
         }
         adapters.push(AdapterDiagnostic {
@@ -365,6 +368,11 @@ mod tests {
         );
         reply.count = 2;
         reply.names[1] = reply.names[0];
+        assert_eq!(
+            validate_adapter_reply(&reply, full),
+            Err(AdapterQueryProblem::Name(1))
+        );
+        reply.names[1][1] = b'd'; // Windows adapter names are case-insensitive.
         assert_eq!(
             validate_adapter_reply(&reply, full),
             Err(AdapterQueryProblem::Name(1))
