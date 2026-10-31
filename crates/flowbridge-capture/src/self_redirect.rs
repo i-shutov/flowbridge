@@ -31,11 +31,20 @@ pub struct Request {
     pub expect_denied: bool,
     #[serde(default)]
     pub spawned_child: bool,
+    #[serde(default)]
+    pub powershell_child: bool,
 }
 
 impl Request {
     pub(crate) fn validate(&self) -> Result<(), String> {
-        let required_consent = if self.spawned_child {
+        // Only an explicitly identified parent-controlled laboratory client is
+        // accepted. No arbitrary executable path or PID can be supplied.
+        if self.spawned_child && self.powershell_child {
+            return Err("Conflicting native laboratory child types".into());
+        }
+        let required_consent = if self.powershell_child {
+            "NATIVE_POWERSHELL_CHILD_TCP_REFLECT"
+        } else if self.spawned_child {
             "NATIVE_SPAWNED_CHILD_TCP_REFLECT"
         } else {
             "NATIVE_SELF_SOCKET_TCP_REFLECT"
@@ -339,6 +348,7 @@ mod tests {
             duration_ms: 5000,
             expect_denied: false,
             spawned_child: false,
+            powershell_child: false,
         };
         assert!(r.validate().is_ok());
         r.upstream = "192.0.2.7:1080".parse().unwrap();
@@ -351,6 +361,16 @@ mod tests {
         assert!(r.validate().is_err());
         r.consent = "NATIVE_SPAWNED_CHILD_TCP_REFLECT".into();
         assert!(r.validate().is_ok());
+        r.powershell_child = true;
+        assert!(r.validate().is_err(), "two child types cannot be selected");
+        r.spawned_child = false;
+        assert!(r.validate().is_err(), "consent must match child type");
+        r.consent = "NATIVE_POWERSHELL_CHILD_TCP_REFLECT".into();
+        assert!(r.validate().is_ok(), "fixed system PowerShell lab client is permitted");
+        r.powershell_child = false;
+        assert!(r.validate().is_err(), "PowerShell consent never grants self socket");
+        r.spawned_child = true;
+        r.consent = "NATIVE_SPAWNED_CHILD_TCP_REFLECT".into();
         r.target = "127.0.0.1:80".parse().unwrap();
         assert!(r.validate().is_err());
     }

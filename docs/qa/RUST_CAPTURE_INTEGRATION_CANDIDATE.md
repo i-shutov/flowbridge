@@ -510,3 +510,32 @@ Windows 10/11 acceptance, macOS NE, raw OpenSSH 512 capacity or release 1.0.
 Next genuine blocker: attach unrelated selected-app flow to *defensible* owner
 authority and independently enforced protected drop, with native negative
 tests under guaranteed rollback. Server 2025 is only an integration laboratory.
+
+
+## Fixed Microsoft PowerShell test-client vertical (2026-10-31, native proof pending)
+
+The Windows-only Rust agent now supports one further *bounded laboratory*
+client type: the OS PowerShell executable in the fixed system directory,
+running a static source-owned script to reserve an IPv4 TCP source port,
+announce it to the Rust parent and wait for GO. The parent pins the distinct
+process object and exact creation epoch; the same native packet-reflection
+worker requires two consistent IP Helper TCP-owner snapshots before reflecting
+the single reserved flow through Rust SOCKS and authenticated OpenSSH. The
+PowerShell process is ONLY a traffic generator, not a router or privileged
+backend. No caller-provided executable path, script or PID is accepted.
+
+This mode requires the distinct NATIVE_POWERSHELL_CHILD_TCP_REFLECT consent,
+rejects conflicting client modes, validates the live owner and returns the
+socket child to a terminated/joined state before the NDISRD tunnel is
+disarmed. The Python native harness requires connected, denied and recovered
+phases for the PowerShell client, with separate identity and negative
+PacketBound/release flags. Native VDSina execution MUST verify the system
+PowerShell Authenticode signature before driver mutation, keep the independent
+SYSTEM rescue armed, and check source/merge/binary/artifact SHA-256. This
+paragraph records the new SOURCE CANDIDATE only, not a native test PASS.
+
+Even if these further native phases eventually pass, a known parent-created
+PowerShell process with an explicit GO handshake does NOT establish arbitrary
+app packet attribution, persistent crash fail-closed, DNS/UDP/IPv6 containment
+or personal Win10/11 acceptance. Mode zero remains ordinary DIRECT-capable
+networking.

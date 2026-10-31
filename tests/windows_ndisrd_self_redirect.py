@@ -138,24 +138,33 @@ def main() -> None:
                 abi.call('fb_engine_start_json', engine)
                 round_trip(ingress, echo.server_address[1])
                 result['actual_supervised_ssh_authenticated'] = True
-                def probe(expect_denied, spawned_child=False):
+                def probe(expect_denied, source='self'):
+                    require(source in ('self', 'rust-child', 'powershell'), 'Unrecognized native lab client')
+                    consents = {'self': 'NATIVE_SELF_SOCKET_TCP_REFLECT',
+                                'rust-child': 'NATIVE_SPAWNED_CHILD_TCP_REFLECT',
+                                'powershell': 'NATIVE_POWERSHELL_CHILD_TCP_REFLECT'}
                     request = {'adapter_name': context['adapter_name'], 'local_ipv4': context['local_ipv4'],
                         'target': f'{target}:80', 'upstream': f'127.0.0.1:{ingress}',
-                        'duration_ms': 12000,
-                        'consent': 'NATIVE_SPAWNED_CHILD_TCP_REFLECT' if spawned_child else 'NATIVE_SELF_SOCKET_TCP_REFLECT',
-                        'spawned_child': spawned_child, 'expect_denied': expect_denied}
+                        'duration_ms': 12000, 'consent': consents[source],
+                        'spawned_child': source == 'rust-child',
+                        'powershell_child': source == 'powershell',
+                        'expect_denied': expect_denied}
                     proc = subprocess.run([str(args.agent.resolve()), 'native-self-redirect', json.dumps(request)],
                         capture_output=True, text=True, encoding='utf-8', timeout=20, check=False)
                     report = json.loads(proc.stdout)
                     require(isinstance(report, dict), 'No structured agent report')
                     report['process_exit_code'] = proc.returncode
                     return report
-                phases = [('connected', False, False), ('gate_closed', True, False),
-                          ('recovered', False, False), ('child_connected', False, True),
-                          ('child_gate_closed', True, True), ('child_recovered', False, True)]
-                for phase, deny, child in phases:
+                phases = [('connected', False, 'self'), ('gate_closed', True, 'self'),
+                          ('recovered', False, 'self'), ('child_connected', False, 'rust-child'),
+                          ('child_gate_closed', True, 'rust-child'),
+                          ('child_recovered', False, 'rust-child'),
+                          ('powershell_connected', False, 'powershell'),
+                          ('powershell_gate_closed', True, 'powershell'),
+                          ('powershell_recovered', False, 'powershell')]
+                for phase, deny, source in phases:
                     gate(not deny)
-                    report = probe(deny, child)
+                    report = probe(deny, source)
                     result[phase] = report
                     result['driver_was_used'] = result['driver_was_used'] or report.get('actual_ndisrd_tunnel') is True
                     require(report.get('rollback_confirmed') is True, 'Native adapter rollback not confirmed')
@@ -163,21 +172,28 @@ def main() -> None:
                             f'Native {phase} canary did not satisfy all gates')
                     require(report.get('selected_original_frames_sent_to_adapter') == 0,
                             'Selected original packet escaped to physical adapter')
-                    evidence_field = ('spawned_child_socket_pid_epoch_consistent' if child
-                                      else 'self_owned_socket_pid_epoch_consistent')
+                    evidence_field = {'self': 'self_owned_socket_pid_epoch_consistent',
+                                      'rust-child': 'spawned_child_socket_pid_epoch_consistent',
+                                      'powershell': 'powershell_child_socket_pid_epoch_consistent'}[source]
                     require(report.get(evidence_field) is True,
                             'Expected pinned live process epoch not confirmed')
-                    if child:
+                    if source != 'self':
                         require(report.get('self_owned_socket_pid_epoch_consistent') is False,
                                 'Child flow was incorrectly reported as parent-owned')
-                        require(report.get('source_authority') ==
-                                'parent_spawned_child_live_process_and_bound_port_not_general_packetbound',
-                                'Cross-process evidence authority exaggerated')
+                        authority = ('parent_spawned_child_live_process_and_bound_port_not_general_packetbound'
+                                     if source == 'rust-child' else
+                                     'parent_spawned_os_powershell_client_and_bound_port_not_general_packetbound')
+                        require(report.get('source_authority') == authority,
+                                'Cross-runtime evidence authority exaggerated')
+                    require(report.get('arbitrary_app_owner_binding_accepted') is False and
+                            report.get('native_owner_binding_accepted') is False,
+                            'Cannot promote a controlled canary to PacketBound')
                     require(report.get('release_accepted') is False, 'False release claim')
                 require(snapshot()['pid'] == initial_pid, 'SSH restarted unexpectedly')
                 result['same_supervised_ssh_across_failure_recovery'] = True
                 result['native_self_owned_tcp_to_real_socks_ssh_verified'] = True
                 result['native_spawned_child_tcp_to_real_socks_ssh_verified'] = True
+                result['native_system_powershell_tcp_to_real_socks_ssh_verified'] = True
                 result['general_packet_pid_proof'] = False
                 result['arbitrary_selected_app_accepted'] = False
                 result['passed'] = True

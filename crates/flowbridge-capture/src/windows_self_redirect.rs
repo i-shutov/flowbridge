@@ -25,6 +25,48 @@ use tokio::sync::watch;
 
 const REQUEST: &[u8] = b"HEAD / HTTP/1.0\r\nHost: example.com\r\nConnection: close\r\n\r\n";
 
+/// Fixed Windows PowerShell client for cross-runtime NDISRD lab verification.
+/// This creates only TCP test traffic; all interception/routing stays in Rust.
+/// No executable path or script is accepted from untrusted JSON/IPC.
+const POWERSHELL_CLIENT_SCRIPT: &str = r#"
+$ErrorActionPreference = 'Stop'
+$localIP = [System.Net.IPAddress]::Parse($env:FLOWBRIDGE_LAB_LOCAL_IPV4)
+$targetIP = [System.Net.IPAddress]::Parse($env:FLOWBRIDGE_LAB_TARGET_IPV4)
+if ($localIP.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork -or $targetIP.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { exit 2 }
+$s = [System.Net.Sockets.Socket]::new([System.Net.Sockets.AddressFamily]::InterNetwork, [System.Net.Sockets.SocketType]::Stream, [System.Net.Sockets.ProtocolType]::Tcp)
+try {
+  $s.ReceiveTimeout = 7000
+  $s.SendTimeout = 7000
+  $s.Bind([System.Net.IPEndPoint]::new($localIP, 0))
+  [Console]::Out.WriteLine(([System.Net.IPEndPoint]$s.LocalEndPoint).Port)
+  [Console]::Out.Flush()
+  if ([Console]::ReadLine() -cne 'go') { exit 2 }
+  $s.Connect([System.Net.IPEndPoint]::new($targetIP, 80))
+  $crlf = [string][char]13 + [string][char]10
+  $payload = 'HEAD / HTTP/1.0' + $crlf + 'Host: example.com' + $crlf + 'Connection: close' + $crlf + $crlf
+  $bytes = [System.Text.Encoding]::ASCII.GetBytes($payload)
+  $offset = 0
+  while ($offset -lt $bytes.Length) {
+    $sent = $s.Send($bytes, $offset, $bytes.Length - $offset, [System.Net.Sockets.SocketFlags]::None)
+    if ($sent -le 0) { throw 'Socket send refused' }
+    $offset += $sent
+  }
+  $s.Shutdown([System.Net.Sockets.SocketShutdown]::Send)
+  $buffer = New-Object byte[] 4096
+  $reply = [System.IO.MemoryStream]::new()
+  while ($true) {
+    $n = $s.Receive($buffer)
+    if ($n -eq 0) { break }
+    if ($reply.Length + $n -gt 8192) { throw 'Reply too large' }
+    $reply.Write($buffer, 0, $n)
+  }
+  $response = [System.Text.Encoding]::ASCII.GetString($reply.ToArray())
+  $ok = $response.StartsWith('HTTP/1.') -and $response.Contains($crlf + $crlf)
+  [Console]::Out.WriteLine((@{ok=$ok;bytes=[long]$reply.Length} | ConvertTo-Json -Compress))
+} finally { $s.Dispose() }
+"#;
+
+
 #[derive(Default)]
 struct Probe {
     valid_http_reply: bool,
@@ -293,24 +335,52 @@ async fn native(request: Request) -> Result<Value, String> {
     {
         return Err("Exact Ethernet adapter/MTU prerequisite failed".into());
     }
-    let (local, source, process) = if request.spawned_child {
-        let binary =
-            std::env::current_exe().map_err(|_| "Original Rust child executable unavailable")?;
-        let mut child = Command::new(binary)
-            .arg("native-child")
-            .arg(request.local_ipv4.to_string())
-            .arg(request.target.to_string())
+    let (local, source, process) = if request.spawned_child || request.powershell_child {
+        let mut command = if request.powershell_child {
+            // Fixed system executable, never a user-specified command.
+            // Private native QA checks its Microsoft Authenticode signature.
+            let root =
+                std::env::var_os("SystemRoot").ok_or("Windows system directory unavailable")?;
+            let binary = std::path::PathBuf::from(root)
+                .join("System32")
+                .join("WindowsPowerShell")
+                .join("v1.0")
+                .join("powershell.exe");
+            if !binary.is_file() {
+                return Err("System PowerShell TCP canary is unavailable".into());
+            }
+            let mut command = Command::new(binary);
+            command
+                .arg("-NoLogo")
+                .arg("-NoProfile")
+                .arg("-NonInteractive")
+                .arg("-Command")
+                .arg(POWERSHELL_CLIENT_SCRIPT)
+                .env("FLOWBRIDGE_LAB_LOCAL_IPV4", request.local_ipv4.to_string())
+                .env("FLOWBRIDGE_LAB_TARGET_IPV4", request.target.ip().to_string());
+            command
+        } else {
+            let binary = std::env::current_exe()
+                .map_err(|_| "Original Rust child executable unavailable")?;
+            let mut command = Command::new(binary);
+            command
+                .arg("native-child")
+                .arg(request.local_ipv4.to_string())
+                .arg(request.target.to_string());
+            command
+        };
+        let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .kill_on_drop(true)
             .spawn()
-            .map_err(|_| "Original Rust child creation failed")?;
+            .map_err(|_| "Bounded native child creation failed")?;
         let pid = child.id().ok_or("Child process identity unavailable")?;
         let stdout = child.stdout.take().ok_or("Child handshake unavailable")?;
         let mut reader = BufReader::new(stdout);
         let mut ready = String::new();
-        let bytes = tokio::time::timeout(Duration::from_secs(3), reader.read_line(&mut ready))
+        let bytes = tokio::time::timeout(Duration::from_secs(6), reader.read_line(&mut ready))
             .await
             .map_err(|_| "Child ready handshake timed out")?
             .map_err(|_| "Child ready handshake failed")?;
@@ -478,9 +548,12 @@ async fn native(request: Request) -> Result<Value, String> {
         "selected_frames_dropped":reflect.counters.selected_dropped,
         "selected_checksum_or_options_rejected":reflect.counters.checksums_or_options_rejected,
         "unsolicited_wire_replies_dropped":reflect.counters.unsolicited_wire_replies_dropped,
-        "self_owned_socket_pid_epoch_consistent":native_candidate_checked && !request.spawned_child,
+        "self_owned_socket_pid_epoch_consistent":native_candidate_checked && !request.spawned_child && !request.powershell_child,
         "spawned_child_socket_pid_epoch_consistent":native_candidate_checked && request.spawned_child,
-        "source_authority":if request.spawned_child {
+        "powershell_child_socket_pid_epoch_consistent":native_candidate_checked && request.powershell_child,
+        "source_authority":if request.powershell_child {
+            "parent_spawned_os_powershell_client_and_bound_port_not_general_packetbound"
+        } else if request.spawned_child {
             "parent_spawned_child_live_process_and_bound_port_not_general_packetbound"
         } else {
             "internally_created_live_socket_not_arbitrary_pid"
@@ -495,6 +568,6 @@ async fn native(request: Request) -> Result<Value, String> {
         "protected_redirect_available":false, "dns_leak_free":false,
         "win10_11_acceptance":false, "release_accepted":false,
         "payload_or_process_identity_logged":false,
-        "note":"Controlled parent/child IPv4 canaries only. Neither authorizes arbitrary PID capture. Caller must attest real SSH and independent rescue. Mode 0 is ordinary networking, not a kill switch."
+        "note":"Controlled parent/Rust child/OS PowerShell child IPv4 canaries only. Neither authorizes arbitrary PID capture. Caller must attest real SSH and independent rescue. Mode 0 is ordinary networking, not a kill switch."
     }))
 }
