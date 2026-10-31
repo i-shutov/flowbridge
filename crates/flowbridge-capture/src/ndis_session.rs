@@ -48,6 +48,16 @@ pub struct PumpStats {
     pub injected: u64,
     pub bytes: u64,
     pub metadata_vlan: u64,
+    pub reflected: u64,
+    pub dropped: u64,
+}
+
+/// Explicit laboratory-only dispositions. Modified frames may only go UP to
+/// the stack; this API cannot transmit modified bytes onto the physical wire.
+pub enum LabDisposition {
+    Original,
+    Drop,
+    ToStack(Vec<u8>),
 }
 
 pub struct PacketSession<'a, D: PacketDevice> {
@@ -140,10 +150,27 @@ impl<'a, D: PacketDevice> PacketSession<'a, D> {
                 code: 0,
             });
         }
-        let result = self.pump(max_batch, observe);
+        let result = self.pump(max_batch, observe, &mut |_| Ok(LabDisposition::Original));
         if result.is_err() {
             self.faulted = true;
         }
+        result
+    }
+
+    /// Laboratory routing callback; refused unless this session explicitly
+    /// owns TUNNEL_BOTH. This is NOT a protected-mode authorization API.
+    pub fn poll_lab_redirect(
+        &mut self,
+        max_batch: usize,
+        decide: &mut impl FnMut(&crate::ndis_wire::PacketView<'_>) -> Result<LabDisposition, IoFailure>,
+    ) -> Result<usize, IoFailure> {
+        if self.mode != LabMode::Passthrough || !self.armed || self.faulted
+            || !(1..=256).contains(&max_batch)
+        {
+            return Err(IoFailure { operation: "redirect_requires_owned_lab_tunnel", code: 0 });
+        }
+        let result = self.pump(max_batch, &mut |_, _| {}, decide);
+        if result.is_err() { self.faulted = true; }
         result
     }
 
@@ -151,6 +178,7 @@ impl<'a, D: PacketDevice> PacketSession<'a, D> {
         &mut self,
         max_batch: usize,
         observe: &mut impl FnMut(Direction, &[u8]),
+        decide: &mut impl FnMut(&crate::ndis_wire::PacketView<'_>) -> Result<LabDisposition, IoFailure>,
     ) -> Result<usize, IoFailure> {
         if self.device.get_mode(self.adapter)? != self.mode.flags() {
             return Err(IoFailure {
@@ -188,9 +216,28 @@ impl<'a, D: PacketDevice> PacketSession<'a, D> {
                 observe(packet.direction, packet.frame);
             }
             if self.mode == LabMode::Passthrough {
-                self.device
-                    .send(self.adapter, packet.direction, &self.buffer)?;
-                self.stats.injected += 1;
+                match decide(&packet)? {
+                    LabDisposition::Original => {
+                        self.device.send(self.adapter, packet.direction, &self.buffer)?;
+                        self.stats.injected += 1;
+                    }
+                    LabDisposition::Drop => self.stats.dropped += 1,
+                    LabDisposition::ToStack(frame) => {
+                        if !(14..=crate::ndis_wire::MAX_FRAME_BYTES).contains(&frame.len())
+                            || packet.vlan_metadata != 0
+                        {
+                            return Err(IoFailure { operation: "unsupported_reflected_frame", code: 0 });
+                        }
+                        // Fresh injection header: never propagate offload/queue metadata.
+                        let mut reflected = vec![0u8; PACKET_BUFFER_BYTES];
+                        reflected[16..20].copy_from_slice(&2u32.to_le_bytes());
+                        reflected[20..24].copy_from_slice(&(frame.len() as u32).to_le_bytes());
+                        reflected[52..52 + frame.len()].copy_from_slice(&frame);
+                        self.device.send(self.adapter, Direction::ToStack, &reflected)?;
+                        self.stats.injected += 1;
+                        self.stats.reflected += 1;
+                    }
+                }
             }
             count += 1;
         }
@@ -283,6 +330,51 @@ mod tests {
         b[20] = 60;
         b[52..112].fill(19);
         b
+    }
+
+    #[test]
+    fn redirected_lab_frame_goes_only_to_stack_and_drops_metadata() {
+        let mut d = Device::default();
+        let original = frame();
+        d.queue.push_back(original.clone());
+        {
+            let mut s = PacketSession::start(&mut d, 7, LabMode::Passthrough).unwrap();
+            let frame = original[52..112].to_vec();
+            assert_eq!(s.poll_lab_redirect(1, &mut |_| Ok(LabDisposition::ToStack(frame.clone()))).unwrap(), 1);
+            assert_eq!(s.stats().reflected, 1);
+            s.close().unwrap();
+        }
+        assert_eq!(decode_packet(&d.sent[0]).unwrap().direction, Direction::ToStack);
+        assert_eq!(&d.sent[0][52..112], &original[52..112]);
+        assert!(d.sent[0][24..52].iter().all(|b| *b == 0));
+        assert_eq!(d.mode, 0);
+    }
+
+    #[test]
+    fn lab_drop_or_callback_failure_never_reinjects_original() {
+        for fault in [false, true] {
+            let mut d = Device::default(); d.queue.push_back(frame());
+            {
+                let mut s = PacketSession::start(&mut d, 7, LabMode::Passthrough).unwrap();
+                let result = s.poll_lab_redirect(1, &mut |_| {
+                    if fault { Err(IoFailure { operation: "test_deny", code: 1 }) }
+                    else { Ok(LabDisposition::Drop) }
+                });
+                assert_eq!(result.is_err(), fault);
+                assert_eq!(s.stats().injected, 0);
+                if fault { assert!(s.poll(1).is_err()); }
+                s.close().unwrap();
+            }
+            assert!(d.sent.is_empty()); assert_eq!(d.mode, 0);
+        }
+    }
+
+    #[test]
+    fn passive_capture_cannot_call_redirect_policy() {
+        let mut d = Device::default();
+        let mut s = PacketSession::start(&mut d, 7, LabMode::Observe).unwrap();
+        assert!(s.poll_lab_redirect(1, &mut |_| panic!("observer acquired injection permission")).is_err());
+        s.close().unwrap();
     }
 
     #[test]
