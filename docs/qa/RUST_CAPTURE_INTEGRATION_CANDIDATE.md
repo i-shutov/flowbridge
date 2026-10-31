@@ -740,3 +740,9 @@ upgrade/uninstall, macOS NE and personal beta/1.0 remain blocked. VDSina stays
 useful only for further carefully bounded native testing with verified VNC
 and independently armed rollback; never delete/disable protections or publish
 release without the owner. [Public issue #41 checkpoint](https://github.com/i-shutov/flowbridge/issues/41#issuecomment-6545902118).
+
+### 2026-10-31 — Bounded native packet protocol inventory (source candidate, not leak containment)
+
+A new \`LISTEN_ONLY_PROTOCOL_PROFILE\` request collects **aggregate** Ethernet/IPv4/IPv6/TCP/UDP counters and DNS/DoT/QUIC/mDNS/LLMNR *port hints* with the real NDISRD listener. It never copies packet payload, port values, IP addresses, process identities, or DNS questions into reports. It recognizes up to two VLAN tags, bounded IPv6 extension headers and IPv4/IPv6 fragments, refusing to infer transport identity for fragments or truncated frames. An exclusive consent and 15-second cap prevent changing to divert or owner sampling in the same request. Results always explicitly say \`dns_leak_free=false\`, \`native_packet_owner_proved=false\`, and \`selected_application_containment_proved=false\`. TCP/443 DoH cannot be distinguished from HTTPS without deeper authorized testing. Network traffic not present in the observation window cannot be ruled out.
+
+This source addition is distinct from previously verified 12/12 IPv4 TCP native routing; it is **not native VPS proof** until the exact commit is built, a supervised LISTEN_ONLY profile is run on VDSina with independent rollback, and its artifact SHA and actual source/merge SHA are checked. No Win10/11 acceptance or protected-routing claim follows from this inventory.
