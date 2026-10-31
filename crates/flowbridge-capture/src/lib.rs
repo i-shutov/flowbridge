@@ -8,6 +8,7 @@ pub mod ndis_wire;
 pub mod owned_relay;
 #[cfg(any(windows, test))]
 mod owner_sampling;
+#[cfg(any(windows, test))]
 mod protocol_profile;
 pub mod relay;
 pub mod relay_probe;
