@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Explicit VDSina native self-socket -> NDISRD -> Rust -> SOCKS -> SSH canary.
 
-Not a hosted-fixture simulation: this requires a real, separately installed
-NDISRD driver, a prearmed independent recovery task and a scoped firewall rule.
-All SSH keys are newly generated in TemporaryDirectory and never uploaded.
-Only aggregate evidence is persisted; arbitrary app/protected acceptance stays false.
+Requires a real separately installed NDISRD driver, prearmed independent
+recovery and a scoped firewall rule. Ephemeral SSH keys are never uploaded.
+Only aggregate evidence is saved; arbitrary-app/protected flags stay false.
 """
 from __future__ import annotations
 
@@ -42,10 +41,13 @@ def main() -> None:
     target = context['target_ipv4']
     socket.inet_aton(target)
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    source_sha = os.environ.get('FLOWBRIDGE_SOURCE_SHA', '')
+    require(len(source_sha) == 40 and all(c in '0123456789abcdef' for c in source_sha),
+            'Externally verified source tree SHA is mandatory')
     result = {
         'passed': False,
         'kind': 'actual_self_owned_tcp_ndisrd_reflection_real_flowbridge_socks_openssh',
-        'source_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+        'source_commit': source_sha,
         'agent_sha256': digest(args.agent),
         'ffi_sha256': digest(args.library),
         'ssh_sha256': digest(args.ssh),
@@ -89,7 +91,7 @@ def main() -> None:
                 f'AuthorizedKeysFile "{authorized.as_posix()}"', f'AllowUsers {user}',
                 'PasswordAuthentication no', 'PubkeyAuthentication yes', 'AuthenticationMethods publickey',
                 'AllowTcpForwarding local', 'GatewayPorts no',
-                f'PermitOpen 127.0.0.1:{echo.server_address[1]} {target}:80',
+                f'PermitOpen localhost:{echo.server_address[1]} 127.0.0.1:{echo.server_address[1]} {target}:80',
                 'LogLevel ERROR', 'MaxStartups 10:30:20', 'MaxSessions 10', '',
             ]), encoding='ascii')
             secure_test_file(config)
