@@ -145,6 +145,7 @@ dependencies = [
 name = "flowbridge-capture"
 version = "0.2.0"
 dependencies = [
+ "base64",
  "flowbridge-core",
  "flowbridge-net",
  "flowbridge-runtime",
