@@ -55,26 +55,40 @@ fn load_explicit_profile(path: &Path) -> Result<Config, String> {
 pub(crate) struct Controller {
     engine: Engine,
     config_path: PathBuf,
+    scm_mode: bool,
 }
 
 #[cfg(any(windows, test))]
 impl Controller {
     fn open(config_path: PathBuf) -> Result<Self, String> {
+        Self::open_with_mode(config_path, false)
+    }
+
+    fn open_with_mode(config_path: PathBuf, scm_mode: bool) -> Result<Self, String> {
         let config = load_explicit_profile(&config_path)?;
+        if scm_mode && (!config_path.is_absolute() || !config.listen.ip().is_loopback()) {
+            return Err("SCM candidate requires an absolute config path and loopback-only SOCKS listener".into());
+        }
         let engine = Engine::new(config).map_err(|e| e.to_string())?;
         engine.start().map_err(|e| e.to_string())?;
         Ok(Self {
             engine,
             config_path,
+            scm_mode,
         })
+    }
+
+    pub(crate) fn stop_engine(&self) -> Result<(), String> {
+        self.engine.stop().map_err(|error| error.to_string())
     }
 
     pub(crate) fn status(&self) -> Value {
         let s = self.engine.snapshot().status;
         json!({
             "ok": true,
-            "mode": "foreground_explicit_socks_only",
-            "scm_service_installed": false,
+            "mode": if self.scm_mode { "scm_explicit_socks_only" } else { "foreground_explicit_socks_only" },
+            "scm_service_installed": self.scm_mode,
+            "scm_service_running": self.scm_mode,
             "driver_capture_active": false,
             "native_process_proof": false,
             "protected_redirect_available": false,
@@ -134,6 +148,13 @@ impl Controller {
     }
 }
 
+#[cfg(any(windows, test))]
+impl Drop for Controller {
+    fn drop(&mut self) {
+        let _ = self.stop_engine();
+    }
+}
+
 /// Starts a same-user foreground proxy/control process. No driver IOCTLs.
 #[cfg(windows)]
 pub fn serve_foreground(path: &str) -> Result<Value, String> {
@@ -145,6 +166,17 @@ pub fn serve_foreground(path: &str) -> Result<Value, String> {
         .enable_all()
         .build()
         .map_err(|e| e.to_string())?;
+    runtime.block_on(crate::windows_control_pipe::serve(controller))
+}
+
+#[cfg(windows)]
+pub(crate) fn serve_scm(path: &Path) -> Result<Value, String> {
+    let controller = Controller::open_with_mode(path.to_path_buf(), true)?;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| e.to_string())?;
+    crate::windows_service::mark_running()?;
     runtime.block_on(crate::windows_control_pipe::serve(controller))
 }
 

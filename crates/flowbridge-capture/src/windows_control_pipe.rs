@@ -103,6 +103,16 @@ pub(super) async fn serve(mut controller: Controller) -> Result<Value, String> {
         let connection = tokio::select! {
             result = waiting.connect() => result,
             _ = tokio::time::sleep(POLL_INTERVAL) => {
+                if controller.status()["scm_service_running"] == true
+                    && crate::windows_service::stop_requested()
+                {
+                    controller.stop_engine()?;
+                    return Ok(json!({
+                        "ok":true, "scm_stop_completed":true,
+                        "driver_capture_active":false,
+                        "protected_redirect_available":false, "release_accepted":false
+                    }));
+                }
                 if !controller.status()["engine"]["running"].as_bool().unwrap_or(false) {
                     return Err("explicit SOCKS engine stopped unexpectedly; refusing stale control service".into());
                 }

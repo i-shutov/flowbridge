@@ -11,10 +11,11 @@ pub fn capabilities() -> Value {
         "ndisrd_separately_installed":true, "proxifyre_required":false,
         "vendor_driver_bundled":false, "custom_wfp_required":false,
         "native_owner_binding_accepted":false, "protected_redirect_available":false,
-        "foreground_control_ipc_available":cfg!(windows), "scm_service_available":false,
+        "foreground_control_ipc_available":cfg!(windows), "scm_service_available":cfg!(windows),
+        "scm_protected_native_mode_available":false,
         "native_tcp_owner_candidate_selftest":cfg!(windows),
         "dns_leak_free":false, "release_accepted":false,
-        "modes":["status","observe_lab","observe_owner_candidates_lab","passthrough_lab","relay_loopback_probe","foreground_explicit_socks_control","owner_selftest_read_only"],
+        "modes":["status","observe_lab","observe_owner_candidates_lab","passthrough_lab","relay_loopback_probe","foreground_explicit_socks_control","scm_explicit_socks_candidate","owner_selftest_read_only"],
         "abi":{"adapters":ndis_wire::ADAPTER_LIST_BYTES,"mode":ndis_wire::MODE_BYTES,
             "request":ndis_wire::REQUEST_BYTES,"packet_header":ndis_wire::PACKET_HEADER_BYTES,
             "packet_capacity":ndis_wire::PACKET_BUFFER_BYTES}
