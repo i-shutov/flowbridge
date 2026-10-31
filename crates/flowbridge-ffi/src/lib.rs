@@ -7,6 +7,84 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 mod diagnostics;
 mod native_context;
 mod native_dns;
+#[cfg(windows)]
+mod windows_packet_filter;
+
+#[cfg(windows)]
+mod windows_tcp_owner;
+
+#[cfg(windows)]
+mod windows_udp_owner;
+
+/// Read-only IPv4/IPv6 Windows UDP LOCAL bind PID candidate only.
+/// UDP tables do not contain a remote address, and this API never authorizes
+/// packet capture, DNS claims or protected routing.
+///
+/// # Safety
+/// query_json is a live NUL-terminated UTF-8 string with one key: "local".
+#[no_mangle]
+pub unsafe extern "C" fn fb_windows_udp_owner_candidate_json(
+    query_json: *const c_char,
+) -> *mut c_char {
+    guarded(|| {
+        #[cfg(windows)]
+        {
+            let request =
+                serde_json::from_str(unsafe { input(query_json) }?).map_err(|e| e.to_string())?;
+            let candidate = windows_udp_owner::lookup(request)?;
+            Ok(json!({"ok": true, "candidate": candidate}))
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = query_json;
+            Err("Windows IP Helper UDP bind lookup is unavailable on this platform".into())
+        }
+    })
+}
+
+/// Read-only Windows IP Helper process candidate for an exact IPv4/v6 TCP tuple.
+///
+/// # Safety
+/// query_json must be a live NUL-terminated UTF-8 string with keys local/remote.
+/// IP Helper tables are racy; this diagnostic NEVER authorizes packet capture.
+#[no_mangle]
+pub unsafe extern "C" fn fb_windows_tcp_owner_candidate_json(
+    query_json: *const c_char,
+) -> *mut c_char {
+    guarded(|| {
+        #[cfg(windows)]
+        {
+            let request =
+                serde_json::from_str(unsafe { input(query_json) }?).map_err(|e| e.to_string())?;
+            let candidate = windows_tcp_owner::lookup(request)?;
+            Ok(json!({"ok": true, "candidate": candidate}))
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = query_json;
+            Err("Windows IP Helper owner lookup is unavailable on this platform".into())
+        }
+    })
+}
+
+/// Passive NDISRD device/API check only; no install, signature claim, or traffic capture.
+#[no_mangle]
+pub extern "C" fn fb_windows_packet_filter_status_json() -> *mut c_char {
+    guarded(|| {
+        #[cfg(windows)]
+        {
+            Ok(windows_packet_filter::report())
+        }
+        #[cfg(not(windows))]
+        {
+            Ok(
+                json!({"backend":"ndisapi","supported":false,"device_opened":false,"api_compatible":false,
+            "signature_status":"not_checked","packet_capture_active":false,"native_routing_accepted":false,
+            "driver_installation_attempted":false,"dns_leak_test_passed":false}),
+            )
+        }
+    })
+}
 
 const MAX_INPUT_BYTES: usize = 1024 * 1024;
 

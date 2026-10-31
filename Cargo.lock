@@ -142,6 +142,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "flowbridge-capture"
+version = "0.2.0"
+dependencies = [
+ "base64",
+ "flowbridge-core",
+ "flowbridge-net",
+ "flowbridge-runtime",
+ "serde",
+ "serde_json",
+ "tokio",
+ "windows-sys",
+]
+
+[[package]]
 name = "flowbridge-cli"
 version = "0.2.0"
 dependencies = [
@@ -149,6 +163,7 @@ dependencies = [
  "flowbridge-core",
  "flowbridge-net",
  "flowbridge-runtime",
+ "flowbridge-tunnel",
  "serde",
  "serde_json",
  "tokio",
@@ -170,6 +185,7 @@ dependencies = [
 name = "flowbridge-ffi"
 version = "0.2.0"
 dependencies = [
+ "flowbridge-capture",
  "flowbridge-core",
  "flowbridge-net",
  "flowbridge-runtime",

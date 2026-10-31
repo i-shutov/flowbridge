@@ -58,6 +58,15 @@ enum Command {
         #[arg(long)]
         port: u16,
     },
+    /// Explicit, non-authenticating, direct SSH identification-order A/B diagnostic.
+    SshDiagnose {
+        #[arg(long)]
+        endpoint: std::net::SocketAddr,
+        #[arg(long, default_value_t = 2000)]
+        timeout_ms: u64,
+        #[arg(long)]
+        consent: String,
+    },
     /// Report actual available features. Does not claim OS interception is active.
     Capabilities,
 }
@@ -155,6 +164,23 @@ async fn run() -> AppResult<()> {
                     "proxy_hops": route.len(), "payload_sent": false
                 }))?
             );
+        }
+        Command::SshDiagnose {
+            endpoint,
+            timeout_ms,
+            consent,
+        } => {
+            if consent != "DIRECT_SSH_DIAGNOSTIC" {
+                return Err("ssh-diagnose requires --consent DIRECT_SSH_DIAGNOSTIC".into());
+            }
+            if !(100..=10000).contains(&timeout_ms) || endpoint.port() == 0 {
+                return Err("SSH probe timeout must be 100..=10000 ms with a nonzero port".into());
+            }
+            let report = flowbridge_tunnel::handshake_diagnostic::compare_direct(
+                endpoint,
+                Duration::from_millis(timeout_ms),
+            );
+            println!("{}", serde_json::to_string_pretty(&report)?);
         }
         Command::Capabilities => {
             println!(

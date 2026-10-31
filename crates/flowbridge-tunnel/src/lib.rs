@@ -1,6 +1,8 @@
 //! Managed OpenSSH dynamic forwarding. No shell, password storage, terminal or
 //! implicit host-key enrollment. Unix callers must explicitly stop: abrupt parent
 //! process death can leave OpenSSH running. Windows uses a kill-on-close job.
+pub mod handshake_diagnostic;
+
 use serde::{Deserialize, Serialize};
 use std::{
     collections::VecDeque,
@@ -1358,12 +1360,18 @@ mod tests {
 
     #[test]
     fn mock_preflight_collision_retries_before_spawning_child() {
-        let cfg = config();
-        let occupied = cfg.local_port;
-        let held = TcpListener::bind(("127.0.0.1", occupied)).unwrap();
+        let mut cfg = config();
+        // Hold the exact OS-allocated port instead of probing, closing, then
+        // re-binding: parallel CI processes can claim a released test port.
+        let held = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let occupied = held.local_addr().unwrap().port();
+        cfg.local_port = occupied;
         let (candidate, retries) = started_mock_with_preflight_retry(cfg, "ready");
         let ready = candidate.snapshot();
-        assert_eq!(retries, 1);
+        // Another real preflight collision can occur on shared runners after
+        // releasing a candidate port. Retry is strictly limited to an exact
+        // pre-child bind failure, never an SSH/authentication/runtime error.
+        assert!((1..=3).contains(&retries));
         assert_eq!(ready.status.state, "ready");
         assert_eq!(ready.status.attempt, 1);
         assert_eq!(ready.status.restarts, 0);
@@ -1488,9 +1496,11 @@ mod tests {
     fn overload_is_reported_coalesced_and_recovers_without_restarting() {
         let mut cfg = config();
         cfg.overload_quiet_ms = 300;
-        let supervisor = supervisor(cfg, "ready");
-        supervisor.start().unwrap();
-        let ready = wait(&supervisor, |s| s.status.state == "ready");
+        // A concurrently running CI process may claim a checked test port
+        // before the fake child starts. Retry ONLY the pre-child bind race,
+        // never an overload, health, authentication or live SSH failure.
+        let (supervisor, _) = started_mock_with_preflight_retry(cfg, "ready");
+        let ready = supervisor.snapshot();
         for _ in 0..10000 {
             stderr_line(&supervisor.state, b"accept: Too many open files");
         }
@@ -1894,8 +1904,12 @@ mod tests {
     }
     #[test]
     fn occupied_local_port_fails_before_any_child_is_launched() {
-        let config = config();
-        let _occupied = TcpListener::bind(("127.0.0.1", config.local_port)).unwrap();
+        let mut config = config();
+        // Bind atomically and keep the listener alive while testing the
+        // production preflight. This exercises a genuinely occupied port and
+        // cannot race another macOS runner process during fixture allocation.
+        let _occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        config.local_port = _occupied.local_addr().unwrap().port();
         let calls = Arc::new(AtomicUsize::new(0));
         let count = calls.clone();
         let supervisor = Supervisor::with_launcher(

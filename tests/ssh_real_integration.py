@@ -25,10 +25,29 @@ def require(ok, message):
         raise RuntimeError(message)
 
 
+def distinct_free_ports(count):
+    # Bind every CI-only ephemeral listener concurrently before releasing any.
+    # Calling bind(0) and closing independently can return the SAME port three
+    # times on Linux. No retry or relaxation of subsequent SSH/byte checks.
+    held = []
+    try:
+        for _ in range(count):
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            held.append(sock)
+            sock.bind(('127.0.0.1', 0))
+        ports = tuple(sock.getsockname()[1] for sock in held)
+        require(len(set(ports)) == count, 'Duplicate concurrently held test ports')
+        return ports
+    finally:
+        for sock in held:
+            sock.close()
+
+    
 def free_port():
-    with socket.socket() as sock:
-        sock.bind(('127.0.0.1', 0))
-        return sock.getsockname()[1]
+    # Retain the historical test helper API for native_dns_integration.py.
+    # Multi-port fixtures requiring mutual uniqueness must use the held-
+    # socket distinct_free_ports(count) allocator above.
+    return distinct_free_ports(1)[0]
 
 
 def until(predicate, seconds=30):
@@ -160,7 +179,9 @@ def main(repetition=0):
             for key in ['host_key', 'client_key']:
                 subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '',
                                 '-f', str(root / key)], check=True, timeout=15)
-            ssh_port, socks_port, engine_port = free_port(), free_port(), free_port()
+            ssh_port, socks_port, engine_port = distinct_free_ports(3)
+            # The already-live echo target port is excluded by the simultaneous
+            # socket binds. Keep the independent four-endpoint invariant.
             require(len({ssh_port, socks_port, engine_port, target_port}) == 4, 'Port collision')
             if os.environ.get('FLOWBRIDGE_TEST_CAPTURE') == '1':
                 capture_log = (args.output / 'capture.log').open('wb')
@@ -233,6 +254,19 @@ def main(repetition=0):
             gate(True)
             round_trip(engine_port, target_port)
             passed('Actual OpenSSH authentication, strict enrolled host key, binary traffic and half-close')
+            if repetition == 0 and os.environ.get('FLOWBRIDGE_CAPTURE_AGENT'):
+                from capture_real_ssh import run as capture_relay
+
+                def capture_gate(ready):
+                    # Explicitly closed gate: zero reconnect grace.
+                    abi.call('fb_engine_set_upstream_gate_json', engine,
+                             {'endpoint': endpoint, 'ready': ready,
+                              'grace_ms': 15000 if ready else 0, 'limits': ssh_limits})
+
+                report['capture_relay'] = capture_relay(
+                    Path(os.environ['FLOWBRIDGE_CAPTURE_AGENT']), engine_port, capture_gate,
+                    ready['pid'], args.output / 'capture-relay-real-ssh.json')
+                passed('Rust relay -> FlowBridge SOCKS -> real OpenSSH: half-close, deny and recovery')
             from native_vertical_integration import actual_ssh
             actual_ssh(abi, profile, endpoint, target_port, limits=ssh_limits)
             passed('Native capture ABI: selected application -> real SSH -> target, without SOCKS ingress')

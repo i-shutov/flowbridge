@@ -1,0 +1,18 @@
+[package]
+name = "flowbridge-capture"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+flowbridge-core.workspace = true
+flowbridge-net.workspace = true
+flowbridge-runtime.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+base64.workspace = true
+tokio.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Services", "Win32_NetworkManagement_IpHelper", "Win32_Networking_WinSock", "Win32_System_Threading"] }

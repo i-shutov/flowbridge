@@ -13,6 +13,20 @@ extern "C" {
 /* Offline, allowlist-redacted report from {engine:<snapshot>,ssh:<snapshot>}.
  * Contains no raw logs, profile, keys, paths or destination names. */
 char *fb_diagnostic_report_json(const char *snapshot_json);
+/* Read-only Windows Packet Filter / NDISRD API probe. Never installs or loads
+ * a driver, does not inspect signatures and never claims packet interception.
+ * Available on all builds; non-Windows reports supported:false. */
+char *fb_windows_packet_filter_status_json(void);
+/* Read-only IP Helper process-identity candidates. TCP matches exact local +
+ * remote tuple; UDP matches exact local bind ONLY (no remote endpoint exists
+ * in Windows UDP PID tables). Neither API attests captured packets, authorizes
+ * transparent routing, verifies DNS privacy or installs/intercepts anything.
+ * TCP: {"local":"127.0.0.1:50001","remote":"127.0.0.1:443"}.
+ * UDP: {"local":"127.0.0.1:50001"}.
+ * May return a private executable path; use only in trusted local diagnostics.
+ * All returns use fb_string_free. */
+char *fb_windows_tcp_owner_candidate_json(const char *query_json);
+char *fb_windows_udp_owner_candidate_json(const char *query_json);
 char *fb_validate_json(const char *config_json);
 char *fb_evaluate_json(const char *config_json, const char *flow_json);
 void fb_string_free(char *value);
