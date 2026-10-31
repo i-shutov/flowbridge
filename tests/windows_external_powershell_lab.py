@@ -80,6 +80,9 @@ try {
   $s.Dispose()
   $writer.WriteLine((@{ok=[bool]$ok;bytes=[long]$received} | ConvertTo-Json -Compress))
   $writer.Flush()
+  # Keep the independently owned process alive until Rust acknowledges the
+  # complete response, including when the upstream SOCKS gate denies it.
+  if ($reader.ReadLine() -cne 'ack') { exit 4 }
 } finally {
   $s.Dispose()
   if ($null -ne $control) { $control.Dispose() }
@@ -193,6 +196,7 @@ def trial(allowed: bool) -> None:
                 require(raw.endswith(b"\n") and len(raw) <= 256,
                         "External client reply missing or oversized")
                 response = json.loads(raw)
+                ctl.sendall(b"ack\n")
             canary.await_exit()
             if allowed:
                 worker.join(timeout=10)

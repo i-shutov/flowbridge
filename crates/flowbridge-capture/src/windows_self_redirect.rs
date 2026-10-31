@@ -324,14 +324,18 @@ async fn exercise_external(
         channel.write_all(b"go\n").await.map_err(|_| ())?;
         channel.flush().await.map_err(|_| ())?;
         let mut line = String::new();
-        let length = BufReader::new(channel)
-            .read_line(&mut line)
-            .await
-            .map_err(|_| ())?;
+        let mut reader = BufReader::new(channel);
+        let length = reader.read_line(&mut line).await.map_err(|_| ())?;
         if length == 0 || length > 256 {
             return Err(());
         }
         let report: Value = serde_json::from_str(&line).map_err(|_| ())?;
+        // Acknowledge the complete bounded response BEFORE closing the
+        // loopback control channel. Without this handshake the independent
+        // PowerShell writer can be reset while flushing the negative reply.
+        let mut channel = reader.into_inner();
+        channel.write_all(b"ack\n").await.map_err(|_| ())?;
+        channel.flush().await.map_err(|_| ())?;
         if report["ok"] != true {
             return Err(());
         }

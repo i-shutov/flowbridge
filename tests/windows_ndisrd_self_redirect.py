@@ -140,6 +140,7 @@ def main() -> None:
                 round_trip(ingress, echo.server_address[1])
                 result['actual_supervised_ssh_authenticated'] = True
                 def probe(expect_denied, source='self'):
+                    result['pending_step'] = 'validate_canary_request'
                     require(source in ('self', 'rust-child', 'powershell', 'external-powershell'),
                             'Unrecognized native lab client')
                     consents = {'self': 'NATIVE_SELF_SOCKET_TCP_REFLECT',
@@ -155,14 +156,18 @@ def main() -> None:
                     if source == 'external-powershell':
                         # Sibling to Rust agent: QA owns process creation/lifetime.
                         # Neither PID nor ephemeral ports are saved in reports.
+                        result['pending_step'] = 'create_independent_signed_process'
                         with ExternalPowerShellCanary(context['local_ipv4'], target) as external:
                             request['external_client'] = external.request()
+                            result['pending_step'] = 'native_agent_execution'
                             proc = subprocess.run([str(args.agent.resolve()), 'native-self-redirect', json.dumps(request)],
                                 capture_output=True, text=True, encoding='utf-8', timeout=20, check=False)
+                            result['pending_step'] = 'independent_process_exit'
                             external.await_exit()
                     else:
                         proc = subprocess.run([str(args.agent.resolve()), 'native-self-redirect', json.dumps(request)],
                             capture_output=True, text=True, encoding='utf-8', timeout=20, check=False)
+                    result['pending_step'] = 'parse_native_report'
                     report = json.loads(proc.stdout)
                     require(isinstance(report, dict), 'No structured agent report')
                     report['process_exit_code'] = proc.returncode
@@ -178,6 +183,8 @@ def main() -> None:
                           ('unrelated_gate_closed', True, 'external-powershell'),
                           ('unrelated_recovered', False, 'external-powershell')]
                 for phase, deny, source in phases:
+                    result['pending_phase'] = phase
+                    result['pending_step'] = 'upstream_gate'
                     gate(not deny)
                     report = probe(deny, source)
                     result[phase] = report
@@ -210,6 +217,8 @@ def main() -> None:
                             report.get('native_owner_binding_accepted') is False,
                             'Cannot promote a controlled canary to PacketBound')
                     require(report.get('release_accepted') is False, 'False release claim')
+                    result.pop('pending_phase', None)
+                    result.pop('pending_step', None)
                 require(snapshot()['pid'] == initial_pid, 'SSH restarted unexpectedly')
                 result['same_supervised_ssh_across_failure_recovery'] = True
                 result['native_self_owned_tcp_to_real_socks_ssh_verified'] = True
