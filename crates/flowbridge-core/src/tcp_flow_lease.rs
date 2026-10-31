@@ -536,7 +536,7 @@ mod tests {
     }
 
     #[test]
-    fn both_fin_retire_but_half_closed_remains_live() {
+    fn both_fin_keep_lease_until_explicit_terminal_confirmation() {
         let mut l = ledger();
         let t = l.begin_syn(v6(), owner(), syn(), 1).unwrap();
         l.activate(t, owner(), 2, true).unwrap();
