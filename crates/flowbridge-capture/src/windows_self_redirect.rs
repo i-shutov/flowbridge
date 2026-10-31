@@ -706,7 +706,7 @@ async fn native(request: Request) -> Result<Value, String> {
         && transport
         && reflect.counters.checksums_or_options_rejected == 0
         && selected_direct_sends == 0;
-    Ok(json!({
+    let mut report = json!({
         "product":"FlowBridgeAgent", "mode":"native_self_socket_tcp_reflection_lab",
         "passed":passed, "loop_completed":passed, "rollback_confirmed":cleanup.is_ok(),
         "rollback_error":cleanup.err().map(|e| e.to_string()), "pump_error":fault,
@@ -734,7 +734,6 @@ async fn native(request: Request) -> Result<Value, String> {
         "selected_original_frames_sent_to_adapter":selected_direct_sends,
         "fresh_tcp_owner_candidate_checks":owner_candidate_checks,
         "fresh_tcp_owner_candidate_denials":owner_candidate_denials,
-        "fresh_tcp_owner_candidate_denials_dropped":owner_candidate_denials <= reflect.counters.selected_dropped,
         "outbound_candidate_revalidated_for_each_selected_packet":true,
         "fresh_owner_candidate_is_not_packetbound":true,
         "upstream_socks_connected":probe.upstream_connected,
@@ -747,5 +746,10 @@ async fn native(request: Request) -> Result<Value, String> {
         "win10_11_acceptance":false, "release_accepted":false,
         "payload_or_process_identity_logged":false,
         "note":"Controlled parent, Rust child, OS PowerShell child and independently launched OS PowerShell IPv4 canaries only. IP Helper is NOT PacketBound. Unrelated canary must exit before mode 0. Caller must attest independent rescue, signed driver and real SSH. Mode 0 is ordinary networking."
-    }))
+    });
+    // Keep this safety invariant explicit without deepening serde_json's
+    // already large recursive laboratory JSON macro expansion.
+    report["fresh_tcp_owner_candidate_denials_dropped"] =
+        json!(owner_candidate_denials <= reflect.counters.selected_dropped);
+    Ok(report)
 }
