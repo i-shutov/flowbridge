@@ -102,7 +102,6 @@ impl Request {
     }
 }
 
-
 #[cfg(any(all(windows, target_pointer_width = "64"), test))]
 pub(crate) fn owner_evidence_flags(
     checked: bool,
