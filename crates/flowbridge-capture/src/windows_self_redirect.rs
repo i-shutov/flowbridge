@@ -12,6 +12,7 @@ use crate::windows_tcp_owner::{lookup, OwnedProcess, OwnerQuery};
 use flowbridge_core::tcp_packet::TcpTuple;
 use flowbridge_core::Endpoint;
 use serde_json::{json, Value};
+use base64::Engine;
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
 use std::process::Stdio;
@@ -351,12 +352,20 @@ async fn native(request: Request) -> Result<Value, String> {
                 return Err("System PowerShell TCP canary is unavailable".into());
             }
             let mut command = Command::new(binary);
+            // EncodedCommand is the documented UTF-16LE PowerShell invocation.
+            // It avoids Windows CRT command-line quoting of static multiline
+            // script text. No secrets or caller-provided source enter the arg.
+            let script_bytes: Vec<u8> = POWERSHELL_CLIENT_SCRIPT
+                .encode_utf16()
+                .flat_map(u16::to_le_bytes)
+                .collect();
+            let encoded = base64::engine::general_purpose::STANDARD.encode(script_bytes);
             command
                 .arg("-NoLogo")
                 .arg("-NoProfile")
                 .arg("-NonInteractive")
-                .arg("-Command")
-                .arg(POWERSHELL_CLIENT_SCRIPT)
+                .arg("-EncodedCommand")
+                .arg(encoded)
                 .env("FLOWBRIDGE_LAB_LOCAL_IPV4", request.local_ipv4.to_string())
                 .env(
                     "FLOWBRIDGE_LAB_TARGET_IPV4",

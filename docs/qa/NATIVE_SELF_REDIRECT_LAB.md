@@ -175,3 +175,6 @@ PowerShell process with an explicit GO handshake does NOT establish arbitrary
 app packet attribution, persistent crash fail-closed, DNS/UDP/IPv6 containment
 or personal Win10/11 acceptance. Mode zero remains ordinary DIRECT-capable
 networking.
+
+
+The fixed PowerShell script and its Authenticode probe use Windows PowerShell's UTF-16LE Base64 `-EncodedCommand` interface to avoid shell interpolation/argument quoting; the script body is compiled into original Rust and is never sourced from JSON. The hosted signed-PowerShell positive and negative GO/half-close regression remains mandatory; this change is not native driver proof.

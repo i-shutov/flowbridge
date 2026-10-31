@@ -7,6 +7,7 @@ live loopback HTTP server. It cannot attest native NDISRD or a selected app.
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -36,7 +37,9 @@ def executable() -> Path:
            "$s.SignerCertificate.Subject -match 'Microsoft'); " + \
            "@{status=[string]$s.Status;signer_present=[bool]$s.SignerCertificate;" + \
            "signer_microsoft=$ms} | ConvertTo-Json -Compress"
-    check = subprocess.run([str(path), "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", expr],
+    encoded = base64.b64encode(expr.encode("utf-16-le")).decode("ascii")
+    check = subprocess.run([str(path), "-NoLogo", "-NoProfile", "-NonInteractive",
+                            "-EncodedCommand", encoded],
                            capture_output=True, text=True, timeout=15, check=False)
     try:
         signature = json.loads(check.stdout.strip())
@@ -75,8 +78,9 @@ def trial(exe: Path, script: str, allowed: bool) -> tuple[bool, int]:
         env = dict(os.environ, FLOWBRIDGE_LAB_LOCAL_IPV4="127.0.0.1",
                    FLOWBRIDGE_LAB_TARGET_IPV4="127.0.0.1",
                    FLOWBRIDGE_LAB_TARGET_PORT=str(target_port))
+        encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
         process = subprocess.Popen([str(exe), "-NoLogo", "-NoProfile", "-NonInteractive",
-                                    "-Command", script], env=env, stdin=subprocess.PIPE,
+                                    "-EncodedCommand", encoded], env=env, stdin=subprocess.PIPE,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    text=True, encoding="utf-8")
         try:
