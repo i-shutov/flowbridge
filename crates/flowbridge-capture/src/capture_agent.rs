@@ -14,7 +14,7 @@ pub fn capabilities() -> Value {
         "foreground_control_ipc_available":cfg!(windows), "scm_service_available":false,
         "native_tcp_owner_candidate_selftest":cfg!(windows),
         "dns_leak_free":false, "release_accepted":false,
-        "modes":["status","observe_lab","passthrough_lab","relay_loopback_probe","foreground_explicit_socks_control","owner_selftest_read_only"],
+        "modes":["status","observe_lab","observe_owner_candidates_lab","passthrough_lab","relay_loopback_probe","foreground_explicit_socks_control","owner_selftest_read_only"],
         "abi":{"adapters":ndis_wire::ADAPTER_LIST_BYTES,"mode":ndis_wire::MODE_BYTES,
             "request":ndis_wire::REQUEST_BYTES,"packet_header":ndis_wire::PACKET_HEADER_BYTES,
             "packet_capacity":ndis_wire::PACKET_BUFFER_BYTES}
@@ -57,6 +57,8 @@ pub struct LabRequest {
     pub consent: String,
     #[serde(default)]
     pub passthrough: bool,
+    #[serde(default)]
+    pub owner_candidates: bool,
 }
 
 fn validate(request: &LabRequest) -> Result<(), String> {
@@ -67,7 +69,15 @@ fn validate(request: &LabRequest) -> Result<(), String> {
     {
         return Err("Invalid bounded duration or adapter name".into());
     }
-    let required = if request.passthrough {
+    if request.owner_candidates && request.passthrough {
+        return Err("IP Helper candidate sampling is read-only and cannot divert".into());
+    }
+    if request.owner_candidates && request.duration_ms > 15_000 {
+        return Err("Owner snapshot observation is limited to 15 seconds".into());
+    }
+    let required = if request.owner_candidates {
+        "LISTEN_ONLY_OWNER_CANDIDATES"
+    } else if request.passthrough {
         "EXPERIMENTAL_DIVERT_AND_REINJECT"
     } else {
         "LISTEN_ONLY"
@@ -128,8 +138,30 @@ fn run_native(request: LabRequest) -> Result<Value, String> {
     let mut session =
         PacketSession::start(&mut device, adapter.handle, mode).map_err(|e| e.to_string())?;
     let mut failure = None;
+    let mut owner_sample = crate::owner_sampling::Sampler::default();
     while start.elapsed() < Duration::from_millis(request.duration_ms) {
-        if let Err(error) = session.poll(128) {
+        let result = if request.owner_candidates {
+            session.poll_observe(128, &mut |direction, frame| {
+                owner_sample.observe(direction, frame, |local, remote| {
+                    let query = crate::windows_tcp_owner::OwnerQuery { local, remote };
+                    match crate::windows_tcp_owner::lookup(query) {
+                        Ok(result) if result["found"] == true
+                            && result["two_snapshots_consistent"] == true
+                            && result["authorizes_capture"] == false
+                            && result["native_packet_attribution_proved"] == false => {
+                                crate::owner_sampling::Candidate::ConsistentSnapshot
+                            }
+                        Ok(result) if result["found"] == false => {
+                            crate::owner_sampling::Candidate::Missing
+                        }
+                        _ => crate::owner_sampling::Candidate::Uncertain,
+                    }
+                });
+            })
+        } else {
+            session.poll(128)
+        };
+        if let Err(error) = result {
             failure = Some(error.to_string());
             break;
         }
@@ -138,7 +170,7 @@ fn run_native(request: LabRequest) -> Result<Value, String> {
     let stats = session.stats();
     let cleanup = session.close();
     let report = json!({
-        "product":"FlowBridgeAgent", "mode":if request.passthrough {"passthrough_lab"} else {"observe_lab"},
+        "product":"FlowBridgeAgent", "mode":if request.owner_candidates {"observe_owner_candidates_lab"} else if request.passthrough {"passthrough_lab"} else {"observe_lab"},
         "driver_version":format!("0x{version:08x}"), "elapsed_ms":start.elapsed().as_millis(),
         "observed_packets":stats.observed,"outgoing_packets":stats.outgoing,"incoming_packets":stats.incoming,
         "injected_original_packets":stats.injected,"bytes":stats.bytes,"out_of_band_vlan_packets":stats.metadata_vlan,
@@ -148,6 +180,8 @@ fn run_native(request: LabRequest) -> Result<Value, String> {
         "signature_status":"not_checked", "protected_redirect_available":false,"dns_leak_free":false,
         "win10_11_acceptance":false,"release_accepted":false,
         "packet_payload_saved":false,"adapter_name_saved":false,
+        "owner_candidate_sampling":if request.owner_candidates {owner_sample.report()} else {json!({"requested":false})},
+        "native_packet_attribution_proved":false,"authorizes_capture":false,
         "note":"Lab operation only. Passthrough sends originals; observe never reinjects. Mode 0 is normal networking, not a kill switch."
     });
     Ok(report)
@@ -163,6 +197,7 @@ mod tests {
             duration_ms: 20,
             consent: "LISTEN_ONLY".into(),
             passthrough: false,
+            owner_candidates: false,
         };
         assert!(validate(&good).is_ok());
         let mut bad = good;
@@ -171,6 +206,15 @@ mod tests {
         bad.consent = "EXPERIMENTAL_DIVERT_AND_REINJECT".into();
         assert!(validate(&bad).is_ok());
         bad.duration_ms = 60_001;
+        assert!(validate(&bad).is_err());
+        bad.duration_ms = 20;
+        bad.owner_candidates = true;
+        assert!(validate(&bad).is_err());
+        bad.passthrough = false;
+        assert!(validate(&bad).is_err());
+        bad.consent = "LISTEN_ONLY_OWNER_CANDIDATES".into();
+        assert!(validate(&bad).is_ok());
+        bad.duration_ms = 15_001;
         assert!(validate(&bad).is_err());
         assert!(serde_json::from_str::<LabRequest>(
             r#"{"adapter_name":"a","duration_ms":1,"consent":"LISTEN_ONLY","protected":true}"#

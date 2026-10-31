@@ -110,20 +110,48 @@ impl<'a, D: PacketDevice> PacketSession<'a, D> {
     }
 
     pub fn poll(&mut self, max_batch: usize) -> Result<usize, IoFailure> {
+        self.poll_inner(max_batch, &mut |_, _| {})
+    }
+
+    /// Copy-only inspection callback. Never permits caller to alter the frame,
+    /// activate tunneling, or acknowledge a packet as process-owned.
+    pub fn poll_observe(
+        &mut self,
+        max_batch: usize,
+        observe: &mut impl FnMut(Direction, &[u8]),
+    ) -> Result<usize, IoFailure> {
+        if self.mode != LabMode::Observe {
+            return Err(IoFailure {
+                operation: "observer_requires_listen_only",
+                code: 0,
+            });
+        }
+        self.poll_inner(max_batch, observe)
+    }
+
+    fn poll_inner(
+        &mut self,
+        max_batch: usize,
+        observe: &mut impl FnMut(Direction, &[u8]),
+    ) -> Result<usize, IoFailure> {
         if !self.armed || self.faulted || !(1..=256).contains(&max_batch) {
             return Err(IoFailure {
                 operation: "session_not_runnable",
                 code: 0,
             });
         }
-        let result = self.pump(max_batch);
+        let result = self.pump(max_batch, observe);
         if result.is_err() {
             self.faulted = true;
         }
         result
     }
 
-    fn pump(&mut self, max_batch: usize) -> Result<usize, IoFailure> {
+    fn pump(
+        &mut self,
+        max_batch: usize,
+        observe: &mut impl FnMut(Direction, &[u8]),
+    ) -> Result<usize, IoFailure> {
         if self.device.get_mode(self.adapter)? != self.mode.flags() {
             return Err(IoFailure {
                 operation: "adapter_mode_changed",
@@ -155,6 +183,9 @@ impl<'a, D: PacketDevice> PacketSession<'a, D> {
             match packet.direction {
                 Direction::ToAdapter => self.stats.outgoing += 1,
                 Direction::ToStack => self.stats.incoming += 1,
+            }
+            if self.mode == LabMode::Observe {
+                observe(packet.direction, packet.frame);
             }
             if self.mode == LabMode::Passthrough {
                 self.device
@@ -268,6 +299,40 @@ mod tests {
         assert_eq!(d.mode, 0);
         assert!(d.sent.is_empty());
         assert!(d.calls.contains(&"flush"));
+    }
+    #[test]
+    fn observer_cannot_inject_or_observe_divert_mode() {
+        let mut d = Device::default();
+        d.queue.push_back(frame());
+        let mut seen = Vec::new();
+        {
+            let mut s = PacketSession::start(&mut d, 7, LabMode::Observe).unwrap();
+            assert_eq!(
+                s.poll_observe(2, &mut |direction, bytes| {
+                    seen.push((direction, bytes.len()));
+                })
+                .unwrap(),
+                1
+            );
+            assert_eq!(s.stats().injected, 0);
+            s.close().unwrap();
+        }
+        assert_eq!(seen, [(Direction::ToAdapter, 60)]);
+        assert!(d.sent.is_empty());
+        d.queue.push_back(frame());
+        {
+            let mut s = PacketSession::start(&mut d, 7, LabMode::Passthrough).unwrap();
+            assert_eq!(
+                s.poll_observe(1, &mut |_, _| panic!("divert reached observer"))
+                    .unwrap_err()
+                    .operation,
+                "observer_requires_listen_only"
+            );
+            assert_eq!(s.poll(1).unwrap(), 1);
+            s.close().unwrap();
+        }
+        assert_eq!(d.sent.len(), 1);
+        assert_eq!(d.mode, 0);
     }
     #[test]
     fn passthrough_preserves_complete_packet_and_is_bounded() {

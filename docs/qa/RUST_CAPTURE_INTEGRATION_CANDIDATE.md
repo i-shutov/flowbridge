@@ -310,3 +310,28 @@ DENIED. Native packet binding and selected-app ingress/return path remain OPEN.
 
 Exact GitHub CI run, PR HEAD/merge SHA and independently checked artifact
 digests will be added only after verification; no PASS from source alone.
+
+
+## Bounded native NDISRD-to-IP Helper candidate observation (new integration block; CI pending)
+
+The **same** native x64 Rust PacketSession now offers a copy-only packet
+observer that is explicitly denied in divert/passthrough mode. An additional
+owner-candidate laboratory request requires `owner_candidates:true`, explicit
+consent `LISTEN_ONLY_OWNER_CANDIDATES`, an exact adapter name, and <=15 seconds.
+It reads genuine NDISRD LISTEN_BOTH frames when executed on an eligible host,
+parses supported checksummed IPv4/IPv6 Ethernet TCP frames, and attempts at most
+24 IP Helper double-snapshot process-creation-epoch candidate lookups. Reverse
+wire direction is reversed before a local/remote socket query; IPv6 link-local
+frames are excluded because Ethernet does not supply the scope ID. All frames
+and process/tuple identities are discarded, with **only redacted counters**
+returned. The observation callback cannot mutate raw frames or reinject them.
+
+These counters are a diagnostic cross-check, NOT kernel-authenticated
+packet-to-PID proof. In particular, an IP Helper row can race NDIS receive,
+so even a consistent two-snapshot PID/path/creation time does not produce the
+CapturePolicy `PacketBound` authority. `native_packet_attribution_proved`,
+`authorizes_capture` and `protected_redirect_available` remain false.
+No selected-app route, fail-closed safety, DNS leak-free or Windows 10/11
+acceptance is claimed. Dangerous protected operation is not enabled. A VPS
+native run, if performed, requires pre-armed independent rescue and owner-
+confirmed emergency VNC; no unsolicited divert, installer or kernel changes.

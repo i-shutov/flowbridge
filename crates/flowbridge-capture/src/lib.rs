@@ -5,6 +5,8 @@ pub mod capture_pipeline;
 pub mod control_plane;
 pub mod ndis_session;
 pub mod ndis_wire;
+#[cfg(any(windows, test))]
+mod owner_sampling;
 pub mod owned_relay;
 pub mod relay;
 pub mod relay_probe;
