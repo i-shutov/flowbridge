@@ -279,3 +279,34 @@ byte-verified successes with zero errors/4 distinct subprocesses. Separate
 raw OpenSSH characterization only reached 246 held, not stable 512.
 
 All protected, DNS leak-free and release claims remain explicitly FALSE.
+
+
+## Windows IP Helper owner candidate integration (unaccepted until exact-head CI)
+
+The Rust capture crate now owns the single original read-only implementation
+of Windows GetExtendedTcpTable TCP owner-candidate lookup used by BOTH
+flowbridge-agent and the existing flowbridge-ffi API. The FFI ABI remains
+unchanged, and the former duplicated lookup module is a thin reuse layer.
+Only the Windows APIs and Rust code written for FlowBridge are used; no
+ProxiFyre/AGPL source or shipped vendor user-mode binaries are involved.
+
+The new CLI command 'flowbridge-agent owner-selftest' executes an actual
+self-owned loopback TCP socket while retaining both TCP endpoints, samples
+the native IP Helper TCP table TWICE, pins a query-only process handle,
+compares PID, creation FILETIME and queried image identity, and fails if
+the live socket or process epoch cannot be confirmed. CLI output deliberately
+suppresses PID, process creation timestamp, executable path, endpoint and
+payload. A real Windows hosted integration test requires the CLI to succeed
+and verifies the absence of sensitive identity fields. Regression tests
+preserve exact tuple, stale/duplicate-state and IPv6 scope checks.
+
+IMPORTANT evidence boundary: this is a real native Windows TCP owner
+snapshot CANDIDATE, not a kernel-authenticated assignment of an NDISRD
+packet. IP Helper lookup does NOT grant PacketBound, CapturePolicy, a
+selected-app route, or protected allow. Selftest never opens NDISRD or
+changes adapter modes; no DNS/UDP containment, fail-closed, service,
+Win10/11 acceptance or release claim. The current protected gate remains
+DENIED. Native packet binding and selected-app ingress/return path remain OPEN.
+
+Exact GitHub CI run, PR HEAD/merge SHA and independently checked artifact
+digests will be added only after verification; no PASS from source alone.
