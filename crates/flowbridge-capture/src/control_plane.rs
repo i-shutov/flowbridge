@@ -335,6 +335,25 @@ mod tests {
     }
 
     #[test]
+    fn scm_candidate_rejects_non_loopback_and_has_no_native_authority() {
+        let mut invalid = config();
+        invalid.listen = "0.0.0.0:0".parse().unwrap();
+        let file = ConfigFile::new(&invalid);
+        assert!(Controller::open_with_mode(file.0.clone(), true).is_err());
+        let valid = config();
+        file.write(&valid);
+        let scm = Controller::open_with_mode(file.0.clone(), true).unwrap();
+        let report = scm.status();
+        assert_eq!(report["mode"], "scm_explicit_socks_only");
+        assert_eq!(report["scm_service_running"], true);
+        assert_eq!(report["driver_capture_active"], false);
+        assert_eq!(report["protected_redirect_available"], false);
+        assert_eq!(report["dns_leak_free"], false);
+        assert_eq!(report["release_accepted"], false);
+        scm.stop_engine().unwrap();
+    }
+
+    #[test]
     fn strict_command_and_bounded_config_fail_closed() {
         let file = ConfigFile::new(&config());
         let mut ctl = Controller::open(file.0.clone()).unwrap();

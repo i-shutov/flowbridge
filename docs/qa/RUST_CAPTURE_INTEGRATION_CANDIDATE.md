@@ -344,3 +344,29 @@ confirmed emergency VNC; no unsolicited divert, installer or kernel changes.
 - Independently downloaded private sanitized evidence artifact #13040235105: ZIP SHA-256 `f0c1ad2d7b0ae42b37cc261725d3a5c3e461f4dfab914bba22dc2c2b08ab362d`; internal `listen-only.json` SHA-256 `c70d5800131c152e139e2fdd86174e12fd7db907867d0a837b3cfdc46303c679`. Both source/merge SHA and mandatory rollback/no-reinjection security booleans checked against downloaded bytes. Evidence is also copied to private [VPS issue #1](https://github.com/i-shutov/flowbridge-vps-qa/issues/1#issuecomment-6542425846).
 
 **Important:** Even 18 consistent IP Helper PID + creation-time snapshots are temporal *candidate associations*, NOT kernel-authenticated assignment of NDISRD frames to process identity. The implementation does not synthesize `PacketBound` or authorize a selected app, and cannot yet route intercepted TCP through the SOCKS/SSH relay. No protected fail-closed, DNS/UDP/IPv6 leak containment, Windows 10/11 native acceptance, complete service/installer, macOS NE acceptance or release is proved. Mode 0 returns to ordinary networking, NOT a protected kill switch. Raw unprotected OpenSSH 512-channel stability is still not established.
+
+
+## Windows native SCM candidate — cross-component beta staging (pending verified CI)
+
+The original Rust capture agent now has an **on-demand, manually installed**
+SCM dispatch entrypoint `service-run <absolute-config>`. No kernel driver,
+ProxiFyre executable, custom WFP component or extra dependency is installed.
+The test-only SCM service identity is `FlowBridgeRustCandidateCI`; no service
+is installed during package creation or ordinary agent invocation. It refuses
+an unbounded/non-absolute profile path and refuses non-loopback SOCKS listeners
+**before** the Engine begins listening. It opens the same real SOCKS Engine and
+same fixed-ACL local-only Windows named pipe as the previous foreground mode.
+Service STOP/SHUTDOWN signals request graceful engine stop, close the listener
+and report SERVICE_STOPPED; pipe STOP also terminates its SCM instance.
+No opaque service command can change NDISRD mode, set a trusted PID token,
+or change the service identity/configuration path.
+
+On hosted Windows, a dedicated script tests REAL SCM create/start/stop/restart,
+real TCP SOCKS5 handshake, local IPC/status/reload, generation reset and
+termination via both SCM STOP and pipe STOP. It always attempts to remove its
+own manually-created test service. This is independent process/SCM evidence,
+**not** Win10/11 NDISRD, protected packet routing, crash-persistent fail-closed,
+remote-DNS containment, automatic upgrade or installer acceptance. The SCM
+candidate starts **only with explicit SOCKS and loopback bind** and never
+activates native capture. Any claim of a protected Windows beta still requires
+a separate native interposition/safety/installer implementation and acceptance.

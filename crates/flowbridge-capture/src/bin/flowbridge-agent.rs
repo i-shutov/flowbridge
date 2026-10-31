@@ -8,6 +8,7 @@ fn main() {
         [command] if command == "status" || command == "--preflight" => Ok(capture_agent::status()),
         [command] if command == "capabilities" => Ok(capture_agent::capabilities()),
         [command] if command == "owner-selftest" => capture_agent::owner_self_test(),
+        #[cfg(windows)]
         [command, config_path] if command == "service-run" => {
             flowbridge_capture::windows_service::run(config_path)
         }
