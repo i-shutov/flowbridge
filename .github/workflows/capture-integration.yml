@@ -70,6 +70,12 @@ jobs:
       - name: Windows original Rust reversible on-demand SCM stage/upgrade/remove
         if: runner.os == 'Windows'
         run: python tests/windows_capture_install.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/scm-install-lifecycle.json
+      - name: Build distinct debug Rust agent for stopped-only binary replacement
+        if: runner.os == 'Windows'
+        run: cargo build --locked -p flowbridge-capture --bin flowbridge-agent
+      - name: Windows exact-hash binary upgrade, live SOCKS restart and rollback
+        if: runner.os == 'Windows'
+        run: python tests/windows_capture_binary_upgrade.py --agent target/release/flowbridge-agent.exe --next-agent target/debug/flowbridge-agent.exe --output build/capture-candidate/scm-binary-upgrade-lifecycle.json
       - name: Windows genuine signed PowerShell client pre-GO rejection and HTTP half-close
         if: runner.os == 'Windows'
         run: python tests/windows_powershell_lab_client.py --source crates/flowbridge-capture/src/windows_self_redirect.rs --output build/capture-candidate/powershell-client-lifecycle.json

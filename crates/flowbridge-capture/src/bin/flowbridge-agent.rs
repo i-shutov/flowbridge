@@ -22,6 +22,14 @@ fn main() {
             flowbridge_capture::windows_service_management::remove(config_path)
         }
         #[cfg(windows)]
+        [command, old_config, next_executable, next_config, expected_sha256]
+            if command == "service-binary-replace" =>
+        {
+            flowbridge_capture::windows_service_management::binary_replace(
+                old_config, next_executable, next_config, expected_sha256,
+            )
+        }
+        #[cfg(windows)]
         [command, config_path] if command == "service-run" => {
             flowbridge_capture::windows_service::run(config_path)
         }
@@ -55,7 +63,7 @@ fn main() {
                 .map_err(|e| e.to_string())
                 .and_then(flowbridge_capture::relay_probe::run)
         }
-        _ => Err("Usage: flowbridge-agent status | capabilities | owner-selftest | udp-owner-selftest | control-serve <explicit config path> | service-run <absolute loopback config> | service-stage <absolute config> | service-replace <old absolute config> <new absolute config> | service-remove <absolute config> | control <status|reload|stop> | lab <bounded JSON> | relay-probe <loopback JSON>. Protected redirect is unavailable.".to_owned()),
+        _ => Err("Usage: flowbridge-agent status | capabilities | owner-selftest | udp-owner-selftest | control-serve <explicit config path> | service-run <absolute loopback config> | service-stage <absolute config> | service-replace <old absolute config> <new absolute config> | service-remove <absolute config> | service-binary-replace <old config> <next sibling x64 exe> <new config> <sha256> | control <status|reload|stop> | lab <bounded JSON> | relay-probe <loopback JSON>. Protected redirect is unavailable.".to_owned()),
     };
     match result {
         Ok(value) => {
