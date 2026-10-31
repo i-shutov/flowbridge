@@ -72,6 +72,37 @@ def main() -> None:
     parser.add_argument("--output", type=pathlib.Path, required=True)
     args = parser.parse_args()
     agent = args.agent.resolve()
+    # Real Windows self-owned loopback socket -> two native IP Helper reads ->
+    # PID + process creation-time matching, with deliberate identity redaction.
+    # This does NOT promote an NDISRD packet into PacketBound.
+    owner_proc = subprocess.run(
+        [str(agent), "owner-selftest"], capture_output=True, text=True,
+        encoding="utf-8", timeout=12, check=False,
+    )
+    if owner_proc.returncode != 0:
+        raise AssertionError(
+            f"native TCP owner candidate selftest failed: "
+            f"code={owner_proc.returncode}, output={owner_proc.stdout[-600:]}"
+        )
+    owner_evidence = json.loads(owner_proc.stdout)
+    required_true = (
+        "ok", "actual_loopback_tcp_socket", "two_snapshots_consistent",
+        "candidate_matches_current_process_and_creation_epoch",
+        "process_identity_redacted",
+    )
+    required_false = (
+        "driver_opened", "packet_owner_bound", "native_packet_attribution_proved",
+        "authorizes_capture", "protected_redirect_available", "dns_leak_free",
+        "win10_11_acceptance", "release_accepted",
+    )
+    if any(owner_evidence.get(k) is not True for k in required_true):
+        raise AssertionError(f"missing actual native owner evidence: {owner_evidence}")
+    if any(owner_evidence.get(k) is not False for k in required_false):
+        raise AssertionError(f"false native owner/packet claim: {owner_evidence}")
+    if any(k in owner_evidence for k in (
+        "pid", "process_creation_100ns", "executable_path", "local", "remote",
+    )):
+        raise AssertionError("owner selftest exposed process or endpoint identity")
     with socket.socket() as reserve:
         reserve.bind(("127.0.0.1", 0))
         listen_port = reserve.getsockname()[1]
@@ -170,6 +201,10 @@ def main() -> None:
                     "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
                     "agent_sha256": sha256(agent),
                     "real_windows_named_pipe": True,
+                    "real_loopback_tcp_iphelper_candidate": True,
+                    "owner_epoch_verified_against_current_process": True,
+                    "two_native_iphelper_tables_consistent": True,
+                    "owner_candidate_redacted": True,
                     "local_acl_restricts_to_system_admin_owner": True,
                     "remote_pipe_clients_rejected_by_server": True,
                     "actual_loopback_socks5_negotiation": True,
