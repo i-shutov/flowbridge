@@ -163,6 +163,7 @@ dependencies = [
  "flowbridge-core",
  "flowbridge-net",
  "flowbridge-runtime",
+ "flowbridge-tunnel",
  "serde",
  "serde_json",
  "tokio",

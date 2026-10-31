@@ -79,3 +79,6 @@ fail-closed or DNS leak-free. The full source, binary, QA digests and remaining
 acceptance boundaries are in
 [`RUST_CAPTURE_INTEGRATION_CANDIDATE.md`](RUST_CAPTURE_INTEGRATION_CANDIDATE.md)
 and [issue #41](https://github.com/i-shutov/flowbridge/issues/41#issuecomment-6545902118).
+
+### SSH middlebox hypothesis: diagnostic only
+The opt-in original Rust `flowbridge ssh-diagnose` uses two direct TCP identification-order probes and never enters production SSH supervision, DNS, packet/driver path or protected fail-closed. Until the user's affected route is A/B retested, server-first is not an accepted production workaround; no transparent DIRECT fallback may be introduced.

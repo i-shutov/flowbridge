@@ -51,6 +51,16 @@ jobs:
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - run: cargo test --locked --workspace
       - run: cargo build --locked --workspace
+      - name: Real cross-process SSH identification A/B and no-consent denial
+        run: python tests/ssh_banner_diagnostic.py --output build/verification/ssh-banner/result.json
+      - name: Preserve SHA-tied SSH identification evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: FlowBridge-ssh-banner-${{ matrix.os }}
+          path: build/verification/ssh-banner/result.json
+          if-no-files-found: warn
+          retention-days: 14
       - run: python tests/smoke.py
       - name: Native capture session vertical integration
         run: python tests/native_vertical_integration.py --output build/verification/native/session.json
