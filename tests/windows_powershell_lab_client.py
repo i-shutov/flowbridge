@@ -30,13 +30,26 @@ def executable() -> Path:
     require(bool(root), "Missing Windows system directory")
     path = Path(root) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
     require(path.is_file(), "In-box Windows PowerShell unavailable")
-    expr = "$s = Get-AuthenticodeSignature -LiteralPath '" + str(path).replace("'", "''") + "'; " \
-           "if ($s.Status -ne 'Valid' -or -not $s.SignerCertificate -or " \
-           "$s.SignerCertificate.Subject -notmatch 'Microsoft') {exit 8}; 'verified'"
+    expr = "$ErrorActionPreference = 'Stop'; " + \
+           "$s = Get-AuthenticodeSignature -LiteralPath '" + str(path).replace("'", "''") + "'; " + \
+           "$ms = [bool]($s.SignerCertificate -and " + \
+           "$s.SignerCertificate.Subject -match 'Microsoft'); " + \
+           "@{status=[string]$s.Status;signer_present=[bool]$s.SignerCertificate;" + \
+           "signer_microsoft=$ms} | ConvertTo-Json -Compress"
     check = subprocess.run([str(path), "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", expr],
                            capture_output=True, text=True, timeout=15, check=False)
-    require(check.returncode == 0 and "verified" in check.stdout,
-            "Microsoft signature on in-box PowerShell not confirmed")
+    try:
+        signature = json.loads(check.stdout.strip())
+    except (ValueError, TypeError):
+        signature = {}
+    require(check.returncode == 0 and signature.get("status") == "Valid" and
+            signature.get("signer_present") is True and
+            signature.get("signer_microsoft") is True,
+            "Microsoft Authenticode requirement not met: " +
+            f"status={signature.get('status', 'unavailable')}, " +
+            f"signer_present={signature.get('signer_present', 'unavailable')}, " +
+            f"signer_microsoft={signature.get('signer_microsoft', 'unavailable')}, " +
+            f"exit_code={check.returncode}")
     return path
 
 
