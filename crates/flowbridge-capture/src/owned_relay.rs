@@ -59,6 +59,31 @@ fn elapsed_ms(origin: u64, started: Instant) -> Option<u64> {
         .and_then(|duration| origin.checked_add(duration))
 }
 
+/// Pending reservation is protected across the awaited SOCKS handshake. An
+/// aborted future must release its pending slot before it can become active.
+struct PendingGuard<'a> {
+    pipeline: &'a Arc<Mutex<CapturePipeline>>,
+    identity: &'a Identity,
+    ticket: Ticket,
+    armed: bool,
+}
+
+impl Drop for PendingGuard<'_> {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        if let Ok(mut state) = lock_state(self.pipeline) {
+            if state
+                .finish_relay(self.ticket, self.identity.evidence())
+                .is_err()
+            {
+                state.revoke_all();
+            }
+        }
+    }
+}
+
 /// Owns one real SOCKS connection AND exactly one reserved packet-flow ticket.
 /// Drop retires the ticket even if the caller exits without forwarding. An
 /// inability to prove retirement permanently halts the shared pipeline.
@@ -132,20 +157,31 @@ pub async fn connect_owned(
             .destination(ticket, context)
             .map_err(OwnedRelayError::Pipeline)?
     };
-    // No pipeline lock is held while connecting or handshaking.
+    let mut pending = PendingGuard {
+        pipeline: &pipeline,
+        identity: &identity,
+        ticket,
+        armed: true,
+    };
+    // No pipeline lock is held while connecting or handshaking. Aborting this
+    // future invokes pending's Drop, which retires its exact token.
     let upstream = pool.connect(&destination, stop).await;
     let mut state = lock_state(&pipeline)?;
     let Some(now_ms) = elapsed_ms(context.now_ms, started) else {
         state.revoke_all();
+        pending.armed = false;
         return Err(OwnedRelayError::ClockOverflow);
     };
     match upstream {
         Ok(connection) => {
             if let Err(error) = state.activate(ticket, identity.evidence(), now_ms, true) {
                 state.revoke_all();
+                pending.armed = false;
                 return Err(OwnedRelayError::Pipeline(error));
             }
+            pending.armed = false;
             drop(state);
+            drop(pending);
             Ok(OwnedFlowRelay {
                 connection: Some(connection),
                 pipeline,
@@ -161,6 +197,7 @@ pub async fn connect_owned(
             if state.active_records() != 0 {
                 state.revoke_all();
             }
+            pending.armed = false;
             Err(OwnedRelayError::Transport(error))
         }
     }
@@ -346,6 +383,50 @@ mod tests {
             assert_eq!(pool.active(), 0);
             accepted.abort();
             drop(supervisor);
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn abort_during_real_socks_handshake_releases_pending_ticket() {
+        timeout(DEADLINE, async {
+            let original = tuple(false);
+            let syn = frame(original, 2);
+            let pipeline = Arc::new(Mutex::new(setup_with_idle(20_000)));
+            let ticket = pipeline
+                .lock()
+                .unwrap()
+                .begin(context(1), &syn, alias(original))
+                .unwrap();
+            let proxy = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let native = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let pool = RelayPool::new(
+                proxy.local_addr().unwrap(),
+                native.local_addr().unwrap(),
+                1,
+                DEADLINE,
+                DEADLINE,
+                DEADLINE,
+            )
+            .unwrap();
+            let (tx, rx) = watch::channel(false);
+            let state = pipeline.clone();
+            let copy = pool.clone();
+            let opening = tokio::spawn(async move {
+                connect_owned(&copy, state, ticket, context(2), rx).await
+            });
+            // An actual SOCKS TCP connection is established. Holding the
+            // handshake response simulates a stalled supervised SSH backend.
+            let (mut socket, _) = proxy.accept().await.unwrap();
+            let _requested = accept_socks5(&mut socket, DEADLINE).await.unwrap();
+            assert_eq!(pipeline.lock().unwrap().active_records(), 1);
+            opening.abort();
+            assert!(opening.await.unwrap_err().is_cancelled());
+            assert_eq!(pipeline.lock().unwrap().active_records(), 0);
+            assert_eq!(pool.active(), 0);
+            drop(socket);
+            drop(tx);
         })
         .await
         .unwrap();

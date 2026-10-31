@@ -125,3 +125,8 @@ packets and bidirectional offline rewrite alongside actual binary/half-close
 SOCKS streams, plus refusal, abandoned connections, PID/generation and
 supervisor-loss negatives. This does **not** connect native NDISRD packets to
 that relay, prove PID attribution, or provide protected crash persistence.
+
+An aborted async SOCKS handshake additionally owns a pending-token guard: task
+cancellation is tested against an actual TCP/SOCKS handshake stalled before
+the CONNECT reply. Dropping that future must release the exact pending lease
+and capacity slot without a direct dial.
