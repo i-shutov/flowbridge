@@ -1491,9 +1491,11 @@ mod tests {
     fn overload_is_reported_coalesced_and_recovers_without_restarting() {
         let mut cfg = config();
         cfg.overload_quiet_ms = 300;
-        let supervisor = supervisor(cfg, "ready");
-        supervisor.start().unwrap();
-        let ready = wait(&supervisor, |s| s.status.state == "ready");
+        // A concurrently running CI process may claim a checked test port
+        // before the fake child starts. Retry ONLY the pre-child bind race,
+        // never an overload, health, authentication or live SSH failure.
+        let (supervisor, _) = started_mock_with_preflight_retry(cfg, "ready");
+        let ready = supervisor.snapshot();
         for _ in 0..10000 {
             stderr_line(&supervisor.state, b"accept: Too many open files");
         }
