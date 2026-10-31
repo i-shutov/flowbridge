@@ -11,11 +11,10 @@ use std::ptr::{null, null_mut};
 use windows_sys::Win32::Foundation::GetLastError;
 use windows_sys::Win32::System::Services::{
     ChangeServiceConfigW, CloseServiceHandle, CreateServiceW, DeleteService, OpenSCManagerW,
-    OpenServiceW, QueryServiceConfigW, QueryServiceStatusEx, SC_HANDLE, SC_MANAGER_CONNECT,
-    SC_MANAGER_CREATE_SERVICE, SC_STATUS_PROCESS_INFO, SERVICE_CHANGE_CONFIG,
+    OpenServiceW, QueryServiceConfigW, QueryServiceStatusEx, QUERY_SERVICE_CONFIGW, SC_HANDLE,
+    SC_MANAGER_CONNECT, SC_MANAGER_CREATE_SERVICE, SC_STATUS_PROCESS_INFO, SERVICE_CHANGE_CONFIG,
     SERVICE_DEMAND_START, SERVICE_ERROR_NORMAL, SERVICE_NO_CHANGE, SERVICE_QUERY_CONFIG,
     SERVICE_QUERY_STATUS, SERVICE_STATUS_PROCESS, SERVICE_STOPPED, SERVICE_WIN32_OWN_PROCESS,
-    QUERY_SERVICE_CONFIGW,
 };
 
 const DELETE_ACCESS: u32 = 0x0001_0000;
@@ -39,7 +38,9 @@ fn wide(value: &str) -> Vec<u16> {
 }
 
 fn err(action: &str) -> String {
-    format!("{action} failed (Windows error {})", unsafe { GetLastError() })
+    format!("{action} failed (Windows error {})", unsafe {
+        GetLastError()
+    })
 }
 
 // Arguments are never passed through cmd.exe. Still reject quoting/control
@@ -59,7 +60,9 @@ fn exact_path(path: &str) -> Result<(), String> {
 fn image_command(config: &str) -> Result<String, String> {
     exact_path(config)?;
     let exe = std::env::current_exe().map_err(|_| "current executable unavailable")?;
-    let image = exe.to_str().ok_or("current executable path is not Unicode")?;
+    let image = exe
+        .to_str()
+        .ok_or("current executable path is not Unicode")?;
     exact_path(image)?;
     if !exe.is_file() {
         return Err("current executable does not exist".into());
@@ -70,7 +73,11 @@ fn image_command(config: &str) -> Result<String, String> {
 fn manager() -> Result<Handle, String> {
     // SAFETY: NULL names choose the current computer's active SCM database.
     let handle = unsafe {
-        OpenSCManagerW(null(), null(), SC_MANAGER_CONNECT | SC_MANAGER_CREATE_SERVICE)
+        OpenSCManagerW(
+            null(),
+            null(),
+            SC_MANAGER_CONNECT | SC_MANAGER_CREATE_SERVICE,
+        )
     };
     if (handle as usize) == 0 {
         Err(err("OpenSCManagerW"))
@@ -133,10 +140,9 @@ fn config(service: &Handle) -> Result<(String, u32, u32), String> {
     if count > 2 * MAX_PATH_CHARS {
         return Err("SCM binary command is oversized".into());
     }
-    let command = String::from_utf16(
-        unsafe { std::slice::from_raw_parts(record.lpBinaryPathName, count) },
-    )
-    .map_err(|_| "SCM binary command is invalid UTF-16")?;
+    let command =
+        String::from_utf16(unsafe { std::slice::from_raw_parts(record.lpBinaryPathName, count) })
+            .map_err(|_| "SCM binary command is invalid UTF-16")?;
     Ok((command, record.dwStartType, record.dwServiceType))
 }
 
