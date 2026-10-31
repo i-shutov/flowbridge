@@ -145,12 +145,14 @@ fn run_native(request: LabRequest) -> Result<Value, String> {
                 owner_sample.observe(direction, frame, |local, remote| {
                     let query = crate::windows_tcp_owner::OwnerQuery { local, remote };
                     match crate::windows_tcp_owner::lookup(query) {
-                        Ok(result) if result["found"] == true
-                            && result["two_snapshots_consistent"] == true
-                            && result["authorizes_capture"] == false
-                            && result["native_packet_attribution_proved"] == false => {
-                                crate::owner_sampling::Candidate::ConsistentSnapshot
-                            }
+                        Ok(result)
+                            if result["found"] == true
+                                && result["two_snapshots_consistent"] == true
+                                && result["authorizes_capture"] == false
+                                && result["native_packet_attribution_proved"] == false =>
+                        {
+                            crate::owner_sampling::Candidate::ConsistentSnapshot
+                        }
                         Ok(result) if result["found"] == false => {
                             crate::owner_sampling::Candidate::Missing
                         }
