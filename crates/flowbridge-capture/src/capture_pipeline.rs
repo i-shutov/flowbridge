@@ -701,15 +701,16 @@ pub(crate) mod tests {
         };
         let mut p = setup_with_idle(10_000);
         let ticket_a = p.begin(context(1), &frame(a, 2), alias(a)).unwrap();
-        let ticket_b = p.begin(
-            context(2),
-            &frame(b, 2),
-            TcpTuple {
-                source: b.destination,
-                destination: "192.0.2.1:18081".parse().unwrap(),
-            },
-        )
-        .unwrap();
+        let ticket_b = p
+            .begin(
+                context(2),
+                &frame(b, 2),
+                TcpTuple {
+                    source: b.destination,
+                    destination: "192.0.2.1:18081".parse().unwrap(),
+                },
+            )
+            .unwrap();
         p.activate(ticket_a, context(3).owner, 3, true).unwrap();
         p.activate(ticket_b, context(4).owner, 4, true).unwrap();
         // A packet for B advances the clock beyond the async completion of A.
@@ -723,9 +724,22 @@ pub(crate) mod tests {
         p.finish_relay(ticket_a, context(3).owner).unwrap();
         assert_eq!(p.active_records(), 1);
         let mut still_active = frame(b, 0x10);
-        p.rewrite(ticket_b, context(201), Leg::ApplicationToRelay, &mut still_active)
-            .unwrap();
-        assert_eq!(inspect_ethernet_tcp(&still_active).unwrap().tcp.tuple.source.port(), b.destination.port());
+        p.rewrite(
+            ticket_b,
+            context(201),
+            Leg::ApplicationToRelay,
+            &mut still_active,
+        )
+        .unwrap();
+        assert_eq!(
+            inspect_ethernet_tcp(&still_active)
+                .unwrap()
+                .tcp
+                .tuple
+                .source
+                .port(),
+            b.destination.port()
+        );
         assert!(p.finish_relay(ticket_a, context(3).owner).is_err());
         p.finish_relay(ticket_b, context(201).owner).unwrap();
         assert_eq!(p.active_records(), 0);

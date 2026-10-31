@@ -3,8 +3,8 @@
 pub mod capture_agent;
 pub mod capture_pipeline;
 pub mod ndis_session;
-pub mod owned_relay;
 pub mod ndis_wire;
+pub mod owned_relay;
 pub mod relay;
 pub mod relay_probe;
 

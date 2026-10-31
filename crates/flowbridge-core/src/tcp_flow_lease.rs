@@ -358,11 +358,7 @@ impl TcpLeaseLedger {
     /// it deliberately does not tick the shared packet-worker clock. Using a
     /// delayed async completion timestamp to call retire() could falsely
     /// trigger ClockRewind and shut down unrelated healthy flows.
-    pub fn finish_stream(
-        &mut self,
-        token: FlowLease,
-        owner: OwnerStamp,
-    ) -> Result<(), LeaseError> {
+    pub fn finish_stream(&mut self, token: FlowLease, owner: OwnerStamp) -> Result<(), LeaseError> {
         if self.halted {
             return Err(LeaseError::Halted);
         }
@@ -433,7 +429,10 @@ mod tests {
         ledger.expire(110).unwrap();
         ledger.finish_stream(first, owner()).unwrap();
         assert!(ledger.is_empty());
-        assert_eq!(ledger.finish_stream(first, owner()), Err(LeaseError::Missing));
+        assert_eq!(
+            ledger.finish_stream(first, owner()),
+            Err(LeaseError::Missing)
+        );
 
         let new = ledger.begin_syn(v4(), owner(), syn(), 120).unwrap();
         assert_ne!(first, new);
@@ -449,7 +448,10 @@ mod tests {
         assert!(ledger.is_empty());
         let another = ledger.begin_syn(v4(), owner(), syn(), 130).unwrap();
         ledger.shutdown();
-        assert_eq!(ledger.finish_stream(another, owner()), Err(LeaseError::Halted));
+        assert_eq!(
+            ledger.finish_stream(another, owner()),
+            Err(LeaseError::Halted)
+        );
     }
 
     #[test]

@@ -280,7 +280,10 @@ mod tests {
                     state
                         .rewrite(ticket, context(4), Leg::RelayToApplication, &mut reply)
                         .unwrap();
-                    assert_eq!(inspect_ethernet_tcp(&reply).unwrap().tcp.tuple, reverse(original));
+                    assert_eq!(
+                        inspect_ethernet_tcp(&reply).unwrap().tcp.tuple,
+                        reverse(original)
+                    );
                 }
 
                 let mut client = TcpStream::connect(native.local_addr().unwrap())
@@ -295,12 +298,11 @@ mod tests {
                     client.read_to_end(&mut echoed).await.unwrap();
                     assert_eq!(echoed, payload);
                 };
-                let (bytes, ()) =
-                    tokio::try_join!(connected.forward(accepted), async {
-                        transfer.await;
-                        Ok::<(), OwnedRelayError>(())
-                    })
-                    .unwrap();
+                let (bytes, ()) = tokio::try_join!(connected.forward(accepted), async {
+                    transfer.await;
+                    Ok::<(), OwnedRelayError>(())
+                })
+                .unwrap();
                 assert_eq!(bytes, (payload.len() as u64, payload.len() as u64));
                 server.await.unwrap();
                 assert_eq!(pool.active(), 0);
@@ -370,15 +372,21 @@ mod tests {
                 let mut byte = [0u8; 1];
                 let _ = socket.read(&mut byte).await.unwrap();
             });
-            let connected =
-                connect_owned(&pool, pipeline.clone(), new_ticket, context(4), watch::channel(false).1)
-                    .await;
+            let connected = connect_owned(
+                &pool,
+                pipeline.clone(),
+                new_ticket,
+                context(4),
+                watch::channel(false).1,
+            )
+            .await;
             // The supervisor sender was dropped immediately: fail closed,
             // either before or after SOCKS opens. No pending ticket survives.
-            assert!(matches!(
-                connected,
-                Err(OwnedRelayError::Transport(RelayError::Cancelled))
-            ));
+            match connected {
+                Err(OwnedRelayError::Transport(RelayError::Cancelled)) => {}
+                Err(error) => panic!("Closed supervisor returned {error:?}"),
+                Ok(_) => panic!("Closed supervisor unexpectedly established flow"),
+            }
             assert_eq!(pipeline.lock().unwrap().active_records(), 0);
             assert_eq!(pool.active(), 0);
             accepted.abort();
@@ -413,16 +421,20 @@ mod tests {
             let (tx, rx) = watch::channel(false);
             let state = pipeline.clone();
             let copy = pool.clone();
-            let opening = tokio::spawn(async move {
-                connect_owned(&copy, state, ticket, context(2), rx).await
-            });
+            let opening =
+                tokio::spawn(
+                    async move { connect_owned(&copy, state, ticket, context(2), rx).await },
+                );
             // An actual SOCKS TCP connection is established. Holding the
             // handshake response simulates a stalled supervised SSH backend.
             let (mut socket, _) = proxy.accept().await.unwrap();
             let _requested = accept_socks5(&mut socket, DEADLINE).await.unwrap();
             assert_eq!(pipeline.lock().unwrap().active_records(), 1);
             opening.abort();
-            assert!(opening.await.unwrap_err().is_cancelled());
+            match opening.await {
+                Err(error) => assert!(error.is_cancelled()),
+                Ok(_) => panic!("Aborted SOCKS handshake unexpectedly completed"),
+            }
             assert_eq!(pipeline.lock().unwrap().active_records(), 0);
             assert_eq!(pool.active(), 0);
             drop(socket);
@@ -462,10 +474,9 @@ mod tests {
                 let _ = socket.read(&mut scratch).await.unwrap();
             });
             let (supervisor, stop) = watch::channel(false);
-            let owned =
-                connect_owned(&pool, pipeline.clone(), ticket, context(2), stop)
-                    .await
-                    .unwrap();
+            let owned = connect_owned(&pool, pipeline.clone(), ticket, context(2), stop)
+                .await
+                .unwrap();
             let _client = TcpStream::connect(native.local_addr().unwrap())
                 .await
                 .unwrap();
