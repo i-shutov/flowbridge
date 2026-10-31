@@ -1,0 +1,21 @@
+//! Original Rust NDISRD integration candidate. Native lab I/O and offline
+//! protected-policy tests are distinct from personal Windows acceptance.
+pub mod capture_agent;
+pub mod capture_pipeline;
+pub mod ndis_session;
+pub mod ndis_wire;
+pub mod relay;
+
+#[cfg(all(windows, target_pointer_width = "64"))]
+mod windows_ndis_device;
+#[cfg(windows)]
+mod windows_packet_filter;
+#[cfg(windows)]
+mod windows_ndisrd_service;
+
+pub fn driver_status() -> serde_json::Value {
+    #[cfg(windows)]
+    { windows_packet_filter::report() }
+    #[cfg(not(windows))]
+    { serde_json::json!({"backend":"ndisapi","supported":false,"packet_capture_active":false,"native_routing_accepted":false,"signature_status":"not_checked","dns_leak_test_passed":false,"driver_installation_attempted":false,"device_opened":false,"api_compatible":false}) }
+}

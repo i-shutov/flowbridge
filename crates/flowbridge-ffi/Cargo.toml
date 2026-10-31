@@ -9,6 +9,7 @@ rust-version.workspace = true
 crate-type = ["rlib", "staticlib", "cdylib"]
 
 [dependencies]
+flowbridge-capture = { path = "../flowbridge-capture" }
 flowbridge-core.workspace = true
 flowbridge-net.workspace = true
 flowbridge-runtime.workspace = true

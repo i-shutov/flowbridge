@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/flowbridge-core",
+    "crates/flowbridge-capture",
     "crates/flowbridge-net",
     "crates/flowbridge-cli",
     "crates/flowbridge-ffi",

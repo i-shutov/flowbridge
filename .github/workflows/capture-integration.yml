@@ -1,0 +1,65 @@
+name: Rust capture integration candidate
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: capture-integration-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  integration:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Independent capture unit and real loopback SOCKS regressions
+        run: cargo test --locked -p flowbridge-capture --all-targets
+      - name: Strict Clippy
+        run: cargo clippy --locked -p flowbridge-capture --all-targets -- -D warnings
+      - name: Build original Rust agent and proxy CLI
+        run: cargo build --locked --release -p flowbridge-capture -p flowbridge-cli
+      - name: Verify CLI denial and independent ABI without activating driver
+        shell: bash
+        run: |
+          suffix=""; if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=".exe"; fi
+          python tools/capture_candidate.py verify --agent "target/release/flowbridge-agent${suffix}" --output build/capture-candidate/verification.json
+          python tools/capture_candidate.py package --agent "target/release/flowbridge-agent${suffix}" --cli "target/release/flowbridge${suffix}" --output "build/capture-candidate/FlowBridge-Rust-Candidate-${RUNNER_OS}.zip"
+      - name: Verify formatting (never auto-commit or waive failure)
+        if: always()
+        run: cargo fmt --all -- --check
+      - name: Preserve formatting diagnostic, not acceptance evidence
+        if: failure()
+        shell: bash
+        run: |
+          mkdir -p build/capture-format
+          cargo fmt --all
+          git diff --binary > build/capture-format/format.patch
+          git rev-parse HEAD > build/capture-format/source-sha.txt
+      - uses: actions/upload-artifact@v7.0.0
+        if: always()
+        with:
+          name: FlowBridge-Rust-Capture-${{ matrix.os }}
+          path: build/capture-candidate/
+          if-no-files-found: warn
+          retention-days: 14
+      - uses: actions/upload-artifact@v7.0.0
+        if: failure()
+        with:
+          name: FlowBridge-Capture-Format-${{ matrix.os }}
+          path: build/capture-format/
+          if-no-files-found: warn
+          retention-days: 7
