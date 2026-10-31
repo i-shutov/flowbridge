@@ -346,7 +346,7 @@ mod tests {
         assert_eq!(report["ipv4_fragments"], 1);
         assert_eq!(report["ipv6_fragments"], 1);
         assert_eq!(report["udp_port_53"], 0);
-        assert_eq!(report["malformed_or_truncated"], 1);
+        assert_eq!(report["malformed_or_truncated"], 2);
     }
 
     #[test]

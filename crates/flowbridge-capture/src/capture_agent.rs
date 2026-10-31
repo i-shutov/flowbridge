@@ -241,6 +241,7 @@ mod tests {
         bad.protocol_profile = true;
         assert!(validate(&bad).is_err());
         bad.consent = "LISTEN_ONLY_PROTOCOL_PROFILE".into();
+        bad.duration_ms = 20;
         assert!(validate(&bad).is_ok());
         bad.owner_candidates = true;
         assert!(validate(&bad).is_err());
