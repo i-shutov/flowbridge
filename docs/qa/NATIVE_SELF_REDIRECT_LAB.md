@@ -178,3 +178,88 @@ networking.
 
 
 The fixed PowerShell script and its Authenticode probe use Windows PowerShell's UTF-16LE Base64 `-EncodedCommand` interface to avoid shell interpolation/argument quoting; the script body is compiled into original Rust and is never sourced from JSON. The hosted signed-PowerShell positive and negative GO/half-close regression remains mandatory; this change is not native driver proof.
+
+
+## VERIFIED native nine-phase parent/Rust-child/signed-OS-PowerShell NDISRD → Rust SOCKS → real SSH (2026-10-31)
+
+The prior "native proof pending" source checkpoint above is historical: the
+fixed Microsoft-signed OS PowerShell child has now passed **actual NDISRD**
+interception and bidirectional reflection on a separately rented Windows
+Server 2025 Standard system. This **does not** authorize arbitrary
+selected-app/packet-to-PID binding, persistent fail-closed or a beta release.
+
+**Pinned code and hosted CI:** PR #56 code HEAD
+`6ec22db996276aef19e378aed799476a0068166a`, exact test merge
+`6aaadd172cf7425ab314eb51a91d994c00e7be41`; public base `main`
+`5b5afc2feeda2195f302380e615ba003d4906e09` unchanged. Hosted
+[capture integration #41214148509](https://github.com/i-shutov/flowbridge/actions/runs/41214148509)
+**3/3 PASS**, including Microsoft Authenticode-checked in-box PowerShell
+negative GO (no connection before authorization) and real TCP half-close HTTP
+response. Hosted [Rust/native #41214148179](https://github.com/i-shutov/flowbridge/actions/runs/41214148179)
+**5/5 PASS** and [DNS regression #41214148223](https://github.com/i-shutov/flowbridge/actions/runs/41214148223)
+**3/3 PASS**; *DNS regression is not leak-free acceptance*. Long
+[real Windows OpenSSH #41214148092](https://github.com/i-shutov/flowbridge/actions/runs/41214148092)
+was still running at this evidence checkpoint: no PASS claimed; separate raw
+512-channel stability was not established.
+
+**Independent downloaded public artifacts**, exact hosted source and test
+merge cross-checked against internal manifests:
+- Windows capture artifact `13047248828`: outer ZIP SHA-256
+  `d0a4290ccf76717de437654eb30a0a1c5de6f6c4008d26caf3bac93e0ef60a48`;
+  allowlisted four-file candidate ZIP
+  `c5f559db68cd2ca8dda744463228dce29c366e1e994315acd9d2a9b8d51d3978`;
+  Rust agent PE SHA-256
+  `5cfd2fba229c6c5d3e0c7a9bc11070603d69ab930f931151cd2c9a98fbe82f69`.
+- Separately allowlisted **test-only**, not product, native tooling
+  `13047547909`: outer ZIP SHA-256
+  `dd957942bdc0ffbb299539e8b17b667f49b1d4b2d3142c31efc61d1497300280`;
+  Rust FFI DLL SHA-256
+  `d0a341647436d5644c7fdadc0cdee876b6a06ea428bbdd6a543ece8104f21079`.
+  Every manifest payload hash and file count passed independent inspection;
+  no vendor driver, ProxiFyre, AGPL implementation, legacy C++ sidecar or
+  credentials in the product candidate.
+- Hosted `powershell-client-lifecycle.json` has `passed=true`,
+  `negative_go_no_tcp=true`, `positive_half_close_http=true`,
+  `verified_http_reply_bytes=57`, `native_driver_tested=false`.
+
+**Actual VDSina VPS #3293462 native test:** [private Windows Server
+2025 GitHub Actions #41214578775](https://github.com/i-shutov/flowbridge-vps-qa/actions/runs/41214578775)
+**PASS**, pinned private workflow SHA
+`cf86df971cf4044963119b43c0bb3099453c46f9` and exactly the public
+source/merge/binaries above; [sanitized evidence in private issue
+#1](https://github.com/i-shutov/flowbridge-vps-qa/issues/1#issuecomment-6545349434).
+Independent **signed Microsoft PowerShell executable prerequisite**, signed
+NDISRD, Defender, firewall, exact adapter and owner-confirmed VNC were checked
+*before* diversion. Independent SYSTEM rescue was armed before network
+mutation, and then disarmed after confirmed mode-zero rollback, network,
+firewall rule removal and Defender health; `rollback_needed=false`.
+
+All **9/9 real NDISRD/real authenticated OpenSSH phases PASS**:
+parent-owned socket **connected/denied/recovered**; distinct parent-spawned
+Rust child **connected/denied/recovered**; distinct fixed Microsoft-signed OS
+PowerShell child **connected/denied/recovered**. PowerShell connected:
+**5/4** client/relay reflected native frames, **57/311 bytes** sent/received
+and HTTP reply; closed upstream: **4/3** reflected frames, **0 reply
+bytes**, no SOCKS connection or DIRECT; recovered: **5/5** frames,
+**57/314 bytes** and same live SSH supervisor. Distinct PowerShell PID/creation
+epoch and double-snapshot IP Helper ownership candidate matched the reserved
+flow in all three phases, but no PID, endpoint or payload was recorded.
+All nine native phases report **zero selected original frames sent to physical
+adapter**; return traffic was reflected through Rust and the Windows TCP stack.
+
+Independent downloaded **private native evidence** artifact `13047204447`:
+ZIP SHA-256 `8bd0151566173fee517147c486e4935f1e7285197e042a7605364d6805fc8f8b`
+matching GitHub digest, exactly one redacted JSON SHA-256
+`548f0d3b185f3437955e23a6c18e192f6e4a3fe97c4a9b6090b45fab1156a916`.
+All nine phase flags, counts, source/merge/workflow SHA, agent/FFI digests,
+nine rollback flags and negative release claims were independently checked.
+
+**Still open / explicitly FALSE:** arbitrary unrelated selected-app packet
+ownership (the PowerShell canary is parent-created and pre-authorized),
+kernel-authenticated `PacketBound`, transparent process redirect,
+crash-persistent protected fail-closed, DNS/UDP/IPv6 leak containment, personal
+Windows 10/11 native acceptance, macOS NE, raw 512 stable SSH channels,
+DNS leak-free and release 1.0. Mode 0 restores ordinary DIRECT-capable
+networking, not a protected kill switch. Keep the paid VPS only while further
+bounded native tests materially advance these open gates; no deletion or
+release without explicit owner approval.
