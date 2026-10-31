@@ -165,7 +165,11 @@ async fn run() -> AppResult<()> {
                 }))?
             );
         }
-        Command::SshDiagnose { endpoint, timeout_ms, consent } => {
+        Command::SshDiagnose {
+            endpoint,
+            timeout_ms,
+            consent,
+        } => {
             if consent != "DIRECT_SSH_DIAGNOSTIC" {
                 return Err("ssh-diagnose requires --consent DIRECT_SSH_DIAGNOSTIC".into());
             }
@@ -173,7 +177,8 @@ async fn run() -> AppResult<()> {
                 return Err("SSH probe timeout must be 100..=10000 ms with a nonzero port".into());
             }
             let report = flowbridge_tunnel::handshake_diagnostic::compare_direct(
-                endpoint, Duration::from_millis(timeout_ms)
+                endpoint,
+                Duration::from_millis(timeout_ms),
             );
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
