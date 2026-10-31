@@ -35,7 +35,6 @@ struct Probe {
     received: u64,
 }
 
-
 /// A separately spawned, controllable Rust process owns the socket. Only a
 /// parent-provided GO on inherited stdin permits its first SYN. The parent
 /// keeps the OS child process handle live across the native packet pump.
@@ -101,9 +100,14 @@ pub(super) fn run_child(local_ipv4: Ipv4Addr, target: SocketAddrV4) -> Result<Va
     })
 }
 
+struct SpawnedClient {
+    child: Child,
+    reader: BufReader<ChildStdout>,
+}
+
 enum ClientSource {
     SelfSocket(TcpSocket),
-    Spawned(Child, BufReader<ChildStdout>),
+    Spawned(Box<SpawnedClient>),
 }
 
 pub(super) fn run(request: Request) -> Result<Value, String> {
@@ -181,10 +185,8 @@ async fn exercise(
     probe
 }
 
-
 async fn exercise_child(
-    mut child: Child,
-    mut reader: BufReader<ChildStdout>,
+    spawned: Box<SpawnedClient>,
     listener: TcpListener,
     peer: SocketAddr,
     request_target: SocketAddr,
@@ -192,6 +194,7 @@ async fn exercise_child(
     stop: watch::Receiver<bool>,
     deadline: Duration,
 ) -> Probe {
+    let SpawnedClient { mut child, mut reader } = *spawned;
     let connected = Arc::new(AtomicBool::new(false));
     let denied = Arc::new(AtomicBool::new(false));
     let up = connected.clone();
@@ -288,8 +291,8 @@ async fn native(request: Request) -> Result<Value, String> {
         return Err("Exact Ethernet adapter/MTU prerequisite failed".into());
     }
     let (local, source, process) = if request.spawned_child {
-        let binary = std::env::current_exe()
-            .map_err(|_| "Original Rust child executable unavailable")?;
+        let binary =
+            std::env::current_exe().map_err(|_| "Original Rust child executable unavailable")?;
         let mut child = Command::new(binary)
             .arg("native-child")
             .arg(request.local_ipv4.to_string())
@@ -311,14 +314,17 @@ async fn native(request: Request) -> Result<Value, String> {
         if bytes == 0 {
             return Err("Child exited before reserving TCP source".into());
         }
-        let port: u16 = ready.trim().parse().map_err(|_| "Child source port invalid")?;
+        let port: u16 = ready
+            .trim()
+            .parse()
+            .map_err(|_| "Child source port invalid")?;
         if port == 0 {
             return Err("Child source port was zero".into());
         }
         let process = OwnedProcess::query(pid)?;
         (
             SocketAddr::new(request.local_ipv4.into(), port),
-            ClientSource::Spawned(child, reader),
+            ClientSource::Spawned(Box::new(SpawnedClient { child, reader })),
             process,
         )
     } else {
@@ -369,9 +375,8 @@ async fn native(request: Request) -> Result<Value, String> {
             stop_rx,
             deadline,
         )),
-        ClientSource::Spawned(child, stdout) => tokio::spawn(exercise_child(
-            child,
-            stdout,
+        ClientSource::Spawned(spawned) => tokio::spawn(exercise_child(
+            spawned,
             listener,
             reflect.peer,
             original.destination,
