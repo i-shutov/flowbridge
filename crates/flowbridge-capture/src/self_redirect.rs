@@ -571,6 +571,27 @@ mod tests {
         ));
     }
     #[test]
+    fn stale_owner_after_valid_syn_must_drop_even_for_valid_tcp_fin() {
+        let mut r = reflection();
+        let syn = frame(r.original, 2, 1);
+        assert!(matches!(
+            r.decide(&packet(&syn), &mut || true),
+            LabDisposition::ToStack(_)
+        ));
+        // This deliberately models a table/owner snapshot racing a closing
+        // TCP endpoint. Correct response is DROP, never Original / DIRECT.
+        for (flags, seq) in [(0x10, 2), (0x11, 2), (0x04, 3)] {
+            let segment = frame(r.original, flags, seq);
+            assert!(matches!(
+                r.decide(&packet(&segment), &mut || false),
+                LabDisposition::Drop
+            ));
+        }
+        assert_eq!(r.counters.client_reflected, 1);
+        assert_eq!(r.counters.selected_dropped, 3);
+    }
+
+    #[test]
     fn unrelated_flow_unchanged_and_wire_reply_cannot_bypass_local_relay() {
         let mut r = reflection();
         let other = frame(
