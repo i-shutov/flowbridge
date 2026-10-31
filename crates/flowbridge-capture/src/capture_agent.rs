@@ -1,8 +1,8 @@
 //! Safe Rust diagnostic/lab surface. No arbitrary service launch or privileged
 //! SSH execution. Protected application redirect is intentionally unavailable.
+use crate::ndis_wire;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use crate::ndis_wire;
 
 pub fn capabilities() -> Value {
     json!({
@@ -27,7 +27,9 @@ pub fn status() -> Value {
         value["scm"] = crate::windows_ndisrd_service::report();
     }
     #[cfg(not(windows))]
-    { value["driver"] = json!({"supported":false}); }
+    {
+        value["driver"] = json!({"supported":false});
+    }
     value
 }
 
@@ -43,12 +45,21 @@ pub struct LabRequest {
 
 fn validate(request: &LabRequest) -> Result<(), String> {
     if !(1..=60_000).contains(&request.duration_ms)
-        || request.adapter_name.is_empty() || request.adapter_name.len() > 255
+        || request.adapter_name.is_empty()
+        || request.adapter_name.len() > 255
         || !request.adapter_name.bytes().all(|b| b.is_ascii_graphic())
-    { return Err("Invalid bounded duration or adapter name".into()); }
-    let required = if request.passthrough { "EXPERIMENTAL_DIVERT_AND_REINJECT" } else { "LISTEN_ONLY" };
+    {
+        return Err("Invalid bounded duration or adapter name".into());
+    }
+    let required = if request.passthrough {
+        "EXPERIMENTAL_DIVERT_AND_REINJECT"
+    } else {
+        "LISTEN_ONLY"
+    };
     if request.consent != required {
-        return Err(format!("Explicit consent must be {required}; this is not protected mode"));
+        return Err(format!(
+            "Explicit consent must be {required}; this is not protected mode"
+        ));
     }
     Ok(())
 }
@@ -56,34 +67,56 @@ fn validate(request: &LabRequest) -> Result<(), String> {
 pub fn run_lab(request: LabRequest) -> Result<Value, String> {
     validate(&request)?;
     #[cfg(all(windows, target_pointer_width = "64"))]
-    { run_native(request) }
+    {
+        run_native(request)
+    }
     #[cfg(not(all(windows, target_pointer_width = "64")))]
-    { Err("NDISRD laboratory mode requires Windows x64".into()) }
+    {
+        Err("NDISRD laboratory mode requires Windows x64".into())
+    }
 }
 
 #[cfg(all(windows, target_pointer_width = "64"))]
 fn run_native(request: LabRequest) -> Result<Value, String> {
-    use crate::windows_ndis_device::Driver;
     use crate::ndis_session::{LabMode, PacketSession};
+    use crate::windows_ndis_device::Driver;
     use std::time::{Duration, Instant};
     let scm = crate::windows_ndisrd_service::report();
-    if scm["service_registered"] != true || scm["kernel_driver_type"] != true || scm["service_state"] != "running" {
-        return Err("NDISRD kernel-driver service is not confirmed running; no activation attempted".into());
+    if scm["service_registered"] != true
+        || scm["kernel_driver_type"] != true
+        || scm["service_state"] != "running"
+    {
+        return Err(
+            "NDISRD kernel-driver service is not confirmed running; no activation attempted".into(),
+        );
     }
     let mut device = Driver::open(true).map_err(|e| e.to_string())?;
     let version = device.version().map_err(|e| e.to_string())?;
     let adapters = device.adapters().map_err(|e| e.to_string())?;
-    let adapter = adapters.iter().find(|a| a.name == request.adapter_name)
+    let adapter = adapters
+        .iter()
+        .find(|a| a.name == request.adapter_name)
         .ok_or("Exact adapter name not found; no mode change attempted")?;
-    if adapter.medium != 0 || adapter.mtu == 0 || usize::from(adapter.mtu) + 14 > ndis_wire::MAX_FRAME_BYTES {
+    if adapter.medium != 0
+        || adapter.mtu == 0
+        || usize::from(adapter.mtu) + 14 > ndis_wire::MAX_FRAME_BYTES
+    {
         return Err("Unsupported media or MTU; no mode change attempted".into());
     }
-    let mode = if request.passthrough { LabMode::Passthrough } else { LabMode::Observe };
+    let mode = if request.passthrough {
+        LabMode::Passthrough
+    } else {
+        LabMode::Observe
+    };
     let start = Instant::now();
-    let mut session = PacketSession::start(&mut device, adapter.handle, mode).map_err(|e| e.to_string())?;
+    let mut session =
+        PacketSession::start(&mut device, adapter.handle, mode).map_err(|e| e.to_string())?;
     let mut failure = None;
     while start.elapsed() < Duration::from_millis(request.duration_ms) {
-        if let Err(error) = session.poll(128) { failure = Some(error.to_string()); break; }
+        if let Err(error) = session.poll(128) {
+            failure = Some(error.to_string());
+            break;
+        }
         std::thread::sleep(Duration::from_millis(5));
     }
     let stats = session.stats();
@@ -109,13 +142,27 @@ mod tests {
     use super::*;
     #[test]
     fn lab_input_cannot_enable_protected_mode_or_hide_consent() {
-        let good = LabRequest { adapter_name:"adapter".into(), duration_ms:20, consent:"LISTEN_ONLY".into(), passthrough:false };
+        let good = LabRequest {
+            adapter_name: "adapter".into(),
+            duration_ms: 20,
+            consent: "LISTEN_ONLY".into(),
+            passthrough: false,
+        };
         assert!(validate(&good).is_ok());
-        let mut bad = good; bad.passthrough = true; assert!(validate(&bad).is_err());
-        bad.consent = "EXPERIMENTAL_DIVERT_AND_REINJECT".into(); assert!(validate(&bad).is_ok());
-        bad.duration_ms = 60_001; assert!(validate(&bad).is_err());
-        assert!(serde_json::from_str::<LabRequest>(r#"{"adapter_name":"a","duration_ms":1,"consent":"LISTEN_ONLY","protected":true}"#).is_err());
-        let cap = capabilities(); assert_eq!(cap["protected_redirect_available"], false);
-        assert_eq!(cap["vendor_driver_bundled"], false); assert_eq!(cap["release_accepted"], false);
+        let mut bad = good;
+        bad.passthrough = true;
+        assert!(validate(&bad).is_err());
+        bad.consent = "EXPERIMENTAL_DIVERT_AND_REINJECT".into();
+        assert!(validate(&bad).is_ok());
+        bad.duration_ms = 60_001;
+        assert!(validate(&bad).is_err());
+        assert!(serde_json::from_str::<LabRequest>(
+            r#"{"adapter_name":"a","duration_ms":1,"consent":"LISTEN_ONLY","protected":true}"#
+        )
+        .is_err());
+        let cap = capabilities();
+        assert_eq!(cap["protected_redirect_available"], false);
+        assert_eq!(cap["vendor_driver_bundled"], false);
+        assert_eq!(cap["release_accepted"], false);
     }
 }

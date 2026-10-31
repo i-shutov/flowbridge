@@ -69,7 +69,9 @@ pub fn decode_adapters(bytes: &[u8]) -> Result<Vec<Adapter>, WireError> {
         if end == 0 || !raw[..end].iter().all(u8::is_ascii_graphic) {
             return Err(WireError::Name);
         }
-        let name = std::str::from_utf8(&raw[..end]).map_err(|_| WireError::Name)?.to_owned();
+        let name = std::str::from_utf8(&raw[..end])
+            .map_err(|_| WireError::Name)?
+            .to_owned();
         if !names.insert(name.to_ascii_lowercase()) {
             return Err(WireError::Name);
         }
@@ -171,7 +173,10 @@ mod tests {
         assert_eq!(a[0].mtu, 1500);
         assert!(!format!("{:?}", a[0]).contains("1020304050607080"));
         assert_eq!(decode_adapters(&vec![0; 8840]), Err(WireError::Length));
-        assert_eq!(mode_request(0x1122334455667788, 12), [0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 12, 0, 0, 0]);
+        assert_eq!(
+            mode_request(0x1122334455667788, 12),
+            [0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 12, 0, 0, 0]
+        );
     }
 
     #[test]

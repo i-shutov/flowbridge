@@ -16,11 +16,17 @@ pub(super) fn report() -> Value {
     #[cfg(target_pointer_width = "64")]
     {
         match crate::windows_ndis_device::Driver::open(false) {
-            Err(error) => { value["error"] = json!(error.operation); value["win32_error"] = json!(error.code); }
+            Err(error) => {
+                value["error"] = json!(error.operation);
+                value["win32_error"] = json!(error.code);
+            }
             Ok(mut driver) => {
                 value["device_opened"] = json!(true);
                 match driver.version() {
-                    Err(error) => { value["error"] = json!(error.operation); value["win32_error"] = json!(error.code); }
+                    Err(error) => {
+                        value["error"] = json!(error.operation);
+                        value["win32_error"] = json!(error.code);
+                    }
                     Ok(version) => {
                         value["api_compatible"] = json!(true);
                         value["driver_api_version"] = json!(format!("0x{version:08x}"));
@@ -32,7 +38,10 @@ pub(super) fn report() -> Value {
                                     "name":a.name,"medium":a.medium,"mtu":a.mtu,"mac":a.mac,"handle_present":true
                                 })).collect::<Vec<_>>());
                             }
-                            Err(error) => { value["adapter_inventory_status"] = json!("failed"); value["adapter_error"] = json!(error.to_string()); }
+                            Err(error) => {
+                                value["adapter_inventory_status"] = json!("failed");
+                                value["adapter_error"] = json!(error.to_string());
+                            }
                         }
                     }
                 }
@@ -40,7 +49,9 @@ pub(super) fn report() -> Value {
         }
     }
     #[cfg(not(target_pointer_width = "64"))]
-    { value["error"] = json!("unsupported_architecture"); }
+    {
+        value["error"] = json!("unsupported_architecture");
+    }
     value
 }
 
@@ -50,9 +61,12 @@ mod tests {
     #[test]
     fn native_status_does_not_make_capture_signature_or_install_claims() {
         let v = report();
-        assert_eq!(v["backend"], "ndisapi"); assert_eq!(v["signature_status"], "not_checked");
-        assert_eq!(v["packet_capture_active"], false); assert_eq!(v["native_routing_accepted"], false);
-        assert_eq!(v["dns_leak_test_passed"], false); assert_eq!(v["driver_installation_attempted"], false);
+        assert_eq!(v["backend"], "ndisapi");
+        assert_eq!(v["signature_status"], "not_checked");
+        assert_eq!(v["packet_capture_active"], false);
+        assert_eq!(v["native_routing_accepted"], false);
+        assert_eq!(v["dns_leak_test_passed"], false);
+        assert_eq!(v["driver_installation_attempted"], false);
         assert_eq!(v["adapter_wire_bytes"], 8836);
     }
 }

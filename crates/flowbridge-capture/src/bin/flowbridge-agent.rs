@@ -15,9 +15,22 @@ fn main() {
     match result {
         Ok(value) => {
             println!("{}", value);
-            if value.get("loop_completed").is_some_and(|v| v.as_bool() != Some(true))
-                || value.get("rollback_confirmed").is_some_and(|v| v.as_bool() != Some(true)) { std::process::exit(1); }
+            if value
+                .get("loop_completed")
+                .is_some_and(|v| v.as_bool() != Some(true))
+                || value
+                    .get("rollback_confirmed")
+                    .is_some_and(|v| v.as_bool() != Some(true))
+            {
+                std::process::exit(1);
+            }
         }
-        Err(error) => { println!("{}", json!({"ok":false,"error":error,"release_accepted":false})); std::process::exit(1); }
+        Err(error) => {
+            println!(
+                "{}",
+                json!({"ok":false,"error":error,"release_accepted":false})
+            );
+            std::process::exit(1);
+        }
     }
 }

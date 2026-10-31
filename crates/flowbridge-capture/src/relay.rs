@@ -42,8 +42,12 @@ pub struct ConnectedUpstream {
 
 async fn cancelled(stop: &mut watch::Receiver<bool>) {
     loop {
-        if *stop.borrow_and_update() { return; }
-        if stop.changed().await.is_err() { return; }
+        if *stop.borrow_and_update() {
+            return;
+        }
+        if stop.changed().await.is_err() {
+            return;
+        }
     }
 }
 
@@ -79,7 +83,10 @@ impl RelayPool {
             route: vec![Proxy {
                 id: "supervised-flowbridge-socks".into(),
                 kind: ProxyKind::Socks5,
-                endpoint: Endpoint { host: upstream.ip().to_string(), port: upstream.port() },
+                endpoint: Endpoint {
+                    host: upstream.ip().to_string(),
+                    port: upstream.port(),
+                },
                 username: None,
                 password_env: None,
             }],
@@ -106,16 +113,21 @@ impl RelayPool {
         context: crate::capture_pipeline::PacketContext<'_>,
         stop: watch::Receiver<bool>,
     ) -> Result<ConnectedUpstream, RelayError> {
-        let destination = pipeline.destination(ticket, context).map_err(RelayError::Pipeline)?;
+        let destination = pipeline
+            .destination(ticket, context)
+            .map_err(RelayError::Pipeline)?;
         let started = std::time::Instant::now();
         let connected = self.connect(&destination, stop).await;
         let elapsed = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
         let Some(now_ms) = context.now_ms.checked_add(elapsed) else {
-            pipeline.revoke_all(); return Err(RelayError::InvalidConfiguration);
+            pipeline.revoke_all();
+            return Err(RelayError::InvalidConfiguration);
         };
         match connected {
             Ok(upstream) => {
-                pipeline.activate(ticket, context.owner, now_ms, true).map_err(RelayError::Pipeline)?;
+                pipeline
+                    .activate(ticket, context.owner, now_ms, true)
+                    .map_err(RelayError::Pipeline)?;
                 Ok(upstream)
             }
             Err(error) => {
@@ -132,16 +144,29 @@ impl RelayPool {
         target: &Endpoint,
         mut stop: watch::Receiver<bool>,
     ) -> Result<ConnectedUpstream, RelayError> {
-        if target.validate().is_err() { return Err(RelayError::InvalidDestination); }
-        let permit = self.permits.clone().try_acquire_owned().map_err(|_| RelayError::AtCapacity)?;
+        if target.validate().is_err() {
+            return Err(RelayError::InvalidDestination);
+        }
+        let permit = self
+            .permits
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| RelayError::AtCapacity)?;
         let stream = tokio::select! {
             biased;
             () = cancelled(&mut stop) => return Err(RelayError::Cancelled),
             result = connect_route_guarded(target, &self.route, self.connect_timeout,
                 self.handshake_timeout, self.listener) => result.map_err(RelayError::Transport)?,
         };
-        if *stop.borrow() || stop.has_changed().is_err() { return Err(RelayError::Cancelled); }
-        Ok(ConnectedUpstream { stream, _permit: permit, stop, idle_timeout: self.idle_timeout })
+        if *stop.borrow() || stop.has_changed().is_err() {
+            return Err(RelayError::Cancelled);
+        }
+        Ok(ConnectedUpstream {
+            stream,
+            _permit: permit,
+            stop,
+            idle_timeout: self.idle_timeout,
+        })
     }
 }
 
@@ -166,7 +191,12 @@ mod tests {
     use tokio::time::timeout;
 
     const DEADLINE: Duration = Duration::from_secs(3);
-    fn target() -> Endpoint { Endpoint { host: "preserved-name.invalid".into(), port: 443 } }
+    fn target() -> Endpoint {
+        Endpoint {
+            host: "preserved-name.invalid".into(),
+            port: 443,
+        }
+    }
     fn pool(proxy: SocketAddr, listener: SocketAddr) -> RelayPool {
         RelayPool::new(proxy, listener, 1, DEADLINE, DEADLINE, DEADLINE).unwrap()
     }
@@ -179,26 +209,44 @@ mod tests {
         let (tx, rx) = watch::channel(false);
         let server = tokio::spawn(async move {
             let (mut socket, _) = proxy.accept().await.unwrap();
-            assert_eq!(accept_socks5(&mut socket, DEADLINE).await.unwrap(), target());
+            assert_eq!(
+                accept_socks5(&mut socket, DEADLINE).await.unwrap(),
+                target()
+            );
             reply_socks5(&mut socket, 0).await.unwrap();
             let mut data = Vec::new();
-            timeout(DEADLINE, socket.read_to_end(&mut data)).await.unwrap().unwrap();
+            timeout(DEADLINE, socket.read_to_end(&mut data))
+                .await
+                .unwrap()
+                .unwrap();
             assert_eq!(data, b"binary\x00\xff request");
             socket.write_all(b"reply after FIN\x00\xfe").await.unwrap();
             socket.shutdown().await.unwrap();
         });
         let upstream = p.connect(&target(), rx.clone()).await.unwrap();
         assert_eq!(p.active(), 1);
-        assert!(matches!(p.connect(&target(), rx).await, Err(RelayError::AtCapacity)));
-        let mut client = TcpStream::connect(native.local_addr().unwrap()).await.unwrap();
+        assert!(matches!(
+            p.connect(&target(), rx).await,
+            Err(RelayError::AtCapacity)
+        ));
+        let mut client = TcpStream::connect(native.local_addr().unwrap())
+            .await
+            .unwrap();
         let (accepted, _) = native.accept().await.unwrap();
         let forwarding = tokio::spawn(upstream.forward(accepted));
         client.write_all(b"binary\x00\xff request").await.unwrap();
         client.shutdown().await.unwrap();
         let mut reply = Vec::new();
-        timeout(DEADLINE, client.read_to_end(&mut reply)).await.unwrap().unwrap();
+        timeout(DEADLINE, client.read_to_end(&mut reply))
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(reply, b"reply after FIN\x00\xfe");
-        let bytes = timeout(DEADLINE, forwarding).await.unwrap().unwrap().unwrap();
+        let bytes = timeout(DEADLINE, forwarding)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
         assert_eq!(bytes, (16, 17));
         server.await.unwrap();
         assert_eq!(p.active(), 0);
@@ -218,11 +266,20 @@ mod tests {
             reply_socks5(&mut socket, 5).await.unwrap();
         });
         let address = direct_target.local_addr().unwrap();
-        let target = Endpoint { host: address.ip().to_string(), port: address.port() };
-        assert!(matches!(p.connect(&target, rx).await, Err(RelayError::Transport(_))));
-        assert!(timeout(Duration::from_millis(50), direct_target.accept()).await.is_err());
+        let target = Endpoint {
+            host: address.ip().to_string(),
+            port: address.port(),
+        };
+        assert!(matches!(
+            p.connect(&target, rx).await,
+            Err(RelayError::Transport(_))
+        ));
+        assert!(timeout(Duration::from_millis(50), direct_target.accept())
+            .await
+            .is_err());
         assert_eq!(p.active(), 0);
-        server.await.unwrap(); drop(tx);
+        server.await.unwrap();
+        drop(tx);
     }
 
     #[tokio::test]
@@ -231,7 +288,10 @@ mod tests {
         let native = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let p = pool(proxy.local_addr().unwrap(), native.local_addr().unwrap());
         let (tx, rx) = watch::channel(true);
-        assert!(matches!(p.connect(&target(), rx).await, Err(RelayError::Cancelled)));
+        assert!(matches!(
+            p.connect(&target(), rx).await,
+            Err(RelayError::Cancelled)
+        ));
         assert_eq!(p.active(), 0);
         drop(tx);
         let (tx, rx) = watch::channel(false);
@@ -239,7 +299,10 @@ mod tests {
         let connecting = tokio::spawn(async move { copy.connect(&target(), rx).await });
         let (_accepted, _) = timeout(DEADLINE, proxy.accept()).await.unwrap().unwrap();
         tx.send(true).unwrap();
-        assert!(matches!(timeout(DEADLINE, connecting).await.unwrap().unwrap(), Err(RelayError::Cancelled)));
+        assert!(matches!(
+            timeout(DEADLINE, connecting).await.unwrap().unwrap(),
+            Err(RelayError::Cancelled)
+        ));
         assert_eq!(p.active(), 0);
     }
 
@@ -254,16 +317,30 @@ mod tests {
             accept_socks5(&mut socket, DEADLINE).await.unwrap();
             reply_socks5(&mut socket, 0).await.unwrap();
             let mut data = [0; 1];
-            timeout(DEADLINE, socket.read(&mut data)).await.unwrap().unwrap()
+            timeout(DEADLINE, socket.read(&mut data))
+                .await
+                .unwrap()
+                .unwrap()
         });
         let upstream = p.connect(&target(), rx).await.unwrap();
-        let mut client = TcpStream::connect(native.local_addr().unwrap()).await.unwrap();
+        let mut client = TcpStream::connect(native.local_addr().unwrap())
+            .await
+            .unwrap();
         let (accepted, _) = native.accept().await.unwrap();
         let forwarding = tokio::spawn(upstream.forward(accepted));
         drop(tx);
-        assert!(matches!(timeout(DEADLINE, forwarding).await.unwrap().unwrap(), Err(RelayError::Cancelled)));
+        assert!(matches!(
+            timeout(DEADLINE, forwarding).await.unwrap().unwrap(),
+            Err(RelayError::Cancelled)
+        ));
         let mut data = [0; 1];
-        assert_eq!(timeout(DEADLINE, client.read(&mut data)).await.unwrap().unwrap(), 0);
+        assert_eq!(
+            timeout(DEADLINE, client.read(&mut data))
+                .await
+                .unwrap()
+                .unwrap(),
+            0
+        );
         assert_eq!(server.await.unwrap(), 0);
         assert_eq!(p.active(), 0);
     }
@@ -279,7 +356,9 @@ mod tests {
             let syn = fixtures::frame(original, 2);
             let mut pipeline = fixtures::setup_with_idle(10_000);
             let context = fixtures::context(1);
-            let ticket = pipeline.begin(context, &syn, fixtures::alias(original)).unwrap();
+            let ticket = pipeline
+                .begin(context, &syn, fixtures::alias(original))
+                .unwrap();
             let server = tokio::spawn(async move {
                 let (mut socket, _) = proxy.accept().await.unwrap();
                 let destination = accept_socks5(&mut socket, DEADLINE).await.unwrap();
@@ -296,7 +375,14 @@ mod tests {
                 let mut frame = syn.clone();
                 // Host wall time is deliberately not used as a packet clock.
                 let now = 10_000;
-                pipeline.rewrite(ticket, fixtures::context(now), Leg::ApplicationToRelay, &mut frame).unwrap();
+                pipeline
+                    .rewrite(
+                        ticket,
+                        fixtures::context(now),
+                        Leg::ApplicationToRelay,
+                        &mut frame,
+                    )
+                    .unwrap();
                 assert_ne!(frame, syn);
                 drop(upstream);
             } else {
@@ -311,7 +397,11 @@ mod tests {
     #[test]
     fn invalid_nonlocal_upstream_and_self_loop_are_rejected() {
         let local = "127.0.0.1:1080".parse().unwrap();
-        for upstream in [local, "192.0.2.1:1080".parse().unwrap(), "127.0.0.1:0".parse().unwrap()] {
+        for upstream in [
+            local,
+            "192.0.2.1:1080".parse().unwrap(),
+            "127.0.0.1:0".parse().unwrap(),
+        ] {
             assert!(RelayPool::new(upstream, local, 1, DEADLINE, DEADLINE, DEADLINE).is_err());
         }
     }

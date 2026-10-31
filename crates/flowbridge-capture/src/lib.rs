@@ -9,13 +9,17 @@ pub mod relay;
 #[cfg(all(windows, target_pointer_width = "64"))]
 mod windows_ndis_device;
 #[cfg(windows)]
-mod windows_packet_filter;
-#[cfg(windows)]
 mod windows_ndisrd_service;
+#[cfg(windows)]
+mod windows_packet_filter;
 
 pub fn driver_status() -> serde_json::Value {
     #[cfg(windows)]
-    { windows_packet_filter::report() }
+    {
+        windows_packet_filter::report()
+    }
     #[cfg(not(windows))]
-    { serde_json::json!({"backend":"ndisapi","supported":false,"packet_capture_active":false,"native_routing_accepted":false,"signature_status":"not_checked","dns_leak_test_passed":false,"driver_installation_attempted":false,"device_opened":false,"api_compatible":false}) }
+    {
+        serde_json::json!({"backend":"ndisapi","supported":false,"packet_capture_active":false,"native_routing_accepted":false,"signature_status":"not_checked","dns_leak_test_passed":false,"driver_installation_attempted":false,"device_opened":false,"api_compatible":false})
+    }
 }
