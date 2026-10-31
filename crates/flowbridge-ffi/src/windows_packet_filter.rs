@@ -106,7 +106,6 @@ fn read_version() -> Result<u32, ProbeProblem> {
 // Offsets and size are asserted below: the native driver accepts one complete
 // fixed-size buffer, not an unbounded vector or a structure of host pointers.
 #[repr(C)]
-#[derive(Default)]
 struct AdapterList {
     count: u32,
     names: [[u8; ADAPTER_NAME_BYTES]; ADAPTER_CAPACITY],
@@ -114,6 +113,19 @@ struct AdapterList {
     media: [u32; ADAPTER_CAPACITY],
     macs: [[u8; MAC_BYTES]; ADAPTER_CAPACITY],
     mtu: [u16; ADAPTER_CAPACITY],
+}
+
+impl Default for AdapterList {
+    fn default() -> Self {
+        Self {
+            count: 0,
+            names: [[0; ADAPTER_NAME_BYTES]; ADAPTER_CAPACITY],
+            handles: [0; ADAPTER_CAPACITY],
+            media: [0; ADAPTER_CAPACITY],
+            macs: [[0; MAC_BYTES]; ADAPTER_CAPACITY],
+            mtu: [0; ADAPTER_CAPACITY],
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
