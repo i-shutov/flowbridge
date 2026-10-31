@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import socket
 import subprocess
 import threading
@@ -27,32 +28,55 @@ def require(ok: bool, error: str) -> None:
 
 
 def executable() -> Path:
+    """Select only the fixed in-box PowerShell, then authenticate its publisher.
+
+    Run the signature query with a separate available PowerShell host rather
+    than asking the target binary to attest itself. The signed target must
+    still pass the same strict Authenticode gate on every Windows machine.
+    """
     root = os.environ.get("SystemRoot")
     require(bool(root), "Missing Windows system directory")
     path = Path(root) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
     require(path.is_file(), "In-box Windows PowerShell unavailable")
-    expr = "$ErrorActionPreference = 'Stop'; " + \
-           "$s = Get-AuthenticodeSignature -LiteralPath '" + str(path).replace("'", "''") + "'; " + \
-           "$ms = [bool]($s.SignerCertificate -and " + \
-           "$s.SignerCertificate.Subject -match 'Microsoft'); " + \
-           "@{status=[string]$s.Status;signer_present=[bool]$s.SignerCertificate;" + \
-           "signer_microsoft=$ms} | ConvertTo-Json -Compress"
+    escaped = str(path).replace("'", "''")
+    expr = (
+        "$ErrorActionPreference='Stop'; "
+        "try { "
+        f"$sig=Get-AuthenticodeSignature -LiteralPath '{escaped}'; "
+        "if ($null -eq $sig) { throw 'Missing Authenticode result' }; "
+        "$present=($null -ne $sig.SignerCertificate); "
+        "$subject=if ($present) { [string]$sig.SignerCertificate.Subject } else { '' }; "
+        "$ms=($subject -match '(^|,\\s*)O=Microsoft Corporation(,|$)'); "
+        "[pscustomobject]@{status=[string]$sig.Status;signer_present=[bool]$present;"
+        "signer_microsoft=[bool]$ms} | ConvertTo-Json -Compress; "
+        "} catch { [Console]::Error.WriteLine('signature_error_type=' + "
+        "$_.Exception.GetType().Name); exit 9 }"
+    )
     encoded = base64.b64encode(expr.encode("utf-16-le")).decode("ascii")
-    check = subprocess.run([str(path), "-NoLogo", "-NoProfile", "-NonInteractive",
-                            "-EncodedCommand", encoded],
-                           capture_output=True, text=True, timeout=15, check=False)
+    # Hosted Actions uses pwsh, while stock Windows 10/11 can use the in-box
+    # shell. A failed signature query NEVER falls back to a weaker checker.
+    checker = shutil.which("pwsh") or str(path)
+    check = subprocess.run(
+        [checker, "-NoLogo", "-NoProfile", "-NonInteractive",
+         "-EncodedCommand", encoded],
+        capture_output=True, timeout=20, check=False
+    )
     try:
-        signature = json.loads(check.stdout.strip())
+        signature = json.loads(check.stdout.decode("utf-8-sig", errors="replace").strip())
     except (ValueError, TypeError):
         signature = {}
-    require(check.returncode == 0 and signature.get("status") == "Valid" and
-            signature.get("signer_present") is True and
-            signature.get("signer_microsoft") is True,
-            "Microsoft Authenticode requirement not met: " +
-            f"status={signature.get('status', 'unavailable')}, " +
-            f"signer_present={signature.get('signer_present', 'unavailable')}, " +
-            f"signer_microsoft={signature.get('signer_microsoft', 'unavailable')}, " +
-            f"exit_code={check.returncode}")
+    require(
+        check.returncode == 0
+        and signature.get("status") == "Valid"
+        and signature.get("signer_present") is True
+        and signature.get("signer_microsoft") is True,
+        "Microsoft Authenticode requirement not met: "
+        + f"status={signature.get('status', 'unavailable')}, "
+        + f"signer_present={signature.get('signer_present', 'unavailable')}, "
+        + f"signer_microsoft={signature.get('signer_microsoft', 'unavailable')}, "
+        + f"exit_code={check.returncode}, "
+        + f"checker={'pwsh' if checker != str(path) else 'inbox'}"
+    )
     return path
 
 
