@@ -311,7 +311,6 @@ pub fn remove(config_path: &str) -> Result<Value, String> {
     Ok(report("removed_stopped_only"))
 }
 
-
 const MAX_STAGED_BINARY_BYTES: u64 = 64 * 1024 * 1024;
 
 /// Windows CNG SHA-256, not an ad-hoc hash and not an external executable.
@@ -401,9 +400,7 @@ pub fn binary_replace(
     use std::io::Read;
     use std::os::windows::fs::OpenOptionsExt;
 
-    if expected_sha256.len() != 64
-        || !expected_sha256.bytes().all(|c| c.is_ascii_hexdigit())
-    {
+    if expected_sha256.len() != 64 || !expected_sha256.bytes().all(|c| c.is_ascii_hexdigit()) {
         return Err("Expected SHA-256 must be exactly 64 hexadecimal characters".into());
     }
     exact_path(next_executable)?;
@@ -423,7 +420,8 @@ pub fn binary_replace(
     let next = std::fs::canonicalize(next_executable)
         .map_err(|_| "Staged Rust executable cannot be resolved")?;
     let same_folder = current.parent().zip(next.parent()).is_some_and(|(a, b)| {
-        a.to_string_lossy().eq_ignore_ascii_case(&b.to_string_lossy())
+        a.to_string_lossy()
+            .eq_ignore_ascii_case(&b.to_string_lossy())
     });
     if !same_folder || current == next {
         return Err("Staged binary must be a distinct sibling of this Rust agent".into());
@@ -440,7 +438,7 @@ pub fn binary_replace(
         .metadata()
         .map_err(|_| "Cannot inspect staged executable metadata")?
         .len();
-    if size < 256 || size > MAX_STAGED_BINARY_BYTES {
+    if !(256..=MAX_STAGED_BINARY_BYTES).contains(&size) {
         return Err("Staged executable size outside allowed range".into());
     }
     let mut content = Vec::with_capacity(size as usize);
