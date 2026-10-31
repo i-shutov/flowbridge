@@ -1,3 +1,21 @@
+## 2026-10-31: Native Windows UDP local-bind owner-candidate vertical (pending exact-HEAD CI)
+
+A new original-Rust Windows-only UDP IP Helper vertical exercises actual IPv4
+and, where available, IPv6 loopback UDP datagrams; two bounded
+`GetExtendedUdpTable(UDP_TABLE_OWNER_PID)` snapshots; pinned process-object
+PID, creation time and image consistency; and negative ambiguity rules for
+wildcard, zero-PID, duplicate and IPv4-mapped binds. The public CI runs the
+built x64 Rust executable and saves a privacy-redacted JSON report with a
+strict negative checklist. Tests must confirm the report against the exact
+PR head/merge SHA and Windows artifact before this can be accepted.
+
+**Trust boundary:** UDP owner tables identify only a **local socket bind**,
+not the remote tuple, intercepted NDISRD packet, DNS query, per-app routing,
+or leak prevention. This diagnostic does not enable protected mode or change
+NDISRD, firewall, DNS or SSH state. IPv6 loopback test availability must be
+reported, not converted into a fabricated native IPv6 NDISRD acceptance.
+It complements but does not supersede signed-driver VPS packet observations.
+
 # Rust capture integration candidate — NOT a protected beta or release
 
 ## Windows reversible SCM staging/upgrade/removal candidate (pending exact-head CI)

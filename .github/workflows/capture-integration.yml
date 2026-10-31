@@ -38,6 +38,29 @@ jobs:
           suffix=""; if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=".exe"; fi
           python tools/capture_candidate.py verify --agent "target/release/flowbridge-agent${suffix}" --output build/capture-candidate/verification.json
           python tools/capture_candidate.py package --agent "target/release/flowbridge-agent${suffix}" --cli "target/release/flowbridge${suffix}" --output "build/capture-candidate/FlowBridge-Rust-Candidate-${RUNNER_OS}.zip"
+      - name: Windows real IPv4 and available IPv6 UDP loopback plus IP Helper local owner snapshots
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, pathlib, subprocess
+          result = subprocess.run(['target/release/flowbridge-agent.exe', 'udp-owner-selftest'],
+                                  capture_output=True, text=True, timeout=30)
+          report = json.loads(result.stdout)
+          assert result.returncode == 0 and report['ok'] is True, report
+          assert report['actual_ipv4_loopback_udp_bytes'] == 4
+          assert report['ipv4_sender_and_receiver_two_snapshots_consistent'] is True
+          assert report['ipv6_loopback_udp_and_two_snapshots_consistent'] is report['ipv6_loopback_available']
+          for denied in ('native_ndisrd_packet_bound', 'selected_app_accepted',
+                         'authorizes_capture', 'protected_redirect_available',
+                         'dns_leak_free', 'win10_11_acceptance', 'release_accepted'):
+              assert report[denied] is False, denied
+          assert report['process_identity_and_addresses_redacted'] is True
+          assert not any(key in report for key in ('pid','path','local','remote','source_ip'))
+          pathlib.Path('build/capture-candidate/udp-owner-lifecycle.json').write_text(
+              json.dumps(report, sort_keys=True, indent=2) + '\n', encoding='utf-8')
+          print('WINDOWS_REAL_UDP_IPHELPER_LOCAL_BIND_PASS: IPv6_available=' + str(report['ipv6_loopback_available']))
+          PY
       - name: Windows restricted named-pipe and live explicit SOCKS lifecycle
         if: runner.os == 'Windows'
         run: python tests/windows_capture_control.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/control-lifecycle.json

@@ -14,8 +14,9 @@ pub fn capabilities() -> Value {
         "foreground_control_ipc_available":cfg!(windows), "scm_service_available":cfg!(windows),
         "scm_protected_native_mode_available":false,
         "native_tcp_owner_candidate_selftest":cfg!(windows),
+        "native_udp_local_bind_candidate_selftest":cfg!(windows),
         "dns_leak_free":false, "release_accepted":false,
-        "modes":["status","observe_lab","observe_owner_candidates_lab","observe_protocol_profile_lab","passthrough_lab","relay_loopback_probe","foreground_explicit_socks_control","scm_explicit_socks_candidate","owner_selftest_read_only"],
+        "modes":["status","observe_lab","observe_owner_candidates_lab","observe_protocol_profile_lab","passthrough_lab","relay_loopback_probe","foreground_explicit_socks_control","scm_explicit_socks_candidate","owner_selftest_read_only","udp_owner_selftest_read_only"],
         "abi":{"adapters":ndis_wire::ADAPTER_LIST_BYTES,"mode":ndis_wire::MODE_BYTES,
             "request":ndis_wire::REQUEST_BYTES,"packet_header":ndis_wire::PACKET_HEADER_BYTES,
             "packet_capacity":ndis_wire::PACKET_BUFFER_BYTES}
@@ -47,6 +48,19 @@ pub fn owner_self_test() -> Result<Value, String> {
     #[cfg(not(windows))]
     {
         Err("read-only owner selftest requires native Windows IP Helper".into())
+    }
+}
+
+/// Windows read-only UDP IPv4/IPv6 live-socket and IP Helper snapshot test.
+/// A UDP table has NO remote tuple and never authenticates an NDISRD packet.
+pub fn udp_owner_self_test() -> Result<Value, String> {
+    #[cfg(windows)]
+    {
+        crate::windows_udp_owner::self_test()
+    }
+    #[cfg(not(windows))]
+    {
+        Err("read-only UDP owner selftest requires native Windows IP Helper".into())
     }
 }
 
