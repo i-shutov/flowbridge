@@ -194,7 +194,10 @@ async fn exercise_child(
     stop: watch::Receiver<bool>,
     deadline: Duration,
 ) -> Probe {
-    let SpawnedClient { mut child, mut reader } = *spawned;
+    let SpawnedClient {
+        mut child,
+        mut reader,
+    } = *spawned;
     let connected = Arc::new(AtomicBool::new(false));
     let denied = Arc::new(AtomicBool::new(false));
     let up = connected.clone();
