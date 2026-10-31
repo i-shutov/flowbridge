@@ -47,9 +47,43 @@ jobs:
       - name: Windows original Rust reversible on-demand SCM stage/upgrade/remove
         if: runner.os == 'Windows'
         run: python tests/windows_capture_install.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/scm-install-lifecycle.json
+      - name: Build separately allowlisted native-test FFI and original harness (not product payload)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          cargo build --locked --release -p flowbridge-ffi
+          python -m py_compile tests/windows_ndisrd_self_redirect.py
+          python - <<'PY'
+          import hashlib, json, os, pathlib, shutil, subprocess
+          root = pathlib.Path('build/native-self-tools')
+          root.mkdir(parents=True, exist_ok=True)
+          sources = [pathlib.Path('target/release/flowbridge_ffi.dll')]
+          sources += [pathlib.Path('tests') / name for name in (
+              'windows_ndisrd_self_redirect.py', 'ssh_real_integration.py',
+              'windows_real_ssh_hosted.py', 'windows_openssh_capacity_vm.py',
+              'windows_ssh_probe_core.py', 'real_ssh_capacity.py', 'churn_pacing.py')]
+          hashes = {}
+          for source in sources:
+              dest = root / source.name
+              shutil.copyfile(source, dest)
+              hashes[dest.name] = hashlib.sha256(dest.read_bytes()).hexdigest()
+          report = {'kind':'original_rust_ffi_and_audited_native_test_sources_not_product',
+                    'source_commit': subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
+                    'pr_head_sha':os.environ['PR_HEAD_SHA'],'payload_sha256':hashes,
+                    'vendor_binary_included':False,'private_credentials_included':False,
+                    'native_test_executed':False,'release_accepted':False}
+          (root / 'manifest.json').write_text(json.dumps(report, indent=2)+'\n',encoding='utf-8')
+          PY
       - name: Verify formatting (never auto-commit or waive failure)
         if: always()
         run: cargo fmt --all -- --check
+      - uses: actions/upload-artifact@v7.0.0
+        if: success() && runner.os == 'Windows'
+        with:
+          name: FlowBridge-Native-Self-Tools-Windows
+          path: build/native-self-tools/
+          if-no-files-found: error
+          retention-days: 7
       - name: Preserve formatting diagnostic, not acceptance evidence
         if: failure()
         shell: bash
