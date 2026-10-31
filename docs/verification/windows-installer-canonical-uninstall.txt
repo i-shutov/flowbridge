@@ -1,4 +1,0 @@
-Canonical installed Windows-path invocation: ['/usr/lib/wine/wine64', 'C:\\FlowBridgeSmokeInstall\\Uninstall.exe', '/S']
-Exit: 0
-
-Actual uninstaller removed: True

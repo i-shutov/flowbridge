@@ -1,4 +1,0 @@
-['/usr/lib/wine/wine64', 'C:\\users\\root\\Temp\\FlowBridgeUninstallSmoke.exe', '/S', '_?=C:\\FlowBridgeSmokeInstall']
-Exit 0
-
-Remaining ['examples', 'FlowBridge.exe', 'licenses', 'resources', 'keep-me.txt', 'LICENSE', 'README.txt', 'flowbridge-cli.exe', 'Uninstall.exe', 'flowbridge_ffi.dll']

@@ -1,5 +1,0 @@
-valuable 0.1.1 declares MIT but the crates.io package omits its workspace-root
-license. LICENSE.MIT was obtained unchanged from the official repository commit
-recorded in the package's .cargo_vcs_info.json:
-https://raw.githubusercontent.com/tokio-rs/valuable/9efc29b6e58cef28f6566a47aa7e142a55fead77/LICENSE
-Repository: https://github.com/tokio-rs/valuable

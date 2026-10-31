@@ -1,3 +1,0 @@
-    Checking flowbridge-tunnel v0.2.0 (/workspace/scratch/78d80ff877dc/flowbridge/crates/flowbridge-tunnel)
-    Checking flowbridge-ffi v0.2.0 (/workspace/scratch/78d80ff877dc/flowbridge/crates/flowbridge-ffi)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.88s

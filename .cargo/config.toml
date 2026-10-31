@@ -1,3 +1,0 @@
-# Match the native /MT build: no separate VC++ runtime installation is required.
-[target.'cfg(all(windows, target_env = "msvc"))']
-rustflags = ["-C", "target-feature=+crt-static"]

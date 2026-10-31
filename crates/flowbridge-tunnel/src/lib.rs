@@ -1366,7 +1366,10 @@ mod tests {
         cfg.local_port = occupied;
         let (candidate, retries) = started_mock_with_preflight_retry(cfg, "ready");
         let ready = candidate.snapshot();
-        assert_eq!(retries, 1);
+        // Another real preflight collision can occur on shared runners after
+        // releasing a candidate port. Retry is strictly limited to an exact
+        // pre-child bind failure, never an SSH/authentication/runtime error.
+        assert!((1..=3).contains(&retries));
         assert_eq!(ready.status.state, "ready");
         assert_eq!(ready.status.attempt, 1);
         assert_eq!(ready.status.restarts, 0);

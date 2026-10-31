@@ -23,6 +23,9 @@ pub(crate) struct Profile {
     other_ip_transport: u64,
     tcp_port_53: u64,
     udp_port_53: u64,
+    udp53_standard_question_shape: u64,
+    udp53_standard_response_shape: u64,
+    udp53_unclassified_payload: u64,
     tcp_port_853: u64,
     udp_port_853: u64,
     udp_port_443: u64,
@@ -31,9 +34,16 @@ pub(crate) struct Profile {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DnsWireShape {
+    StandardQuestion,
+    StandardResponse,
+    Unclassified,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Transport {
     Tcp(u16, u16),
-    Udp(u16, u16),
+    Udp(u16, u16, DnsWireShape),
     Fragment,
     Other,
     Malformed,
@@ -50,6 +60,52 @@ enum Frame {
 
 fn be16(bytes: &[u8], offset: usize) -> u16 {
     u16::from_be_bytes([bytes[offset], bytes[offset + 1]])
+}
+
+// Conservative RFC 1035 first-question wire shape, not DNS transaction
+// authentication. No QNAME labels or question contents leave this stack
+// frame; compressed first names, nonstandard opcodes and split TCP messages
+// intentionally remain unclassified. This is never proof of containment.
+fn dns_standard_question_shape(message: &[u8]) -> DnsWireShape {
+    if message.len() < 17 {
+        return DnsWireShape::Unclassified;
+    }
+    let flags = be16(message, 2);
+    if (flags & 0x7800) != 0 || be16(message, 4) != 1 {
+        return DnsWireShape::Unclassified;
+    }
+    let mut offset = 12;
+    let mut encoded_name_len = 1usize;
+    loop {
+        if offset >= message.len() {
+            return DnsWireShape::Unclassified;
+        }
+        let label_len = usize::from(message[offset]);
+        offset += 1;
+        if label_len == 0 {
+            break;
+        }
+        // Compression pointers in the first question are not dereferenced.
+        if label_len > 63
+            || encoded_name_len + label_len + 1 > 255
+            || offset + label_len > message.len()
+        {
+            return DnsWireShape::Unclassified;
+        }
+        encoded_name_len += label_len + 1;
+        offset += label_len;
+    }
+    if offset + 4 > message.len()
+        || be16(message, offset) == 0
+        || be16(message, offset + 2) == 0
+    {
+        return DnsWireShape::Unclassified;
+    }
+    if (flags & 0x8000) != 0 {
+        DnsWireShape::StandardResponse
+    } else {
+        DnsWireShape::StandardQuestion
+    }
 }
 
 fn transport(protocol: u8, bytes: &[u8]) -> Transport {
@@ -72,7 +128,14 @@ fn transport(protocol: u8, bytes: &[u8]) -> Transport {
             if datagram_len < 8 || datagram_len > bytes.len() {
                 return Transport::Malformed;
             }
-            Transport::Udp(be16(bytes, 0), be16(bytes, 2))
+            let source = be16(bytes, 0);
+            let destination = be16(bytes, 2);
+            let shape = if source == 53 || destination == 53 {
+                dns_standard_question_shape(&bytes[8..datagram_len])
+            } else {
+                DnsWireShape::Unclassified
+            };
+            Transport::Udp(source, destination, shape)
         }
         _ => Transport::Other,
     }
@@ -219,9 +282,16 @@ impl Profile {
                 self.tcp_port_53 += u64::from(a == 53 || b == 53);
                 self.tcp_port_853 += u64::from(a == 853 || b == 853);
             }
-            Transport::Udp(a, b) => {
+            Transport::Udp(a, b, shape) => {
                 self.udp += 1;
-                self.udp_port_53 += u64::from(a == 53 || b == 53);
+                if a == 53 || b == 53 {
+                    self.udp_port_53 += 1;
+                    match shape {
+                        DnsWireShape::StandardQuestion => self.udp53_standard_question_shape += 1,
+                        DnsWireShape::StandardResponse => self.udp53_standard_response_shape += 1,
+                        DnsWireShape::Unclassified => self.udp53_unclassified_payload += 1,
+                    }
+                }
                 self.udp_port_853 += u64::from(a == 853 || b == 853);
                 self.udp_port_443 += u64::from(a == 443 || b == 443);
                 self.udp_port_5353 += u64::from(a == 5353 || b == 5353);
@@ -248,6 +318,10 @@ impl Profile {
             "ipv6_extensions":self.ipv6_extensions, "tcp":self.tcp, "udp":self.udp,
             "other_ip_transport":self.other_ip_transport,
             "tcp_port_53":self.tcp_port_53, "udp_port_53":self.udp_port_53,
+            "udp53_standard_question_shape":self.udp53_standard_question_shape,
+            "udp53_standard_response_shape":self.udp53_standard_response_shape,
+            "udp53_unclassified_payload":self.udp53_unclassified_payload,
+            "dns_wire_shape_is_not_dns_transaction_proof":true,
             "tcp_port_853":self.tcp_port_853, "udp_port_853":self.udp_port_853,
             "udp_port_443":self.udp_port_443, "udp_port_5353":self.udp_port_5353,
             "udp_port_5355":self.udp_port_5355,
@@ -347,6 +421,58 @@ mod tests {
         assert_eq!(report["ipv6_fragments"], 1);
         assert_eq!(report["udp_port_53"], 0);
         assert_eq!(report["malformed_or_truncated"], 2);
+    }
+
+    fn ipv4_udp_payload(a: u16, b: u16, payload: &[u8]) -> Vec<u8> {
+        let mut frame = ipv4_udp(a, b);
+        frame.extend_from_slice(payload);
+        let total_len = u16::try_from(28 + payload.len()).unwrap();
+        let udp_len = u16::try_from(8 + payload.len()).unwrap();
+        frame[16..18].copy_from_slice(&total_len.to_be_bytes());
+        frame[38..40].copy_from_slice(&udp_len.to_be_bytes());
+        frame
+    }
+
+    fn standard_dns_question() -> Vec<u8> {
+        let mut question = vec![0x12, 0x34, 0x01, 0x00, 0, 1, 0, 0, 0, 0, 0, 0];
+        for label in ["example", "invalid"] {
+            question.push(label.len() as u8);
+            question.extend_from_slice(label.as_bytes());
+        }
+        question.push(0);
+        question.extend_from_slice(&[0, 1, 0, 1]);
+        question
+    }
+
+    #[test]
+    fn dns_question_wire_shape_is_distinct_from_port_53_and_keeps_privacy() {
+        let mut sample = Profile::default();
+        let query = standard_dns_question();
+        sample.observe(Direction::ToAdapter, &ipv4_udp_payload(43100, 53, &query));
+        let mut response = query.clone();
+        response[2] |= 0x80;
+        sample.observe(Direction::ToStack, &ipv4_udp_payload(53, 43100, &response));
+        // Previous native zero-only UDP/53 canary is not a DNS question.
+        sample.observe(Direction::ToAdapter, &ipv4_udp_payload(43100, 53, &[0; 4]));
+        let mut invalid_label = query.clone();
+        invalid_label[12] = 0xc0;
+        sample.observe(
+            Direction::ToAdapter,
+            &ipv4_udp_payload(43100, 53, &invalid_label),
+        );
+        let report = sample.report();
+        assert_eq!(report["frames"], 4);
+        assert_eq!(report["udp_port_53"], 4);
+        assert_eq!(report["udp53_standard_question_shape"], 1);
+        assert_eq!(report["udp53_standard_response_shape"], 1);
+        assert_eq!(report["udp53_unclassified_payload"], 2);
+        assert_eq!(report["dns_wire_shape_is_not_dns_transaction_proof"], true);
+        assert_eq!(report["native_packet_owner_proved"], false);
+        assert_eq!(report["dns_leak_free"], false);
+        assert_eq!(report["selected_application_containment_proved"], false);
+        for private_key in ["qname", "question", "addresses", "ports", "payload"] {
+            assert!(report.get(private_key).is_none());
+        }
     }
 
     #[test]
