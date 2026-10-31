@@ -19,6 +19,11 @@ const FILE_DEVICE_NDISRD: u32 = 0x8300;
 const GET_VERSION_FUNCTION: u32 = 0x830;
 // CTL_CODE(device, function, METHOD_BUFFERED=0, FILE_ANY_ACCESS=0)
 const GET_VERSION_IOCTL: u32 = (FILE_DEVICE_NDISRD << 16) | (GET_VERSION_FUNCTION << 2);
+// Public NDISRD ABI: IOCTL_NDISRD_GET_TCPIP_INTERFACES is function index + 1.
+const GET_ADAPTERS_IOCTL: u32 = (FILE_DEVICE_NDISRD << 16) | ((GET_VERSION_FUNCTION + 1) << 2);
+const ADAPTER_CAPACITY: usize = 32;
+const ADAPTER_NAME_BYTES: usize = 256;
+const MAC_BYTES: usize = 6;
 const REQUIRED_MAJOR: u16 = 3;
 const MINIMUM_MINOR: u16 = 0x0601;
 
@@ -96,6 +101,122 @@ fn read_version() -> Result<u32, ProbeProblem> {
     Ok(output)
 }
 
+// The vendor's public, x64 TCP_AdapterList wire ABI. No vendor library is
+// linked, and opaque adapter handles never leave this diagnostic module.
+// Offsets and size are asserted below: the native driver accepts one complete
+// fixed-size buffer, not an unbounded vector or a structure of host pointers.
+#[repr(C)]
+#[derive(Default)]
+struct AdapterList {
+    count: u32,
+    names: [[u8; ADAPTER_NAME_BYTES]; ADAPTER_CAPACITY],
+    handles: [usize; ADAPTER_CAPACITY],
+    media: [u32; ADAPTER_CAPACITY],
+    macs: [[u8; MAC_BYTES]; ADAPTER_CAPACITY],
+    mtu: [u16; ADAPTER_CAPACITY],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AdapterQueryProblem {
+    UnsupportedArchitecture,
+    Open(u32),
+    Query(u32),
+    ReplySize(u32),
+    Count(u32),
+    Name(usize),
+}
+
+fn validate_adapter_reply(
+    reply: &AdapterList,
+    returned: u32,
+) -> Result<Vec<String>, AdapterQueryProblem> {
+    if returned as usize != std::mem::size_of::<AdapterList>() {
+        return Err(AdapterQueryProblem::ReplySize(returned));
+    }
+    if reply.count as usize > ADAPTER_CAPACITY {
+        return Err(AdapterQueryProblem::Count(reply.count));
+    }
+    let mut names = Vec::with_capacity(reply.count as usize);
+    for (index, bytes) in reply.names[..reply.count as usize].iter().enumerate() {
+        let end = bytes
+            .iter()
+            .position(|byte| *byte == 0)
+            .filter(|end| *end > 0)
+            .ok_or(AdapterQueryProblem::Name(index))?;
+        // Internal adapter names should be printable ASCII. Refuse a malformed
+        // or truncated name rather than treating ambiguous identity as usable.
+        if !bytes[..end].iter().all(|byte| byte.is_ascii_graphic()) {
+            return Err(AdapterQueryProblem::Name(index));
+        }
+        let name = std::str::from_utf8(&bytes[..end])
+            .map_err(|_| AdapterQueryProblem::Name(index))?;
+        if names.iter().any(|existing| existing == name) {
+            return Err(AdapterQueryProblem::Name(index));
+        }
+        names.push(name.to_owned());
+    }
+    Ok(names)
+}
+
+/// Passive IOCTL only. Neither opens an adapter for filtering nor enables
+/// listen/tunnel modes, queue events, packet reads or injection.
+#[cfg(target_pointer_width = "64")]
+fn read_bound_adapter_names() -> Result<Vec<String>, AdapterQueryProblem> {
+    let wide: Vec<u16> = DEVICE.encode_utf16().chain(Some(0)).collect();
+    // SAFETY: The literal device name is NUL-terminated UTF-16, requesting
+    // zero file access and no handle inheritance.
+    let handle = unsafe {
+        CreateFileW(
+            wide.as_ptr(),
+            0,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            std::ptr::null(),
+            OPEN_EXISTING,
+            0,
+            std::ptr::null_mut(),
+        )
+    };
+    if handle == INVALID_HANDLE_VALUE {
+        // SAFETY: A failing Win32 call sets the current thread's error.
+        return Err(AdapterQueryProblem::Open(unsafe { GetLastError() }));
+    }
+    let input = AdapterList::default();
+    let mut output = AdapterList::default();
+    let mut returned = 0;
+    let size = std::mem::size_of::<AdapterList>() as u32;
+    // SAFETY: Input and output are separate fully initialized fixed-layout
+    // buffers, both alive for this synchronous buffered IOCTL.
+    let ok = unsafe {
+        DeviceIoControl(
+            handle,
+            GET_ADAPTERS_IOCTL,
+            (&input as *const AdapterList).cast::<c_void>(),
+            size,
+            (&mut output as *mut AdapterList).cast::<c_void>(),
+            size,
+            &mut returned,
+            std::ptr::null_mut(),
+        )
+    };
+    let error = if ok == 0 {
+        // SAFETY: Capture the failure before CloseHandle overwrites it.
+        Some(unsafe { GetLastError() })
+    } else {
+        None
+    };
+    // SAFETY: Handle came from successful CreateFileW.
+    unsafe { CloseHandle(handle) };
+    if let Some(code) = error {
+        return Err(AdapterQueryProblem::Query(code));
+    }
+    validate_adapter_reply(&output, returned)
+}
+
+#[cfg(not(target_pointer_width = "64"))]
+fn read_bound_adapter_names() -> Result<Vec<String>, AdapterQueryProblem> {
+    Err(AdapterQueryProblem::UnsupportedArchitecture)
+}
+
 pub(super) fn report() -> Value {
     let status = read_version();
     let (device_opened, api_compatible, version, error, win32_error) = match status {
@@ -117,6 +238,15 @@ pub(super) fn report() -> Value {
             None,
         ),
     };
+    let (adapter_inventory_status, adapter_names, adapter_error) = if api_compatible {
+        match read_bound_adapter_names() {
+            Ok(names) => ("read_only_ok", Some(names), None),
+            Err(problem) => ("failed", None, Some(format!("{problem:?}"))),
+        }
+    } else {
+        ("not_checked", None, None)
+    };
+    let adapter_count = adapter_names.as_ref().map(Vec::len);
     json!({
         "backend": "ndisapi",
         "device_opened": device_opened,
@@ -124,6 +254,10 @@ pub(super) fn report() -> Value {
         "driver_api_version": version.map(|v| format!("0x{v:08x}")),
         "error": error,
         "win32_error": win32_error,
+        "adapter_inventory_status": adapter_inventory_status,
+        "adapter_count": adapter_count,
+        "adapter_names": adapter_names,
+        "adapter_query_error": adapter_error,
         "signature_status": "not_checked",
         "driver_installation_attempted": false,
         "packet_capture_active": false,
@@ -144,6 +278,68 @@ mod tests {
         assert!(!compatible(0x06012000));
         assert!(!compatible(0));
         assert_eq!(GET_VERSION_IOCTL, 0x830020c0);
+    }
+
+    #[test]
+    fn adapter_abi_x64_layout_and_ioctl_are_pinned() {
+        assert_eq!(GET_ADAPTERS_IOCTL, 0x830020c4);
+        assert_eq!(ADAPTER_CAPACITY, 32);
+        assert_eq!(ADAPTER_NAME_BYTES, 256);
+        if cfg!(target_pointer_width = "64") {
+            assert_eq!(std::mem::align_of::<AdapterList>(), 8);
+            assert_eq!(std::mem::size_of::<AdapterList>(), 8840);
+            assert_eq!(std::mem::offset_of!(AdapterList, names), 4);
+            assert_eq!(std::mem::offset_of!(AdapterList, handles), 8200);
+            assert_eq!(std::mem::offset_of!(AdapterList, media), 8456);
+            assert_eq!(std::mem::offset_of!(AdapterList, macs), 8584);
+            assert_eq!(std::mem::offset_of!(AdapterList, mtu), 8776);
+        }
+    }
+
+    #[test]
+    fn adapter_reply_rejects_truncation_count_and_ambiguous_names() {
+        let mut reply = AdapterList::default();
+        let full = std::mem::size_of::<AdapterList>() as u32;
+        assert_eq!(
+            validate_adapter_reply(&reply, full).unwrap(),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            validate_adapter_reply(&reply, full - 1),
+            Err(AdapterQueryProblem::ReplySize(full - 1))
+        );
+        reply.count = 33;
+        assert_eq!(
+            validate_adapter_reply(&reply, full),
+            Err(AdapterQueryProblem::Count(33))
+        );
+        reply.count = 1;
+        assert_eq!(
+            validate_adapter_reply(&reply, full),
+            Err(AdapterQueryProblem::Name(0))
+        );
+        reply.names[0].fill(b'A');
+        assert_eq!(
+            validate_adapter_reply(&reply, full),
+            Err(AdapterQueryProblem::Name(0))
+        );
+        reply.names[0] = [0; ADAPTER_NAME_BYTES];
+        reply.names[0][..14].copy_from_slice(br"\\DEVICE\\{TEST}");
+        assert_eq!(
+            validate_adapter_reply(&reply, full).unwrap(),
+            vec![r"\\DEVICE\\{TEST}".to_owned()]
+        );
+        reply.count = 2;
+        reply.names[1] = reply.names[0];
+        assert_eq!(
+            validate_adapter_reply(&reply, full),
+            Err(AdapterQueryProblem::Name(1))
+        );
+        reply.names[1][0] = 0xff;
+        assert_eq!(
+            validate_adapter_reply(&reply, full),
+            Err(AdapterQueryProblem::Name(1))
+        );
     }
 
     #[test]
