@@ -69,7 +69,10 @@ async fn probe(request: ProbeRequest) -> Result<Value, String> {
     let payload: Vec<u8> = (0u8..=255).cycle().take(4097).collect();
     let expected = payload.len() as u64;
     let transfer = async {
-        client.write_all(&payload).await.map_err(|e| e.to_string())?;
+        client
+            .write_all(&payload)
+            .await
+            .map_err(|e| e.to_string())?;
         client.shutdown().await.map_err(|e| e.to_string())?;
         let mut returned = Vec::new();
         (&mut client)
@@ -82,7 +85,12 @@ async fn probe(request: ProbeRequest) -> Result<Value, String> {
         }
         Ok::<(), String>(())
     };
-    let forwarding = async { upstream.forward(accepted).await.map_err(|e| format!("{e:?}")) };
+    let forwarding = async {
+        upstream
+            .forward(accepted)
+            .await
+            .map_err(|e| format!("{e:?}"))
+    };
     let (bytes, ()) = tokio::try_join!(forwarding, transfer)?;
     drop(supervisor);
     if bytes != (expected, expected) || pool.active() != 0 {
