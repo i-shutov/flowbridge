@@ -29,11 +29,18 @@ pub struct Request {
     pub duration_ms: u64,
     #[serde(default)]
     pub expect_denied: bool,
+    #[serde(default)]
+    pub spawned_child: bool,
 }
 
 impl Request {
     pub(crate) fn validate(&self) -> Result<(), String> {
-        if self.consent != "NATIVE_SELF_SOCKET_TCP_REFLECT"
+        let required_consent = if self.spawned_child {
+            "NATIVE_SPAWNED_CHILD_TCP_REFLECT"
+        } else {
+            "NATIVE_SELF_SOCKET_TCP_REFLECT"
+        };
+        if self.consent != required_consent
             || !(2000..=15000).contains(&self.duration_ms)
             || self.adapter_name.is_empty()
             || self.adapter_name.len() > 255
@@ -70,6 +77,11 @@ pub fn run(request: Request) -> Result<Value, String> {
     {
         Err("Native self-socket reflection requires Windows x64".into())
     }
+}
+
+#[cfg(all(windows, target_pointer_width = "64"))]
+pub fn run_child(local_ipv4: Ipv4Addr, target: SocketAddrV4) -> Result<Value, String> {
+    crate::windows_self_redirect::run_child(local_ipv4, target)
 }
 
 #[cfg(any(all(windows, target_pointer_width = "64"), test))]
@@ -326,12 +338,20 @@ mod tests {
             consent: "NATIVE_SELF_SOCKET_TCP_REFLECT".into(),
             duration_ms: 5000,
             expect_denied: false,
+            spawned_child: false,
         };
         assert!(r.validate().is_ok());
         r.upstream = "192.0.2.7:1080".parse().unwrap();
         assert!(r.validate().is_err());
         r.upstream = "127.0.0.1:1080".parse().unwrap();
         r.consent.clear();
+        assert!(r.validate().is_err());
+        r.spawned_child = true;
+        r.consent = "NATIVE_SELF_SOCKET_TCP_REFLECT".into();
+        assert!(r.validate().is_err());
+        r.consent = "NATIVE_SPAWNED_CHILD_TCP_REFLECT".into();
+        assert!(r.validate().is_ok());
+        r.target = "127.0.0.1:80".parse().unwrap();
         assert!(r.validate().is_err());
     }
     #[test]

@@ -12,12 +12,15 @@ use crate::windows_tcp_owner::{lookup, OwnedProcess, OwnerQuery};
 use flowbridge_core::tcp_packet::TcpTuple;
 use flowbridge_core::Endpoint;
 use serde_json::{json, Value};
-use std::net::{SocketAddr, UdpSocket};
+use std::io::Write;
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
+use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpSocket};
+use tokio::process::{Child, ChildStdout, Command};
 use tokio::sync::watch;
 
 const REQUEST: &[u8] = b"HEAD / HTTP/1.0\r\nHost: example.com\r\nConnection: close\r\n\r\n";
@@ -30,6 +33,77 @@ struct Probe {
     bytes_match: bool,
     sent: u64,
     received: u64,
+}
+
+
+/// A separately spawned, controllable Rust process owns the socket. Only a
+/// parent-provided GO on inherited stdin permits its first SYN. The parent
+/// keeps the OS child process handle live across the native packet pump.
+/// This is deliberate multi-process lab evidence, NEVER a general PID token.
+pub(super) fn run_child(local_ipv4: Ipv4Addr, target: SocketAddrV4) -> Result<Value, String> {
+    if local_ipv4.is_unspecified()
+        || local_ipv4.is_loopback()
+        || local_ipv4.is_multicast()
+        || target.ip().is_loopback()
+        || target.ip().is_unspecified()
+        || target.port() != 80
+        || target.ip() == &local_ipv4
+    {
+        return Err("Spawned canary requires explicit non-loopback IPv4 endpoints".into());
+    }
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|_| "Child runtime creation failed")?;
+    runtime.block_on(async move {
+        let socket = TcpSocket::new_v4().map_err(|_| "Child TCP socket unavailable")?;
+        socket
+            .bind(SocketAddr::new(local_ipv4.into(), 0))
+            .map_err(|_| "Child TCP source bind failed")?;
+        let local = socket
+            .local_addr()
+            .map_err(|_| "Child TCP source identity unavailable")?;
+        println!("{}", local.port());
+        std::io::stdout()
+            .flush()
+            .map_err(|_| "Child ready handshake flush failed")?;
+        let mut command = String::new();
+        std::io::stdin()
+            .read_line(&mut command)
+            .map_err(|_| "Child GO handshake unavailable")?;
+        if command.trim() != "go" {
+            return Err("Child did not receive explicit GO".into());
+        }
+        let received = tokio::time::timeout(Duration::from_secs(8), async move {
+            let mut socket = socket
+                .connect(SocketAddr::V4(target))
+                .await
+                .map_err(|_| ())?;
+            socket.write_all(REQUEST).await.map_err(|_| ())?;
+            socket.shutdown().await.map_err(|_| ())?;
+            let mut response = Vec::new();
+            (&mut socket)
+                .take(8193)
+                .read_to_end(&mut response)
+                .await
+                .map_err(|_| ())?;
+            if response.len() > 8192
+                || !response.starts_with(b"HTTP/1.")
+                || !response.windows(4).any(|w| w == b"\r\n\r\n")
+            {
+                return Err(());
+            }
+            Ok::<u64, ()>(response.len() as u64)
+        })
+        .await;
+        let bytes = received.ok().and_then(Result::ok);
+        Ok(json!({"ok":bytes.is_some(),"bytes":bytes.unwrap_or(0)}))
+    })
+}
+
+enum ClientSource {
+    SelfSocket(TcpSocket),
+    Spawned(Child, BufReader<ChildStdout>),
 }
 
 pub(super) fn run(request: Request) -> Result<Value, String> {
@@ -107,6 +181,75 @@ async fn exercise(
     probe
 }
 
+
+async fn exercise_child(
+    mut child: Child,
+    mut reader: BufReader<ChildStdout>,
+    listener: TcpListener,
+    peer: SocketAddr,
+    request_target: SocketAddr,
+    pool: RelayPool,
+    stop: watch::Receiver<bool>,
+    deadline: Duration,
+) -> Probe {
+    let connected = Arc::new(AtomicBool::new(false));
+    let denied = Arc::new(AtomicBool::new(false));
+    let up = connected.clone();
+    let down = denied.clone();
+    let stdin = child.stdin.take();
+    let client = async move {
+        let mut stdin = stdin.ok_or(())?;
+        stdin.write_all(b"go\n").await.map_err(|_| ())?;
+        stdin.flush().await.map_err(|_| ())?;
+        drop(stdin);
+        let mut line = String::new();
+        reader.read_line(&mut line).await.map_err(|_| ())?;
+        let response: Value = serde_json::from_str(&line).map_err(|_| ())?;
+        if response["ok"] != true {
+            return Err(());
+        }
+        response["bytes"].as_u64().ok_or(())
+    };
+    let forwarding = async move {
+        let (native, accepted_peer) = listener.accept().await.map_err(|_| ())?;
+        if accepted_peer != peer {
+            return Err(());
+        }
+        let endpoint = Endpoint {
+            host: request_target.ip().to_string(),
+            port: request_target.port(),
+        };
+        let upstream = match pool.connect(&endpoint, stop).await {
+            Ok(value) => {
+                up.store(true, Ordering::SeqCst);
+                value
+            }
+            Err(_) => {
+                down.store(true, Ordering::SeqCst);
+                return Err(());
+            }
+        };
+        upstream.forward(native).await.map_err(|_| ())
+    };
+    let results = tokio::time::timeout(deadline, async { tokio::join!(client, forwarding) }).await;
+    // The child cannot survive diversion teardown or retry DIRECT after
+    // adapter mode 0 is restored, even when GO/client/SSH times out.
+    let _ = child.start_kill();
+    let _ = child.wait().await;
+    let mut probe = Probe {
+        upstream_connected: connected.load(Ordering::SeqCst),
+        upstream_failed: denied.load(Ordering::SeqCst),
+        ..Probe::default()
+    };
+    if let Ok((Ok(received), Ok((sent, relayed)))) = results {
+        probe.valid_http_reply = true;
+        probe.sent = sent;
+        probe.received = received;
+        probe.bytes_match = sent == REQUEST.len() as u64 && relayed == received && received > 0;
+    }
+    probe
+}
+
 async fn native(request: Request) -> Result<Value, String> {
     // A UDP connect chooses a route but sends no datagram. Never discover local
     // address by sending application data before the diversion has been armed.
@@ -144,15 +287,55 @@ async fn native(request: Request) -> Result<Value, String> {
     {
         return Err("Exact Ethernet adapter/MTU prerequisite failed".into());
     }
-    let process = OwnedProcess::query(std::process::id())?;
+    let (local, source, process) = if request.spawned_child {
+        let binary = std::env::current_exe()
+            .map_err(|_| "Original Rust child executable unavailable")?;
+        let mut child = Command::new(binary)
+            .arg("native-child")
+            .arg(request.local_ipv4.to_string())
+            .arg(request.target.to_string())
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(|_| "Original Rust child creation failed")?;
+        let pid = child.id().ok_or("Child process identity unavailable")?;
+        let stdout = child.stdout.take().ok_or("Child handshake unavailable")?;
+        let mut reader = BufReader::new(stdout);
+        let mut ready = String::new();
+        let bytes = tokio::time::timeout(Duration::from_secs(3), reader.read_line(&mut ready))
+            .await
+            .map_err(|_| "Child ready handshake timed out")?
+            .map_err(|_| "Child ready handshake failed")?;
+        if bytes == 0 {
+            return Err("Child exited before reserving TCP source".into());
+        }
+        let port: u16 = ready.trim().parse().map_err(|_| "Child source port invalid")?;
+        if port == 0 {
+            return Err("Child source port was zero".into());
+        }
+        let process = OwnedProcess::query(pid)?;
+        (
+            SocketAddr::new(request.local_ipv4.into(), port),
+            ClientSource::Spawned(child, reader),
+            process,
+        )
+    } else {
+        let socket = TcpSocket::new_v4().map_err(|_| "Owned TCP socket unavailable")?;
+        socket
+            .bind(SocketAddr::new(request.local_ipv4.into(), 0))
+            .map_err(|_| "Owned source bind failed")?;
+        let local = socket
+            .local_addr()
+            .map_err(|_| "Owned source identity unavailable")?;
+        (
+            local,
+            ClientSource::SelfSocket(socket),
+            OwnedProcess::query(std::process::id())?,
+        )
+    };
     let epoch = process.evidence()?;
-    let socket = TcpSocket::new_v4().map_err(|_| "Owned TCP socket unavailable")?;
-    socket
-        .bind(SocketAddr::new(request.local_ipv4.into(), 0))
-        .map_err(|_| "Owned source bind failed")?;
-    let local = socket
-        .local_addr()
-        .map_err(|_| "Owned source identity unavailable")?;
     let listener = TcpListener::bind(SocketAddr::new(request.local_ipv4.into(), 0))
         .await
         .map_err(|_| "Local native relay bind failed")?;
@@ -176,15 +359,27 @@ async fn native(request: Request) -> Result<Value, String> {
     )
     .map_err(|_| "Canary upstream settings invalid")?;
     let (stop_tx, stop_rx) = watch::channel(false);
-    let mut worker = tokio::spawn(exercise(
-        socket,
-        listener,
-        reflect.peer,
-        original.destination,
-        pool,
-        stop_rx,
-        deadline,
-    ));
+    let mut worker = match source {
+        ClientSource::SelfSocket(socket) => tokio::spawn(exercise(
+            socket,
+            listener,
+            reflect.peer,
+            original.destination,
+            pool,
+            stop_rx,
+            deadline,
+        )),
+        ClientSource::Spawned(child, stdout) => tokio::spawn(exercise_child(
+            child,
+            stdout,
+            listener,
+            reflect.peer,
+            original.destination,
+            pool,
+            stop_rx,
+            deadline,
+        )),
+    };
     // No await between spawn and mode activation: on the current-thread
     // runtime the client cannot send SYN before TUNNEL_BOTH was confirmed.
     let mut session = match PacketSession::start(&mut driver, adapter.handle, LabMode::Passthrough)
@@ -275,8 +470,13 @@ async fn native(request: Request) -> Result<Value, String> {
         "selected_frames_dropped":reflect.counters.selected_dropped,
         "selected_checksum_or_options_rejected":reflect.counters.checksums_or_options_rejected,
         "unsolicited_wire_replies_dropped":reflect.counters.unsolicited_wire_replies_dropped,
-        "self_owned_socket_pid_epoch_consistent":native_candidate_checked,
-        "source_authority":"internally_created_live_socket_not_arbitrary_pid",
+        "self_owned_socket_pid_epoch_consistent":native_candidate_checked && !request.spawned_child,
+        "spawned_child_socket_pid_epoch_consistent":native_candidate_checked && request.spawned_child,
+        "source_authority":if request.spawned_child {
+            "parent_spawned_child_live_process_and_bound_port_not_general_packetbound"
+        } else {
+            "internally_created_live_socket_not_arbitrary_pid"
+        },
         "selected_original_frames_sent_to_adapter":selected_direct_sends,
         "upstream_socks_connected":probe.upstream_connected,
         "upstream_socks_failed":probe.upstream_failed,
@@ -287,6 +487,6 @@ async fn native(request: Request) -> Result<Value, String> {
         "protected_redirect_available":false, "dns_leak_free":false,
         "win10_11_acceptance":false, "release_accepted":false,
         "payload_or_process_identity_logged":false,
-        "note":"Controlled self-owned IPv4 canary only. Caller must separately attest real SSH and an active recovery watchdog. Mode 0 is ordinary networking, not kill switch."
+        "note":"Controlled parent/child IPv4 canaries only. Neither authorizes arbitrary PID capture. Caller must attest real SSH and independent rescue. Mode 0 is ordinary networking, not a kill switch."
     }))
 }

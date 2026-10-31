@@ -84,3 +84,24 @@ ownership proof, arbitrary selected-app redirect, crash-persistent protected
 fail-closed, DNS leak-free, UDP/QUIC and IPv6 containment, native Windows
 10/11 acceptance, 512 stable raw OpenSSH channels, personal beta/1.0 release.
 The signed-driver Windows Server 2025 canary **does not** grant these claims.
+
+## Controlled separate-process Rust client (new candidate; native proof pending)
+
+The integration can optionally spawn a separate `flowbridge-agent native-child`
+process, whose own bound TCP source port and **OS process handle** are retained
+by the parent before adapter diversion. A bounded stdin GO handshake ensures
+the child cannot send its first SYN before the parent confirms the tunnel
+session. During capture, two native IP Helper table snapshots must match the
+**child**, not the parent, PID/creation epoch. The parent reflects exactly the
+known child TCP tuple to a Rust relay and inverse response into the TCP stack;
+the child is terminated/joined *before* restoring normal adapter mode, even
+when the SOCKS gate is closed. Only redacted aggregate evidence is emitted.
+
+The same isolated Microsoft OpenSSH + FlowBridge SOCKS fixture now runs a
+second connected / gate-closed / recovered triple for the child process.
+**This is not arbitrary selected-app acceptance.** A parent spawning and
+holding the exact child socket/process is a stronger, specifically engineered
+test than observing an unknown third-party flow. Neither IP Helper snapshots
+nor process creation time authenticate arbitrary NDISRD packet ownership.
+No persistent protected mode, DNS/UDP/IPv6 containment, Win10/11 evidence
+or release is asserted without separate native checks.

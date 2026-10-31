@@ -33,6 +33,17 @@ fn main() {
         [command, request] if command == "lab" && request.len() <= 4096 => {
             serde_json::from_str(request).map_err(|e| e.to_string()).and_then(capture_agent::run_lab)
         }
+        #[cfg(all(windows, target_pointer_width = "64"))]
+        [command, local, target] if command == "native-child" => {
+            local.parse::<std::net::Ipv4Addr>()
+                .map_err(|_| "Invalid child local IPv4".to_owned())
+                .and_then(|local| {
+                    target
+                        .parse::<std::net::SocketAddrV4>()
+                        .map_err(|_| "Invalid child target".to_owned())
+                        .and_then(|target| flowbridge_capture::self_redirect::run_child(local, target))
+                })
+        }
         [command, request] if command == "native-self-redirect" && request.len() <= 4096 => {
             serde_json::from_str(request)
                 .map_err(|e| e.to_string())
