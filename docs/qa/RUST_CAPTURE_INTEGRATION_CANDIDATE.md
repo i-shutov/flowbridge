@@ -397,3 +397,44 @@ remote-DNS containment, automatic upgrade or installer acceptance. The SCM
 candidate starts **only with explicit SOCKS and loopback bind** and never
 activates native capture. Any claim of a protected Windows beta still requires
 a separate native interposition/safety/installer implementation and acceptance.
+
+## Native controlled self-owned Windows TCP → NDISRD → Rust relay → SOCKS/OpenSSH: first verified chain
+
+2026-10-31 exact *code* SHA `f947bf9f27923a6a669f6f2c521f6235796cc74c`,
+PR #56 test merge `22c3b698ef01a7b945e6360d6ed37bfddea11413`.
+The public capture 3/3, Rust/native 5/5 and DNS regression 3/3 GitHub Actions
+passed on this source. The **separate** Windows OpenSSH workflow **FAILED**
+its experimental raw 512-channel characterization (Winsock 10054 /
+sshd "Too many open files") even though managed 128 held / 1152 denied /
+10,000 byte-verified successes / four independent SSH processes passed.
+Do not represent raw 512 as PASS or the overall SSH workflow as green.
+
+Actual VDSina VPS #3293462 Windows Server 2025 [native run
+41207789454](https://github.com/i-shutov/flowbridge-vps-qa/actions/runs/41207789454)
+**PASS**, private workflow SHA `f04e7fbb2cec46532828381055e825659fa4d827`;
+[private truthful evidence](https://github.com/i-shutov/flowbridge-vps-qa/issues/1#issuecomment-6544300447).
+An internally-owned and live socket was captured via official separately
+installed signed NDISRD, reflected to the Windows TCP stack and the original
+Rust relay, then genuine FlowBridge SOCKS and authenticated supervised
+Microsoft-signed OpenSSH; the HTTP response returned through inverse
+reflection. Connected: 5/4 reflected client/relay frames, 57/313 bytes.
+Gate denied: 4/3 reflected frames, no HTTP reply and no SOCKS CONNECT.
+Recovered: 5/4 reflected frames, 57/315 bytes on the SAME SSH supervisor.
+All three native runs report zero selected original frames sent to adapter,
+an internally verified owner PID+epoch, and mode rollback.
+
+Independent SYSTEM recovery armed and later disarmed; temporary scoped
+firewall rule removed; mode zero/network/Defender healthy. Actual downloaded
+artifact #13044882622 outer SHA-256
+`2a381eafdf040e50dc29c320cd1c35c8b16fc02348a9a2e9932327bc80a85359`
+equals GitHub digest, one JSON entry SHA-256
+`6ecdc8338249a9e7ae63895511238bb1500d2325ebcad64cebee03cc14b06be0`.
+Verified source/merge SHA and all acceptance/negative flags; no packet
+payload or PID/IP identity persisted. See
+[full native lab dossier](NATIVE_SELF_REDIRECT_LAB.md).
+
+**NOT proof** of another application's packet ownership, not protected
+system-wide interception/crash fail-closed, not DNS leak-free/UDP/IPv6,
+not Windows 10/11 desktop native acceptance, not a beta/1.0 release.
+Adapter mode 0 is normal networking. Private VPS is still useful for
+additional negative native tests and owner/driver containment work.
