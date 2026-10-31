@@ -224,7 +224,7 @@ mod tests {
     #[test]
     fn protected_route_requires_all_five_independent_readiness_gates() {
         let policy = p(false); // permissive normal mode MUST NOT weaken protected mode
-        let selected = Process::Attested(r"C:\\Apps\\Browser.exe");
+        let selected = Process::Attested(r"C:\Apps\Browser.exe");
         for mask in 0u8..32 {
             let evidence = ProtectedReadiness {
                 driver_tunnel_confirmed: (mask & 1) != 0,
@@ -256,7 +256,7 @@ mod tests {
             );
             assert_eq!(
                 policy.route_protected(
-                    Process::Attested(r"C:\\Apps\\Unselected.exe"),
+                    Process::Attested(r"C:\Apps\Unselected.exe"),
                     Protocol::Tcp,
                     evidence
                 ).route,
@@ -270,9 +270,9 @@ mod tests {
     fn protected_mode_does_not_trust_basename_only_carrier_exemptions() {
         let policy = p(false);
         for path in [
-            r"C:\\Temp\\ssh.exe",
-            r"C:\\Users\\Public\\FlowBridge.exe",
-            r"C:\\Apps\\ProxiFyre.exe",
+            r"C:\Temp\ssh.exe",
+            r"C:\Users\Public\FlowBridge.exe",
+            r"C:\Apps\ProxiFyre.exe",
         ] {
             let normal = policy.route(Process::Attested(path), Protocol::Tcp, true);
             assert_eq!(normal.reason, Reason::Carrier);
