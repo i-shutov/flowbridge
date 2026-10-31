@@ -10,15 +10,13 @@ use std::ffi::c_void;
 use std::mem::{offset_of, size_of, size_of_val};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6};
 use std::ptr::{null_mut, read_unaligned};
-use windows_sys::Win32::Foundation::GetLastError;
 use windows_sys::Win32::NetworkManagement::IpHelper::{
     GetExtendedUdpTable, MIB_UDP6ROW_OWNER_PID, MIB_UDP6TABLE_OWNER_PID, MIB_UDPROW_OWNER_PID,
     MIB_UDPTABLE_OWNER_PID, UDP_TABLE_OWNER_PID,
 };
 use windows_sys::Win32::Networking::WinSock::{AF_INET, AF_INET6};
-use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
 
-use super::windows_tcp_owner::{process_evidence, OwnedProcess};
+use super::windows_tcp_owner::OwnedProcess;
 
 const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
 const MAX_TABLE_BYTES: usize = 8 * 1024 * 1024;
@@ -214,19 +212,13 @@ pub(super) fn lookup(query: UdpOwnerQuery) -> Result<Value, String> {
         }
     };
 
-    // SAFETY: Query-only rights, no inheritance. Handle pins the process
-    // object through the second table snapshot (not the UDP socket).
-    let raw = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
-    if raw.is_null() {
-        return Err(format!("OpenProcess query denied: {}", unsafe {
-            GetLastError()
-        }));
-    }
-    let handle = OwnedProcess(raw);
-    let before = process_evidence(handle.0, pid)?;
+    // Query-only handle pins the same process object throughout the two
+    // UDP bind snapshots. A bind is NOT an individual datagram owner.
+    let handle = OwnedProcess::query(pid)?;
+    let before = handle.evidence()?;
     let second = read_rows(af)?;
     require_stable_bind(&second, query.local, pid)?;
-    let after = process_evidence(handle.0, pid)?;
+    let after = handle.evidence()?;
     if before != after {
         return Err("Process identity changed during UDP lookup".into());
     }
