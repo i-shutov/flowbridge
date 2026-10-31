@@ -316,6 +316,35 @@ pub(super) fn process_evidence(process: HANDLE, pid: u32) -> Result<ProcessEvide
     })
 }
 
+/// Revalidate a pinned OS process against TWO fresh IP Helper TCP table reads.
+/// This is intentionally expensive: the bounded native laboratory tests
+/// reject stale tuple reuse rather than trusting the first SYN forever.
+/// A matching Windows table row is only a process *candidate*, never a
+/// driver packet-to-process attestation or a protected-mode grant.
+pub fn validate_pinned_tcp_owner(
+    query: &OwnerQuery,
+    expected: &ProcessEvidence,
+    pinned: &OwnedProcess,
+) -> Result<(), String> {
+    if query.local.is_ipv4() != query.remote.is_ipv4()
+        || query.local.port() == 0
+        || query.remote.port() == 0
+        || pinned.pid != expected.pid
+    {
+        return Err("Invalid pinned TCP owner witness parameters".into());
+    }
+    if !pinned.is_active()? || &pinned.evidence()? != expected {
+        return Err("Pinned TCP process identity is no longer active".into());
+    }
+    let af = if query.local.is_ipv4() { AF_INET } else { AF_INET6 } as u32;
+    require_stable_pid(&read_rows(af)?, query, expected.pid)?;
+    require_stable_pid(&read_rows(af)?, query, expected.pid)?;
+    if !pinned.is_active()? || &pinned.evidence()? != expected {
+        return Err("Pinned TCP process changed during fresh observations".into());
+    }
+    Ok(())
+}
+
 /// A diagnostic-only read. The returned identity MUST NOT be used to authorize
 /// transparent capture: an IP Helper snapshot is not a packet ownership token.
 pub fn lookup(query: OwnerQuery) -> Result<Value, String> {
@@ -588,6 +617,42 @@ mod tests {
             .ends_with(".exe"));
         assert_eq!(result["authorizes_capture"], false);
         assert_eq!(result["native_packet_attribution_proved"], false);
+    }
+
+    #[test]
+    fn real_pinned_tcp_witness_refuses_epoch_and_tuple_changes() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (_accepted, _) = listener.accept().unwrap();
+        let query = OwnerQuery {
+            local: client.local_addr().unwrap(),
+            remote: client.peer_addr().unwrap(),
+        };
+        let pinned = OwnedProcess::query(std::process::id()).unwrap();
+        let original = pinned.evidence().unwrap();
+        validate_pinned_tcp_owner(&query, &original, &pinned).unwrap();
+        let other_epoch = ProcessEvidence {
+            pid: original.pid,
+            created_100ns: original.created_100ns.saturating_add(1),
+            path: original.path.clone(),
+        };
+        assert!(validate_pinned_tcp_owner(&query, &other_epoch, &pinned).is_err());
+        let wrong_remote = OwnerQuery {
+            local: query.local,
+            remote: SocketAddr::new(query.remote.ip(), query.remote.port() ^ 0x4000),
+        };
+        assert!(validate_pinned_tcp_owner(&wrong_remote, &original, &pinned).is_err());
+        let wrong_local = OwnerQuery {
+            local: SocketAddr::new(query.local.ip(), query.local.port() ^ 0x4000),
+            remote: query.remote,
+        };
+        assert!(validate_pinned_tcp_owner(&wrong_local, &original, &pinned).is_err());
+        let wrong_pid = ProcessEvidence {
+            pid: original.pid.wrapping_add(1),
+            created_100ns: original.created_100ns,
+            path: original.path.clone(),
+        };
+        assert!(validate_pinned_tcp_owner(&query, &wrong_pid, &pinned).is_err());
     }
 
     #[test]

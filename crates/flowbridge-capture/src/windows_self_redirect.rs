@@ -8,7 +8,7 @@ use crate::ndis_session::{LabDisposition, LabMode, PacketSession};
 use crate::relay::RelayPool;
 use crate::self_redirect::{Reflection, Request};
 use crate::windows_ndis_device::Driver;
-use crate::windows_tcp_owner::{lookup, OwnedProcess, OwnerQuery};
+use crate::windows_tcp_owner::{validate_pinned_tcp_owner, OwnedProcess, OwnerQuery};
 use base64::Engine;
 use flowbridge_core::tcp_packet::TcpTuple;
 use flowbridge_core::Endpoint;
@@ -599,6 +599,8 @@ async fn native(request: Request) -> Result<Value, String> {
     let start = Instant::now();
     let mut fault = None;
     let mut native_candidate_checked = false;
+    let mut owner_candidate_checks = 0u64;
+    let mut owner_candidate_denials = 0u64;
     let mut selected_direct_sends = 0u64;
     while start.elapsed() < timeout && !worker.is_finished() {
         let outcome = session.poll_lab_redirect(128, &mut |packet| {
@@ -606,21 +608,26 @@ async fn native(request: Request) -> Result<Value, String> {
                 crate::self_redirect::candidate_tuple(packet.frame) == Some(original);
             let decision = reflect.decide(packet, &mut || {
                 if !matches!(process.evidence(), Ok(now) if now == epoch) {
+                    owner_candidate_denials += 1;
                     return false;
                 }
-                if !native_candidate_checked {
-                    let Ok(result) = lookup(OwnerQuery {
-                        local: original.source,
-                        remote: original.destination,
-                    }) else {
-                        return false;
-                    };
-                    if result["found"] != true
-                        || result["two_snapshots_consistent"] != true
-                        || result["pid"].as_u64() != Some(u64::from(epoch.pid))
-                        || result["process_creation_100ns"].as_u64() != Some(epoch.created_100ns)
-                        || result["authorizes_capture"] != false
+                // Re-read the real OS TCP table for EVERY original outbound
+                // packet. A successfully matched first SYN never authorizes
+                // subsequent packets after socket/tuple reuse or PID churn.
+                // This remains bounded laboratory evidence, NOT PacketBound.
+                if selected_candidate {
+                    owner_candidate_checks += 1;
+                    if validate_pinned_tcp_owner(
+                        &OwnerQuery {
+                            local: original.source,
+                            remote: original.destination,
+                        },
+                        &epoch,
+                        &process,
+                    )
+                    .is_err()
                     {
+                        owner_candidate_denials += 1;
                         return false;
                     }
                     native_candidate_checked = true;
@@ -687,6 +694,8 @@ async fn native(request: Request) -> Result<Value, String> {
     let passed = fault.is_none()
         && cleanup.is_ok()
         && native_candidate_checked
+        && owner_candidate_checks > 0
+        && owner_candidate_denials == 0
         && external_exited
         && reflect.counters.owner_checked
         && reflect.counters.client_reflected > 0
@@ -719,6 +728,10 @@ async fn native(request: Request) -> Result<Value, String> {
             "internally_created_live_socket_not_arbitrary_pid"
         },
         "selected_original_frames_sent_to_adapter":selected_direct_sends,
+        "fresh_tcp_owner_candidate_checks":owner_candidate_checks,
+        "fresh_tcp_owner_candidate_denials":owner_candidate_denials,
+        "outbound_candidate_revalidated_for_each_selected_packet":true,
+        "fresh_owner_candidate_is_not_packetbound":true,
         "upstream_socks_connected":probe.upstream_connected,
         "upstream_socks_failed":probe.upstream_failed,
         "application_received_http":probe.valid_http_reply,
