@@ -144,7 +144,7 @@ pub(super) async fn client(action: &str) -> Result<Value, String> {
             .await
             .map_err(|e| e.to_string())?;
         if buffer.last() != Some(&b'\n') || buffer.len() > MAX_FRAME {
-            return Err("invalid bounded control response".into());
+            return Err::<Value, String>("invalid bounded control response".to_owned());
         }
         serde_json::from_slice::<Value>(&buffer[..buffer.len() - 1])
             .map_err(|_| "invalid control response JSON".into())

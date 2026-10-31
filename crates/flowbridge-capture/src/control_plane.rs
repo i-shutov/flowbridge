@@ -1,15 +1,24 @@
 //! Foreground, explicit SOCKS control plane. It is deliberately NOT an SCM
 //! service, NDISRD protected routing or a substitute for packet/PID attestation.
 //! No arbitrary paths, process identities, driver modes or secrets travel over IPC.
+#[cfg(any(windows, test))]
 use flowbridge_core::Config;
+#[cfg(any(windows, test))]
 use flowbridge_runtime::Engine;
+#[cfg(any(windows, test))]
 use serde::Deserialize;
-use serde_json::{json, Value};
+#[cfg(any(windows, test))]
+use serde_json::json;
+use serde_json::Value;
+#[cfg(any(windows, test))]
 use std::io::Read;
+#[cfg(any(windows, test))]
 use std::path::{Path, PathBuf};
 
+#[cfg(any(windows, test))]
 const MAX_CONFIG: u64 = 1024 * 1024;
 
+#[cfg(any(windows, test))]
 #[derive(Debug, Deserialize)]
 #[serde(tag = "command", rename_all = "snake_case", deny_unknown_fields)]
 enum Request {
@@ -18,6 +27,7 @@ enum Request {
     Stop {},
 }
 
+#[cfg(any(windows, test))]
 fn load_explicit_profile(path: &Path) -> Result<Config, String> {
     let file = std::fs::File::open(path).map_err(|e| format!("configuration open failed: {e}"))?;
     let mut bytes = Vec::new();
@@ -41,11 +51,13 @@ fn load_explicit_profile(path: &Path) -> Result<Config, String> {
     Ok(profile)
 }
 
+#[cfg(any(windows, test))]
 pub(crate) struct Controller {
     engine: Engine,
     config_path: PathBuf,
 }
 
+#[cfg(any(windows, test))]
 impl Controller {
     fn open(config_path: PathBuf) -> Result<Self, String> {
         let config = load_explicit_profile(&config_path)?;
