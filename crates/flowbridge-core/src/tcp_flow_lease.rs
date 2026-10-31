@@ -281,7 +281,10 @@ impl TcpLeaseLedger {
             self.entries.remove(&token.tuple);
             return Err(LeaseError::UpstreamUnavailable);
         }
-        let entry = self.entries.get_mut(&token.tuple).ok_or(LeaseError::Missing)?;
+        let entry = self
+            .entries
+            .get_mut(&token.tuple)
+            .ok_or(LeaseError::Missing)?;
         if entry.phase != LeasePhase::Pending {
             return Err(LeaseError::AlreadyActive);
         }
@@ -299,7 +302,10 @@ impl TcpLeaseLedger {
         now_ms: u64,
     ) -> Result<LeasePhase, LeaseError> {
         self.check(token, owner, now_ms)?;
-        let entry = self.entries.get_mut(&token.tuple).ok_or(LeaseError::Missing)?;
+        let entry = self
+            .entries
+            .get_mut(&token.tuple)
+            .ok_or(LeaseError::Missing)?;
         if entry.phase == LeasePhase::Pending {
             return Err(LeaseError::NotActive);
         }
@@ -316,7 +322,10 @@ impl TcpLeaseLedger {
         side: FinSide,
     ) -> Result<bool, LeaseError> {
         self.check(token, owner, now_ms)?;
-        let entry = self.entries.get_mut(&token.tuple).ok_or(LeaseError::Missing)?;
+        let entry = self
+            .entries
+            .get_mut(&token.tuple)
+            .ok_or(LeaseError::Missing)?;
         if entry.phase == LeasePhase::Pending {
             return Err(LeaseError::NotActive);
         }
@@ -396,8 +405,14 @@ mod tests {
         let a = v4();
         assert_eq!(a.local().port(), 44001);
         assert_eq!(a.remote().port(), 443);
-        assert_eq!(FlowTuple::new(a.local(), a.local()), Err(LeaseError::InvalidTuple));
-        assert_eq!(FlowTuple::new(a.local(), v6().remote()), Err(LeaseError::InvalidTuple));
+        assert_eq!(
+            FlowTuple::new(a.local(), a.local()),
+            Err(LeaseError::InvalidTuple)
+        );
+        assert_eq!(
+            FlowTuple::new(a.local(), v6().remote()),
+            Err(LeaseError::InvalidTuple)
+        );
         assert_eq!(
             FlowTuple::new(SocketAddr::new(a.local().ip(), 0), a.remote()),
             Err(LeaseError::InvalidTuple)
@@ -408,12 +423,18 @@ mod tests {
     fn only_initial_syn_and_pending_never_routable() {
         let mut l = ledger();
         for flags in [
-            InitialTcpFlags { syn: false, ..syn() },
+            InitialTcpFlags {
+                syn: false,
+                ..syn()
+            },
             InitialTcpFlags { ack: true, ..syn() },
             InitialTcpFlags { fin: true, ..syn() },
             InitialTcpFlags { rst: true, ..syn() },
         ] {
-            assert_eq!(l.begin_syn(v4(), owner(), flags, 1), Err(LeaseError::NotInitialSyn));
+            assert_eq!(
+                l.begin_syn(v4(), owner(), flags, 1),
+                Err(LeaseError::NotInitialSyn)
+            );
         }
         let t = l.begin_syn(v4(), owner(), syn(), 2).unwrap();
         assert_eq!(l.check_active(t, owner(), 3), Err(LeaseError::NotActive));
@@ -424,13 +445,19 @@ mod tests {
     fn unavailable_upstream_revokes_and_does_not_fallback() {
         let mut l = ledger();
         let t = l.begin_syn(v4(), owner(), syn(), 1).unwrap();
-        assert_eq!(l.activate(t, owner(), 2, false), Err(LeaseError::UpstreamUnavailable));
+        assert_eq!(
+            l.activate(t, owner(), 2, false),
+            Err(LeaseError::UpstreamUnavailable)
+        );
         assert_eq!(l.check_active(t, owner(), 3), Err(LeaseError::Missing));
         let fresh = l.begin_syn(v4(), owner(), syn(), 4).unwrap();
         assert_ne!(t, fresh);
         l.activate(fresh, owner(), 5, true).unwrap();
         assert_eq!(l.check_active(fresh, owner(), 6), Ok(LeasePhase::Active));
-        assert_eq!(l.activate(fresh, owner(), 7, true), Err(LeaseError::AlreadyActive));
+        assert_eq!(
+            l.activate(fresh, owner(), 7, true),
+            Err(LeaseError::AlreadyActive)
+        );
     }
 
     #[test]
@@ -448,8 +475,14 @@ mod tests {
     fn collisions_and_capacity_do_not_replace_live_flows() {
         let mut l = TcpLeaseLedger::new(1, 100, 27).unwrap();
         let t = l.begin_syn(v4(), owner(), syn(), 1).unwrap();
-        assert_eq!(l.begin_syn(v4(), owner(), syn(), 2), Err(LeaseError::TupleOccupied));
-        assert_eq!(l.begin_syn(v6(), owner(), syn(), 3), Err(LeaseError::Capacity));
+        assert_eq!(
+            l.begin_syn(v4(), owner(), syn(), 2),
+            Err(LeaseError::TupleOccupied)
+        );
+        assert_eq!(
+            l.begin_syn(v6(), owner(), syn(), 3),
+            Err(LeaseError::Capacity)
+        );
         l.activate(t, owner(), 4, true).unwrap();
         assert_eq!(l.check_active(t, owner(), 5), Ok(LeasePhase::Active));
         assert_eq!(l.len(), 1);
@@ -461,11 +494,17 @@ mod tests {
         let old = l.begin_syn(v4(), owner(), syn(), 1).unwrap();
         l.retire(old, owner(), 2).unwrap();
         let current = l.begin_syn(v4(), owner(), syn(), 3).unwrap();
-        assert_eq!(l.activate(old, owner(), 4, true), Err(LeaseError::StaleLease));
+        assert_eq!(
+            l.activate(old, owner(), 4, true),
+            Err(LeaseError::StaleLease)
+        );
         l.activate(current, owner(), 5, true).unwrap();
         let mut restarted = TcpLeaseLedger::new(2, 100, 202).unwrap();
         let _ = restarted.begin_syn(v4(), owner(), syn(), 5).unwrap();
-        assert_eq!(restarted.check_active(current, owner(), 6), Err(LeaseError::StaleLease));
+        assert_eq!(
+            restarted.check_active(current, owner(), 6),
+            Err(LeaseError::StaleLease)
+        );
         let reversed = FlowTuple::new(v4().remote(), v4().local()).unwrap();
         l.begin_syn(reversed, owner(), syn(), 7).unwrap();
         assert_eq!(l.len(), 2);
@@ -476,7 +515,10 @@ mod tests {
         let mut l = ledger();
         let old = l.begin_syn(v4(), owner(), syn(), 10).unwrap();
         l.verify_retransmit(old, owner(), syn(), 80).unwrap();
-        assert_eq!(l.verify_retransmit(old, owner(), syn(), 110), Err(LeaseError::Expired));
+        assert_eq!(
+            l.verify_retransmit(old, owner(), syn(), 110),
+            Err(LeaseError::Expired)
+        );
         let fresh = l.begin_syn(v4(), owner(), syn(), 111).unwrap();
         assert_ne!(old, fresh);
         assert_eq!(l.expire(211), Ok(1));
@@ -511,7 +553,10 @@ mod tests {
         let t = l.begin_syn(v4(), owner(), syn(), 100).unwrap();
         assert_eq!(l.check_active(t, owner(), 99), Err(LeaseError::ClockRewind));
         assert!(l.is_empty());
-        assert_eq!(l.begin_syn(v4(), owner(), syn(), 101), Err(LeaseError::Halted));
+        assert_eq!(
+            l.begin_syn(v4(), owner(), syn(), 101),
+            Err(LeaseError::Halted)
+        );
     }
 
     #[test]
@@ -520,13 +565,19 @@ mod tests {
         let t = l.begin_syn(v4(), owner(), syn(), 1).unwrap();
         l.shutdown();
         assert_eq!(l.activate(t, owner(), 2, true), Err(LeaseError::Halted));
-        assert_eq!(l.begin_syn(v6(), owner(), syn(), 3), Err(LeaseError::Halted));
+        assert_eq!(
+            l.begin_syn(v6(), owner(), syn(), 3),
+            Err(LeaseError::Halted)
+        );
         let mut exhausted = ledger();
         exhausted.sequence = u64::MAX;
         assert_eq!(
             exhausted.begin_syn(v4(), owner(), syn(), 1),
             Err(LeaseError::SequenceExhausted)
         );
-        assert_eq!(exhausted.begin_syn(v4(), owner(), syn(), 2), Err(LeaseError::Halted));
+        assert_eq!(
+            exhausted.begin_syn(v4(), owner(), syn(), 2),
+            Err(LeaseError::Halted)
+        );
     }
 }
