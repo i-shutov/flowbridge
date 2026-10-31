@@ -127,17 +127,40 @@ enum AdapterQueryProblem {
     Name(usize),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+struct AdapterDiagnostic {
+    name: String,
+    medium: u32,
+    mtu: u16,
+    mac: [u8; MAC_BYTES],
+    handle_present: bool,
+}
+
+impl AdapterQueryProblem {
+    fn message(self) -> String {
+        match self {
+            #[cfg(not(target_pointer_width = "64"))]
+            Self::UnsupportedArchitecture => "unsupported_architecture".to_owned(),
+            Self::Open(code) => format!("device_open_failed:{code}"),
+            Self::Query(code) => format!("adapter_query_failed:{code}"),
+            Self::ReplySize(bytes) => format!("unexpected_reply_size:{bytes}"),
+            Self::Count(count) => format!("invalid_adapter_count:{count}"),
+            Self::Name(index) => format!("invalid_adapter_name:{index}"),
+        }
+    }
+}
+
 fn validate_adapter_reply(
     reply: &AdapterList,
     returned: u32,
-) -> Result<Vec<String>, AdapterQueryProblem> {
+) -> Result<Vec<AdapterDiagnostic>, AdapterQueryProblem> {
     if returned as usize != std::mem::size_of::<AdapterList>() {
         return Err(AdapterQueryProblem::ReplySize(returned));
     }
     if reply.count as usize > ADAPTER_CAPACITY {
         return Err(AdapterQueryProblem::Count(reply.count));
     }
-    let mut names = Vec::with_capacity(reply.count as usize);
+    let mut adapters: Vec<AdapterDiagnostic> = Vec::with_capacity(reply.count as usize);
     for (index, bytes) in reply.names[..reply.count as usize].iter().enumerate() {
         let end = bytes
             .iter()
@@ -151,18 +174,24 @@ fn validate_adapter_reply(
         }
         let name = std::str::from_utf8(&bytes[..end])
             .map_err(|_| AdapterQueryProblem::Name(index))?;
-        if names.iter().any(|existing| existing.as_str() == name) {
+        if adapters.iter().any(|existing| existing.name == name) {
             return Err(AdapterQueryProblem::Name(index));
         }
-        names.push(name.to_owned());
+        adapters.push(AdapterDiagnostic {
+            name: name.to_owned(),
+            medium: reply.media[index],
+            mtu: reply.mtu[index],
+            mac: reply.macs[index],
+            handle_present: reply.handles[index] != 0,
+        });
     }
-    Ok(names)
+    Ok(adapters)
 }
 
 /// Passive IOCTL only. Neither opens an adapter for filtering nor enables
 /// listen/tunnel modes, queue events, packet reads or injection.
 #[cfg(target_pointer_width = "64")]
-fn read_bound_adapter_names() -> Result<Vec<String>, AdapterQueryProblem> {
+fn read_bound_adapters() -> Result<Vec<AdapterDiagnostic>, AdapterQueryProblem> {
     let wide: Vec<u16> = DEVICE.encode_utf16().chain(Some(0)).collect();
     // SAFETY: The literal device name is NUL-terminated UTF-16, requesting
     // zero file access and no handle inheritance.
@@ -214,7 +243,7 @@ fn read_bound_adapter_names() -> Result<Vec<String>, AdapterQueryProblem> {
 }
 
 #[cfg(not(target_pointer_width = "64"))]
-fn read_bound_adapter_names() -> Result<Vec<String>, AdapterQueryProblem> {
+fn read_bound_adapters() -> Result<Vec<AdapterDiagnostic>, AdapterQueryProblem> {
     Err(AdapterQueryProblem::UnsupportedArchitecture)
 }
 
@@ -239,15 +268,15 @@ pub(super) fn report() -> Value {
             None,
         ),
     };
-    let (adapter_inventory_status, adapter_names, adapter_error) = if api_compatible {
-        match read_bound_adapter_names() {
+    let (adapter_inventory_status, adapter_inventory, adapter_error) = if api_compatible {
+        match read_bound_adapters() {
             Ok(names) => ("read_only_ok", Some(names), None),
-            Err(problem) => ("failed", None, Some(format!("{problem:?}"))),
+            Err(problem) => ("failed", None, Some(problem.message())),
         }
     } else {
         ("not_checked", None, None)
     };
-    let adapter_count = adapter_names.as_ref().map(Vec::len);
+    let adapter_count = adapter_inventory.as_ref().map(Vec::len);
     json!({
         "backend": "ndisapi",
         "device_opened": device_opened,
@@ -257,7 +286,7 @@ pub(super) fn report() -> Value {
         "win32_error": win32_error,
         "adapter_inventory_status": adapter_inventory_status,
         "adapter_count": adapter_count,
-        "adapter_names": adapter_names,
+        "adapter_inventory": adapter_inventory,
         "adapter_query_error": adapter_error,
         "signature_status": "not_checked",
         "driver_installation_attempted": false,
@@ -303,7 +332,7 @@ mod tests {
         let full = std::mem::size_of::<AdapterList>() as u32;
         assert_eq!(
             validate_adapter_reply(&reply, full).unwrap(),
-            Vec::<String>::new()
+            Vec::<AdapterDiagnostic>::new()
         );
         assert_eq!(
             validate_adapter_reply(&reply, full - 1),
@@ -327,7 +356,11 @@ mod tests {
         reply.names[0] = [0; ADAPTER_NAME_BYTES];
         reply.names[0][..14].copy_from_slice(br"\DEVICE\{TEST}");
         assert_eq!(
-            validate_adapter_reply(&reply, full).unwrap(),
+            validate_adapter_reply(&reply, full)
+                .unwrap()
+                .into_iter()
+                .map(|adapter| adapter.name)
+                .collect::<Vec<_>>(),
             vec![r"\DEVICE\{TEST}".to_owned()]
         );
         reply.count = 2;
