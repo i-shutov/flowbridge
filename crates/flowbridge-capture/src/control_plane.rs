@@ -82,7 +82,10 @@ impl Controller {
     }
 
     pub(crate) fn stop_engine(&self) -> Result<(), String> {
-        self.engine.stop().map(|_| ()).map_err(|error| error.to_string())
+        self.engine
+            .stop()
+            .map(|_| ())
+            .map_err(|error| error.to_string())
     }
 
     pub(crate) fn status(&self) -> Value {

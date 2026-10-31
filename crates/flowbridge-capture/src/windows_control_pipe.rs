@@ -99,13 +99,17 @@ async fn transaction(server: NamedPipeServer, ctl: &mut Controller) -> bool {
 
 pub(super) async fn serve(mut controller: Controller) -> Result<Value, String> {
     let mut waiting = secure_server(true)?;
+    // An absolute periodic tick cannot be starved by status clients arriving
+    // more frequently than POLL_INTERVAL during an SCM STOP request.
+    let mut health_tick = tokio::time::interval(POLL_INTERVAL);
     loop {
         let connection = tokio::select! {
-            result = waiting.connect() => result,
-            _ = tokio::time::sleep(POLL_INTERVAL) => {
+            biased;
+            _ = health_tick.tick() => {
                 if controller.status()["scm_service_running"] == true
                     && crate::windows_service::stop_requested()
                 {
+                    crate::windows_service::mark_stopping()?;
                     controller.stop_engine()?;
                     return Ok(json!({
                         "ok":true, "scm_stop_completed":true,
@@ -118,6 +122,7 @@ pub(super) async fn serve(mut controller: Controller) -> Result<Value, String> {
                 }
                 continue;
             }
+            result = waiting.connect() => result,
         };
         connection.map_err(|e| format!("restricted pipe accept failed: {e}"))?;
         // Keep an unused listener instance alive while serving an authenticated

@@ -85,6 +85,22 @@ unsafe extern "system" fn service_main(_argc: u32, _argv: *mut *mut u16) {
     unsafe { SetServiceStatus(handle, &status(SERVICE_STOPPED, 0, error, 0)) };
 }
 
+pub(crate) fn mark_stopping() -> Result<(), String> {
+    let handle = SERVICE_HANDLE
+        .get()
+        .copied()
+        .ok_or("SCM service handler was not registered")?;
+    // SAFETY: SCM control has requested a stop, and the registered status
+    // handle remains valid until ServiceMain reports STOPPED.
+    let ok = unsafe { SetServiceStatus(handle as _, &status(SERVICE_STOP_PENDING, 0, 0, 1)) };
+    if ok == 0 {
+        return Err(format!("SCM STOP_PENDING status failed: {}", unsafe {
+            GetLastError()
+        }));
+    }
+    Ok(())
+}
+
 // Executed only after Controller has opened an engine and before the control
 // pipe's accept loop. SCM STOP remains accepted during the lifetime of the
 // engine; there is no driver or protected-allow side effect.

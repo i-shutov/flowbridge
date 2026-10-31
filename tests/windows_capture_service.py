@@ -52,6 +52,15 @@ def wait_status(agent: pathlib.Path, expected: bool, seconds: float = 12) -> dic
     raise AssertionError(f"control pipe did not reach expected availability={expected}")
 
 
+def wait_scm_stopped() -> None:
+    for _ in range(70):
+        state = sc("query", NAME, ok=False)
+        if state.returncode == 0 and "STOPPED" in state.stdout:
+            return
+        time.sleep(0.2)
+    raise AssertionError("SCM service did not report STOPPED")
+
+
 def port_blocked(port: int) -> None:
     for _ in range(20):
         try:
@@ -112,6 +121,7 @@ def main() -> None:
             if result["engine"]["generation"] != 2:
                 raise AssertionError("SCM engine did not atomically reload policy")
             sc("stop", NAME)
+            wait_scm_stopped()
             wait_status(agent, False)
             port_blocked(port)
             # Only SCM can restart this process. Test IPC stop independently
@@ -123,6 +133,7 @@ def main() -> None:
             stopped = control(agent, "stop")
             if stopped["engine"]["running"]:
                 raise AssertionError("IPC stop failed to terminate SCM engine")
+            wait_scm_stopped()
             wait_status(agent, False)
             port_blocked(port)
             result = {
