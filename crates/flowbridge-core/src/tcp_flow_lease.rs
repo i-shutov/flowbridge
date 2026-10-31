@@ -353,6 +353,34 @@ impl TcpLeaseLedger {
         Ok(())
     }
 
+    /// Remove ONLY an exact owned ticket after an async stream terminates.
+    /// This is a destructive cleanup operation, NEVER an authorization check:
+    /// it deliberately does not tick the shared packet-worker clock. Using a
+    /// delayed async completion timestamp to call retire() could falsely
+    /// trigger ClockRewind and shut down unrelated healthy flows.
+    pub fn finish_stream(
+        &mut self,
+        token: FlowLease,
+        owner: OwnerStamp,
+    ) -> Result<(), LeaseError> {
+        if self.halted {
+            return Err(LeaseError::Halted);
+        }
+        if token.session_id != self.session_id {
+            return Err(LeaseError::StaleLease);
+        }
+        let entry = self.entries.get(&token.tuple).ok_or(LeaseError::Missing)?;
+        if entry.token != token {
+            return Err(LeaseError::StaleLease);
+        }
+        if entry.owner != owner {
+            self.entries.remove(&token.tuple);
+            return Err(LeaseError::OwnerChanged);
+        }
+        self.entries.remove(&token.tuple);
+        Ok(())
+    }
+
     /// Revokes everything on SSH loss, worker shutdown or uncertain cleanup.
     /// A fresh ledger MUST use a different trusted session ID.
     pub fn shutdown(&mut self) {
@@ -393,6 +421,35 @@ mod tests {
     }
     fn ledger() -> TcpLeaseLedger {
         TcpLeaseLedger::new(2, 100, 101).unwrap()
+    }
+
+    #[test]
+    fn stream_completion_is_clock_independent_but_generation_and_owner_bound() {
+        let mut ledger = ledger();
+        let first = ledger.begin_syn(v4(), owner(), syn(), 100).unwrap();
+        ledger.activate(first, owner(), 101, true).unwrap();
+        // An async completion is allowed after the packet-worker clock advances,
+        // with no stale timestamp assertion or accidental clock rewind.
+        ledger.expire(110).unwrap();
+        ledger.finish_stream(first, owner()).unwrap();
+        assert!(ledger.is_empty());
+        assert_eq!(ledger.finish_stream(first, owner()), Err(LeaseError::Missing));
+
+        let new = ledger.begin_syn(v4(), owner(), syn(), 120).unwrap();
+        assert_ne!(first, new);
+        assert_eq!(
+            ledger.finish_stream(first, owner()),
+            Err(LeaseError::StaleLease)
+        );
+        assert_eq!(ledger.len(), 1);
+        assert_eq!(
+            ledger.finish_stream(new, OwnerStamp::new(811, 999).unwrap()),
+            Err(LeaseError::OwnerChanged)
+        );
+        assert!(ledger.is_empty());
+        let another = ledger.begin_syn(v4(), owner(), syn(), 130).unwrap();
+        ledger.shutdown();
+        assert_eq!(ledger.finish_stream(another, owner()), Err(LeaseError::Halted));
     }
 
     #[test]

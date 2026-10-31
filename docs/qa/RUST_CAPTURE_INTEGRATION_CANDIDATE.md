@@ -109,3 +109,19 @@ binary SHA-256 in machine-readable evidence. Existing 128/1152/10000/4 and
 raw-512 assertions remain intact. The helper may **never** claim driver
 interception, packet-to-PID authority, DNS containment or Windows 10/11
 acceptance, irrespective of the probe result.
+
+## Cross-component owned TCP lease lifecycle (integration head after 529a9ead)
+
+The new Rust owned-flow boundary joins the existing packet-policy ticket to a
+**real** SOCKS5 connection and a real user-mode TCP ingress stream. Activation
+is only after SOCKS CONNECT succeeds; STREAM termination, cancellation, upstream
+supervisor disappearance, or Drop removes the exact ticket and alias without a
+DIRECT fallback. The packet-worker mutex is **not** held across an awaited
+network operation. An independent terminal-only cleanup API avoids advancing
+(or rewinding) the packet clock from unrelated async I/O and refuses stale
+generation/owner tokens. Lock poison or unprovable cleanup revokes the entire
+offline pipeline. Cross-component tests cover IPv4/IPv6 VLAN-tagged synthetic
+packets and bidirectional offline rewrite alongside actual binary/half-close
+SOCKS streams, plus refusal, abandoned connections, PID/generation and
+supervisor-loss negatives. This does **not** connect native NDISRD packets to
+that relay, prove PID attribution, or provide protected crash persistence.

@@ -416,6 +416,26 @@ impl CapturePipeline {
         result
     }
 
+    /// Terminal stream cleanup is not packet authorization and does not inject
+    /// or extend the lifetime of any frame. It intentionally does NOT tick the
+    /// packet-worker clock: an async I/O completion must never introduce a
+    /// spurious time rewind across otherwise healthy flows.
+    pub fn finish_relay(
+        &mut self,
+        ticket: Ticket,
+        owner: OwnerEvidence<'_>,
+    ) -> Result<(), PipelineError> {
+        self.bound(ticket, &owner)?;
+        let result = self
+            .ledger
+            .finish_stream(ticket.lease, owner.stamp)
+            .map_err(PipelineError::Lease);
+        if result.is_ok() {
+            self.remove(ticket);
+        }
+        result
+    }
+
     pub fn revoke_all(&mut self) {
         self.halted = true;
         self.ledger.shutdown();
@@ -670,6 +690,45 @@ pub(crate) mod tests {
         );
         assert_eq!(p.active_records(), 0);
         assert_eq!(data, syn);
+    }
+
+    #[test]
+    fn stream_completion_removes_only_the_exact_alias_and_never_rewinds_clock() {
+        let a = tuple(false);
+        let b = TcpTuple {
+            source: "192.0.2.1:40002".parse().unwrap(),
+            destination: a.destination,
+        };
+        let mut p = setup_with_idle(10_000);
+        let ticket_a = p.begin(context(1), &frame(a, 2), alias(a)).unwrap();
+        let ticket_b = p.begin(
+            context(2),
+            &frame(b, 2),
+            TcpTuple {
+                source: b.destination,
+                destination: "192.0.2.1:18081".parse().unwrap(),
+            },
+        )
+        .unwrap();
+        p.activate(ticket_a, context(3).owner, 3, true).unwrap();
+        p.activate(ticket_b, context(4).owner, 4, true).unwrap();
+        // A packet for B advances the clock beyond the async completion of A.
+        p.rewrite(
+            ticket_b,
+            context(200),
+            Leg::ApplicationToRelay,
+            &mut frame(b, 0x10),
+        )
+        .unwrap();
+        p.finish_relay(ticket_a, context(3).owner).unwrap();
+        assert_eq!(p.active_records(), 1);
+        let mut still_active = frame(b, 0x10);
+        p.rewrite(ticket_b, context(201), Leg::ApplicationToRelay, &mut still_active)
+            .unwrap();
+        assert_eq!(inspect_ethernet_tcp(&still_active).unwrap().tcp.tuple.source.port(), b.destination.port());
+        assert!(p.finish_relay(ticket_a, context(3).owner).is_err());
+        p.finish_relay(ticket_b, context(201).owner).unwrap();
+        assert_eq!(p.active_records(), 0);
     }
 
     #[test]

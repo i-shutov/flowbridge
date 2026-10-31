@@ -67,8 +67,6 @@ pub struct OwnedFlowRelay {
     pipeline: Arc<Mutex<CapturePipeline>>,
     ticket: Ticket,
     identity: Identity,
-    origin_ms: u64,
-    started: Instant,
     finished: bool,
 }
 
@@ -79,12 +77,8 @@ impl OwnedFlowRelay {
         }
         self.finished = true;
         let mut pipeline = lock_state(&self.pipeline)?;
-        let Some(now_ms) = elapsed_ms(self.origin_ms, self.started) else {
-            pipeline.revoke_all();
-            return Err(OwnedRelayError::ClockOverflow);
-        };
         let outcome = pipeline
-            .retire(self.ticket, self.identity.evidence(), now_ms)
+            .finish_relay(self.ticket, self.identity.evidence())
             .map_err(OwnedRelayError::Pipeline);
         if outcome.is_err() {
             pipeline.revoke_all();
@@ -157,8 +151,6 @@ pub async fn connect_owned(
                 pipeline,
                 ticket,
                 identity,
-                origin_ms: context.now_ms,
-                started,
                 finished: false,
             })
         }
@@ -354,6 +346,58 @@ mod tests {
             assert_eq!(pool.active(), 0);
             accepted.abort();
             drop(supervisor);
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn supervisor_loss_during_real_transfer_retires_owned_packet_ticket() {
+        timeout(DEADLINE, async {
+            let original = tuple(false);
+            let syn = frame(original, 2);
+            let pipeline = Arc::new(Mutex::new(setup_with_idle(20_000)));
+            let ticket = pipeline
+                .lock()
+                .unwrap()
+                .begin(context(1), &syn, alias(original))
+                .unwrap();
+            let proxy = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let native = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let pool = RelayPool::new(
+                proxy.local_addr().unwrap(),
+                native.local_addr().unwrap(),
+                1,
+                DEADLINE,
+                DEADLINE,
+                DEADLINE,
+            )
+            .unwrap();
+            let server = tokio::spawn(async move {
+                let (mut socket, _) = proxy.accept().await.unwrap();
+                accept_socks5(&mut socket, DEADLINE).await.unwrap();
+                reply_socks5(&mut socket, 0).await.unwrap();
+                let mut scratch = [0; 1];
+                let _ = socket.read(&mut scratch).await.unwrap();
+            });
+            let (supervisor, stop) = watch::channel(false);
+            let owned =
+                connect_owned(&pool, pipeline.clone(), ticket, context(2), stop)
+                    .await
+                    .unwrap();
+            let _client = TcpStream::connect(native.local_addr().unwrap())
+                .await
+                .unwrap();
+            let (accepted, _) = native.accept().await.unwrap();
+            let forward = tokio::spawn(owned.forward(accepted));
+            supervisor.send(true).unwrap();
+            assert!(matches!(
+                forward.await.unwrap(),
+                Err(OwnedRelayError::Transport(RelayError::Cancelled))
+            ));
+            server.await.unwrap();
+            assert_eq!(pool.active(), 0);
+            assert_eq!(pipeline.lock().unwrap().active_records(), 0);
         })
         .await
         .unwrap();
