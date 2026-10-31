@@ -1,0 +1,15 @@
+FlowBridge — custom development deliverable
+
+No separate open-source license has been selected for the FlowBridge-specific
+source code in this development delivery. This notice does not change the
+licenses of third-party components. Before publishing or redistributing a
+product based on this project, select the license for its project-specific code
+and retain the applicable third-party notices.
+
+The third-party components and their license texts are listed in
+licenses/THIRD_PARTY_NOTICES.txt in the binary distribution, and in
+third_party/THIRD_PARTY_NOTICES.txt in the source distribution.
+
+This independently developed project contains no Proxifier code, executables,
+drivers, icons, or license circumvention tools. Product names mentioned in its
+documentation identify the interoperability reference only.

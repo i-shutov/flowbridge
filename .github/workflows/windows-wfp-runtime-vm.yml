@@ -1,0 +1,51 @@
+name: Windows WFP real redirect — authorized VM only
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: flowbridge-wfp-runtime-vm
+  cancel-in-progress: false
+jobs:
+  actual-redirect:
+    # Not a hosted Windows runner. Deliberately stays unassigned until a
+    # dedicated, snapshot-restorable, authorized test VM is connected.
+    runs-on: [self-hosted, windows, x64, flowbridge-wfp-vm]
+    timeout-minutes: 20
+    env:
+      FLOWBRIDGE_WFP_VM: '1'
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Compile Rust ABI and native helper
+        shell: pwsh
+        run: |
+          cargo build --locked --release -p flowbridge-ffi
+          cmake -S native/windows/wfp -B build/windows-capture -A x64 -DFLOWBRIDGE_FFI_LIBRARY="$env:GITHUB_WORKSPACE/target/release/flowbridge_ffi.dll.lib"
+          cmake --build build/windows-capture --config Release
+          Copy-Item target/release/flowbridge_ffi.dll build/windows-capture/Release/
+      - name: Build test-only same-basename client
+        shell: pwsh
+        run: |
+          cmake -S tests/wfp_scope -B build/wfp-scope -A x64
+          cmake --build build/wfp-scope --config Release
+      - name: Exercise real WFP redirect, application identity and fail-closed SOCKS
+        shell: pwsh
+        run: |
+          python tests/windows_wfp_redirect_runtime.py --helper build/windows-capture/Release/FlowBridgeCapture.exe --probe build/wfp-scope/Release/FlowBridgeWfpScopeQA.exe --output build/verification/wfp-runtime/result.json
+      - name: Exercise real WFP through GUI-owner Rust listener, with simulated SSH gate failures
+        shell: pwsh
+        run: |
+          python tests/windows_wfp_userchain_runtime.py --helper build/windows-capture/Release/FlowBridgeCapture.exe --probe build/wfp-scope/Release/FlowBridgeWfpScopeQA.exe --library target/release/flowbridge_ffi.dll --output build/verification/wfp-runtime/userchain.json
+      - name: Preserve evidence (including failure)
+        if: always()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: FlowBridge-actual-WFP-redirect-evidence
+          path: build/verification/wfp-runtime/
+          if-no-files-found: warn
+          retention-days: 14

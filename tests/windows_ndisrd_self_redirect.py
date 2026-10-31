@@ -1,0 +1,252 @@
+#!/usr/bin/env python3
+"""Explicit VDSina native self-socket -> NDISRD -> Rust -> SOCKS -> SSH canary.
+
+Requires a real separately installed NDISRD driver, prearmed independent
+recovery and a scoped firewall rule. Ephemeral SSH keys are never uploaded.
+Only aggregate evidence is saved; arbitrary-app/protected flags stay false.
+"""
+from __future__ import annotations
+
+import argparse
+import contextlib
+import getpass
+import hashlib
+import json
+import os
+from pathlib import Path
+import socket
+import subprocess
+import sys
+import tempfile
+import threading
+
+from ssh_real_integration import ABI, Echo, Server, free_port, require, until, round_trip
+from windows_real_ssh_hosted import secure_test_file
+from windows_external_powershell_lab import ExternalPowerShellCanary
+
+
+def digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    for name in ('agent', 'library', 'ssh', 'sshd', 'keygen', 'context', 'output'):
+        parser.add_argument('--' + name, type=Path, required=True)
+    args = parser.parse_args()
+    require(sys.platform == 'win32' and os.environ.get('FLOWBRIDGE_VPS_NATIVE') == 'OWNER_VNC_CONFIRMED',
+            'Explicit dedicated VPS consent is required')
+    context = json.loads(args.context.read_text(encoding='utf-8-sig'))
+    require(context.get('recovery_armed') is True and context.get('defender_active') is True,
+            'Independent safety prerequisites missing')
+    target = context['target_ipv4']
+    socket.inet_aton(target)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    source_sha = os.environ.get('FLOWBRIDGE_SOURCE_SHA', '')
+    require(len(source_sha) == 40 and all(c in '0123456789abcdef' for c in source_sha),
+            'Externally verified source tree SHA is mandatory')
+    result = {
+        'passed': False,
+        'kind': 'actual_self_owned_tcp_ndisrd_reflection_real_flowbridge_socks_openssh',
+        'source_commit': source_sha,
+        'agent_sha256': digest(args.agent),
+        'ffi_sha256': digest(args.library),
+        'ssh_sha256': digest(args.ssh),
+        'sshd_sha256': digest(args.sshd),
+        'driver_was_used': False,
+        'arbitrary_selected_app_accepted': False,
+        'general_packet_pid_proof': False,
+        'persistent_fail_closed_accepted': False,
+        'dns_leak_free': False,
+        'win10_11_acceptance': False,
+        'release_accepted': False,
+        'packet_payload_or_identity_saved': False,
+    }
+    abi = ABI(args.library.resolve())
+    supervisor = engine = 0
+    daemon = None
+    echo = Server(('127.0.0.1', 0), Echo)
+    echo_thread = threading.Thread(target=echo.serve_forever, daemon=True)
+    echo_thread.start()
+    temporary = tempfile.TemporaryDirectory(prefix="flowbridge-native-ssh-")
+    try:
+        with contextlib.nullcontext(temporary.name) as temporary_name:
+            root = Path(temporary_name)
+            for name in ('host_key', 'client_key'):
+                subprocess.run([str(args.keygen), '-q', '-t', 'ed25519', '-N', '', '-f', str(root / name)],
+                               check=True, capture_output=True, timeout=15)
+                secure_test_file(root / name)
+            authorized = root / 'authorized_keys'
+            authorized.write_bytes((root / 'client_key.pub').read_bytes())
+            secure_test_file(authorized)
+            ssh_port, socks_port, ingress = free_port(), free_port(), free_port()
+            require(len({ssh_port, socks_port, ingress, echo.server_address[1]}) == 4, 'Fixture ports collide')
+            user = getpass.getuser().lower()
+            require(user.isascii() and user.replace('_', '').replace('-', '').isalnum(), 'Invalid fixture username')
+            known = root / 'known_hosts'
+            known.write_text(f'[127.0.0.1]:{ssh_port} ' + (root / 'host_key.pub').read_text(), encoding='ascii')
+            config = root / 'sshd_config'
+            config.write_text('\n'.join([
+                f'Port {ssh_port}', 'ListenAddress 127.0.0.1', 'AddressFamily inet',
+                f'HostKey "{(root / "host_key").as_posix()}"',
+                f'AuthorizedKeysFile "{authorized.as_posix()}"', f'AllowUsers {user}',
+                'PasswordAuthentication no', 'PubkeyAuthentication yes', 'AuthenticationMethods publickey',
+                'AllowTcpForwarding local', 'GatewayPorts no',
+                f'PermitOpen localhost:{echo.server_address[1]} 127.0.0.1:{echo.server_address[1]} {target}:80',
+                'LogLevel ERROR', 'MaxStartups 10:30:20', 'MaxSessions 10', '',
+            ]), encoding='ascii')
+            secure_test_file(config)
+            subprocess.run([str(args.sshd), '-t', '-f', str(config)], check=True, capture_output=True, timeout=15)
+            with (root / 'sshd.log').open('wb') as log:
+                daemon = subprocess.Popen([str(args.sshd), '-D', '-e', '-f', str(config)],
+                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=log,
+                    creationflags=subprocess.CREATE_NO_WINDOW)
+                def ready():
+                    require(daemon.poll() is None, 'Isolated sshd exited')
+                    try:
+                        with socket.create_connection(('127.0.0.1', ssh_port), timeout=.3):
+                            return True
+                    except OSError:
+                        return False
+                until(ready, seconds=20)
+                settings = {'host': '127.0.0.1', 'port': ssh_port, 'user': user, 'local_port': socks_port,
+                    'ssh_executable': str(args.ssh.resolve()), 'identity_file': str(root / 'client_key'),
+                    'known_hosts_file': str(known), 'health_check_interval_ms': 250,
+                    'health_check_timeout_ms': 1000, 'startup_timeout_ms': 15000,
+                    'restart_initial_delay_ms': 250, 'restart_max_delay_ms': 1000,
+                    'max_restarts': 3, 'verbose_diagnostics': False}
+                supervisor = abi.call('fb_ssh_create_json', settings)['ssh_id']
+                abi.call('fb_ssh_start_json', supervisor)
+                def snapshot():
+                    return abi.call('fb_ssh_snapshot_json', supervisor)['status']
+                def client_ready():
+                    status = snapshot()
+                    require(status['state'] != 'failed', 'SSH supervisor failed')
+                    return status['state'] == 'ready' and status['pid']
+                until(client_ready, seconds=30)
+                initial_pid = snapshot()['pid']
+                endpoint = {'host': '127.0.0.1', 'port': socks_port}
+                profile = {'version': 1, 'listen': f'127.0.0.1:{ingress}',
+                    'proxies': [{'id': 'ssh', 'kind': 'socks5', 'endpoint': endpoint}], 'chains': [],
+                    'rules': [], 'default_action': {'type': 'proxy', 'id': 'ssh'}, 'max_connections': 8,
+                    'connect_timeout_ms': 5000, 'handshake_timeout_ms': 5000, 'idle_timeout_ms': 30000}
+                engine = abi.call('fb_engine_create_json', profile)['engine_id']
+                def gate(allow):
+                    abi.call('fb_engine_set_upstream_gate_json', engine, {
+                        'endpoint': endpoint, 'ready': allow, 'grace_ms': 0,
+                        'limits': {'max_flows': 4, 'max_opening': 2, 'max_queued': 4, 'wait_timeout_ms': 200}})
+                gate(True)
+                abi.call('fb_engine_start_json', engine)
+                round_trip(ingress, echo.server_address[1])
+                result['actual_supervised_ssh_authenticated'] = True
+                def probe(expect_denied, source='self'):
+                    result['pending_step'] = 'validate_canary_request'
+                    require(source in ('self', 'rust-child', 'powershell', 'external-powershell'),
+                            'Unrecognized native lab client')
+                    consents = {'self': 'NATIVE_SELF_SOCKET_TCP_REFLECT',
+                                'rust-child': 'NATIVE_SPAWNED_CHILD_TCP_REFLECT',
+                                'powershell': 'NATIVE_POWERSHELL_CHILD_TCP_REFLECT',
+                                'external-powershell': 'NATIVE_UNRELATED_OS_POWERSHELL_TCP_REFLECT'}
+                    request = {'adapter_name': context['adapter_name'], 'local_ipv4': context['local_ipv4'],
+                        'target': f'{target}:80', 'upstream': f'127.0.0.1:{ingress}',
+                        'duration_ms': 12000, 'consent': consents[source],
+                        'spawned_child': source == 'rust-child',
+                        'powershell_child': source == 'powershell',
+                        'expect_denied': expect_denied}
+                    if source == 'external-powershell':
+                        # Sibling to Rust agent: QA owns process creation/lifetime.
+                        # Neither PID nor ephemeral ports are saved in reports.
+                        result['pending_step'] = 'create_independent_signed_process'
+                        with ExternalPowerShellCanary(context['local_ipv4'], target) as external:
+                            request['external_client'] = external.request()
+                            result['pending_step'] = 'native_agent_execution'
+                            proc = subprocess.run([str(args.agent.resolve()), 'native-self-redirect', json.dumps(request)],
+                                capture_output=True, text=True, encoding='utf-8', timeout=20, check=False)
+                            result['pending_step'] = 'independent_process_exit'
+                            external.await_exit()
+                    else:
+                        proc = subprocess.run([str(args.agent.resolve()), 'native-self-redirect', json.dumps(request)],
+                            capture_output=True, text=True, encoding='utf-8', timeout=20, check=False)
+                    result['pending_step'] = 'parse_native_report'
+                    report = json.loads(proc.stdout)
+                    require(isinstance(report, dict), 'No structured agent report')
+                    report['process_exit_code'] = proc.returncode
+                    return report
+                phases = [('connected', False, 'self'), ('gate_closed', True, 'self'),
+                          ('recovered', False, 'self'), ('child_connected', False, 'rust-child'),
+                          ('child_gate_closed', True, 'rust-child'),
+                          ('child_recovered', False, 'rust-child'),
+                          ('powershell_connected', False, 'powershell'),
+                          ('powershell_gate_closed', True, 'powershell'),
+                          ('powershell_recovered', False, 'powershell'),
+                          ('unrelated_connected', False, 'external-powershell'),
+                          ('unrelated_gate_closed', True, 'external-powershell'),
+                          ('unrelated_recovered', False, 'external-powershell')]
+                for phase, deny, source in phases:
+                    result['pending_phase'] = phase
+                    result['pending_step'] = 'upstream_gate'
+                    gate(not deny)
+                    report = probe(deny, source)
+                    result[phase] = report
+                    result['driver_was_used'] = result['driver_was_used'] or report.get('actual_ndisrd_tunnel') is True
+                    require(report.get('rollback_confirmed') is True, 'Native adapter rollback not confirmed')
+                    require(report.get('passed') is True and report.get('process_exit_code') == 0,
+                            f'Native {phase} canary did not satisfy all gates')
+                    require(report.get('selected_original_frames_sent_to_adapter') == 0,
+                            'Selected original packet escaped to physical adapter')
+                    evidence_field = {'self': 'self_owned_socket_pid_epoch_consistent',
+                                      'rust-child': 'spawned_child_socket_pid_epoch_consistent',
+                                      'powershell': 'powershell_child_socket_pid_epoch_consistent',
+                                      'external-powershell': 'external_sibling_socket_pid_epoch_consistent'}[source]
+                    require(report.get(evidence_field) is True,
+                            'Expected pinned live process epoch not confirmed')
+                    if source != 'self':
+                        require(report.get('self_owned_socket_pid_epoch_consistent') is False,
+                                'Child flow was incorrectly reported as parent-owned')
+                        authority = {
+                            'rust-child': 'parent_spawned_child_live_process_and_bound_port_not_general_packetbound',
+                            'powershell': 'parent_spawned_os_powershell_client_and_bound_port_not_general_packetbound',
+                            'external-powershell': 'independently_launched_fixed_os_powershell_bound_socket_not_packetbound',
+                        }[source]
+                        if source == 'external-powershell':
+                            require(report.get('external_process_exit_confirmed') is True,
+                                    'Unrelated process must exit before restoring normal networking')
+                        require(report.get('source_authority') == authority,
+                                'Cross-runtime evidence authority exaggerated')
+                    require(report.get('arbitrary_app_owner_binding_accepted') is False and
+                            report.get('native_owner_binding_accepted') is False,
+                            'Cannot promote a controlled canary to PacketBound')
+                    require(report.get('release_accepted') is False, 'False release claim')
+                    result.pop('pending_phase', None)
+                    result.pop('pending_step', None)
+                require(snapshot()['pid'] == initial_pid, 'SSH restarted unexpectedly')
+                result['same_supervised_ssh_across_failure_recovery'] = True
+                result['native_self_owned_tcp_to_real_socks_ssh_verified'] = True
+                result['native_spawned_child_tcp_to_real_socks_ssh_verified'] = True
+                result['native_system_powershell_tcp_to_real_socks_ssh_verified'] = True
+                result['native_unrelated_powershell_tcp_to_real_socks_ssh_verified'] = True
+                result['general_packet_pid_proof'] = False
+                result['arbitrary_selected_app_accepted'] = False
+                result['passed'] = True
+    except Exception as exc:
+        result['error_class'] = type(exc).__name__
+        result['error'] = str(exc) if isinstance(exc, AssertionError) else 'Native harness failed; inspect stage reports'
+        raise
+    finally:
+        if engine: abi.lib.fb_engine_destroy(engine)
+        if supervisor: abi.lib.fb_ssh_destroy(supervisor)
+        if daemon and daemon.poll() is None:
+            subprocess.run(['taskkill', '/PID', str(daemon.pid), '/T', '/F'], capture_output=True, timeout=15, check=False)
+            daemon.wait(timeout=10)
+        echo.shutdown(); echo.server_close(); echo_thread.join(timeout=3)
+        args.output.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
+        print(json.dumps({'native_self_redirect': result}), flush=True)
+        temporary.cleanup()
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except Exception:
+        print('Native self-redirect check failed; sanitized evidence is retained.', file=sys.stderr)
+        sys.exit(1)

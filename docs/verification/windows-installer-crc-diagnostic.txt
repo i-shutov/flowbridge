@@ -1,0 +1,4 @@
+Unchanged real generated uninstaller copied to C:\users\root\Temp\FlowBridgeUninstallSmoke.exe.
+Normal /S _?=C:\FlowBridgeSmokeInstall returned0 with no known payload deletion; see windows-installer-direct-section.txt.
+Diagnostic /NCRC /S _?=C:\FlowBridgeSmokeInstall returned0 and program executables, DLL, license, README and original uninstaller were then absent.
+This diagnostic bypass is NOT counted as a passing normal uninstall.

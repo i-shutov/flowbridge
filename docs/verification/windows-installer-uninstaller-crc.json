@@ -1,0 +1,10 @@
+{
+  "path": "/workspace/scratch/78d80ff877dc/installer-wine/drive_c/users/root/Temp/FlowBridgeUninstallSmoke.exe",
+  "bytes": 131135,
+  "sha256": "832e7162b954523f27054e20467662251c8e3d82a1c279fc91877aef40069a1b",
+  "last16": "1dcc5075a8c027ffccf96127cf43bba6",
+  "footer_le": 2797290447,
+  "crc32_skip512_exclude_footer": 2797290447,
+  "crc32_whole_exclude_footer": 37867313,
+  "nullsoft_header_offset": 115720
+}

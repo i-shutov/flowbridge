@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0-internal-beta",
+  "normal_installer_includes_capture_helper": true,
+  "normal_installer_includes_wfp_driver": false,
+  "read_only_driver_preflight_available": true,
+  "real_driver_loaded_in_hosted_ci": false,
+  "actual_wfp_redirect_verified_in_hosted_ci": false,
+  "vm_redirect_acceptance_requires_self_hosted_windows": true,
+  "status": "development_not_public_release",
+  "gui_profile_sha256_pinned": true,
+  "helper_revalidates_profile_before_wfp": true,
+  "elevated_profile_integrity_is_authentication": false,
+  "dual_stack_wfp_vm_runtime_test_prepared": true,
+  "user_owned_gui_engine_wfp_vm_test_prepared": true,
+  "real_dual_stack_wfp_redirect_verified": false,
+  "real_user_owner_wfp_route_verified": false,
+  "real_openssh_over_wfp_verified": false,
+  "remote_dns_leak_qa_complete": false
+}

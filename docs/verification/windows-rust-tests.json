@@ -1,0 +1,21 @@
+{
+  "command": [
+    "xvfb-run",
+    "-a",
+    "cargo",
+    "test",
+    "--locked",
+    "--offline",
+    "--target",
+    "x86_64-pc-windows-gnu",
+    "-p",
+    "flowbridge-ffi",
+    "-p",
+    "flowbridge-tunnel",
+    "--",
+    "--test-threads=1"
+  ],
+  "execution_environment": "Wine64 on Linux, not native Windows",
+  "exit_code": 0,
+  "timestamp": "2026-10-28T10:37:48.859454+00:00"
+}

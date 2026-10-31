@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "listen": "127.0.0.1:1081",
+  "proxies": [
+    { "id": "ssh", "kind": "socks5", "endpoint": { "host": "127.0.0.1", "port": 1080 }, "username": null, "password_env": null }
+  ],
+  "chains": [],
+  "rules": [
+    { "id": "loopback", "enabled": true, "applications": [], "hosts": [], "networks": ["127.0.0.0/8", "::1/128"], "ports": [], "action": { "type": "direct" } },
+    { "id": "localhost", "enabled": true, "applications": [], "hosts": ["localhost", "*.localhost"], "networks": [], "ports": [], "action": { "type": "direct" } }
+  ],
+  "default_action": { "type": "proxy", "id": "ssh" },
+  "connect_timeout_ms": 10000,
+  "handshake_timeout_ms": 10000,
+  "idle_timeout_ms": 300000,
+  "max_connections": 512
+}
