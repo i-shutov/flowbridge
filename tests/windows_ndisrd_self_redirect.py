@@ -22,6 +22,7 @@ import threading
 
 from ssh_real_integration import ABI, Echo, Server, free_port, require, until, round_trip
 from windows_real_ssh_hosted import secure_test_file
+from windows_external_powershell_lab import ExternalPowerShellCanary
 
 
 def digest(path: Path) -> str:
@@ -139,18 +140,29 @@ def main() -> None:
                 round_trip(ingress, echo.server_address[1])
                 result['actual_supervised_ssh_authenticated'] = True
                 def probe(expect_denied, source='self'):
-                    require(source in ('self', 'rust-child', 'powershell'), 'Unrecognized native lab client')
+                    require(source in ('self', 'rust-child', 'powershell', 'external-powershell'),
+                            'Unrecognized native lab client')
                     consents = {'self': 'NATIVE_SELF_SOCKET_TCP_REFLECT',
                                 'rust-child': 'NATIVE_SPAWNED_CHILD_TCP_REFLECT',
-                                'powershell': 'NATIVE_POWERSHELL_CHILD_TCP_REFLECT'}
+                                'powershell': 'NATIVE_POWERSHELL_CHILD_TCP_REFLECT',
+                                'external-powershell': 'NATIVE_UNRELATED_OS_POWERSHELL_TCP_REFLECT'}
                     request = {'adapter_name': context['adapter_name'], 'local_ipv4': context['local_ipv4'],
                         'target': f'{target}:80', 'upstream': f'127.0.0.1:{ingress}',
                         'duration_ms': 12000, 'consent': consents[source],
                         'spawned_child': source == 'rust-child',
                         'powershell_child': source == 'powershell',
                         'expect_denied': expect_denied}
-                    proc = subprocess.run([str(args.agent.resolve()), 'native-self-redirect', json.dumps(request)],
-                        capture_output=True, text=True, encoding='utf-8', timeout=20, check=False)
+                    if source == 'external-powershell':
+                        # Sibling to Rust agent: QA owns process creation/lifetime.
+                        # Neither PID nor ephemeral ports are saved in reports.
+                        with ExternalPowerShellCanary(context['local_ipv4'], target) as external:
+                            request['external_client'] = external.request()
+                            proc = subprocess.run([str(args.agent.resolve()), 'native-self-redirect', json.dumps(request)],
+                                capture_output=True, text=True, encoding='utf-8', timeout=20, check=False)
+                            external.await_exit()
+                    else:
+                        proc = subprocess.run([str(args.agent.resolve()), 'native-self-redirect', json.dumps(request)],
+                            capture_output=True, text=True, encoding='utf-8', timeout=20, check=False)
                     report = json.loads(proc.stdout)
                     require(isinstance(report, dict), 'No structured agent report')
                     report['process_exit_code'] = proc.returncode
@@ -161,7 +173,10 @@ def main() -> None:
                           ('child_recovered', False, 'rust-child'),
                           ('powershell_connected', False, 'powershell'),
                           ('powershell_gate_closed', True, 'powershell'),
-                          ('powershell_recovered', False, 'powershell')]
+                          ('powershell_recovered', False, 'powershell'),
+                          ('unrelated_connected', False, 'external-powershell'),
+                          ('unrelated_gate_closed', True, 'external-powershell'),
+                          ('unrelated_recovered', False, 'external-powershell')]
                 for phase, deny, source in phases:
                     gate(not deny)
                     report = probe(deny, source)
@@ -174,15 +189,21 @@ def main() -> None:
                             'Selected original packet escaped to physical adapter')
                     evidence_field = {'self': 'self_owned_socket_pid_epoch_consistent',
                                       'rust-child': 'spawned_child_socket_pid_epoch_consistent',
-                                      'powershell': 'powershell_child_socket_pid_epoch_consistent'}[source]
+                                      'powershell': 'powershell_child_socket_pid_epoch_consistent',
+                                      'external-powershell': 'external_sibling_socket_pid_epoch_consistent'}[source]
                     require(report.get(evidence_field) is True,
                             'Expected pinned live process epoch not confirmed')
                     if source != 'self':
                         require(report.get('self_owned_socket_pid_epoch_consistent') is False,
                                 'Child flow was incorrectly reported as parent-owned')
-                        authority = ('parent_spawned_child_live_process_and_bound_port_not_general_packetbound'
-                                     if source == 'rust-child' else
-                                     'parent_spawned_os_powershell_client_and_bound_port_not_general_packetbound')
+                        authority = {
+                            'rust-child': 'parent_spawned_child_live_process_and_bound_port_not_general_packetbound',
+                            'powershell': 'parent_spawned_os_powershell_client_and_bound_port_not_general_packetbound',
+                            'external-powershell': 'independently_launched_fixed_os_powershell_bound_socket_not_packetbound',
+                        }[source]
+                        if source == 'external-powershell':
+                            require(report.get('external_process_exit_confirmed') is True,
+                                    'Unrelated process must exit before restoring normal networking')
                         require(report.get('source_authority') == authority,
                                 'Cross-runtime evidence authority exaggerated')
                     require(report.get('arbitrary_app_owner_binding_accepted') is False and
@@ -194,6 +215,7 @@ def main() -> None:
                 result['native_self_owned_tcp_to_real_socks_ssh_verified'] = True
                 result['native_spawned_child_tcp_to_real_socks_ssh_verified'] = True
                 result['native_system_powershell_tcp_to_real_socks_ssh_verified'] = True
+                result['native_unrelated_powershell_tcp_to_real_socks_ssh_verified'] = True
                 result['general_packet_pid_proof'] = False
                 result['arbitrary_selected_app_accepted'] = False
                 result['passed'] = True

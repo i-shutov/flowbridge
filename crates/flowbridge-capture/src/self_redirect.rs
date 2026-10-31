@@ -18,6 +18,17 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 
+/// Process launched by the QA orchestrator, not by the Rust agent. This is
+/// only a bounded external OS canary; PID/port supplied by a caller never
+/// becomes a general-purpose kernel packet ownership capability.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExternalClient {
+    pub pid: u32,
+    pub source_port: u16,
+    pub control_port: u16,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Request {
@@ -33,16 +44,31 @@ pub struct Request {
     pub spawned_child: bool,
     #[serde(default)]
     pub powershell_child: bool,
+    #[serde(default)]
+    pub external_client: Option<ExternalClient>,
 }
 
 impl Request {
     pub(crate) fn validate(&self) -> Result<(), String> {
-        // Only an explicitly identified parent-controlled laboratory client is
-        // accepted. No arbitrary executable path or PID can be supplied.
-        if self.spawned_child && self.powershell_child {
-            return Err("Conflicting native laboratory child types".into());
+        // The external case is restricted to one independently launched,
+        // fixed in-box PowerShell canary, pinned to its live process object.
+        // It deliberately grants NO general PID/PacketBound authority.
+        if (self.spawned_child && self.powershell_child)
+            || (self.external_client.is_some() && (self.spawned_child || self.powershell_child))
+        {
+            return Err("Conflicting native laboratory client types".into());
         }
-        let required_consent = if self.powershell_child {
+        if self.external_client.as_ref().is_some_and(|client| {
+            client.pid == 0
+                || client.source_port < 1024
+                || client.control_port < 1024
+                || client.source_port == client.control_port
+        }) {
+            return Err("Invalid independent canary PID or bounded ports".into());
+        }
+        let required_consent = if self.external_client.is_some() {
+            "NATIVE_UNRELATED_OS_POWERSHELL_TCP_REFLECT"
+        } else if self.powershell_child {
             "NATIVE_POWERSHELL_CHILD_TCP_REFLECT"
         } else if self.spawned_child {
             "NATIVE_SPAWNED_CHILD_TCP_REFLECT"
@@ -349,6 +375,7 @@ mod tests {
             expect_denied: false,
             spawned_child: false,
             powershell_child: false,
+            external_client: None,
         };
         assert!(r.validate().is_ok());
         r.upstream = "192.0.2.7:1080".parse().unwrap();
@@ -375,6 +402,20 @@ mod tests {
             r.validate().is_err(),
             "PowerShell consent never grants self socket"
         );
+        r.external_client = Some(ExternalClient {
+            pid: 4200,
+            source_port: 49152,
+            control_port: 49153,
+        });
+        r.consent = "NATIVE_UNRELATED_OS_POWERSHELL_TCP_REFLECT".into();
+        assert!(r.validate().is_ok(), "bounded independent canary needs distinct consent");
+        r.external_client.as_mut().unwrap().control_port = 49152;
+        assert!(r.validate().is_err(), "duplicate control/source port is not safe");
+        r.external_client.as_mut().unwrap().control_port = 49153;
+        r.powershell_child = true;
+        assert!(r.validate().is_err(), "cannot mix independent and spawned clients");
+        r.powershell_child = false;
+        r.external_client = None;
         r.spawned_child = true;
         r.consent = "NATIVE_SPAWNED_CHILD_TCP_REFLECT".into();
         r.target = "127.0.0.1:80".parse().unwrap();

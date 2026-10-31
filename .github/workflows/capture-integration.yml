@@ -50,19 +50,23 @@ jobs:
       - name: Windows genuine signed PowerShell client pre-GO rejection and HTTP half-close
         if: runner.os == 'Windows'
         run: python tests/windows_powershell_lab_client.py --source crates/flowbridge-capture/src/windows_self_redirect.rs --output build/capture-candidate/powershell-client-lifecycle.json
+      - name: Windows unrelated signed OS PowerShell process with loopback GO denial and HTTP
+        if: runner.os == 'Windows'
+        run: python tests/windows_external_powershell_lab.py --output build/capture-candidate/unrelated-powershell-lifecycle.json
       - name: Build separately allowlisted native-test FFI and original harness (not product payload)
         if: runner.os == 'Windows'
         shell: bash
         run: |
           cargo build --locked --release -p flowbridge-ffi
-          python -m py_compile tests/windows_ndisrd_self_redirect.py
+          python -m py_compile tests/windows_ndisrd_self_redirect.py tests/windows_external_powershell_lab.py
           python - <<'PY'
           import hashlib, json, os, pathlib, shutil, subprocess
           root = pathlib.Path('build/native-self-tools')
           root.mkdir(parents=True, exist_ok=True)
           sources = [pathlib.Path('target/release/flowbridge_ffi.dll')]
           sources += [pathlib.Path('tests') / name for name in (
-              'windows_ndisrd_self_redirect.py', 'ssh_real_integration.py',
+              'windows_ndisrd_self_redirect.py', 'windows_external_powershell_lab.py',
+              'windows_powershell_lab_client.py', 'ssh_real_integration.py',
               'windows_real_ssh_hosted.py', 'windows_openssh_capacity_vm.py',
               'windows_ssh_probe_core.py', 'real_ssh_capacity.py', 'churn_pacing.py')]
           hashes = {}

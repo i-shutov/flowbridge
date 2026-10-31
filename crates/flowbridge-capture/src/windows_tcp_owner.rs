@@ -18,7 +18,8 @@ use windows_sys::Win32::NetworkManagement::IpHelper::{
 };
 use windows_sys::Win32::Networking::WinSock::{AF_INET, AF_INET6};
 use windows_sys::Win32::System::Threading::{
-    GetProcessTimes, OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
+    GetExitCodeProcess, GetProcessTimes, OpenProcess, QueryFullProcessImageNameW,
+    PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
 const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
@@ -75,6 +76,18 @@ impl OwnedProcess {
 
     pub fn evidence(&self) -> Result<ProcessEvidence, String> {
         process_evidence(self.handle, self.pid)
+    }
+
+    /// Pinned process-object liveness, never a PID-only check. Used solely to
+    /// require the unrelated laboratory TCP client to exit before adapter
+    /// mode 0 can re-enable ordinary direct networking.
+    pub fn is_active(&self) -> Result<bool, String> {
+        let mut code = 0u32;
+        // SAFETY: This handle has PROCESS_QUERY_LIMITED_INFORMATION rights.
+        if unsafe { GetExitCodeProcess(self.handle, &mut code) } == 0 {
+            return Err("Pinned process exit status unavailable".into());
+        }
+        Ok(code == 259) // STILL_ACTIVE
     }
 }
 

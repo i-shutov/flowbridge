@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::net::{TcpListener, TcpSocket};
+use tokio::net::{TcpListener, TcpSocket, TcpStream};
 use tokio::process::{Child, ChildStdout, Command};
 use tokio::sync::watch;
 
@@ -152,6 +152,7 @@ struct SpawnedClient {
 enum ClientSource {
     SelfSocket(TcpSocket),
     Spawned(Box<SpawnedClient>),
+    ExternalControl(u16),
 }
 
 pub(super) fn run(request: Request) -> Result<Value, String> {
@@ -300,6 +301,79 @@ async fn exercise_child(
     probe
 }
 
+
+/// Drive an independently launched Windows PowerShell process through its
+/// loopback-only GO control channel. The agent never creates that process,
+/// holds only a query-only pinned OS handle, and cannot claim PacketBound.
+async fn exercise_external(
+    control_port: u16,
+    listener: TcpListener,
+    peer: SocketAddr,
+    request_target: SocketAddr,
+    pool: RelayPool,
+    stop: watch::Receiver<bool>,
+    deadline: Duration,
+) -> Probe {
+    let connected = Arc::new(AtomicBool::new(false));
+    let denied = Arc::new(AtomicBool::new(false));
+    let up = connected.clone();
+    let down = denied.clone();
+    let client = async move {
+        let mut channel = TcpStream::connect(SocketAddr::from(([127, 0, 0, 1], control_port)))
+            .await
+            .map_err(|_| ())?;
+        channel.write_all(b"go\n").await.map_err(|_| ())?;
+        channel.flush().await.map_err(|_| ())?;
+        let mut line = String::new();
+        let length = BufReader::new(channel)
+            .read_line(&mut line)
+            .await
+            .map_err(|_| ())?;
+        if length == 0 || length > 256 {
+            return Err(());
+        }
+        let report: Value = serde_json::from_str(&line).map_err(|_| ())?;
+        if report["ok"] != true {
+            return Err(());
+        }
+        report["bytes"].as_u64().ok_or(())
+    };
+    let forwarding = async move {
+        let (native, accepted_peer) = listener.accept().await.map_err(|_| ())?;
+        if accepted_peer != peer {
+            return Err(());
+        }
+        let endpoint = Endpoint {
+            host: request_target.ip().to_string(),
+            port: request_target.port(),
+        };
+        let upstream = match pool.connect(&endpoint, stop).await {
+            Ok(value) => {
+                up.store(true, Ordering::SeqCst);
+                value
+            }
+            Err(_) => {
+                down.store(true, Ordering::SeqCst);
+                return Err(());
+            }
+        };
+        upstream.forward(native).await.map_err(|_| ())
+    };
+    let results = tokio::time::timeout(deadline, async { tokio::join!(client, forwarding) }).await;
+    let mut probe = Probe {
+        upstream_connected: connected.load(Ordering::SeqCst),
+        upstream_failed: denied.load(Ordering::SeqCst),
+        ..Probe::default()
+    };
+    if let Ok((Ok(received), Ok((sent, relayed)))) = results {
+        probe.valid_http_reply = true;
+        probe.sent = sent;
+        probe.received = received;
+        probe.bytes_match = sent == REQUEST.len() as u64 && relayed == received && received > 0;
+    }
+    probe
+}
+
 async fn native(request: Request) -> Result<Value, String> {
     // A UDP connect chooses a route but sends no datagram. Never discover local
     // address by sending application data before the diversion has been armed.
@@ -337,7 +411,31 @@ async fn native(request: Request) -> Result<Value, String> {
     {
         return Err("Exact Ethernet adapter/MTU prerequisite failed".into());
     }
-    let (local, source, process) = if request.spawned_child || request.powershell_child {
+    let (local, source, process) = if let Some(external) = &request.external_client {
+        if external.pid == std::process::id() {
+            return Err("Unrelated canary cannot be this Rust agent".into());
+        }
+        let pinned = OwnedProcess::query(external.pid)?;
+        let identity = pinned.evidence()?;
+        let root = std::env::var_os("SystemRoot")
+            .ok_or("Fixed Windows system directory unavailable")?;
+        let expected = std::path::PathBuf::from(root)
+            .join("System32")
+            .join("WindowsPowerShell")
+            .join("v1.0")
+            .join("powershell.exe");
+        if !identity
+            .path
+            .eq_ignore_ascii_case(&expected.to_string_lossy())
+        {
+            return Err("Independent canary must be the fixed OS PowerShell binary".into());
+        }
+        (
+            SocketAddr::new(request.local_ipv4.into(), external.source_port),
+            ClientSource::ExternalControl(external.control_port),
+            pinned,
+        )
+    } else if request.spawned_child || request.powershell_child {
         let mut command = if request.powershell_child {
             // Fixed system executable, never a user-specified command.
             // Private native QA checks its Microsoft Authenticode signature.
@@ -474,6 +572,15 @@ async fn native(request: Request) -> Result<Value, String> {
             stop_rx,
             deadline,
         )),
+        ClientSource::ExternalControl(port) => tokio::spawn(exercise_external(
+            port,
+            listener,
+            reflect.peer,
+            original.destination,
+            pool,
+            stop_rx,
+            deadline,
+        )),
     };
     // No await between spawn and mode activation: on the current-thread
     // runtime the client cannot send SYN before TUNNEL_BOTH was confirmed.
@@ -536,6 +643,27 @@ async fn native(request: Request) -> Result<Value, String> {
     // cannot retry DIRECT after teardown. This is not a crash-persistent policy.
     let probe = (&mut worker).await.unwrap_or_default();
     let _ = stop_tx.send(true);
+    // Unlike spawned children, the unrelated OS canary cannot be killed by
+    // this agent. The exact pinned process must exit BEFORE restoring ordinary
+    // DIRECT-capable mode 0. Keep pumping unselected traffic while waiting.
+    // A timeout fails this trial; an independent SYSTEM rescue remains required.
+    let mut external_exited = request.external_client.is_none();
+    if !external_exited {
+        let exit_started = Instant::now();
+        while exit_started.elapsed() < Duration::from_secs(2) {
+            if matches!(process.is_active(), Ok(false)) {
+                external_exited = true;
+                break;
+            }
+            if let Err(error) = session.poll_lab_redirect(128, &mut |packet| {
+                Ok(reflect.decide(packet, &mut || false))
+            }) {
+                fault = Some(error.to_string());
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+    }
     let stats = session.stats();
     let cleanup = session.close();
     let transport = if request.expect_denied {
@@ -549,6 +677,7 @@ async fn native(request: Request) -> Result<Value, String> {
     let passed = fault.is_none()
         && cleanup.is_ok()
         && native_candidate_checked
+        && external_exited
         && reflect.counters.owner_checked
         && reflect.counters.client_reflected > 0
         && transport
@@ -568,7 +697,11 @@ async fn native(request: Request) -> Result<Value, String> {
         "self_owned_socket_pid_epoch_consistent":native_candidate_checked && !request.spawned_child && !request.powershell_child,
         "spawned_child_socket_pid_epoch_consistent":native_candidate_checked && request.spawned_child,
         "powershell_child_socket_pid_epoch_consistent":native_candidate_checked && request.powershell_child,
-        "source_authority":if request.powershell_child {
+        "external_sibling_socket_pid_epoch_consistent":native_candidate_checked && request.external_client.is_some(),
+        "external_process_exit_confirmed":external_exited,
+        "source_authority":if request.external_client.is_some() {
+            "independently_launched_fixed_os_powershell_bound_socket_not_packetbound"
+        } else if request.powershell_child {
             "parent_spawned_os_powershell_client_and_bound_port_not_general_packetbound"
         } else if request.spawned_child {
             "parent_spawned_child_live_process_and_bound_port_not_general_packetbound"
@@ -585,6 +718,6 @@ async fn native(request: Request) -> Result<Value, String> {
         "protected_redirect_available":false, "dns_leak_free":false,
         "win10_11_acceptance":false, "release_accepted":false,
         "payload_or_process_identity_logged":false,
-        "note":"Controlled parent/Rust child/OS PowerShell child IPv4 canaries only. Neither authorizes arbitrary PID capture. Caller must attest real SSH and independent rescue. Mode 0 is ordinary networking, not a kill switch."
+        "note":"Controlled parent, Rust child, OS PowerShell child and independently launched OS PowerShell IPv4 canaries only. IP Helper is NOT PacketBound. Unrelated canary must exit before mode 0. Caller must attest independent rescue, signed driver and real SSH. Mode 0 is ordinary networking."
     }))
 }
