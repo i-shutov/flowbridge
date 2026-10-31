@@ -16,6 +16,7 @@
 pub mod capture_policy;
 pub mod ndis_ethernet;
 pub mod ndis_frame_tcp;
+pub mod tcp_flow_lease;
 pub mod tcp_packet;
 
 use std::collections::HashSet;
