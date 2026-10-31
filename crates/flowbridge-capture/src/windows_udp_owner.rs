@@ -13,8 +13,8 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
 use std::ptr::{null_mut, read_unaligned};
 use std::time::Duration;
 use windows_sys::Win32::NetworkManagement::IpHelper::{
-    GetExtendedUdpTable, MIB_UDP6ROW_OWNER_PID, MIB_UDP6TABLE_OWNER_PID,
-    MIB_UDPROW_OWNER_PID, MIB_UDPTABLE_OWNER_PID, UDP_TABLE_OWNER_PID,
+    GetExtendedUdpTable, MIB_UDP6ROW_OWNER_PID, MIB_UDP6TABLE_OWNER_PID, MIB_UDPROW_OWNER_PID,
+    MIB_UDPTABLE_OWNER_PID, UDP_TABLE_OWNER_PID,
 };
 use windows_sys::Win32::Networking::WinSock::{AF_INET, AF_INET6};
 
@@ -57,9 +57,8 @@ fn ipv6_row(row: MIB_UDP6ROW_OWNER_PID) -> UdpOwnerRow {
 fn read_table(af: u32) -> Result<(Vec<u32>, usize), String> {
     let mut needed = 0u32;
     // SAFETY: Null output requests only the buffer size.
-    let first = unsafe {
-        GetExtendedUdpTable(null_mut(), &mut needed, 0, af, UDP_TABLE_OWNER_PID, 0)
-    };
+    let first =
+        unsafe { GetExtendedUdpTable(null_mut(), &mut needed, 0, af, UDP_TABLE_OWNER_PID, 0) };
     if first != ERROR_INSUFFICIENT_BUFFER || needed < 4 {
         return Err(format!("UDP IP Helper sizing failed: {first}"));
     }
@@ -119,20 +118,14 @@ fn decode_rows<R: Copy>(
     for index in 0..count {
         let at = offset + index * row_bytes;
         // SAFETY: Checked the complete count*size+offset; row may be unaligned.
-        let row = unsafe {
-            read_unaligned(words.as_ptr().cast::<u8>().add(at).cast::<R>())
-        };
+        let row = unsafe { read_unaligned(words.as_ptr().cast::<u8>().add(at).cast::<R>()) };
         rows.push(convert(row));
     }
     Ok(rows)
 }
 
 fn snapshot(local: SocketAddr) -> Result<Vec<UdpOwnerRow>, String> {
-    let af = if local.is_ipv4() {
-        AF_INET
-    } else {
-        AF_INET6
-    } as u32;
+    let af = if local.is_ipv4() { AF_INET } else { AF_INET6 } as u32;
     let (bytes, used) = read_table(af)?;
     if local.is_ipv4() {
         decode_rows(
@@ -200,8 +193,8 @@ fn stable_candidate(local: SocketAddr) -> Result<Option<ProcessEvidence>, String
 }
 
 fn assert_self_owned(local: SocketAddr) -> Result<(), String> {
-    let candidate = stable_candidate(local)?
-        .ok_or("Active UDP socket has no stable local-bind candidate")?;
+    let candidate =
+        stable_candidate(local)?.ok_or("Active UDP socket has no stable local-bind candidate")?;
     if candidate.pid != std::process::id()
         || candidate.created_100ns == 0
         || candidate.path.is_empty()
@@ -315,7 +308,17 @@ mod tests {
             dwOwningPid: 43,
         });
         assert_eq!(v6.local, "[::1]:4660".parse().unwrap());
-        assert_ne!(unique_pid(&[UdpOwnerRow { local: v4.local, pid: 42 }], v6.local).unwrap(), Some(42));
+        assert_ne!(
+            unique_pid(
+                &[UdpOwnerRow {
+                    local: v4.local,
+                    pid: 42
+                }],
+                v6.local
+            )
+            .unwrap(),
+            Some(42)
+        );
     }
 
     #[test]
