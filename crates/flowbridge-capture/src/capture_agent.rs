@@ -11,8 +11,9 @@ pub fn capabilities() -> Value {
         "ndisrd_separately_installed":true, "proxifyre_required":false,
         "vendor_driver_bundled":false, "custom_wfp_required":false,
         "native_owner_binding_accepted":false, "protected_redirect_available":false,
+        "foreground_control_ipc_available":cfg!(windows), "scm_service_available":false,
         "dns_leak_free":false, "release_accepted":false,
-        "modes":["status","observe_lab","passthrough_lab","relay_loopback_probe"],
+        "modes":["status","observe_lab","passthrough_lab","relay_loopback_probe","foreground_explicit_socks_control"],
         "abi":{"adapters":ndis_wire::ADAPTER_LIST_BYTES,"mode":ndis_wire::MODE_BYTES,
             "request":ndis_wire::REQUEST_BYTES,"packet_header":ndis_wire::PACKET_HEADER_BYTES,
             "packet_capacity":ndis_wire::PACKET_BUFFER_BYTES}

@@ -38,6 +38,9 @@ jobs:
           suffix=""; if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=".exe"; fi
           python tools/capture_candidate.py verify --agent "target/release/flowbridge-agent${suffix}" --output build/capture-candidate/verification.json
           python tools/capture_candidate.py package --agent "target/release/flowbridge-agent${suffix}" --cli "target/release/flowbridge${suffix}" --output "build/capture-candidate/FlowBridge-Rust-Candidate-${RUNNER_OS}.zip"
+      - name: Windows restricted named-pipe and live explicit SOCKS lifecycle
+        if: runner.os == 'Windows'
+        run: python tests/windows_capture_control.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/control-lifecycle.json
       - name: Verify formatting (never auto-commit or waive failure)
         if: always()
         run: cargo fmt --all -- --check

@@ -130,3 +130,43 @@ An aborted async SOCKS handshake additionally owns a pending-token guard: task
 cancellation is tested against an actual TCP/SOCKS handshake stalled before
 the CONNECT reply. Dropping that future must release the exact pending lease
 and capacity slot without a direct dial.
+
+## Windows foreground Rust control and explicit SOCKS lifecycle (R7 partial)
+
+The independent Rust agent additionally supports a bounded, LOCAL named-pipe
+control of the existing Rust SOCKS Engine in explicitly configured mode:
+
+```powershell
+flowbridge-agent.exe control-serve C:\path\to\explicit-profile.json
+# From another terminal, same user:
+flowbridge-agent.exe control status
+flowbridge-agent.exe control reload
+flowbridge-agent.exe control stop
+```
+
+The controller runs in the foreground as the invoking user, with a fixed named
+pipe. Windows security is enforced at pipe creation with an explicit protected
+ACL (SYSTEM, Administrators and pipe owner), rejects remote clients, requires
+the first pipe instance, bounds input/output frames and deadlines, and provides
+only three strict commands. Status contains bounded aggregate counters, NOT
+SSH credentials, client destinations, EXE paths or opaque kernel handles.
+No service registration, elevation, driver installation, SSH key acquisition
+or NDISRD interception is performed by this feature.
+
+The controller validates explicit SOCKS profiles, deliberately DENIES enabled
+application-specific rules because the source process is not attested by
+SOCKS5, and rejects live listener/capacity changes. An invalid reload leaves
+the running engine's configuration generation unchanged; a valid reload
+increments it. Stop closes the real listener and cancels its live connections.
+This is NOT a persistent fail-closed kernel barrier. Profiles can contain
+explicit DIRECT rules: the controller does not claim a security kill switch.
+
+Windows Server hosted CI adds an actual second-process named-pipe control
+test against an independently running Rust agent and real loopback SOCKS5
+handshake. It checks blocked target connectivity, failed reload rollback,
+successful hot reload and graceful stop; it writes SHA-tied JSON evidence into
+the allow-listed candidate CI artifact. Other platforms test protocol
+validations and real Rust Engine lifecycle without claiming native Windows
+driver evidence. An actual Windows SCM service, restricted unauthenticated
+GUI views, crash recovery, authenticated owner binding, selected-app packet
+capture, protected DNS/UDP and Win10/11 installation remain OPEN.
