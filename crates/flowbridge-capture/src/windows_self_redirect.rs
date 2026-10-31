@@ -66,7 +66,6 @@ try {
 } finally { $s.Dispose() }
 "#;
 
-
 #[derive(Default)]
 struct Probe {
     valid_http_reply: bool,
@@ -357,7 +356,10 @@ async fn native(request: Request) -> Result<Value, String> {
                 .arg("-Command")
                 .arg(POWERSHELL_CLIENT_SCRIPT)
                 .env("FLOWBRIDGE_LAB_LOCAL_IPV4", request.local_ipv4.to_string())
-                .env("FLOWBRIDGE_LAB_TARGET_IPV4", request.target.ip().to_string());
+                .env(
+                    "FLOWBRIDGE_LAB_TARGET_IPV4",
+                    request.target.ip().to_string(),
+                );
             command
         } else {
             let binary = std::env::current_exe()

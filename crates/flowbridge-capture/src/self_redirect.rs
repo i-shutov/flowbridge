@@ -366,9 +366,15 @@ mod tests {
         r.spawned_child = false;
         assert!(r.validate().is_err(), "consent must match child type");
         r.consent = "NATIVE_POWERSHELL_CHILD_TCP_REFLECT".into();
-        assert!(r.validate().is_ok(), "fixed system PowerShell lab client is permitted");
+        assert!(
+            r.validate().is_ok(),
+            "fixed system PowerShell lab client is permitted"
+        );
         r.powershell_child = false;
-        assert!(r.validate().is_err(), "PowerShell consent never grants self socket");
+        assert!(
+            r.validate().is_err(),
+            "PowerShell consent never grants self socket"
+        );
         r.spawned_child = true;
         r.consent = "NATIVE_SPAWNED_CHILD_TCP_REFLECT".into();
         r.target = "127.0.0.1:80".parse().unwrap();
