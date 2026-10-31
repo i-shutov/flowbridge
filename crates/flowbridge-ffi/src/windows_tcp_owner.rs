@@ -4,4 +4,4 @@
 //! may promote a racy table snapshot into packet-bound authority.
 #![cfg(windows)]
 
-pub(super) use flowbridge_capture::windows_tcp_owner::{lookup, OwnedProcess, OwnerQuery};
+pub(super) use flowbridge_capture::windows_tcp_owner::{lookup, OwnedProcess};
