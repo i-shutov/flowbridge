@@ -129,6 +129,10 @@ def main():
                         except OSError:
                             return False
                     until(ready, seconds=20)
+                    from ssh_banner_gate import real_authenticated_ssh
+                    report['banner_first_real_ssh'] = real_authenticated_ssh(
+                        Path('target/debug/flowbridge.exe'), args.ssh, root / 'client_key',
+                        known, user, ssh_port, echo.server_address[1], free_port())
                     settings = {'host':'127.0.0.1','port':ssh_port,'user':user,
                                 'local_port':socks_port,'ssh_executable':str(args.ssh),
                                 'identity_file':str(root/'client_key'), 'known_hosts_file':str(known),

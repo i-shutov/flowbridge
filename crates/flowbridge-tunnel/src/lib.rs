@@ -1,6 +1,7 @@
 //! Managed OpenSSH dynamic forwarding. No shell, password storage, terminal or
 //! implicit host-key enrollment. Unix callers must explicitly stop: abrupt parent
 //! process death can leave OpenSSH running. Windows uses a kill-on-close job.
+pub mod banner_gate;
 pub mod handshake_diagnostic;
 
 use serde::{Deserialize, Serialize};

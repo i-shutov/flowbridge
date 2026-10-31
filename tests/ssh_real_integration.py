@@ -217,6 +217,11 @@ def main(repetition=0):
                 except OSError:
                     return False
             until(listening, 10)
+            from ssh_banner_gate import real_authenticated_ssh
+            report['banner_first_real_ssh'] = real_authenticated_ssh(
+                Path('target/debug/flowbridge'), 'ssh', root / 'client_key', known,
+                getpass.getuser(), ssh_port, target_port, distinct_free_ports(1)[0])
+            passed('Rust banner-first adapter -> real authenticated OpenSSH -> binary SOCKS')
             settings = {'host': '127.0.0.1', 'port': ssh_port, 'user': getpass.getuser(),
                         'local_port': socks_port, 'verbose_diagnostics': False, 'identity_file': str(root / 'client_key'),
                         'known_hosts_file': str(known), 'server_alive_interval_secs': 15,

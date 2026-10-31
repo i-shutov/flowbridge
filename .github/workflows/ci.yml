@@ -53,12 +53,14 @@ jobs:
       - run: cargo build --locked --workspace
       - name: Real cross-process SSH identification A/B and no-consent denial
         run: python tests/ssh_banner_diagnostic.py --output build/verification/ssh-banner/result.json
+      - name: Real binary SSH banner-first transport, half-close and negative consent
+        run: python tests/ssh_banner_gate.py --output build/verification/ssh-banner/gate.json
       - name: Preserve SHA-tied SSH identification evidence
         if: always()
         uses: actions/upload-artifact@v7.0.0
         with:
           name: FlowBridge-ssh-banner-${{ matrix.os }}
-          path: build/verification/ssh-banner/result.json
+          path: build/verification/ssh-banner/*.json
           if-no-files-found: warn
           retention-days: 14
       - run: python tests/smoke.py

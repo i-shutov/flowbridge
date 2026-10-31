@@ -67,6 +67,15 @@ enum Command {
         #[arg(long)]
         consent: String,
     },
+    /// Experimental raw SSH server-banner-first ProxyCommand transport.
+    SshBannerGate {
+        #[arg(long)]
+        endpoint: std::net::SocketAddr,
+        #[arg(long, default_value_t = 3000)]
+        timeout_ms: u64,
+        #[arg(long)]
+        consent: String,
+    },
     /// Report actual available features. Does not claim OS interception is active.
     Capabilities,
 }
@@ -181,6 +190,20 @@ async fn run() -> AppResult<()> {
                 Duration::from_millis(timeout_ms),
             );
             println!("{}", serde_json::to_string_pretty(&report)?);
+        }
+        Command::SshBannerGate {
+            endpoint,
+            timeout_ms,
+            consent,
+        } => {
+            if consent != "BANNER_FIRST_EXPERIMENTAL" {
+                return Err("ssh-banner-gate requires exact experimental consent".into());
+            }
+            if !(100..=10000).contains(&timeout_ms) || endpoint.port() == 0 {
+                return Err("SSH banner gate timeout/port outside explicit bounds".into());
+            }
+            // Stdout MUST remain an unmodified binary SSH transport.
+            flowbridge_tunnel::banner_gate::run(endpoint, Duration::from_millis(timeout_ms))?;
         }
         Command::Capabilities => {
             println!(

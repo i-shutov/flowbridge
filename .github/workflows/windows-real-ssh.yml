@@ -41,7 +41,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Reject false-positive capacity probes
         run: python -m unittest discover -s tests -p test_windows_ssh_probe.py -v
-      - run: cargo build --locked -p flowbridge-ffi -p flowbridge-capture
+      - run: cargo build --locked -p flowbridge-ffi -p flowbridge-capture -p flowbridge-cli
       - name: Fetch pinned official sshd without installing a system service
         shell: pwsh
         run: |
