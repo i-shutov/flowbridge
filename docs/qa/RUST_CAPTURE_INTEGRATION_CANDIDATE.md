@@ -1,5 +1,32 @@
 # Rust capture integration candidate — NOT a protected beta or release
 
+## Windows reversible SCM staging/upgrade/removal candidate (pending exact-head CI)
+
+The original Rust agent now has explicit, admin-only Windows SCM operations:
+`service-stage <absolute config>`, `service-replace <old absolute config> <new absolute config>`,
+and `service-remove <absolute config>`. These are not invoked by packaging
+or ordinary startup. They manage ONLY the fixed on-demand candidate service
+`FlowBridgeRustCandidateCI`; no service is auto-started, no driver is
+installed or supplied, no NDISRD mode is changed, and no protected mode is
+enabled. Strict profile validation rejects application-specific SOCKS rules
+without packet ownership evidence and non-loopback SCM listeners. SCM install
+refuses any existing record. Upgrade requires the old exact binary command,
+an already STOPPED service, and a valid new profile, then verifies the
+changed SCM config and attempts rollback of the old command if verification
+fails. Removal requires a stopped service with EXACT prior executable and
+config path matching, refusing to delete a foreign/modified service. Status
+remains redacted and explicitly reports protected=false, dns_leak_free=false.
+
+A separate actual hosted Windows integration script must prove full
+stage -> SCM start -> live SOCKS5 -> running-upgrade refusal -> SCM stop ->
+invalid-upgrade refusal -> stopped upgrade -> new-port real SOCKS5 ->
+named-pipe stop -> exact Rust removal, and pre-existing/other config
+ownership denial. This is service-lifecycle/installer staging only, NOT a
+complete production upgrade/rollback with signed releases or protected
+selected-app interception. Do not mark this block accepted until exact
+HEAD + test-merge CI and separately hashed Windows candidate artifacts
+have been examined and recorded in issue #41.
+
 ## What is now one component
 
 `flowbridge-capture` consolidates the original Rust packet validators, Ethernet/VLAN

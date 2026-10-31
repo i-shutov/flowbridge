@@ -17,7 +17,7 @@ use windows_sys::Win32::System::Services::{
     SERVICE_TABLE_ENTRYW, SERVICE_WIN32_OWN_PROCESS,
 };
 
-const NAME: &str = "FlowBridgeRustCandidateCI";
+pub(crate) const NAME: &str = "FlowBridgeRustCandidateCI";
 static CONFIG: OnceLock<PathBuf> = OnceLock::new();
 static STOP_REQUESTED: AtomicBool = AtomicBool::new(false);
 

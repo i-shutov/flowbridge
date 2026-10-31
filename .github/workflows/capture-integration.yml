@@ -44,6 +44,9 @@ jobs:
       - name: Windows real on-demand SCM service and named-pipe lifecycle
         if: runner.os == 'Windows'
         run: python tests/windows_capture_service.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/scm-lifecycle.json
+      - name: Windows original Rust reversible on-demand SCM stage/upgrade/remove
+        if: runner.os == 'Windows'
+        run: python tests/windows_capture_install.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/scm-install-lifecycle.json
       - name: Verify formatting (never auto-commit or waive failure)
         if: always()
         run: cargo fmt --all -- --check

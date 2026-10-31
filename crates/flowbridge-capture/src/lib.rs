@@ -22,6 +22,8 @@ mod windows_packet_filter;
 #[cfg(windows)]
 pub mod windows_service;
 #[cfg(windows)]
+pub mod windows_service_management;
+#[cfg(windows)]
 pub mod windows_tcp_owner;
 
 pub fn driver_status() -> serde_json::Value {

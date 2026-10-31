@@ -51,6 +51,18 @@ fn load_explicit_profile(path: &Path) -> Result<Config, String> {
     Ok(profile)
 }
 
+#[cfg(windows)]
+pub(crate) fn validate_scm_profile(path: &Path) -> Result<(), String> {
+    if !path.is_absolute() {
+        return Err("SCM candidate requires an absolute config file".into());
+    }
+    let config = load_explicit_profile(path)?;
+    if !config.listen.ip().is_loopback() {
+        return Err("SCM candidate refuses non-loopback SOCKS listeners".into());
+    }
+    Ok(())
+}
+
 #[cfg(any(windows, test))]
 pub(crate) struct Controller {
     engine: Engine,
