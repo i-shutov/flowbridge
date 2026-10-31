@@ -12,7 +12,7 @@
 - The flow is bound to an owner stamp (PID+creation timestamp), a per-service-run nonzero session ID, and a monotonically increasing sequence. A changed owner stamp revokes the flow, and a stale session/sequence cannot attach to a recycled tuple. The runtime must generate a distinct ID for each new service run; the ID is **not** a cryptographic authorization token.
 - The ledger is single-threaded; a future packet worker must own synchronization, ordering, and a monotonic millisecond clock. A backwards clock jump, counter wrap, or uncertain shutdown stops the entire ledger and revokes all leases.
 - Capacity is 1..=65,536; idle expiry 1..=86,400,000 ms. Capacity exhaustion denies new flows instead of evicting active flows. Active traffic can refresh idle time; repeated pending SYN cannot.
-- FIN bookkeeping permits reverse-direction traffic after the first FIN and retires after both FINs. It **does not** implement RFC 793 TCP sequence/ACK validation, retransmissions, RST injection or packet checksums; those require separate native and on-wire acceptance.
+- FIN bookkeeping permits reverse-direction traffic after the first FIN and **does not retire on the second FIN**: final TCP ACKs may still be in flight. Explicit terminal confirmation/RST or idle expiration must release the lease. It **does not** implement RFC 793 TCP sequence/ACK validation, retransmissions, RST injection or packet checksums; those require separate native and on-wire acceptance.
 - Any error on a protected path must produce DROP, never DIRECT.
 
 ## Regression scope
