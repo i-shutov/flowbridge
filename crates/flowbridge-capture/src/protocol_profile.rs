@@ -95,10 +95,7 @@ fn dns_standard_question_shape(message: &[u8]) -> DnsWireShape {
         encoded_name_len += label_len + 1;
         offset += label_len;
     }
-    if offset + 4 > message.len()
-        || be16(message, offset) == 0
-        || be16(message, offset + 2) == 0
-    {
+    if offset + 4 > message.len() || be16(message, offset) == 0 || be16(message, offset + 2) == 0 {
         return DnsWireShape::Unclassified;
     }
     if (flags & 0x8000) != 0 {
