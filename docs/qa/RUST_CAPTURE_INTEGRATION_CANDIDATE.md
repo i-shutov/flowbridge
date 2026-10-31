@@ -624,3 +624,119 @@ DNS leak-free and release 1.0. Mode 0 restores ordinary DIRECT-capable
 networking, not a protected kill switch. Keep the paid VPS only while further
 bounded native tests materially advance these open gates; no deletion or
 release without explicit owner approval.
+
+## Verified independent signed-PowerShell sibling 12-phase native NDISRD / Rust SOCKS / OpenSSH integration (2026-10-31)
+
+**Scope and safety:** This supersedes the historical **nine-phase** maximum
+checkpoint above, without changing its original evidence. Native driver
+integration passed for **four explicitly controlled traffic generators**,
+each with connected / SOCKS-gate-closed / recovered phases: (1) Rust agent's
+self-owned TCP socket; (2) parent-spawned distinct Rust child; (3) Rust
+parent-spawned fixed Microsoft-signed OS PowerShell child; and **(4) an
+independently QA-launched fixed Microsoft-signed OS PowerShell process,
+not created by the Rust agent**. The fourth generator owns and reserves a
+source TCP port before announcing a bounded loopback GO-control port; it is
+still a **known, consenting test canary**, not arbitrary selected-app capture.
+
+**Found and fixed a real false-ownership bug before accepting the run:**
+private [failure 41216230392](https://github.com/i-shutov/flowbridge-vps-qa/actions/runs/41216230392)
+and the first pinned [failure 41217430715](https://github.com/i-shutov/flowbridge-vps-qa/actions/runs/41217430715)
+already demonstrated successful bidirectional traffic for the independent
+PowerShell canary but the Rust report incorrectly returned both
+`self_owned_socket_pid_epoch_consistent=true` and
+`external_sibling_socket_pid_epoch_consistent=true` for one flow. The
+private QA harness correctly failed. New original-Rust
+`owner_evidence_flags` is an exclusive four-category assertion: self,
+spawned Rust child, spawned signed OS PowerShell child, independent signed OS
+PowerShell sibling; any ambiguous/unchecked observation produces all-false.
+Dedicated negative/positive Rust unit tests verify every combination. This
+fixes only the *reported laboratory ownership category*, not kernel
+PacketBound or arbitrary-app authorization.
+
+**Pinned source/build:** exact draft PR #56 source HEAD
+`64118bbbf15d2c0fa2eb5d76c76c2eb36539ef37`, tested GitHub merge
+`9b73dd051fd06eeb54b95ca24f92d3d8c3e31912`; base `main`
+`5b5afc2feeda2195f302380e615ba003d4906e09` unchanged. Original
+Rust capture [CI 41217812299](https://github.com/i-shutov/flowbridge/actions/runs/41217812299)
+**3/3 PASS** (Linux/macOS/hosted Windows Server, Clippy/rustfmt, signed OS
+PowerShell positive/negative tests), [Rust/native 41217812303](https://github.com/i-shutov/flowbridge/actions/runs/41217812303)
+**5/5 PASS**, [DNS 41217812321](https://github.com/i-shutov/flowbridge/actions/runs/41217812321)
+**3/3 PASS**; generic DNS CI is **not** DNS containment.
+[Real Windows OpenSSH 41217812301](https://github.com/i-shutov/flowbridge/actions/runs/41217812301)
+**1/1 PASS**, independently downloaded exact merge artifact `13048599045`
+outer ZIP SHA-256
+`de6a935d0a16bfbe36c213dc65d2cf4837f9bfc75e17bf058eb074b7a0c793b3`.
+Verified all six JSON files: real supervised OpenSSH with **128 actual held**,
+**1,152 admission denials**, **10,000 byte-verified successful churn** with
+zero failures and half-close, **four distinct owned SSH processes**, plus
+real Rust agent TCP→SOCKS→OpenSSH→TCP 4,097-byte round-trip and upstream-gate
+denial/recovery. **Separate unprotected raw-backend capacity characterization
+reached peak 246 held** and returned the Windows OS handle count to near
+baseline; a stable **512 channels was NOT demonstrated** (the 512 tier
+accepted 0 additional). OS HANDLE is not an internal OpenSSH FD slot count;
+`windows_fd_limit_verified=false`. This is hosted Windows Server 2025 and
+does not establish Win10/11 native protected packet capture.
+
+**Independently downloaded and inspected binary provenance** from the exact
+hosted test merge:
+- Windows capture artifact `13048604939` outer ZIP SHA-256
+  `46812abb7ffbe9253c4e0fa441518ed7cdc481881edd76b0169626b010dedda7`,
+  allowlisted four-file inner Rust candidate ZIP
+  `a6a6014774def5291064514b3e2842d8e580c465be7f864bc8984c92bdfaecab`,
+  `flowbridge-agent.exe`
+  `fad4638ac26603bf3b01cbcfad2298e07fde09c72ccf4261ef2bfafed372a0b1`.
+  Every manifest payload digest and six hosted verification JSON booleans
+  checked. Candidate contains **only** two Rust executables, README and
+  manifest; no vendor driver, ProxiFyre binary, legacy C++/WFP research,
+  private SSH keys or credentials.
+- Separately allowlisted **test-only** tooling artifact `13049295236`,
+  outer ZIP SHA-256
+  `9e5854a4cdae32ade2df7122e6eafae2cb11e768bad7506da4a764602695daf5`,
+  Rust `flowbridge_ffi.dll` SHA-256
+  `0b656ecdcafcdc4cb9f51d6cbee874fda59edf38cb7aa7a8c5c3074f01ef35d0`,
+  all ten payload hashes verified against test manifest. This DLL/test
+  harness does **not** ship with the personal Windows product.
+
+**Real signed-driver network evidence on rented VDSina VPS #3293462
+(Windows Server 2025, NOT Win10/11):**
+[private Actions 41218337232](https://github.com/i-shutov/flowbridge-vps-qa/actions/runs/41218337232)
+**12/12 PASS**, private QA workflow commit
+`50323de71b019492ce0ef8081df18dfc08352c21`, pinned exact
+public source/merge and Rust binary digests. The
+[redacted private issue #1 report](https://github.com/i-shutov/flowbridge-vps-qa/issues/1#issuecomment-6545884850)
+confirms **real NDISRD TUNNEL_BOTH, 12 bidirectional TCP experiments,
+real FlowBridge SOCKS, authenticated supervised Microsoft OpenSSH and
+HTTP response delivered to selected laboratory process**.
+Each generator had a positive HTTP reply, an upstream gate-closed test with
+**zero application reply bytes and no SOCKS CONNECT**, and a recovered
+HTTP reply under the **same SSH supervisor**. No original selected frames
+were sent directly to the physical adapter in any of the 12 trials.
+Independent PowerShell sibling positive: **5 client / 5 relay native reflected
+frames, 57 B sent / 311 B received**; gate closed: **4/2, 0 B received**;
+recovered: **5/4, 57/311 B**. The mutually exclusive sibling flag remained
+true and parent self-owned flag false in all three; the pinned process exited
+before returning NDISRD adapter to normal mode. No PID, endpoint, SSH secret or
+packet payload saved in evidence.
+
+**Independent private artifact audit:** `13048839212`, outer ZIP SHA-256
+`8ee5cd749277f95c3a26f5fe5c8bde5eba45849e12c2ea5fb5ef2d087f21b1fe`
+matching GitHub digest, exactly one sanitized JSON SHA-256
+`b2734bc57d1143fd4e4ce3a763400dc83a2c4a9db1c929d701765d21af033c9a`.
+Verified every one of 12 phase flags and the independent process authority,
+zero DIRECT selected original packets, no SOCKS while gate closed, rollback
+and **all negative security/release claims**. Independently scheduled
+local SYSTEM MSI-uninstall rescue armed before driver mutation and disarmed
+after exact adapter **mode 0** recheck, network reachable, Defender active
+and scoped Windows Firewall rule removed; no rollback incident.
+
+**DO NOT PROMOTE THESE RESULTS:** A reported two-snapshot IP Helper
+PID+creation-time candidate plus a preannounced source TCP port in a controlled
+canary is **not kernel-authenticated packet-to-process authority**. The
+general arbitrary selected-EXE `PacketBound` capability and transparent
+routing are NOT accepted. NDISRD mode 0 **restores DIRECT-capable networking,
+not persistent fail-closed**. Native crash/SSH-death protection, DNS/UDP/QUIC/
+IPv6 containment, actual Win10/11 x64 signed-driver acceptance, production
+upgrade/uninstall, macOS NE and personal beta/1.0 remain blocked. VDSina stays
+useful only for further carefully bounded native testing with verified VNC
+and independently armed rollback; never delete/disable protections or publish
+release without the owner. [Public issue #41 checkpoint](https://github.com/i-shutov/flowbridge/issues/41#issuecomment-6545902118).

@@ -55,3 +55,27 @@ Existing **FlowBridge** Rust crates already provide validated profiles, TCP SOCK
 - https://github.com/wiresock/proxifyre/blob/5e3bc845d73a47a0931b1233c745580cb916f4ba/docs/configuration.md
 - https://github.com/wiresock/proxifyre/blob/5e3bc845d73a47a0931b1233c745580cb916f4ba/docs/installer.md
 - https://github.com/wiresock/proxifyre/blob/5e3bc845d73a47a0931b1233c745580cb916f4ba/netlib/src/proxy/process_routing_policy.h
+
+## Native ownership boundary after independently launched OS PowerShell verification (2026-10-31)
+
+A real native NDISRD RX/rewrite/TCP-return -> Rust relay -> SOCKS/SSH
+laboratory path is now measured for four controlled process categories,
+including a **separately QA-launched fixed Microsoft-signed PowerShell
+process** ([12/12 private native phases PASS](https://github.com/i-shutov/flowbridge-vps-qa/actions/runs/41218337232),
+public code `64118bbbf15d2c0fa2eb5d76c76c2eb36539ef37`).
+A previous negative test caught the independent process being falsely
+classified **both independent and self-owned**, despite real traffic success.
+The original Rust `owner_evidence_flags` correction enforces one-hot or
+all-false **lab-only** source-evidence categories, with conflicting/unknown
+identities denied. The native test only establishes the precisely prearranged
+source socket (read-only pinned process, PID/creation epoch, two IP Helper
+snapshots, fixed signed EXE and explicit control GO). Never elevate such an
+ownership candidate to general kernel-verified `PacketBound` or arbitrary
+selected-app authorization; direct app-level selection still requires a
+separately justified OS authority and negative race/PID reuse tests.
+Driver mode 0 remains ordinary networking; a crash-safe persistent blocking
+mechanism must be independently designed and proven before calling protected
+fail-closed or DNS leak-free. The full source, binary, QA digests and remaining
+acceptance boundaries are in
+[`RUST_CAPTURE_INTEGRATION_CANDIDATE.md`](RUST_CAPTURE_INTEGRATION_CANDIDATE.md)
+and [issue #41](https://github.com/i-shutov/flowbridge/issues/41#issuecomment-6545902118).
