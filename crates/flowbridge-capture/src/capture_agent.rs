@@ -12,8 +12,9 @@ pub fn capabilities() -> Value {
         "vendor_driver_bundled":false, "custom_wfp_required":false,
         "native_owner_binding_accepted":false, "protected_redirect_available":false,
         "foreground_control_ipc_available":cfg!(windows), "scm_service_available":false,
+        "native_tcp_owner_candidate_selftest":cfg!(windows),
         "dns_leak_free":false, "release_accepted":false,
-        "modes":["status","observe_lab","passthrough_lab","relay_loopback_probe","foreground_explicit_socks_control"],
+        "modes":["status","observe_lab","passthrough_lab","relay_loopback_probe","foreground_explicit_socks_control","owner_selftest_read_only"],
         "abi":{"adapters":ndis_wire::ADAPTER_LIST_BYTES,"mode":ndis_wire::MODE_BYTES,
             "request":ndis_wire::REQUEST_BYTES,"packet_header":ndis_wire::PACKET_HEADER_BYTES,
             "packet_capacity":ndis_wire::PACKET_BUFFER_BYTES}
@@ -32,6 +33,20 @@ pub fn status() -> Value {
         value["driver"] = json!({"supported":false});
     }
     value
+}
+
+/// Actual native Windows IP Helper two-snapshot process-epoch selftest using
+/// only a disposable, self-owned loopback TCP socket. This never authenticates
+/// any NDISRD packet, enables any divert mode or logs executable paths.
+pub fn owner_self_test() -> Result<Value, String> {
+    #[cfg(windows)]
+    {
+        crate::windows_tcp_owner::self_test()
+    }
+    #[cfg(not(windows))]
+    {
+        Err("read-only owner selftest requires native Windows IP Helper".into())
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -165,5 +180,6 @@ mod tests {
         assert_eq!(cap["protected_redirect_available"], false);
         assert_eq!(cap["vendor_driver_bundled"], false);
         assert_eq!(cap["release_accepted"], false);
+        assert_eq!(cap["native_owner_binding_accepted"], false);
     }
 }
