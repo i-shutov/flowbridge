@@ -237,29 +237,41 @@ mod tests {
             assert_eq!(evidence.complete(), mask == 31);
             assert_eq!(
                 tcp.route,
-                if mask == 31 { Route::Proxy } else { Route::Block },
+                if mask == 31 {
+                    Route::Proxy
+                } else {
+                    Route::Block
+                },
                 "mask {mask}"
             );
             assert_eq!(
-                policy.route_protected(selected, Protocol::Udp, evidence).route,
+                policy
+                    .route_protected(selected, Protocol::Udp, evidence)
+                    .route,
                 Route::Block,
                 "UDP mask {mask} must not fall back to DIRECT"
             );
             assert_eq!(
-                policy.route_protected(Process::Unknown, Protocol::Tcp, evidence).route,
+                policy
+                    .route_protected(Process::Unknown, Protocol::Tcp, evidence)
+                    .route,
                 Route::Block,
                 "unknown owner mask {mask} must not fall back to DIRECT"
             );
             assert_eq!(
-                policy.route_protected(Process::Unknown, Protocol::Udp, evidence).route,
+                policy
+                    .route_protected(Process::Unknown, Protocol::Udp, evidence)
+                    .route,
                 Route::Block
             );
             assert_eq!(
-                policy.route_protected(
-                    Process::Attested(r"C:\Apps\Unselected.exe"),
-                    Protocol::Tcp,
-                    evidence
-                ).route,
+                policy
+                    .route_protected(
+                        Process::Attested(r"C:\Apps\Unselected.exe"),
+                        Protocol::Tcp,
+                        evidence
+                    )
+                    .route,
                 Route::Direct,
                 "known unselected traffic stays outside selected-app capture"
             );
