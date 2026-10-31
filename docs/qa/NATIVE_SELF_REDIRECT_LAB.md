@@ -105,3 +105,44 @@ test than observing an unknown third-party flow. Neither IP Helper snapshots
 nor process creation time authenticate arbitrary NDISRD packet ownership.
 No persistent protected mode, DNS/UDP/IPv6 containment, Win10/11 evidence
 or release is asserted without separate native checks.
+
+
+## Native separate-process child — accepted bounded lab evidence, not arbitrary app (2026-10-31)
+
+Unlike the original single-process canary, a separate `flowbridge-agent
+native-child` creates and retains its own IPv4 TCP socket, announces only a
+bound ephemeral port, and blocks awaiting GO over inherited stdin. The
+parent pins a real read-only child process handle, validates process creation
+FILETIME and two native exact-tuple IP Helper snapshots before forwarding
+selected packets. No child SYN precedes confirmed NDISRD tunnel activation;
+child process join/termination precedes return to ordinary adapter mode 0.
+
+[Real VDSina workflow run #41210941526](https://github.com/i-shutov/flowbridge-vps-qa/actions/runs/41210941526)
+**PASS** on native Windows Server 2025, using publicly pinned source
+`81419f764ba51dab9c4aa91bda1de81ccb581383` / CI merge
+`dc70e093c40490aa728455fa52a22eca38bef7d7` and private
+workflow `68b690adde99fb730c9f8f7f9c6c67768437b812`.
+[Private truthful issue evidence](https://github.com/i-shutov/flowbridge-vps-qa/issues/1#issuecomment-6544806370).
+All three child stages (connected/closed-gate/recovered) and all three
+original parent stages passed with genuine NDISRD RX/rewrite/TX into stack and
+isolated authenticated real OpenSSH. Child 57/314 transmitted/received
+bytes on positive and recovered, zero bytes and no SOCKS CONNECT when closed;
+5/4 forward/reverse frames on success, 4/3 on denial. Same SSH supervisor
+survived the complete sequence. Child identity verified separately from
+parent and neither identity was emitted in evidence. All six reflected
+sessions had **zero selected original frames leaked to adapter**.
+
+Independent private artifact #`13045204941`, outer ZIP SHA-256
+`d9740fb5505eb8c884410b98755567ab630ae0f16de3c628761dec29d262317c`,
+single redacted report SHA-256
+`55d60ac595bb4024c406e14a5f043c126c96fb9f17200328fc7d5a5b7f5829b9`;
+source/merge/workflow and binary hashes matched pinned public manifests.
+An independent SYSTEM rescue remained armed for each bounded lab session,
+then disarmed only after mode-zero, firewall, network and Defender checks.
+No credentials or packet/PID/endpoint identities entered artifacts.
+
+**Trust limit:** parent deliberately creates and supervises this known child,
+so the result is **not proof of general NDISRD packet ownership or arbitrary
+selected-app enforcement**. Protected crash-persistent fail-closed, DNS/UDP/IPv6
+containment, Windows 10/11 desktop acceptance and beta release still remain
+false. Mode 0 restores DIRECT-capable ordinary networking.

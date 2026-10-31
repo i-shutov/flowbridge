@@ -438,3 +438,75 @@ system-wide interception/crash fail-closed, not DNS leak-free/UDP/IPv6,
 not Windows 10/11 desktop native acceptance, not a beta/1.0 release.
 Adapter mode 0 is normal networking. Private VPS is still useful for
 additional negative native tests and owner/driver containment work.
+
+
+## Real NDISRD parent/child cross-process TCP → Rust SOCKS → authenticated OpenSSH (6/6 PASS; 2026-10-31)
+
+**Scope:** this advances beyond the parent-owned socket: an entirely separate
+original Rust child process binds its own source port, waits for an explicit
+parent GO handshake until NDISRD diversion is active, and completes real
+HTTP request/response via actual native driver interception, Windows TCP
+reflection, Rust relay, FlowBridge SOCKS5 and supervised OpenSSH. The parent
+pins the child process object and verifies PID/creation FILETIME alongside
+two consistent native IP Helper TCP table snapshots. The exact reserved
+child flow is reflected, and the child is killed/joined **before** restoring
+ordinary networking. A parent-spawned, known-socket canary is **NOT**
+transparent arbitrary selected-app capture or authenticated packet ownership.
+
+- Exact public source commit `81419f764ba51dab9c4aa91bda1de81ccb581383`,
+  exact CI PR merge `dc70e093c40490aa728455fa52a22eca38bef7d7`.
+  Public [capture integration 41210372566](https://github.com/i-shutov/flowbridge/actions/runs/41210372566)
+  **3/3 PASS** (Windows/Linux/macOS, strict Clippy/rustfmt), [Rust/native
+  41210372560](https://github.com/i-shutov/flowbridge/actions/runs/41210372560)
+  **5/5 PASS**, and [DNS regression 41210372591](https://github.com/i-shutov/flowbridge/actions/runs/41210372591)
+  **3/3 PASS**. [Windows OpenSSH 41210372578](https://github.com/i-shutov/flowbridge/actions/runs/41210372578)
+  was still executing when this exact code was independently checked.
+  Managed 128 held/1152 denied/10000 byte-verified completed/4 distinct SSH
+  processes remain prior evidence; separate raw 512 stable channels are NOT proven.
+- Independently downloaded public capture Windows artifact
+  #`13045349444`: outer ZIP SHA-256
+  `c616b6666d71d00b587a441c43c8ec08deac3458ba4383a010b729526c440c9b`,
+  allowlisted Rust candidate ZIP
+  `04a90b470a60530294511a89b5651796ab042df4c1f465d9895315cad0554a13`,
+  original agent PE
+  `3aa4ecaaa027f6b0f4091c83e7e445ba060cdce6caff14e185247307f9259283`.
+  Separate *testing-only* native FFI/tools artifact #`13045109828`:
+  outer SHA-256
+  `d0011d624c6ac5081780193de629e8b0e39e3454cd4ce34386b4fb63dde8157a`,
+  FFI DLL SHA-256
+  `8ad037271bf3231180801a820b9a2880b0007bc6bc20af19963107fe4c2f9d63`.
+  Both source/merge SHA and every file hash checked against the downloaded
+  manifests. No driver, ProxiFyre binary, C++ WFP sidecar or keys in candidate.
+- [VDSina Windows Server 2025 self-hosted native run #41210941526](https://github.com/i-shutov/flowbridge-vps-qa/actions/runs/41210941526)
+  **PASS**, private workflow SHA `68b690adde99fb730c9f8f7f9c6c67768437b812`.
+  [Sanitized actual JSON in private issue #1](https://github.com/i-shutov/flowbridge-vps-qa/issues/1#issuecomment-6544806370).
+  Six actual driver/SSH phases: parent connected/closed/recovered and
+  **separate child connected/closed/recovered**, all 6/6 PASS. Child positive
+  had **5 forward / 4 inverse reflected native TCP frames; 57 bytes sent,
+  314 bytes received**, confirmed HTTP response. Child gate closed had
+  **4 / 3 frames, 0 bytes received, no DIRECT, no SOCKS CONNECT**; recovery
+  had **5 / 4, 57/314 bytes**, same authenticated SSH supervisor. The parent
+  also passed its full positive/closed/recovery triple (57/311 success).
+  All six report zero selected original frames sent to physical adapter.
+- Independently downloaded private evidence artifact #`13045204941`:
+  outer SHA-256
+  `d9740fb5505eb8c884410b98755567ab630ae0f16de3c628761dec29d262317c`,
+  exactly one sanitized JSON SHA-256
+  `55d60ac595bb4024c406e14a5f043c126c96fb9f17200328fc7d5a5b7f5829b9`.
+  Validated public and private SHAs, 6× native frames/HTTP/denied/recovery,
+  child-vs-parent identity distinction, native driver access, agent/FFI binary
+  hashes, no payload/process identity retention and **all false release gates**.
+- Safety: independently scheduled local SYSTEM MSI-uninstall rescue armed
+  beforehand and disarmed after positive **adapter mode 0** recheck,
+  network and Microsoft Defender active, exact scoped firewall rule removed.
+  `rollback_needed=false`, no teardown incident, vendor driver remains
+  separately installed. Normal adapter mode 0 permits DIRECT traffic and is
+  **NOT protected fail-closed**.
+
+**Explicitly NOT ACCEPTED:** arbitrary application NDISRD packet→PID+creation
+epoch authentication, transparent selected app routing, persistent protected
+crash/SSH failure policy, DNS-leak-free, UDP/QUIC/IPv6 containment, personal
+Windows 10/11 acceptance, macOS NE, raw OpenSSH 512 capacity or release 1.0.
+Next genuine blocker: attach unrelated selected-app flow to *defensible* owner
+authority and independently enforced protected drop, with native negative
+tests under guaranteed rollback. Server 2025 is only an integration laboratory.
