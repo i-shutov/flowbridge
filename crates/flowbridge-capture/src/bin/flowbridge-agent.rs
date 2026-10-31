@@ -7,6 +7,7 @@ fn main() {
     let result = match args.as_slice() {
         [command] if command == "status" || command == "--preflight" => Ok(capture_agent::status()),
         [command] if command == "capabilities" => Ok(capture_agent::capabilities()),
+        [command] if command == "owner-selftest" => capture_agent::owner_self_test(),
         [command, config_path] if command == "control-serve" => {
             flowbridge_capture::control_plane::serve_foreground(config_path)
         }
@@ -21,7 +22,7 @@ fn main() {
                 .map_err(|e| e.to_string())
                 .and_then(flowbridge_capture::relay_probe::run)
         }
-        _ => Err("Usage: flowbridge-agent status | capabilities | control-serve <explicit config path> | control <status|reload|stop> | lab <bounded JSON> | relay-probe <loopback JSON>. Protected redirect is unavailable.".to_owned()),
+        _ => Err("Usage: flowbridge-agent status | capabilities | owner-selftest | control-serve <explicit config path> | control <status|reload|stop> | lab <bounded JSON> | relay-probe <loopback JSON>. Protected redirect is unavailable.".to_owned()),
     };
     match result {
         Ok(value) => {
