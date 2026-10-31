@@ -301,7 +301,6 @@ async fn exercise_child(
     probe
 }
 
-
 /// Drive an independently launched Windows PowerShell process through its
 /// loopback-only GO control channel. The agent never creates that process,
 /// holds only a query-only pinned OS handle, and cannot claim PacketBound.
@@ -417,8 +416,8 @@ async fn native(request: Request) -> Result<Value, String> {
         }
         let pinned = OwnedProcess::query(external.pid)?;
         let identity = pinned.evidence()?;
-        let root = std::env::var_os("SystemRoot")
-            .ok_or("Fixed Windows system directory unavailable")?;
+        let root =
+            std::env::var_os("SystemRoot").ok_or("Fixed Windows system directory unavailable")?;
         let expected = std::path::PathBuf::from(root)
             .join("System32")
             .join("WindowsPowerShell")
@@ -655,9 +654,9 @@ async fn native(request: Request) -> Result<Value, String> {
                 external_exited = true;
                 break;
             }
-            if let Err(error) = session.poll_lab_redirect(128, &mut |packet| {
-                Ok(reflect.decide(packet, &mut || false))
-            }) {
+            if let Err(error) = session
+                .poll_lab_redirect(128, &mut |packet| Ok(reflect.decide(packet, &mut || false)))
+            {
                 fault = Some(error.to_string());
                 break;
             }

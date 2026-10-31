@@ -408,12 +408,21 @@ mod tests {
             control_port: 49153,
         });
         r.consent = "NATIVE_UNRELATED_OS_POWERSHELL_TCP_REFLECT".into();
-        assert!(r.validate().is_ok(), "bounded independent canary needs distinct consent");
+        assert!(
+            r.validate().is_ok(),
+            "bounded independent canary needs distinct consent"
+        );
         r.external_client.as_mut().unwrap().control_port = 49152;
-        assert!(r.validate().is_err(), "duplicate control/source port is not safe");
+        assert!(
+            r.validate().is_err(),
+            "duplicate control/source port is not safe"
+        );
         r.external_client.as_mut().unwrap().control_port = 49153;
         r.powershell_child = true;
-        assert!(r.validate().is_err(), "cannot mix independent and spawned clients");
+        assert!(
+            r.validate().is_err(),
+            "cannot mix independent and spawned clients"
+        );
         r.powershell_child = false;
         r.external_client = None;
         r.spawned_child = true;
