@@ -77,6 +77,28 @@ fn carrier(path: &str) -> bool {
         "flowbridge.exe" | "flowbridgecapture.exe" | "ssh.exe" | "proxifyre.exe"
     )
 }
+/// Offline readiness evidence supplied by a privileged native supervisor.
+/// This is NOT an attestation type or permission to turn on NDISRD interception.
+/// None of these values may come from UI JSON or be assumed true from CI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ProtectedReadiness {
+    pub driver_tunnel_confirmed: bool,
+    pub owner_revalidated: bool,
+    pub ssh_upstream_healthy: bool,
+    pub dns_udp_contained: bool,
+    pub rollback_guard_armed: bool,
+}
+
+impl ProtectedReadiness {
+    pub fn complete(self) -> bool {
+        self.driver_tunnel_confirmed
+            && self.owner_revalidated
+            && self.ssh_upstream_healthy
+            && self.dns_udp_contained
+            && self.rollback_guard_armed
+    }
+}
+
 impl CapturePolicy {
     pub fn new(
         paths: &[String],
@@ -102,6 +124,37 @@ impl CapturePolicy {
             strict_udp,
         })
     }
+    /// Conservative offline verdict for a future protected-mode native worker.
+    /// Unlike route(), this NEVER allows unknown owner, unsupported UDP or a
+    /// basename-only carrier exemption to fall back to DIRECT. Real carrier
+    /// identities must be proven by the supervisor and handled outside this
+    /// preliminary rule; a process named ssh.exe is NOT such proof.
+    /// Unselected OS-attested identities remain DIRECT by design, but this is
+    /// NOT evidence that OS-resolver DNS can safely be attributed to an app.
+    /// A Proxy verdict is only a policy candidate; no packet I/O happens here.
+    pub fn route_protected(
+        &self,
+        owner: Process<'_>,
+        protocol: Protocol,
+        readiness: ProtectedReadiness,
+    ) -> Verdict {
+        let candidate = self.route(owner, protocol, readiness.ssh_upstream_healthy);
+        match candidate.reason {
+            Reason::Unselected => candidate,
+            Reason::Carrier | Reason::UnknownOwner | Reason::UdpUnsupported => Verdict {
+                route: Route::Block,
+                reason: candidate.reason,
+            },
+            Reason::Selected if readiness.complete() && candidate.route == Route::Proxy => {
+                candidate
+            }
+            Reason::Selected | Reason::NoProxy => Verdict {
+                route: Route::Block,
+                reason: Reason::NoProxy,
+            },
+        }
+    }
+
     /// Identity/transport-only decision: actual destination policy remains
     /// in Config::evaluate. Proxy is NOT proof of a connected upstream socket.
     pub fn route(&self, owner: Process<'_>, protocol: Protocol, ready: bool) -> Verdict {
@@ -168,6 +221,90 @@ mod tests {
     fn p(strict: bool) -> CapturePolicy {
         CapturePolicy::new(&[r"C:\Apps\Browser.exe".into()], strict, strict).unwrap()
     }
+    #[test]
+    fn protected_route_requires_all_five_independent_readiness_gates() {
+        let policy = p(false); // permissive normal mode MUST NOT weaken protected mode
+        let selected = Process::Attested(r"C:\Apps\Browser.exe");
+        for mask in 0u8..32 {
+            let evidence = ProtectedReadiness {
+                driver_tunnel_confirmed: (mask & 1) != 0,
+                owner_revalidated: (mask & 2) != 0,
+                ssh_upstream_healthy: (mask & 4) != 0,
+                dns_udp_contained: (mask & 8) != 0,
+                rollback_guard_armed: (mask & 16) != 0,
+            };
+            let tcp = policy.route_protected(selected, Protocol::Tcp, evidence);
+            assert_eq!(evidence.complete(), mask == 31);
+            assert_eq!(
+                tcp.route,
+                if mask == 31 {
+                    Route::Proxy
+                } else {
+                    Route::Block
+                },
+                "mask {mask}"
+            );
+            assert_eq!(
+                policy
+                    .route_protected(selected, Protocol::Udp, evidence)
+                    .route,
+                Route::Block,
+                "UDP mask {mask} must not fall back to DIRECT"
+            );
+            assert_eq!(
+                policy
+                    .route_protected(Process::Unknown, Protocol::Tcp, evidence)
+                    .route,
+                Route::Block,
+                "unknown owner mask {mask} must not fall back to DIRECT"
+            );
+            assert_eq!(
+                policy
+                    .route_protected(Process::Unknown, Protocol::Udp, evidence)
+                    .route,
+                Route::Block
+            );
+            assert_eq!(
+                policy
+                    .route_protected(
+                        Process::Attested(r"C:\Apps\Unselected.exe"),
+                        Protocol::Tcp,
+                        evidence
+                    )
+                    .route,
+                Route::Direct,
+                "known unselected traffic stays outside selected-app capture"
+            );
+        }
+    }
+
+    #[test]
+    fn protected_mode_does_not_trust_basename_only_carrier_exemptions() {
+        let policy = p(false);
+        for path in [
+            r"C:\Temp\ssh.exe",
+            r"C:\Users\Public\FlowBridge.exe",
+            r"C:\Apps\ProxiFyre.exe",
+        ] {
+            let normal = policy.route(Process::Attested(path), Protocol::Tcp, true);
+            assert_eq!(normal.reason, Reason::Carrier);
+            // An arbitrary executable with this name is not the supervised SSH.
+            let protected = policy.route_protected(
+                Process::Attested(path),
+                Protocol::Tcp,
+                ProtectedReadiness {
+                    driver_tunnel_confirmed: true,
+                    owner_revalidated: true,
+                    ssh_upstream_healthy: true,
+                    dns_udp_contained: true,
+                    rollback_guard_armed: true,
+                },
+            );
+            assert_eq!(protected.route, Route::Block);
+            assert_eq!(protected.reason, Reason::Carrier);
+        }
+    }
+
     #[test]
     fn selected_tcp_requires_real_readiness() {
         let app = Process::Attested(r"c:\apps\BROWSER.EXE");
