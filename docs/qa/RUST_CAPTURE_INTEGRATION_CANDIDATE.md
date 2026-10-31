@@ -230,3 +230,52 @@ Returning to adapter mode 0 resumes **ordinary** connectivity and is not
 a protective kill switch. No release or DNS-leak-free claim follows from
 this result. See [issue #41](https://github.com/i-shutov/flowbridge/issues/41)
 for the detailed independent evidence checkpoint.
+
+
+## 2026-10-31 — independently verified real native original-frame RX/TX on VDSina
+
+Advance beyond prior read-only LISTEN_BOTH: a guarded, bounded real NDISRD
+TUNNEL_BOTH lab session received **109 native frames (53 outgoing, 56 incoming)**
+and completed **109 successful original-frame sends**, with actual driver I/O
+from the original Rust agent, no ProxiFyre and no distributed driver. This is
+still not selected-app proxying, DNS containment, protected kill switch or Win10/11
+acceptance. Tested Windows Server 2025 only. Agent source HEAD
+51bdc3b16f46e6bee99ec3bf213ca47276335450, prior tested merge
+3b2f5867b7b6ee55f50dc3826008184a68e1d447, agent SHA-256
+bd74827262da07c538c9a78ea6c96d048aa6a1df49026cf56e691435cd4ce92e.
+
+- [Private native run 41184740167](https://github.com/i-shutov/flowbridge-vps-qa/actions/runs/41184740167)
+  and [sanitized evidence](https://github.com/i-shutov/flowbridge-vps-qa/issues/1#issuecomment-6541158423):
+  workflow SHA 708f5ca08ffdc000a3ef186accfabe699f409c57; 7503 ms; process
+  exit 0, loop completed; in-session TCP/443 and post-session network PASS;
+  signed official kernel driver and active Defender PASS. Independently armed
+  local SYSTEM uninstall rescue was disarmed only after mode-0 restoration and
+  health verification. NDISRD remains installed.
+- Downloaded private artifact 13035917293 ZIP SHA-256
+  27f08238aabdd71d8f201cb5a44adf2d47245cd4297d0833af0c02c345d02588
+  matches GitHub digest. Independent checks verified receipt/sends, both packet
+  directions, reset, watchdog and Defender. No packet payload, IP/MAC/adapter
+  names or credentials were written to evidence.
+- These were the **original, unmodified packets**. No reliable packet ownership
+  binding to PID + creation epoch, no TCP selected-app redirect to relay/SSH,
+  no reverse-path proxy rewrite, and no persistent fail-closed. Restoring NDISRD
+  adapter mode 0 resumes ordinary DIRECT-capable networking; not a kill switch.
+
+Prior documentation-only HEAD f44070c74c5ef489e88956179e7285c64c8bfec4
+had tested PR merge 754b39b9cf568254917bb2f4c949d3da581ea68d.
+All four exact-head CI workflows succeeded:
+[capture 3/3](https://github.com/i-shutov/flowbridge/actions/runs/41183457267),
+[Rust/native 5/5](https://github.com/i-shutov/flowbridge/actions/runs/41183457221),
+[DNS 3/3](https://github.com/i-shutov/flowbridge/actions/runs/41183457222), and
+[real Windows managed OpenSSH](https://github.com/i-shutov/flowbridge/actions/runs/41183457268).
+The Windows capture Actions ZIP SHA-256 was independently reproduced as
+c7468766066029a7fe082e2d56b2d9d6b2d944f7fd4b233a46666e2305b0400c,
+and nested allowlisted candidate ZIP as
+ce0152d47dc9a64b7b43db0e6dc4a67e3a7662e24618c2c559c0307209707e26.
+Real Windows SSH Actions artifact SHA-256 was
+51b207771f423417621486050c098d1562f6236e0211742b62ef6c960643a2b0.
+Managed OpenSSH acceptance remains 128 actual held/1152 rejections/10000
+byte-verified successes with zero errors/4 distinct subprocesses. Separate
+raw OpenSSH characterization only reached 246 held, not stable 512.
+
+All protected, DNS leak-free and release claims remain explicitly FALSE.
