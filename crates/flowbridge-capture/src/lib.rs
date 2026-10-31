@@ -13,14 +13,14 @@ pub mod relay_probe;
 
 #[cfg(windows)]
 mod windows_control_pipe;
-#[cfg(windows)]
-pub mod windows_service;
 #[cfg(all(windows, target_pointer_width = "64"))]
 mod windows_ndis_device;
 #[cfg(windows)]
 mod windows_ndisrd_service;
 #[cfg(windows)]
 mod windows_packet_filter;
+#[cfg(windows)]
+pub mod windows_service;
 #[cfg(windows)]
 pub mod windows_tcp_owner;
 

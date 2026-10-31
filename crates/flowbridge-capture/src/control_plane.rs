@@ -67,7 +67,10 @@ impl Controller {
     fn open_with_mode(config_path: PathBuf, scm_mode: bool) -> Result<Self, String> {
         let config = load_explicit_profile(&config_path)?;
         if scm_mode && (!config_path.is_absolute() || !config.listen.ip().is_loopback()) {
-            return Err("SCM candidate requires an absolute config path and loopback-only SOCKS listener".into());
+            return Err(
+                "SCM candidate requires an absolute config path and loopback-only SOCKS listener"
+                    .into(),
+            );
         }
         let engine = Engine::new(config).map_err(|e| e.to_string())?;
         engine.start().map_err(|e| e.to_string())?;
@@ -79,7 +82,7 @@ impl Controller {
     }
 
     pub(crate) fn stop_engine(&self) -> Result<(), String> {
-        self.engine.stop().map_err(|error| error.to_string())
+        self.engine.stop().map(|_| ()).map_err(|error| error.to_string())
     }
 
     pub(crate) fn status(&self) -> Value {

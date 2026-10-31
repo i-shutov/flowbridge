@@ -12,9 +12,9 @@ use std::sync::OnceLock;
 use windows_sys::Win32::Foundation::GetLastError;
 use windows_sys::Win32::System::Services::{
     RegisterServiceCtrlHandlerExW, SetServiceStatus, StartServiceCtrlDispatcherW,
-    SERVICE_ACCEPT_SHUTDOWN, SERVICE_ACCEPT_STOP, SERVICE_CONTROL_SHUTDOWN,
-    SERVICE_CONTROL_STOP, SERVICE_RUNNING, SERVICE_START_PENDING, SERVICE_STATUS,
-    SERVICE_STOPPED, SERVICE_STOP_PENDING, SERVICE_TABLE_ENTRYW, SERVICE_WIN32_OWN_PROCESS,
+    SERVICE_ACCEPT_SHUTDOWN, SERVICE_ACCEPT_STOP, SERVICE_CONTROL_SHUTDOWN, SERVICE_CONTROL_STOP,
+    SERVICE_RUNNING, SERVICE_START_PENDING, SERVICE_STATUS, SERVICE_STOPPED, SERVICE_STOP_PENDING,
+    SERVICE_TABLE_ENTRYW, SERVICE_WIN32_OWN_PROCESS,
 };
 
 const NAME: &str = "FlowBridgeRustCandidateCI";
@@ -69,7 +69,9 @@ unsafe extern "system" fn service_main(_argc: u32, _argv: *mut *mut u16) {
     let _ = SERVICE_HANDLE.set(handle as usize);
     // SAFETY: A live SCM status handle is returned from registration.
     unsafe { SetServiceStatus(handle, &status(SERVICE_START_PENDING, 0, 0, 1)) };
-    let path = CONFIG.get().expect("SCM service config must be set before dispatch");
+    let path = CONFIG
+        .get()
+        .expect("SCM service config must be set before dispatch");
     // Do not claim RUNNING before config and the real SOCKS engine have started.
     // The pipe and engine share the same controller; a failed pipe fails the
     // service rather than leaving an unmanageable background proxy.
@@ -106,7 +108,9 @@ pub(crate) fn mark_running() -> Result<(), String> {
         )
     };
     if ok == 0 {
-        return Err(format!("SCM RUNNING status failed: {}", unsafe { GetLastError() }));
+        return Err(format!("SCM RUNNING status failed: {}", unsafe {
+            GetLastError()
+        }));
     }
     Ok(())
 }
@@ -116,7 +120,9 @@ pub fn run(path: &str) -> Result<Value, String> {
     if path.len() > 4096 || !Path::new(path).is_absolute() {
         return Err("service-run requires one absolute bounded config path".into());
     }
-    CONFIG.set(PathBuf::from(path)).map_err(|_| "SCM config already initialized")?;
+    CONFIG
+        .set(PathBuf::from(path))
+        .map_err(|_| "SCM config already initialized")?;
     let mut name: Vec<u16> = NAME.encode_utf16().chain(Some(0)).collect();
     let table = [
         SERVICE_TABLE_ENTRYW {
@@ -132,7 +138,9 @@ pub fn run(path: &str) -> Result<Value, String> {
     // the service callbacks are ABI-conformant extern "system" functions.
     let ok = unsafe { StartServiceCtrlDispatcherW(table.as_ptr()) };
     if ok == 0 {
-        return Err(format!("SCM dispatcher unavailable: {}", unsafe { GetLastError() }));
+        return Err(format!("SCM dispatcher unavailable: {}", unsafe {
+            GetLastError()
+        }));
     }
     Ok(json!({
         "ok":true, "scm_dispatch_completed":true,
