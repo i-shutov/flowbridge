@@ -172,8 +172,8 @@ fn validate_adapter_reply(
         if !bytes[..end].iter().all(|byte| byte.is_ascii_graphic()) {
             return Err(AdapterQueryProblem::Name(index));
         }
-        let name = std::str::from_utf8(&bytes[..end])
-            .map_err(|_| AdapterQueryProblem::Name(index))?;
+        let name =
+            std::str::from_utf8(&bytes[..end]).map_err(|_| AdapterQueryProblem::Name(index))?;
         if adapters.iter().any(|existing| existing.name == name) {
             return Err(AdapterQueryProblem::Name(index));
         }
