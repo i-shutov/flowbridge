@@ -262,7 +262,10 @@ mod tests {
             for _ in 0..2 {
                 let (mut s, _) = l.accept().unwrap();
                 s.write_all(&[b'A'; 256]).unwrap();
-                s.write_all(b"\r\n").unwrap();
+                // The parser must reject a >255-byte line immediately; Windows
+                // may reset before we can append CRLF. The probe's outcome,
+                // not a successful write after rejection, is the assertion.
+                let _ = s.write_all(b"\r\n");
             }
         });
         let r = compare_direct(addr, Duration::from_millis(500));
