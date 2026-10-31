@@ -314,6 +314,8 @@ impl TcpLeaseLedger {
     }
 
     /// FIN tracking is only lifecycle bookkeeping, NOT TCP sequence/ACK logic.
+    /// Keep the lease after both FINs: final ACKs may still be in flight.
+    /// Only explicit terminal confirmation, RST, or expiry may retire it.
     pub fn note_fin(
         &mut self,
         token: FlowLease,
@@ -336,9 +338,7 @@ impl TcpLeaseLedger {
         entry.phase = LeasePhase::HalfClosed;
         entry.last_ms = now_ms;
         let both_fin = entry.local_fin && entry.remote_fin;
-        if both_fin {
-            self.entries.remove(&token.tuple);
-        }
+        // Seeing both FINs is not proof that the final ACKs have arrived.
         Ok(both_fin)
     }
 
@@ -544,7 +544,9 @@ mod tests {
         assert_eq!(l.note_fin(t, owner(), 4, FinSide::Local), Ok(false));
         assert_eq!(l.check_active(t, owner(), 5), Ok(LeasePhase::HalfClosed));
         assert_eq!(l.note_fin(t, owner(), 6, FinSide::Remote), Ok(true));
-        assert_eq!(l.check_active(t, owner(), 7), Err(LeaseError::Missing));
+        assert_eq!(l.check_active(t, owner(), 7), Ok(LeasePhase::HalfClosed));
+        l.retire(t, owner(), 8).unwrap(); // explicit terminal confirmation
+        assert_eq!(l.check_active(t, owner(), 9), Err(LeaseError::Missing));
     }
 
     #[test]
