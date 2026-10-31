@@ -47,6 +47,9 @@ jobs:
       - name: Windows original Rust reversible on-demand SCM stage/upgrade/remove
         if: runner.os == 'Windows'
         run: python tests/windows_capture_install.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/scm-install-lifecycle.json
+      - name: Windows genuine signed PowerShell client pre-GO rejection and HTTP half-close
+        if: runner.os == 'Windows'
+        run: python tests/windows_powershell_lab_client.py --source crates/flowbridge-capture/src/windows_self_redirect.rs --output build/capture-candidate/powershell-client-lifecycle.json
       - name: Build separately allowlisted native-test FFI and original harness (not product payload)
         if: runner.os == 'Windows'
         shell: bash

@@ -32,6 +32,8 @@ const POWERSHELL_CLIENT_SCRIPT: &str = r#"
 $ErrorActionPreference = 'Stop'
 $localIP = [System.Net.IPAddress]::Parse($env:FLOWBRIDGE_LAB_LOCAL_IPV4)
 $targetIP = [System.Net.IPAddress]::Parse($env:FLOWBRIDGE_LAB_TARGET_IPV4)
+$targetPort = [int]$env:FLOWBRIDGE_LAB_TARGET_PORT
+if ($targetPort -lt 1 -or $targetPort -gt 65535) { exit 2 }
 if ($localIP.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork -or $targetIP.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { exit 2 }
 $s = [System.Net.Sockets.Socket]::new([System.Net.Sockets.AddressFamily]::InterNetwork, [System.Net.Sockets.SocketType]::Stream, [System.Net.Sockets.ProtocolType]::Tcp)
 try {
@@ -41,7 +43,7 @@ try {
   [Console]::Out.WriteLine(([System.Net.IPEndPoint]$s.LocalEndPoint).Port)
   [Console]::Out.Flush()
   if ([Console]::ReadLine() -cne 'go') { exit 2 }
-  $s.Connect([System.Net.IPEndPoint]::new($targetIP, 80))
+  $s.Connect([System.Net.IPEndPoint]::new($targetIP, $targetPort))
   $crlf = [string][char]13 + [string][char]10
   $payload = 'HEAD / HTTP/1.0' + $crlf + 'Host: example.com' + $crlf + 'Connection: close' + $crlf + $crlf
   $bytes = [System.Text.Encoding]::ASCII.GetBytes($payload)
@@ -359,7 +361,8 @@ async fn native(request: Request) -> Result<Value, String> {
                 .env(
                     "FLOWBRIDGE_LAB_TARGET_IPV4",
                     request.target.ip().to_string(),
-                );
+                )
+                .env("FLOWBRIDGE_LAB_TARGET_PORT", request.target.port().to_string());
             command
         } else {
             let binary = std::env::current_exe()
