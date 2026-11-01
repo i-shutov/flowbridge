@@ -1,3 +1,18 @@
+### 2026-11-01 — Exact-filter WFP event diagnostics, not a packet identity token
+
+Port-only WFP classification on actual hosted Windows produced three BFE
+events that lacked a matching per-EXE AppId derived from filenames, but the
+initial diagnostic compared only the TCP port and might have counted another
+rule's events. The stricter original Rust laboratory probe binds
+\`FWPM_NET_EVENT_CLASSIFY_DROP0.filterId\` to a still-active, dynamic, scoped
+guard, compares its live BFE registration against the expected QA
+sublayer/layer and emits anonymized aggregate identity counters. The transient
+filter ID is not logged. Collection absent => INCONCLUSIVE; even a positive
+exact-filter event is **not** an NDISRD packet-to-process credential, protected
+crash-persistent deny, DNS privacy or Win10/11 acceptance. Existing observed
+AppId enforcement failures stay strictly failing until a real selected client
+is blocked and the two controls are not.
+
 ### 2026-11-01 — Cold-start integrity of the signed OS-process QA canaries
 
 A hosted Windows CI run failed before entering the strict AppId diagnostic

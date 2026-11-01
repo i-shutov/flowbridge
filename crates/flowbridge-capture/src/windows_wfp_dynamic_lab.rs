@@ -22,6 +22,7 @@ use windows_sys::Win32::{
         FwpmNetEventEnum0, FwpmSubLayerAdd0, FWPM_CONDITION_ALE_APP_ID, FWPM_CONDITION_IP_PROTOCOL,
         FWPM_CONDITION_IP_REMOTE_PORT, FWPM_FILTER0, FWPM_FILTER_CONDITION0,
         FWPM_LAYER_ALE_AUTH_CONNECT_V4, FWPM_NET_EVENT0, FWPM_NET_EVENT_FLAG_APP_ID_SET,
+        FWPM_NET_EVENT_TYPE_CLASSIFY_DROP,
         FWPM_SESSION0, FWPM_SESSION_FLAG_DYNAMIC, FWPM_SUBLAYER0, FWP_ACTION_BLOCK, FWP_BYTE_BLOB,
         FWP_BYTE_BLOB_TYPE, FWP_MATCH_EQUAL, FWP_UINT16, FWP_UINT8,
     },
@@ -223,23 +224,67 @@ impl Drop for EventEnumerator {
     }
 }
 
-/// Bounded, READ-ONLY WFP net-event identity correlation. The engine may have
-/// event collection disabled; zero events is an explicit INCONCLUSIVE result.
-/// Never enable auditing, change BFE options, emit paths/PIDs/blob bytes, or
-/// turn this observation into an authorization to intercept arbitrary flows.
+/// READ-ONLY attestation that the filter-ID received from the disposable QA
+/// guard belongs to the expected live dynamic sublayer, layer and TCP port.
+/// Never trust an arbitrary user-supplied filter ID or accept it as a PID token.
+fn verify_active_qa_filter(engine: HANDLE, filter_id: u64, port: u16) -> Result<bool, String> {
+    let mut raw: *mut FWPM_FILTER0 = null_mut();
+    // SAFETY: live engine and a bounded integer identifier; no BFE mutation.
+    let status = unsafe { FwpmFilterGetById0(engine, filter_id, &mut raw) };
+    if status != 0 || raw.is_null() {
+        return Ok(false);
+    }
+    let stored = FilterReadback(raw);
+    // SAFETY: a non-null BFE-owned filter pointer is held by stored.
+    let filter = unsafe { &*stored.0 };
+    if !same_guid(&filter.layerKey, &FWPM_LAYER_ALE_AUTH_CONNECT_V4)
+        || !same_guid(&filter.subLayerKey, &QA_SUBLAYER)
+        || filter.action.r#type != FWP_ACTION_BLOCK
+        || filter.numFilterConditions == 0
+        || filter.numFilterConditions > 3
+        || filter.filterCondition.is_null()
+    {
+        return Err("WFP QA event filter is not the expected ephemeral guard".into());
+    }
+    // SAFETY: the BFE count has been checked within the exact three-condition bound.
+    let conditions = unsafe {
+        std::slice::from_raw_parts(
+            filter.filterCondition,
+            filter.numFilterConditions as usize,
+        )
+    };
+    for condition in conditions {
+        if same_guid(&condition.fieldKey, &FWPM_CONDITION_IP_REMOTE_PORT) {
+            if condition.matchType != FWP_MATCH_EQUAL
+                || condition.conditionValue.r#type != FWP_UINT16
+                || unsafe { condition.conditionValue.Anonymous.uint16 } != port
+            {
+                return Err("WFP QA event filter port mismatch".into());
+            }
+        }
+    }
+    Ok(true)
+}
+
+/// Bounded, READ-ONLY WFP net-event correlation against one precise live QA
+/// filter ID, not just a coincidentally reused localhost TCP port. No event
+/// collection/auditing is enabled, and absent events remain INCONCLUSIVE.
+/// The filter ID is used in-process only, never persisted to the report.
 pub fn event_identity_probe(
     selected_path: &str,
     other_path: &str,
     port: u16,
+    filter_id: u64,
     consent: &str,
 ) -> Result<Value, String> {
     validate(selected_path, port, consent)?;
     if consent != CONSENT
+        || filter_id == 0
         || Path::new(other_path).file_name().and_then(|n| n.to_str()) != Some(OTHER_CLIENT)
         || Path::new(other_path).parent() != Path::new(selected_path).parent()
         || !Path::new(other_path).is_file()
     {
-        return Err("WFP QA events require two sibling dedicated lab executables".into());
+        return Err("WFP QA events require one live filter and two sibling lab EXEs".into());
     }
     let selected = lookup_app(Path::new(selected_path))?;
     let other = lookup_app(Path::new(other_path))?;
@@ -247,21 +292,30 @@ pub fn event_identity_probe(
     // SAFETY: read-only local BFE connection; no dynamic/persistent rule created.
     let status = unsafe { FwpmEngineOpen0(null(), RPC_C_AUTHN_WINNT, null(), null(), &mut raw) };
     if status != 0 || raw.is_null() {
-        return Err(format!(
-            "WFP QA event read-only engine open failed: {status}"
-        ));
+        return Err(format!("WFP QA event read-only engine open failed: {status}"));
     }
     let engine = Engine(raw);
+    let filter_present = verify_active_qa_filter(engine.0, filter_id, port)?;
+    if !filter_present {
+        return Ok(json!({
+            "ok":true,"kind":"read_only_wfp_exact_filter_drop_correlation",
+            "query_succeeded":false,"active_qa_filter_verified":false,
+            "event_collection_proven":false,"filter_id_redacted":true,
+            "read_only":true,"kernel_packet_owner_bound":false,
+            "protected_fail_closed":false,"release_accepted":false
+        }));
+    }
     let mut enum_handle: HANDLE = null_mut();
     // SAFETY: read-only enumeration of the current engine's existing events.
     let status = unsafe { FwpmNetEventCreateEnumHandle0(engine.0, null(), &mut enum_handle) };
     if status != 0 || enum_handle.is_null() {
-        return Ok(
-            json!({"ok":true,"kind":"read_only_wfp_event_appid_correlation",
-            "query_succeeded":false,"event_collection_proven":false,
-            "status_code":status,"redacted":true,"kernel_packet_owner_bound":false,
-            "release_accepted":false}),
-        );
+        return Ok(json!({
+            "ok":true,"kind":"read_only_wfp_exact_filter_drop_correlation",
+            "query_succeeded":false,"active_qa_filter_verified":true,
+            "event_collection_proven":false,"filter_id_redacted":true,
+            "read_only":true,"kernel_packet_owner_bound":false,
+            "protected_fail_closed":false,"release_accepted":false
+        }));
     }
     let enumerator = EventEnumerator {
         engine: engine.0,
@@ -275,6 +329,9 @@ pub fn event_identity_probe(
     let mut selected_matches = 0usize;
     let mut other_matches = 0usize;
     let mut unmatched = 0usize;
+    let mut no_app_id = 0usize;
+    let mut unrelated_drop_events = 0usize;
+    let mut exact_filter_drops = 0usize;
     if status == 0 && returned <= 256 && !events.is_null() {
         // SAFETY: successful bounded enumeration of BFE-owned event pointers.
         let entries = unsafe { std::slice::from_raw_parts(events, returned as usize) };
@@ -283,16 +340,29 @@ pub fn event_identity_probe(
                 continue;
             }
             // SAFETY: the entry is valid until FwpmFreeMemory0 below.
-            let header = unsafe { &(**entry).header };
-            if header.remotePort != port
-                || header.ipProtocol != 6
-                || header.flags & FWPM_NET_EVENT_FLAG_APP_ID_SET == 0
-            {
+            let event = unsafe { &**entry };
+            if event.header.remotePort != port || event.header.ipProtocol != 6 {
                 continue;
             }
-            if blob_matches(&selected, &header.appId) {
+            if event.r#type != FWPM_NET_EVENT_TYPE_CLASSIFY_DROP {
+                continue;
+            }
+            // SAFETY: the tagged union contains classifyDrop for this event type.
+            let drop = unsafe { event.Anonymous.classifyDrop };
+            if drop.is_null() {
+                continue;
+            }
+            // SAFETY: BFE owns the classify-drop object until events is freed.
+            if unsafe { (*drop).filterId } != filter_id {
+                unrelated_drop_events += 1;
+                continue;
+            }
+            exact_filter_drops += 1;
+            if event.header.flags & FWPM_NET_EVENT_FLAG_APP_ID_SET == 0 {
+                no_app_id += 1;
+            } else if blob_matches(&selected, &event.header.appId) {
                 selected_matches += 1;
-            } else if blob_matches(&other, &header.appId) {
+            } else if blob_matches(&other, &event.header.appId) {
                 other_matches += 1;
             } else {
                 unmatched += 1;
@@ -301,20 +371,24 @@ pub fn event_identity_probe(
     }
     if !events.is_null() {
         let mut ptr = events.cast::<c_void>();
-        // SAFETY: allocation owned by BFE; it frees all nested net events.
+        // SAFETY: allocation owned by BFE; frees all nested net events.
         unsafe { FwpmFreeMemory0(&mut ptr) };
     }
-    Ok(
-        json!({"ok":true,"kind":"read_only_wfp_event_appid_correlation",
+    Ok(json!({
+        "ok":true,"kind":"read_only_wfp_exact_filter_drop_correlation",
         "query_succeeded":status == 0 && returned <= 256,
-        "event_collection_proven":selected_matches + other_matches + unmatched > 0,
+        "active_qa_filter_verified":true,"filter_id_redacted":true,
+        "event_collection_proven":exact_filter_drops > 0,
+        "exact_qa_filter_classify_drops":exact_filter_drops,
+        "unrelated_filter_classify_drops_same_port":unrelated_drop_events,
         "selected_event_appid_matches":selected_matches,
         "other_event_appid_matches":other_matches,
         "other_or_unresolved_event_appid":unmatched,
+        "exact_filter_events_without_appid":no_app_id,
         "bounded_scan_max":256,"redacted":true,"read_only":true,
         "filter_or_auditing_changed":false,"kernel_packet_owner_bound":false,
-        "protected_fail_closed":false,"release_accepted":false}),
-    )
+        "protected_fail_closed":false,"release_accepted":false
+    }))
 }
 
 fn validate(path: &str, port: u16, consent: &str) -> Result<(), String> {
@@ -430,6 +504,9 @@ pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
         json!({
             "ok":true, "kind":"original_rust_dynamic_wfp_lab",
             "wfp_ale_block_installed":true, "bfe_filter_readback_verified":true,
+            // BFE-generated ephemeral filter identifier only. QA parent
+            // consumes it synchronously, never writes it to artifacts/logs.
+            "ephemeral_filter_id":id,
             "app_id_scoped":!port_only_diagnostic,
             "dynamic_private_sublayer":true,
             "tcp_port_scoped":!app_only_diagnostic,
@@ -514,5 +591,13 @@ mod tests {
         assert!(validate(r"C:\tmp\FlowBridgeWfpLabClient.exe", 50001, "DENY").is_err());
         assert!(validate(r"C:\Windows\System32\powershell.exe", 50001, CONSENT).is_err());
         assert!(validate(r"\\server\share\FlowBridgeWfpLabClient.exe", 50001, CONSENT).is_err());
+        assert!(event_identity_probe(
+            r"C:\Windows\System32\powershell.exe",
+            r"C:\Windows\System32\not-a-lab.exe",
+            50001,
+            0,
+            CONSENT
+        )
+        .is_err());
     }
 }

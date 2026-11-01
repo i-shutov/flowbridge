@@ -1,3 +1,40 @@
+## 2026-11-01 — Exact ephemeral BFE filter-ID / WFP CLASSIFY_DROP causal correlation (CI PENDING)
+
+After exact code SHA \`8f3a5d14d30f9f624680d71b5d1b9af28cd5854f\`, Windows Server
+2025 [hosted capture #41348275968](https://github.com/i-shutov/flowbridge/actions/runs/41348275968)
+completed *both* real signed PowerShell live canaries, Rust-only installed GUI/
+IPC/Banner First/authenticated OpenSSH/SOCKS, NSIS recovery, real SCM upgrade
+and 81 Rust unit tests; the Windows job correctly FAILED the existing strict
+WFP per-app gate. Actual BFE event enumeration succeeded, and three
+port-matched APP_ID_SET events matched NEITHER copied executable's
+\`FwpmGetAppIdFromFileName0\` blob, even though a transient port-only filter
+blocked all three clients. **Those events were correlated only by TCP port,
+not by exact filterId, and cannot yet be claimed as the QA filter's drops.**
+This distinction changes the investigation: filter registration/readback
+works, BFE condition serialization checks pass, actual enforcement by AppId
+still FAILS on 127.0.0.1 and same-host non-127 IPv4.
+
+New coordinated Rust + Python integration QA runs only on a disposable,
+20-second **nonpersistent** dynamic BFE guard scoped to the real local QA
+listener. The guard emits its ephemeral, BFE-assigned \`filterId\` to an
+in-memory parent pipe; it is **never emitted in the report**. Before forcibly
+ending the guard, the independent original Rust read-only event probe validates
+that the BFE filter is still present under the exact QA sublayer/ALE layer,
+then accepts only tagged \`FWPM_NET_EVENT_TYPE_CLASSIFY_DROP\` with exactly that
+\`FWPM_NET_EVENT_CLASSIFY_DROP0.filterId\` and the real TCP port. Counters
+distinguish actual filter drops with selected/other AppId, unresolved AppId,
+missing AppId and other-filter drops. No PID, binary path, raw AppId, filter
+identifier, payload or endpoint is serialized. Absent auditing/events is
+INCONCLUSIVE, never promoted to PASS; the existing real selected/other/Python
+AppId enforcement matrix remains strict and deliberately red unless WFP
+actually blocks the selected process. The signed-driver mode, host firewall,
+BFE audit options, Windows protections and VDSina VPS are untouched.
+
+**CI / test merge / artifact hashes PENDING for the new source.** No security,
+DNS leak-free, native arbitrary packet→PID, crash-persistent fail-closed,
+Win10/11 or release 1.0 acceptance. Native WFP-before/after-NDISRD ordering
+must be measured separately with rescue-armed provider VNC.
+
 ## 2026-11-01 — Signed Windows PowerShell startup/three-phase WFP diagnostic unblocking (CI pending)
 
 PR #56 only. Parent source `27ff9f6e22ea6db35dc9a054779cefdbcdeb37b7`, exact work is an integration-harness

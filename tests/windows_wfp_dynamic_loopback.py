@@ -123,7 +123,7 @@ def main():
 
             def run_trial(guard_consent, app_only=False, port_only=False,
                           guard_executable=None, probe_ip="127.0.0.1",
-                          probe_port=None):
+                          probe_port=None, inspect_events=False):
                 selected_port = port if probe_port is None else probe_port
                 guard = subprocess.Popen(
                     [str(guard_executable or agent), "wfp-qa-guard",
@@ -148,6 +148,10 @@ def main():
                     assert ready["diagnostic_port_only"] is port_only
                     assert ready["app_id_scoped"] is (not port_only)
                     assert ready["tcp_port_scoped"] is (not app_only)
+                    # Filter ID belongs only to this ephemeral guard. Do not
+                    # write it to a report or print it to CI logs.
+                    filter_id = int(ready["ephemeral_filter_id"])
+                    assert filter_id > 0
                     trial["ready"] = True
                     time.sleep(.2)
                     blocked = client(qa, selected_port, probe_ip)
@@ -163,6 +167,24 @@ def main():
                             trial["python_allowed"] = independent.recv(4) == b"done"
                     except OSError:
                         trial["python_allowed"] = False
+                    if inspect_events:
+                        # Read the actual CLASSIFY_DROP.filterId while the QA
+                        # filter still exists; a coincidental port event is
+                        # NOT proof of this filter's runtime classification.
+                        if guard.poll() is not None:
+                            trial["event_probe"] = {"query_succeeded": False,
+                                                    "active_qa_filter_verified": False}
+                        else:
+                            event = subprocess.run(
+                                [str(agent), "wfp-qa-event-identity", str(qa),
+                                 str(other), str(selected_port), str(filter_id), CONSENT],
+                                capture_output=True, text=True, encoding="utf-8",
+                                timeout=8)
+                            if event.returncode != 0:
+                                trial["event_probe"] = {"query_succeeded": False,
+                                                        "error_class": "ChildExit"}
+                            else:
+                                trial["event_probe"] = json.loads(event.stdout)
                 finally:
                     if guard.poll() is None:
                         guard.kill()
@@ -178,20 +200,16 @@ def main():
             # Port-only must deny ALL clients on the one unique ephemeral QA
             # port; AppId-only and precise trials must deny only selected EXE.
             # This discriminates ineffective BFE filtering from AppId mismatch.
-            port_trial = run_trial("DYNAMIC_WFP_QA_PORT_ONLY_DIAGNOSTIC", port_only=True)
-            # Observe the OS's BFE net events without enabling auditing,
-            # copying paths, collecting packets or modifying global options.
-            # No events is explicitly inconclusive, never a false PASS.
-            event_result = subprocess.run(
-                [str(agent), "wfp-qa-event-identity", str(qa),
-                 str(other), str(port), CONSENT],
-                capture_output=True, text=True, encoding="utf-8", timeout=8)
-            assert event_result.returncode == 0
-            event_diagnostic = json.loads(event_result.stdout)
-            assert event_diagnostic["ok"] is True
-            assert event_diagnostic["redacted"] is True
-            assert event_diagnostic["kernel_packet_owner_bound"] is False
-            assert event_diagnostic["release_accepted"] is False
+            port_trial = run_trial(
+                "DYNAMIC_WFP_QA_PORT_ONLY_DIAGNOSTIC",
+                port_only=True, inspect_events=True)
+            # Correlate a *live* exact BFE filter ID to actual classify-drop
+            # events, never arbitrary coincident TCP-port events. Every result
+            # is redacted and a missing event remains explicitly INCONCLUSIVE.
+            event_diagnostic = port_trial.pop("event_probe")
+            assert event_diagnostic.get("filter_id_redacted", True) is True
+            assert event_diagnostic.get("kernel_packet_owner_bound", False) is False
+            assert event_diagnostic.get("release_accepted", False) is False
             identity_trial = run_trial("DYNAMIC_WFP_QA_APP_ONLY_DIAGNOSTIC", app_only=True)
             precise_trial = run_trial(CONSENT)
             # Counterfactual: create exactly the same filter while the
@@ -265,6 +283,8 @@ def main():
                 stage["different_executable_allowed"] is (not stage["port_only"]) and
                 stage["python_allowed"] is (not stage["port_only"]) and
                 stage["recovered"] for stage in stages) and
+                event_diagnostic.get("query_succeeded") is True and
+                event_diagnostic.get("active_qa_filter_verified") is True and
                 (not nic["tested"] or nic["app_id_scoped_proven"])
             )
             result = {
