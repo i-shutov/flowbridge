@@ -120,7 +120,7 @@ pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
     filter.filterCondition = conditions.as_mut_ptr();
     let mut id = 0;
     // SAFETY: app blob, all conditions and display string are live during call.
-    let status = unsafe { FwpmFilterAdd0(engine.0, &filter, null(), &mut id) };
+    let status = unsafe { FwpmFilterAdd0(engine.0, &filter, null_mut(), &mut id) };
     if status != 0 {
         return Err(format!("WFP dynamic filter add failed: {status}"));
     }
