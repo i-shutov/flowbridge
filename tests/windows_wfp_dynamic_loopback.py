@@ -83,7 +83,8 @@ def identity_probe(exe, target):
     assert data["ok"] is True and data["redacted"] is True
     assert data["wfp_filter_created"] is False
     assert data["packet_pid_bound"] is False
-    return data["own_app_id_equals_target"]
+    assert data["file_handle_native_path_checked"] is True
+    return data
 
 
 def main():
@@ -116,10 +117,17 @@ def main():
             # Both QA processes have byte-identical PE images, but different
             # absolute paths. This distinguishes BFE app-ID lookup identity
             # from filter classification; no hash or path enters the report.
+            selected_identity = identity_probe(qa, qa)
+            other_identity = identity_probe(other, qa)
+            agent_identity = identity_probe(agent, qa)
             identity = {
-                "selected_self_matches_target": identity_probe(qa, qa),
-                "different_copy_self_matches_target": identity_probe(other, qa),
-                "agent_self_matches_target": identity_probe(agent, qa),
+                "selected_self_matches_target": selected_identity["own_app_id_equals_target"],
+                "different_copy_self_matches_target": other_identity["own_app_id_equals_target"],
+                "agent_self_matches_target": agent_identity["own_app_id_equals_target"],
+                "selected_running_image_equals_handle": selected_identity["own_native_image_equals_handle"],
+                "different_running_image_equals_handle": other_identity["own_native_image_equals_handle"],
+                "selected_input_equals_handle_appid": selected_identity["target_input_appid_equals_handle_canonical"],
+                "different_input_equals_handle_appid": other_identity["own_input_appid_equals_handle_canonical"],
             }
 
             def run_trial(guard_consent, app_only=False, port_only=False,
@@ -143,6 +151,7 @@ def main():
                     ready = json.loads(q.get(timeout=10))
                     assert ready["wfp_ale_block_installed"] is True
                     assert ready["bfe_filter_readback_verified"] is True
+                    assert ready["app_id_from_canonical_file_handle"] is True
                     assert ready["dynamic_private_sublayer"] is True
                     assert ready["filter_persistent"] is False
                     assert ready["diagnostic_app_id_only"] is app_only
@@ -210,6 +219,7 @@ def main():
             # is redacted and a missing event remains explicitly INCONCLUSIVE.
             event_diagnostic = port_trial.pop("event_probe")
             assert event_diagnostic.get("filter_id_redacted", True) is True
+            assert event_diagnostic.get("file_handle_native_identity_compared") is True
             assert event_diagnostic.get("kernel_packet_owner_bound", False) is False
             assert event_diagnostic.get("release_accepted", False) is False
             identity_trial = run_trial("DYNAMIC_WFP_QA_APP_ONLY_DIAGNOSTIC", app_only=True)

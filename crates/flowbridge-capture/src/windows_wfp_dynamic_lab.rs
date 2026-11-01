@@ -7,8 +7,8 @@ use std::{
     ffi::c_void,
     io::{Read, Write},
     net::{Ipv4Addr, SocketAddrV4, TcpStream, UdpSocket},
-    os::windows::ffi::OsStrExt,
-    path::Path,
+    os::windows::{ffi::OsStrExt, io::AsRawHandle},
+    path::{Path, PathBuf},
     ptr::{null, null_mut},
     thread,
     time::Duration,
@@ -26,6 +26,8 @@ use windows_sys::Win32::{
         FWPM_SUBLAYER0, FWP_ACTION_BLOCK, FWP_BYTE_BLOB, FWP_BYTE_BLOB_TYPE, FWP_MATCH_EQUAL,
         FWP_UINT16, FWP_UINT8,
     },
+    Storage::FileSystem::{GetFinalPathNameByHandleW, VOLUME_NAME_DOS, VOLUME_NAME_NT},
+    System::Threading::{GetCurrentProcess, QueryFullProcessImageNameW, PROCESS_NAME_NATIVE},
 };
 
 const CONSENT: &str = "DYNAMIC_WFP_QA_LOOPBACK_ONLY";
@@ -80,6 +82,80 @@ fn lookup_app(path: &Path) -> Result<AppBlob, String> {
     Ok(app)
 }
 
+
+// Resolve the disposable executable through a real file handle, not merely
+// the caller's DOS spelling. The Win32 canonical path is for the documented
+// FwpmGetAppIdFromFileName0 API; NT volume paths are read-only comparators.
+// Neither path, stable fingerprint, nor process identity enters QA reports.
+fn canonical_file_handle_paths(path: &Path) -> Result<(PathBuf, Vec<u16>), String> {
+    let file = std::fs::File::open(path)
+        .map_err(|_| "WFP QA cannot open executable for canonical path".to_owned())?;
+    let final_path = |flags: u32| -> Result<String, String> {
+        let mut path_buf = vec![0u16; 16_384];
+        // SAFETY: open file handle, allocated UTF-16 buffer and bounded size.
+        let written = unsafe {
+            GetFinalPathNameByHandleW(
+                file.as_raw_handle(),
+                path_buf.as_mut_ptr(),
+                path_buf.len() as u32,
+                flags,
+            )
+        };
+        if written == 0 || written as usize >= path_buf.len() {
+            return Err("WFP QA canonical handle path unavailable".into());
+        }
+        String::from_utf16(&path_buf[..written as usize])
+            .map_err(|_| "WFP QA canonical handle path encoding invalid".to_owned())
+    };
+    let dos = final_path(VOLUME_NAME_DOS)?;
+    let native = final_path(VOLUME_NAME_NT)?;
+    let local = dos
+        .strip_prefix(r"\\?\")
+        .ok_or("WFP QA canonical DOS path lacks a local drive prefix")?;
+    if !Path::new(local).is_absolute() || !native.starts_with(r"\Device\") {
+        return Err("WFP QA canonical file handle is not a local NT volume".into());
+    }
+    Ok((PathBuf::from(local), native.encode_utf16().collect()))
+}
+
+// Independent read-only native image path from the ACTUALLY RUNNING process.
+// Comparing it to the file-handle path is diagnostic, not a network authority.
+fn running_process_native_path() -> Result<Vec<u16>, String> {
+    let mut path = vec![0u16; 16_384];
+    let mut length = path.len() as u32;
+    // SAFETY: current-process pseudo handle and valid bounded UTF-16 buffer.
+    let ok = unsafe {
+        QueryFullProcessImageNameW(
+            GetCurrentProcess(),
+            PROCESS_NAME_NATIVE,
+            path.as_mut_ptr(),
+            &mut length,
+        )
+    };
+    if ok == 0 || length == 0 || length as usize >= path.len() {
+        return Err("WFP QA running process native image path unavailable".into());
+    }
+    path.truncate(length as usize);
+    Ok(path)
+}
+
+fn normalized_native_units(path: &[u16]) -> Vec<u16> {
+    let mut units = path.to_vec();
+    for unit in &mut units {
+        if (b'A' as u16..=b'Z' as u16).contains(unit) {
+            *unit += 32;
+        } else if *unit == b'/' as u16 {
+            *unit = b'\\' as u16;
+        }
+    }
+    units
+}
+
+fn native_path_matches_event(path: &[u16], observed: &FWP_BYTE_BLOB) -> bool {
+    normalized_utf16_app_id(observed)
+        .is_some_and(|units| units == normalized_native_units(path))
+}
+
 fn same_app_id(first: &AppBlob, second: &AppBlob) -> bool {
     // SAFETY: blobs passed validation in lookup_app and remain alive.
     let (a, b) = unsafe {
@@ -100,13 +176,23 @@ pub fn identity_probe(path: &str, consent: &str) -> Result<Value, String> {
         return Err("WFP identity probe requires exact QA consent".into());
     }
     let target = lookup_app(Path::new(path))?;
+    let (target_handle_path, _) = canonical_file_handle_paths(Path::new(path))?;
+    let target_handle_id = lookup_app(&target_handle_path)?;
     let own =
         std::env::current_exe().map_err(|_| "Unable to resolve the QA executable".to_owned())?;
     let self_id = lookup_app(&own)?;
+    let (own_handle_path, own_native) = canonical_file_handle_paths(&own)?;
+    let own_handle_id = lookup_app(&own_handle_path)?;
+    let process_native = running_process_native_path()?;
     Ok(json!({
         "ok": true,
         "kind": "wfp_qa_running_executable_appid_comparison",
         "own_app_id_equals_target": same_app_id(&self_id, &target),
+        "file_handle_native_path_checked":true,
+        "own_native_image_equals_handle":
+            normalized_native_units(&own_native) == normalized_native_units(&process_native),
+        "own_input_appid_equals_handle_canonical":same_app_id(&self_id, &own_handle_id),
+        "target_input_appid_equals_handle_canonical":same_app_id(&target, &target_handle_id),
         "redacted": true,
         "wfp_filter_created": false,
         "ndisrd_modified": false,
@@ -334,6 +420,12 @@ pub fn event_identity_probe(
     }
     let selected = lookup_app(Path::new(selected_path))?;
     let other = lookup_app(Path::new(other_path))?;
+    let (selected_handle_path, selected_handle_native) =
+        canonical_file_handle_paths(Path::new(selected_path))?;
+    let (other_handle_path, other_handle_native) =
+        canonical_file_handle_paths(Path::new(other_path))?;
+    let selected_handle_app = lookup_app(&selected_handle_path)?;
+    let other_handle_app = lookup_app(&other_handle_path)?;
     // These two independent executable paths are read-only comparators.
     // They do not enter the transient WFP filter or a protected policy.
     if !Path::new(python_path).is_file() || !Path::new(agent_path).is_file() {
@@ -382,6 +474,10 @@ pub fn event_identity_probe(
     let status =
         unsafe { FwpmNetEventEnum0(engine.0, enumerator.handle, 256, &mut events, &mut returned) };
     let mut selected_matches = 0usize;
+    let mut selected_handle_native_matches = 0usize;
+    let mut other_handle_native_matches = 0usize;
+    let mut selected_handle_app_matches = 0usize;
+    let mut other_handle_app_matches = 0usize;
     let mut other_matches = 0usize;
     let mut python_matches = 0usize;
     let mut agent_matches = 0usize;
@@ -449,6 +545,18 @@ pub fn event_identity_probe(
             if agent_basename && !blob_matches(&agent, observed) {
                 agent_basename_only += 1;
             }
+            if native_path_matches_event(&selected_handle_native, observed) {
+                selected_handle_native_matches += 1;
+            }
+            if native_path_matches_event(&other_handle_native, observed) {
+                other_handle_native_matches += 1;
+            }
+            if blob_matches(&selected_handle_app, observed) {
+                selected_handle_app_matches += 1;
+            }
+            if blob_matches(&other_handle_app, observed) {
+                other_handle_app_matches += 1;
+            }
             if blob_matches(&selected, observed) {
                 selected_matches += 1;
             } else if blob_matches(&other, observed) {
@@ -484,6 +592,15 @@ pub fn event_identity_probe(
         "other_basename_only_matches":other_basename_only,
         "python_basename_only_matches":python_basename_only,
         "agent_basename_only_matches":agent_basename_only,
+        "file_handle_native_identity_compared":true,
+        "selected_input_appid_equals_handle_canonical":
+            same_app_id(&selected, &selected_handle_app),
+        "other_input_appid_equals_handle_canonical":
+            same_app_id(&other, &other_handle_app),
+        "selected_native_handle_path_event_matches":selected_handle_native_matches,
+        "other_native_handle_path_event_matches":other_handle_native_matches,
+        "selected_canonical_handle_appid_event_matches":selected_handle_app_matches,
+        "other_canonical_handle_appid_event_matches":other_handle_app_matches,
         "event_appid_expected_source_identity_complete":
             selected_matches == 1 && other_matches == 1 && python_matches == 1,
         "other_or_unresolved_event_appid":unmatched,
@@ -525,7 +642,8 @@ pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
     validate(path, port, consent)?;
     let app_only_diagnostic = consent == DIAG;
     let port_only_diagnostic = consent == PORT_DIAG;
-    let app = lookup_app(Path::new(path))?;
+    let (canonical_path, _native_path) = canonical_file_handle_paths(Path::new(path))?;
+    let app = lookup_app(&canonical_path)?;
     // SAFETY: zero is a valid default for these Win32 C repr structures.
     let mut session: FWPM_SESSION0 = unsafe { std::mem::zeroed() };
     session.flags = FWPM_SESSION_FLAG_DYNAMIC;
@@ -611,6 +729,7 @@ pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
             // consumes it synchronously, never writes it to artifacts/logs.
             "ephemeral_filter_id":id,
             "app_id_scoped":!port_only_diagnostic,
+            "app_id_from_canonical_file_handle":true,
             "dynamic_private_sublayer":true,
             "tcp_port_scoped":!app_only_diagnostic,
             "diagnostic_app_id_only":app_only_diagnostic,

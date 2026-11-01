@@ -177,3 +177,17 @@ from a proven kernel ALE AppId match, packet-to-PID authority, persistent
 fail-closed or Windows 10/11 acceptance. Existing live failures still block
 release. See the precise QA acceptance/evidence in
 `RUST_CAPTURE_INTEGRATION_CANDIDATE.md`.
+
+### 2026-11-02: handle-canonicalized WFP AppId QA (not production enforcement)
+
+The original Rust dynamic WFP lab now uses a file-handle-resolved DOS final
+path for its disposable AppId condition and compares the BFE event's live
+AppId to the native NT-volume final path. An independent
+`QueryFullProcessImageNameW(PROCESS_NAME_NATIVE)` of each actually running
+QA client is compared in memory with its opened file image. Only sanitized
+boolean/count results leave the process. Windows Server 2025 CI must **prove**
+a selected-only real TCP deny, independent application allow, and crash
+cleanup before this experimental AppId path can be considered functional.
+It cannot establish arbitrary packet ownership, persistent fail-closed or
+Windows 10/11 native acceptance. See the exact code/CI/ZIP evidence in
+`RUST_CAPTURE_INTEGRATION_CANDIDATE.md`.

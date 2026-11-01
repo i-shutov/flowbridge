@@ -1842,3 +1842,33 @@ The experimental raw backend 512-channel Windows characterization also
 failed again (actual peak below 512). Managed 128/1152/10000/4 acceptance
 is an *independent* gate; avoid calling all workflows green before its
 exact-head result is available. No public release or main update.
+
+## 2026-11-02 — Canonical file-handle WFP AppId end-to-end experiment (CI pending)
+
+This coordinated Rust/Python QA experiment keeps the strict **real TCP AppId
+deny** acceptance gate. It does not accept AppId registration or a read-only
+match as proof. The disposable Windows Server 2025 test copies two distinct
+original Rust EXEs, verifies the actually running native process image path
+against the same executable opened by a Windows file handle, and obtains both
+DOS and NT-volume final paths through `GetFinalPathNameByHandleW`. The former
+(with only the extended-path prefix removed) is supplied to
+`FwpmGetAppIdFromFileName0` for the existing ephemeral dynamic guard. The
+latter is compared privately to the actual `FwpmNetEventEnum0`
+`CLASSIFY_DROP` AppId of the exact live temporary BFE filter. Both the
+original caller-spelled file AppId and the handle-canonical AppId are compared.
+This discriminates an AppId lookup path alias from the kernel's observed
+image path, while preserving independent Python and sibling-EXE negatives.
+
+QA reports contain only boolean equality results and aggregate counters:
+no raw paths, volume strings, PIDs, stable identifiers, filter IDs, event
+blobs, packet payloads or SSH secrets. The filter still disappears when the
+guard process dies; mode 0 remains DIRECT-capable. The Windows native gate
+remains **FAIL** until a selected EXE is really denied while the distinct
+EXE and Python remain allowed, on localhost and any available same-host
+non-127 IPv4 route, followed by successful recovery after guard termination.
+All installed Rust GUI/SSH/SOCKS, SCM, NSIS rollback, and signed PowerShell
+acceptance run ahead of this diagnostic gate. This is not general kernel
+packet-to-PID proof, crash-persistent fail-closed, DNS privacy, Win10/11
+acceptance or permission to publish a release. Source, CI merge SHA,
+Windows JSON, artifact and PE SHA-256 must be recorded only after actual
+CI and byte-level artifact inspection.
