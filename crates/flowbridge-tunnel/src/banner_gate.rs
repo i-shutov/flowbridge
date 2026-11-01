@@ -59,6 +59,8 @@ fn identification(stream: &mut TcpStream, timeout: Duration) -> io::Result<Vec<u
 /// unchanged, including KEX and authentication material, with half-close.
 pub fn run(endpoint: SocketAddr, timeout: Duration) -> io::Result<()> {
     if endpoint.port() == 0
+        || endpoint.ip().is_unspecified()
+        || endpoint.ip().is_multicast()
         || !(Duration::from_millis(100)..=Duration::from_secs(10)).contains(&timeout)
     {
         return Err(io::Error::new(
@@ -99,6 +101,31 @@ pub fn run(endpoint: SocketAddr, timeout: Duration) -> io::Result<()> {
 mod tests {
     use super::*;
     use std::{net::TcpListener, thread};
+
+    #[test]
+    fn rejects_unsafe_endpoints_before_connecting() {
+        for target in [
+            "127.0.0.1:0",
+            "0.0.0.0:22",
+            "224.0.0.1:22",
+            "[::]:22",
+            "[ff02::1]:22",
+        ] {
+            let endpoint: SocketAddr = target.parse().unwrap();
+            assert_eq!(
+                run(endpoint, Duration::from_secs(2)).unwrap_err().kind(),
+                io::ErrorKind::InvalidInput,
+                "{target}",
+            );
+        }
+        let endpoint: SocketAddr = "127.0.0.1:22".parse().unwrap();
+        for timeout in [Duration::ZERO, Duration::from_secs(11)] {
+            assert_eq!(
+                run(endpoint, timeout).unwrap_err().kind(),
+                io::ErrorKind::InvalidInput,
+            );
+        }
+    }
 
     #[test]
     fn banner_does_not_consume_following_binary_packet() {

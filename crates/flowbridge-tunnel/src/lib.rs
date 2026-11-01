@@ -214,6 +214,16 @@ impl Config {
                 if path.is_empty()
                     || path.len() > 4096
                     || !file.is_absolute()
+                    // POSIX // has implementation-defined semantics; Windows
+                    // //server and \\server are network shares. Never launch
+                    // a ProxyCommand helper from an UNC/network path.
+                    || path.starts_with("//")
+                    || path.starts_with(r"\\")
+                    // The command is normalized to forward slashes below.
+                    // On Unix, a backslash could be a shell escape; on
+                    // Windows, both separators must be checked for dot paths.
+                    || (!cfg!(windows) && path.contains('\\'))
+                    || path.split(['/', '\\']).any(|part| part == "." || part == "..")
                     || !path.chars().all(|c| {
                         c.is_ascii_alphanumeric() || matches!(c, '/' | '\\' | '.' | '_' | '-' | ':')
                     })
@@ -1825,6 +1835,13 @@ mod tests {
         ] {
             assert!(args.iter().any(|x| x == required));
         }
+        // IPv6 must be unambiguous and bracketed in the generated endpoint.
+        cfg.host = "::1".into();
+        cfg.validate().unwrap();
+        assert!(cfg
+            .arguments()
+            .iter()
+            .any(|x| x.contains("--endpoint [::1]:22")));
         cfg.host = "example.com".into();
         assert!(cfg.validate().is_err());
         cfg.host = "127.0.0.1".into();
@@ -1834,6 +1851,11 @@ mod tests {
             "/tmp/../flowbridge",
             "flowbridge",
             "//server/share/flowbridge",
+            r"\\server\share\flowbridge.exe",
+            r"\\?\C:\FlowBridge\flowbridge.exe",
+            "/opt/./flowbridge",
+            "/opt/../flowbridge",
+            r"/opt\..\flowbridge",
         ] {
             cfg.banner_gate_executable = Some(bad.into());
             assert!(cfg.validate().is_err(), "dangerous path: {bad}");

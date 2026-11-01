@@ -856,3 +856,14 @@ Windows and Linux. Prior standalone CLI and ordinary supervisor routes,
 native NDISRD QA, protected status, DNS and raw-512 assertions are not modified.
 The new exact-HEAD CI, merge-SHA and artifact evidence must be checked before
 accepting this end-to-end block. Windows Server 2025 is not Win10/11 acceptance.
+
+
+## 2026-11-01: SSH banner-gate local executable safety and independent managed/raw CI (pending exact-source rerun)
+
+At PR #56 source `47c9f83b404c766109af04852cfe74cec197d029`, the first full post-integration CI reports **Rust/native FAILURE**: Linux `flowbridge-tunnel` rejected-path negative test correctly flagged a dangerous input that actual validation had accepted, `//server/share/flowbridge`. This is **not** a rustfmt flake, and the required test must not be weakened. The exact job was [Linux rust/native #41253086494](https://github.com/i-shutov/flowbridge/actions/runs/41253086494), where 25/26 tunnel tests passed and the UNC-like double-slash negative failed. The same source passed hosted Windows/macOS Rust jobs and capture/DNS workflows, but the matrix is NOT green.
+
+The fix extends the original Rust supervisor's strictly opt-in experimental `ProxyCommand` executable validation: reject double-leading-slash roots (implementation-defined POSIX and Windows UNC), backslash UNC/device roots, Linux backslash escaping, and both slash/backslash dot components. Retain the exact inert-character, expected-basename, absolute-local-path and numeric-host constraints. A new IPv6 `[::1]:port` endpoint construction regression verifies no ambiguity. The independent original Rust banner bridge also rejects multicast/unspecified addresses and zero ports before dialing, with local socket-free negatives; existing real OpenSSH binary KEX/half-close, handshake, consent and no-DIRECT tests remain mandatory.
+
+The same full-source run split Windows OpenSSH into real managed and raw jobs: managed `128 held / 1152 refused / 10000 verified / four SSH processes` **SUCCESS**; raw experimental `512` **FAILURE** at 244 held with Winsock 10054. It is an *unresolved raw capacity characterization*, not a reason to obscure or relax the managed acceptance. Keep the jobs, their JSON reports and job statuses independent; do not make raw failure green with `continue-on-error`. Neither result is native Win10/11 driver acceptance.
+
+The code and these notes are a single integrated safety-and-CI correction on the existing PR, **not** a release or evidence that the user's affected external SSH host benefits from Banner Gate. CI, exact source/test merge SHA and actual candidate ZIP/agent SHA-256 must be verified after commit before marking this block accepted. Packet-to-PID, protected crash persistence, DNS/UDP/IPv6 containment, real Win10/11 native acceptance and macOS NE remain open. No changes to `main`.
