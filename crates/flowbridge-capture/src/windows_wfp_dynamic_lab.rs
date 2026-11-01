@@ -17,15 +17,13 @@ use windows_sys::core::GUID;
 use windows_sys::Win32::{
     Foundation::HANDLE,
     NetworkManagement::WindowsFilteringPlatform::{
-        FwpmEngineClose0, FwpmEngineOpen0, FwpmFilterAdd0, FwpmFilterGetById0,
-        FwpmFreeMemory0, FwpmGetAppIdFromFileName0, FwpmNetEventCreateEnumHandle0,
-        FwpmNetEventDestroyEnumHandle0, FwpmNetEventEnum0, FwpmSubLayerAdd0,
-        FWPM_CONDITION_ALE_APP_ID,
-        FWPM_CONDITION_IP_PROTOCOL, FWPM_CONDITION_IP_REMOTE_PORT, FWPM_FILTER0,
-        FWPM_FILTER_CONDITION0, FWPM_LAYER_ALE_AUTH_CONNECT_V4, FWPM_NET_EVENT0,
-        FWPM_NET_EVENT_FLAG_APP_ID_SET, FWPM_SESSION0, FWPM_SESSION_FLAG_DYNAMIC,
-        FWPM_SUBLAYER0, FWP_ACTION_BLOCK, FWP_BYTE_BLOB, FWP_BYTE_BLOB_TYPE,
-        FWP_MATCH_EQUAL, FWP_UINT16, FWP_UINT8,
+        FwpmEngineClose0, FwpmEngineOpen0, FwpmFilterAdd0, FwpmFilterGetById0, FwpmFreeMemory0,
+        FwpmGetAppIdFromFileName0, FwpmNetEventCreateEnumHandle0, FwpmNetEventDestroyEnumHandle0,
+        FwpmNetEventEnum0, FwpmSubLayerAdd0, FWPM_CONDITION_ALE_APP_ID, FWPM_CONDITION_IP_PROTOCOL,
+        FWPM_CONDITION_IP_REMOTE_PORT, FWPM_FILTER0, FWPM_FILTER_CONDITION0,
+        FWPM_LAYER_ALE_AUTH_CONNECT_V4, FWPM_NET_EVENT0, FWPM_NET_EVENT_FLAG_APP_ID_SET,
+        FWPM_SESSION0, FWPM_SESSION_FLAG_DYNAMIC, FWPM_SUBLAYER0, FWP_ACTION_BLOCK, FWP_BYTE_BLOB,
+        FWP_BYTE_BLOB_TYPE, FWP_MATCH_EQUAL, FWP_UINT16, FWP_UINT8,
     },
 };
 
@@ -117,7 +115,6 @@ pub fn identity_probe(path: &str, consent: &str) -> Result<Value, String> {
     }))
 }
 
-
 struct FilterReadback(*mut FWPM_FILTER0);
 impl Drop for FilterReadback {
     fn drop(&mut self) {
@@ -136,10 +133,16 @@ fn blob_matches(expected: &AppBlob, actual: &FWP_BYTE_BLOB) -> bool {
     }
     // SAFETY: the BFE returned a bounded, non-null blob and the AppBlob is live.
     let actual_bytes = unsafe { std::slice::from_raw_parts(actual.data, size) };
-    let expected_bytes = unsafe {
-        std::slice::from_raw_parts((*expected.0).data, (*expected.0).size as usize)
-    };
+    let expected_bytes =
+        unsafe { std::slice::from_raw_parts((*expected.0).data, (*expected.0).size as usize) };
     actual_bytes == expected_bytes
+}
+
+fn same_guid(a: &GUID, b: &GUID) -> bool {
+    a.data1 == b.data1
+        && a.data2 == b.data2
+        && a.data3 == b.data3
+        && a.data4 == b.data4
 }
 
 /// Read back the actual BFE-serialized filter. Success from FwpmFilterAdd0
@@ -162,8 +165,8 @@ fn verify_bfe_filter(
     // SAFETY: successfully retrieved live BFE filter.
     let filter = unsafe { &*stored.0 };
     let count = if port_only || app_only { 1 } else { 3 };
-    if filter.layerKey != FWPM_LAYER_ALE_AUTH_CONNECT_V4
-        || filter.subLayerKey != QA_SUBLAYER
+    if !same_guid(&filter.layerKey, &FWPM_LAYER_ALE_AUTH_CONNECT_V4)
+        || !same_guid(&filter.subLayerKey, &QA_SUBLAYER)
         || filter.action.r#type != FWP_ACTION_BLOCK
         || filter.numFilterConditions != count
         || filter.filterCondition.is_null()
@@ -171,8 +174,7 @@ fn verify_bfe_filter(
         return Err("WFP QA BFE stored filter metadata mismatch".into());
     }
     // SAFETY: count is 1 or 3 and BFE returned a non-null condition array.
-    let conditions =
-        unsafe { std::slice::from_raw_parts(filter.filterCondition, count as usize) };
+    let conditions = unsafe { std::slice::from_raw_parts(filter.filterCondition, count as usize) };
     let mut app_seen = false;
     let mut port_seen = false;
     let mut protocol_seen = false;
@@ -180,7 +182,7 @@ fn verify_bfe_filter(
         if condition.matchType != FWP_MATCH_EQUAL {
             return Err("WFP QA BFE stored match operator mismatch".into());
         }
-        if condition.fieldKey == FWPM_CONDITION_ALE_APP_ID
+        if same_guid(&condition.fieldKey, &FWPM_CONDITION_ALE_APP_ID)
             && condition.conditionValue.r#type == FWP_BYTE_BLOB_TYPE
         {
             let blob = unsafe { condition.conditionValue.Anonymous.byteBlob };
@@ -188,14 +190,14 @@ fn verify_bfe_filter(
                 return Err("WFP QA BFE stored AppId bytes mismatch".into());
             }
             app_seen = true;
-        } else if condition.fieldKey == FWPM_CONDITION_IP_REMOTE_PORT
+        } else if same_guid(&condition.fieldKey, &FWPM_CONDITION_IP_REMOTE_PORT)
             && condition.conditionValue.r#type == FWP_UINT16
         {
             if unsafe { condition.conditionValue.Anonymous.uint16 } != port {
                 return Err("WFP QA BFE stored remote port mismatch".into());
             }
             port_seen = true;
-        } else if condition.fieldKey == FWPM_CONDITION_IP_PROTOCOL
+        } else if same_guid(&condition.fieldKey, &FWPM_CONDITION_IP_PROTOCOL)
             && condition.conditionValue.r#type == FWP_UINT8
         {
             if unsafe { condition.conditionValue.Anonymous.uint8 } != 6 {
@@ -206,9 +208,7 @@ fn verify_bfe_filter(
             return Err("WFP QA BFE returned an unexpected condition or data type".into());
         }
     }
-    if app_seen == port_only
-        || port_seen == app_only
-        || protocol_seen != (!app_only && !port_only)
+    if app_seen == port_only || port_seen == app_only || protocol_seen != (!app_only && !port_only)
     {
         return Err("WFP QA BFE stored condition set mismatch".into());
     }
@@ -250,18 +250,21 @@ pub fn event_identity_probe(
     // SAFETY: read-only local BFE connection; no dynamic/persistent rule created.
     let status = unsafe { FwpmEngineOpen0(null(), RPC_C_AUTHN_WINNT, null(), null(), &mut raw) };
     if status != 0 || raw.is_null() {
-        return Err(format!("WFP QA event read-only engine open failed: {status}"));
+        return Err(format!(
+            "WFP QA event read-only engine open failed: {status}"
+        ));
     }
     let engine = Engine(raw);
     let mut enum_handle: HANDLE = null_mut();
     // SAFETY: read-only enumeration of the current engine's existing events.
-    let status =
-        unsafe { FwpmNetEventCreateEnumHandle0(engine.0, null(), &mut enum_handle) };
+    let status = unsafe { FwpmNetEventCreateEnumHandle0(engine.0, null(), &mut enum_handle) };
     if status != 0 || enum_handle.is_null() {
-        return Ok(json!({"ok":true,"kind":"read_only_wfp_event_appid_correlation",
+        return Ok(
+            json!({"ok":true,"kind":"read_only_wfp_event_appid_correlation",
             "query_succeeded":false,"event_collection_proven":false,
             "status_code":status,"redacted":true,"kernel_packet_owner_bound":false,
-            "release_accepted":false}));
+            "release_accepted":false}),
+        );
     }
     let enumerator = EventEnumerator {
         engine: engine.0,
@@ -270,15 +273,8 @@ pub fn event_identity_probe(
     let mut events: *mut *mut FWPM_NET_EVENT0 = null_mut();
     let mut returned = 0u32;
     // SAFETY: BFE-allocated bounded array; every element is checked for null.
-    let status = unsafe {
-        FwpmNetEventEnum0(
-            engine.0,
-            enumerator.handle,
-            256,
-            &mut events,
-            &mut returned,
-        )
-    };
+    let status =
+        unsafe { FwpmNetEventEnum0(engine.0, enumerator.handle, 256, &mut events, &mut returned) };
     let mut selected_matches = 0usize;
     let mut other_matches = 0usize;
     let mut unmatched = 0usize;
@@ -311,7 +307,8 @@ pub fn event_identity_probe(
         // SAFETY: allocation owned by BFE; it frees all nested net events.
         unsafe { FwpmFreeMemory0(&mut ptr) };
     }
-    Ok(json!({"ok":true,"kind":"read_only_wfp_event_appid_correlation",
+    Ok(
+        json!({"ok":true,"kind":"read_only_wfp_event_appid_correlation",
         "query_succeeded":status == 0 && returned <= 256,
         "event_collection_proven":selected_matches + other_matches + unmatched > 0,
         "selected_event_appid_matches":selected_matches,
@@ -319,7 +316,8 @@ pub fn event_identity_probe(
         "other_or_unresolved_event_appid":unmatched,
         "bounded_scan_max":256,"redacted":true,"read_only":true,
         "filter_or_auditing_changed":false,"kernel_packet_owner_bound":false,
-        "protected_fail_closed":false,"release_accepted":false}))
+        "protected_fail_closed":false,"release_accepted":false}),
+    )
 }
 
 fn validate(path: &str, port: u16, consent: &str) -> Result<(), String> {
