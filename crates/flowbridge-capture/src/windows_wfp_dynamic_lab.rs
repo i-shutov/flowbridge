@@ -17,11 +17,10 @@ use windows_sys::Win32::{
     Foundation::HANDLE,
     NetworkManagement::WindowsFilteringPlatform::{
         FwpmEngineClose0, FwpmEngineOpen0, FwpmFilterAdd0, FwpmFreeMemory0,
-        FwpmGetAppIdFromFileName0, FWPM_CONDITION_ALE_APP_ID,
-        FWPM_CONDITION_IP_PROTOCOL, FWPM_CONDITION_IP_REMOTE_PORT,
-        FWPM_FILTER0, FWPM_FILTER_CONDITION0, FWPM_LAYER_ALE_AUTH_CONNECT_V4,
-        FWPM_SESSION0, FWPM_SESSION_FLAG_DYNAMIC, FWPM_SUBLAYER_UNIVERSAL,
-        FWP_ACTION_BLOCK, FWP_BYTE_BLOB, FWP_BYTE_BLOB_TYPE, FWP_EMPTY,
+        FwpmGetAppIdFromFileName0, FWPM_CONDITION_ALE_APP_ID, FWPM_CONDITION_IP_PROTOCOL,
+        FWPM_CONDITION_IP_REMOTE_PORT, FWPM_FILTER0, FWPM_FILTER_CONDITION0,
+        FWPM_LAYER_ALE_AUTH_CONNECT_V4, FWPM_SESSION0, FWPM_SESSION_FLAG_DYNAMIC,
+        FWPM_SUBLAYER_UNIVERSAL, FWP_ACTION_BLOCK, FWP_BYTE_BLOB, FWP_BYTE_BLOB_TYPE, FWP_EMPTY,
         FWP_MATCH_EQUAL, FWP_UINT16, FWP_UINT8,
     },
 };
@@ -61,7 +60,9 @@ fn validate(path: &str, port: u16, consent: &str) -> Result<(), String> {
         || path.starts_with("//")
         || !Path::new(path).is_file()
         || Path::new(path).file_name().and_then(|n| n.to_str()) != Some(CLIENT)
-        || path.chars().any(|c| c.is_control() || matches!(c, '"' | '%'))
+        || path
+            .chars()
+            .any(|c| c.is_control() || matches!(c, '"' | '%'))
         || path.split(['\\', '/']).any(|c| c == "." || c == "..")
     {
         return Err("WFP lab requires an existing dedicated local-drive QA copy".into());
@@ -105,7 +106,9 @@ pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
     conditions[2].matchType = FWP_MATCH_EQUAL;
     conditions[2].conditionValue.r#type = FWP_UINT8;
     conditions[2].conditionValue.Anonymous.uint8 = 6;
-    let mut display: Vec<u16> = "FlowBridge disposable dynamic QA guard\0".encode_utf16().collect();
+    let mut display: Vec<u16> = "FlowBridge disposable dynamic QA guard\0"
+        .encode_utf16()
+        .collect();
     // SAFETY: zero initialized C repr filter, all required fields populated.
     let mut filter: FWPM_FILTER0 = unsafe { std::mem::zeroed() };
     filter.layerKey = FWPM_LAYER_ALE_AUTH_CONNECT_V4;
@@ -121,15 +124,20 @@ pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
     if status != 0 {
         return Err(format!("WFP dynamic filter add failed: {status}"));
     }
-    println!("{}", json!({
-        "ok":true, "kind":"original_rust_dynamic_wfp_lab",
-        "wfp_ale_block_installed":true, "app_id_scoped":true,
-        "tcp_port_scoped":true, "guard_seconds_max":20,
-        "filter_persistent":false, "ndisrd_touched":false,
-        "wfp_ndisrd_ordering_proved":false, "crash_persistent_fail_closed":false,
-        "release_accepted":false
-    }));
-    std::io::stdout().flush().map_err(|_| "WFP guard stdout error")?;
+    println!(
+        "{}",
+        json!({
+            "ok":true, "kind":"original_rust_dynamic_wfp_lab",
+            "wfp_ale_block_installed":true, "app_id_scoped":true,
+            "tcp_port_scoped":true, "guard_seconds_max":20,
+            "filter_persistent":false, "ndisrd_touched":false,
+            "wfp_ndisrd_ordering_proved":false, "crash_persistent_fail_closed":false,
+            "release_accepted":false
+        })
+    );
+    std::io::stdout()
+        .flush()
+        .map_err(|_| "WFP guard stdout error")?;
     thread::sleep(Duration::from_secs(20));
     Ok(json!({"ok":true, "dynamic_filter_expired":true,
         "crash_persistent_fail_closed":false, "release_accepted":false}))
@@ -145,9 +153,11 @@ pub fn client(port: u16, consent: &str) -> Result<Value, String> {
     tcp.set_read_timeout(Some(Duration::from_secs(3)))
         .map_err(|_| "WFP QA read timeout setup failed")?;
     tcp.write_all(b"probe").map_err(|_| "WFP QA write failed")?;
-    tcp.shutdown(std::net::Shutdown::Write).map_err(|_| "WFP QA half-close failed")?;
+    tcp.shutdown(std::net::Shutdown::Write)
+        .map_err(|_| "WFP QA half-close failed")?;
     let mut data = Vec::new();
-    tcp.read_to_end(&mut data).map_err(|_| "WFP QA read failed")?;
+    tcp.read_to_end(&mut data)
+        .map_err(|_| "WFP QA read failed")?;
     if data != b"done" {
         return Err("WFP QA response mismatch".into());
     }
