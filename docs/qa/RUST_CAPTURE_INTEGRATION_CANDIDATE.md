@@ -1,3 +1,45 @@
+## 2026-11-01 — Original Rust native Windows operator panel + installed SOCKS/SSH candidate (CI PENDING)
+
+Integrated block for **PR #56 only**: add a real, separate-subsystem **native Win32
+Rust** process flowbridge-panel.exe to the original Rust candidate archive,
+unsigned per-user NSIS installer and Start Menu shortcut. Preserve the exact
+source-head/test-merge/payload SHA-256 checks: the Windows candidate now has
+**five files** (Rust agent, Rust CLI, Rust panel, README and manifest); macOS and
+Linux remain the existing four-file candidate. NSIS adds LICENSE separately.
+The panel is a genuinely interactive same-user client of the preexisting
+restricted named pipe, with Start from an explicitly entered absolute JSON
+profile, Refresh, Reload (engine-only; SSH identity unchanged), and confirmed
+Stop. It spawns only the installed sibling Rust agent via separate Windows
+process arguments, not cmd.exe, an elevated service, or ProxiFyre. The agent
+remains foreground/same-user and never touches the NDISRD kernel service in
+this path. Closing the panel is not an implicit tunnel stop.
+
+A new **actual Windows hosted** test must install the candidate, find the real
+FlowBridgeRustPanelV1 window and five native controls, enter an explicit
+temporary profile through its EDIT control, click Start, verify the restricted
+pipe controls a real 127.0.0.1 SOCKS listener, obtain actual SOCKS5 BLOCK
+response on a genuine TCP connection, edit the profile and click Reload,
+observe engine generation increment, click Stop and accept its modal Win32
+confirmation, prove the listening socket closes, then close the actual panel.
+Compare the installed panel and agent SHA-256 to the exact candidate manifest.
+All preexisting fault-injected installer rollback, real installed Rust Banner
+First -> Microsoft-signed OpenSSH -> SOCKS5, KEX, half-close, SSH outage, and
+strict hosted managed 128/1152/10000/four-worker requirements remain intact.
+
+**Explicit non-claims:** This panel does not select arbitrary applications,
+bind NDISRD packets to PIDs, enable native diversion, provide persistent
+fail-closed, prevent DNS/UDP/IPv6 leaks, install a driver, install an SCM
+service, or qualify for Windows 10/11 beta/release. Its main window visibly
+warns of those limitations. The initial operator UI is functional but not
+the final product design; privilege-separated protected-mode user workflows
+remain P0. An unsigned per-user candidate is not a release installer.
+
+**Acceptance status:** PENDING independent exact-HEAD GitHub Actions, test
+merge SHA and downloaded artifact digest verification. Do not report this
+as completed from source review alone.
+
+---
+
 ### CI correction — rollback of newly created EMPTY directory (before acceptance)
 
 First implementation HEAD `f4830874fe9c8e6d749bd6eeb1f6dec078347f28`,

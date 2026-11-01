@@ -11,7 +11,7 @@ Unicode true
   !error "OUTPUT_FILE must be set"
 !endif
 
-Name "FlowBridge Rust Candidate (SSH/SOCKS ONLY)"
+Name "FlowBridge Rust Candidate (SSH/SOCKS Panel, NOT PROTECTED)"
 OutFile "${OUTPUT_FILE}"
 RequestExecutionLevel user
 InstallDir "$LOCALAPPDATA\FlowBridge Rust Candidate"
@@ -47,8 +47,10 @@ SetCompressor /SOLID lzma
 Function RollbackIncompleteInstall
   DeleteRegKey HKCU "${UNINSTALL_KEY}"
   DeleteRegKey HKCU "${SETTINGS_KEY}"
+  Delete "$SMPROGRAMS\FlowBridge Rust Candidate.lnk"
   Delete "$INSTDIR\Uninstall.exe"
   Delete "$INSTDIR\flowbridge-agent.exe"
+  Delete "$INSTDIR\flowbridge-panel.exe"
   Delete "$INSTDIR\flowbridge.exe"
   Delete "$INSTDIR\manifest.json"
   Delete "$INSTDIR\README.md"
@@ -90,6 +92,11 @@ Section "Rust SSH/SOCKS candidate" SEC_MAIN
     SetErrorLevel 45
     Abort
   clean_candidate_target:
+  IfFileExists "$SMPROGRAMS\FlowBridge Rust Candidate.lnk" 0 clean_candidate_shortcut
+    DetailPrint "Candidate Start Menu shortcut exists; no overwrite"
+    SetErrorLevel 45
+    Abort
+  clean_candidate_shortcut:
   SetOutPath "$INSTDIR"
   ; Fail on EVERY individual copy, never just the final File command.
   ClearErrors
@@ -105,6 +112,9 @@ Section "Rust SSH/SOCKS candidate" SEC_MAIN
   File "${PAYLOAD_DIR}\flowbridge-agent.exe"
   IfErrors install_failed
   ClearErrors
+  File "${PAYLOAD_DIR}\flowbridge-panel.exe"
+  IfErrors install_failed
+  ClearErrors
   File "${PAYLOAD_DIR}\manifest.json"
   IfErrors install_failed
   ClearErrors
@@ -115,6 +125,9 @@ Section "Rust SSH/SOCKS candidate" SEC_MAIN
   IfErrors install_failed
   ClearErrors
   WriteUninstaller "$INSTDIR\Uninstall.exe"
+  IfErrors install_failed
+  ClearErrors
+  CreateShortCut "$SMPROGRAMS\FlowBridge Rust Candidate.lnk" "$INSTDIR\flowbridge-panel.exe"
   IfErrors install_failed
 !ifdef QA_ABORT_AFTER_UNINSTALLER
   Call RollbackIncompleteInstall
@@ -160,6 +173,10 @@ Section "Uninstall"
   IfErrors 0 +3
     SetErrorLevel 44
     Abort
+  Delete "$INSTDIR\flowbridge-panel.exe"
+  IfErrors 0 +3
+    SetErrorLevel 44
+    Abort
   Delete "$INSTDIR\flowbridge.exe"
   IfErrors 0 +3
     SetErrorLevel 44
@@ -168,6 +185,7 @@ Section "Uninstall"
   Delete "$INSTDIR\README.md"
   Delete "$INSTDIR\LICENSE"
   Delete "$INSTDIR\Uninstall.exe"
+  Delete "$SMPROGRAMS\FlowBridge Rust Candidate.lnk"
   RMDir "$INSTDIR"
   DeleteRegKey HKCU "${UNINSTALL_KEY}"
   DeleteRegKey HKCU "${SETTINGS_KEY}"

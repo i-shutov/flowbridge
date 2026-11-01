@@ -20,8 +20,8 @@ import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED = {"flowbridge.exe", "flowbridge-agent.exe", "README.md", "manifest.json"}
-BINARY = {"flowbridge.exe", "flowbridge-agent.exe"}
+EXPECTED = {"flowbridge.exe", "flowbridge-agent.exe", "flowbridge-panel.exe", "README.md", "manifest.json"}
+BINARY = {"flowbridge.exe", "flowbridge-agent.exe", "flowbridge-panel.exe"}
 MAX_MEMBER = 32 * 1024 * 1024
 
 
@@ -97,7 +97,7 @@ def main() -> None:
     require(nsis is not None, "makensis unavailable (no silent NSIS fallback)")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.report.parent.mkdir(parents=True, exist_ok=True)
-    # No copied vendor binary, private key or legacy GUI; stage only known names.
+    # Original Rust panel only, no vendor binary, private key or legacy GUI.
     with tempfile.TemporaryDirectory(prefix="flowbridge-rust-installer-") as staging:
         stage = Path(staging)
         for name, data in payload.items():
@@ -133,7 +133,7 @@ def main() -> None:
         "native_driver_installed_or_modified": False,
         "scm_service_installed_or_modified": False,
         "contains_legacy_cpp_wfp": False, "contains_vendor_binary": False,
-        "includes_gui": False, "native_packet_pid_proof": False,
+        "includes_gui": True, "gui_scope": "same_user_explicit_ssh_socks_only", "native_packet_pid_proof": False,
         "protected_fail_closed": False, "dns_leak_free": False,
         "windows_10_11_accepted": False, "release_accepted": False,
     }

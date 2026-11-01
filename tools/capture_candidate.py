@@ -93,12 +93,19 @@ def verify(agent: pathlib.Path, output: pathlib.Path) -> None:
     print(json.dumps(report))
 
 
-def package(agent: pathlib.Path, cli: pathlib.Path, output: pathlib.Path) -> None:
+def package(agent: pathlib.Path, cli: pathlib.Path, output: pathlib.Path, panel: pathlib.Path | None) -> None:
     if not agent.is_file() or not cli.is_file():
         raise FileNotFoundError("Build both original Rust binaries before packaging")
     suffix = ".exe" if os.name == "nt" else ""
+    if os.name == "nt":
+        if panel is None or not panel.is_file() or panel.is_symlink():
+            raise FileNotFoundError("Native Rust Windows panel binary is mandatory for this candidate")
+    elif panel is not None:
+        raise ValueError("The Windows panel cannot be packaged on non-Windows platforms")
     payload = {"flowbridge-agent" + suffix: agent.read_bytes(), "flowbridge" + suffix: cli.read_bytes(),
                "README.md": pathlib.Path("docs/qa/RUST_CAPTURE_INTEGRATION_CANDIDATE.md").read_bytes()}
+    if panel is not None:
+        payload["flowbridge-panel.exe"] = panel.read_bytes()
     manifest = {
         "schema": 1, "kind": "integration_candidate_NOT_RELEASE", "source_commit": git_sha(),
         "pr_head_sha": os.environ.get("PR_HEAD_SHA"), "platform": platform.platform(),
@@ -127,13 +134,14 @@ def main() -> None:
     parser.add_argument("--agent", type=pathlib.Path, required=True)
     parser.add_argument("--cli", type=pathlib.Path)
     parser.add_argument("--output", type=pathlib.Path, required=True)
+    parser.add_argument("--panel", type=pathlib.Path)
     args = parser.parse_args()
     if args.operation == "verify":
         verify(args.agent, args.output)
     else:
         if args.cli is None:
             parser.error("package requires --cli")
-        package(args.agent, args.cli, args.output)
+        package(args.agent, args.cli, args.output, args.panel)
 
 
 if __name__ == "__main__":

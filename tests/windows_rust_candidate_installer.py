@@ -97,6 +97,7 @@ def main() -> None:
         "real_windows_ssh_banner_transport": False,
         "real_windows_pipe_socks_reload_stop": False,
         "installed_real_authenticated_banner_ssh_socks": False,
+        "installed_native_rust_panel_operated_real_socks": False,
         "occupied_destination_rejected_without_mutation": False,
         "fault_injected_partial_copy_rolled_back": False,
         "fault_injected_written_uninstaller_rolled_back": False,
@@ -107,7 +108,7 @@ def main() -> None:
         "registry_removed": False,
         "scm_service_unmodified": False,
         "driver_installed_or_modified": False,
-        "includes_gui": False, "protected_fail_closed": False,
+        "includes_gui": True, "gui_scope": "same_user_ssh_socks_only", "protected_fail_closed": False,
         "native_packet_pid_proof": False, "dns_leak_free": False,
         "win10_11_acceptance": False, "release_accepted": False,
     }
@@ -188,7 +189,7 @@ def main() -> None:
                     "Installed uninstall key does not match directory")
             expected = evidence["payload_sha256"]
             require(set(expected) == {"flowbridge.exe", "flowbridge-agent.exe",
-                                      "README.md", "manifest.json", "LICENSE"},
+                                      "flowbridge-panel.exe", "README.md", "manifest.json", "LICENSE"},
                     "Unexpected product payload file set")
             for name, digest in expected.items():
                 path = installed / name
@@ -245,6 +246,39 @@ def main() -> None:
                     lifecycle.get("stop_closed_listener") is True,
                     "Installed Rust process/sockets did not match archive or stop")
             result["real_windows_pipe_socks_reload_stop"] = True
+
+            # Installed native Rust Win32 UI must start and control an actual
+            # same-user Rust agent, and observe a genuine denied SOCKS5 socket.
+            # Never interpret GUI status as protected native capture.
+            gui_report = base / "installed-panel-test.json"
+            gui_test = subprocess.run(
+                [sys.executable, "tests/windows_rust_panel.py", "--panel",
+                 str(installed / "flowbridge-panel.exe"), "--agent", str(agent),
+                 "--output", str(gui_report)],
+                capture_output=True, text=True, encoding="utf-8", timeout=95,
+                check=False,
+            )
+            require(gui_test.returncode == 0 and gui_report.is_file(),
+                    "Installed Rust Win32 panel/pipe/live SOCKS vertical failed: " +
+                    gui_test.stdout[-500:] + gui_test.stderr[-500:])
+            gui_data = json.loads(gui_report.read_text(encoding="utf-8"))
+            require(gui_data.get("passed") is True and
+                    gui_data.get("panel_sha256") == expected["flowbridge-panel.exe"] and
+                    gui_data.get("agent_sha256") == expected["flowbridge-agent.exe"] and
+                    all(gui_data.get(key) is True for key in (
+                        "actual_win32_window_and_controls",
+                        "gui_start_same_user_rust_agent",
+                        "gui_status_live_socks",
+                        "actual_socks_block_denied",
+                        "gui_reload_atomic_configuration",
+                        "gui_stop_closed_listener",
+                        "gui_closed_cleanly")) and
+                    all(gui_data.get(key) is False for key in (
+                        "ndisrd_activated", "native_packet_pid_proof",
+                        "protected_fail_closed", "dns_leak_free",
+                        "win10_11_acceptance", "release_accepted")),
+                    "Actual installed Rust panel failed acceptance or claimed protection")
+            result["installed_native_rust_panel_operated_real_socks"] = True
 
             # The *installed* agent controls actual Microsoft-signed OpenSSH
             # through the *installed* Rust Banner First helper. Strict known
