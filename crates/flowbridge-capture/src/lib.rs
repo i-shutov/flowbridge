@@ -3,6 +3,7 @@
 pub mod capture_agent;
 pub mod capture_pipeline;
 pub mod control_plane;
+pub mod dns_stub;
 pub mod ndis_session;
 pub mod ndis_wire;
 pub mod owned_relay;

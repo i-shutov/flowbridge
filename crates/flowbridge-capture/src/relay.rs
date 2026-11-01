@@ -9,6 +9,7 @@ use flowbridge_net::{connect_route_guarded, relay};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::{watch, OwnedSemaphorePermit, Semaphore};
 
@@ -171,6 +172,64 @@ impl RelayPool {
 }
 
 impl ConnectedUpstream {
+    /// One explicitly bounded DNS-over-TCP transaction over the existing
+    /// supervised SOCKS connection. Never opens a resolver socket directly.
+    /// Any timeout, cancellation, truncated reply or excessive length drops
+    /// both the connection and its capacity permit without fallback.
+    pub async fn dns_tcp_exchange(mut self, query: &[u8]) -> Result<Vec<u8>, RelayError> {
+        if !(12..=1232).contains(&query.len()) {
+            return Err(RelayError::InvalidDestination);
+        }
+        let mut stop = self.stop.clone();
+        let idle_timeout = self.idle_timeout;
+        let exchange = async {
+            let size = (query.len() as u16).to_be_bytes();
+            self.stream.write_all(&size).await.map_err(|source| {
+                RelayError::Transport(flowbridge_net::NetError::Io {
+                    stage: "DNS TCP query length",
+                    source,
+                })
+            })?;
+            self.stream.write_all(query).await.map_err(|source| {
+                RelayError::Transport(flowbridge_net::NetError::Io {
+                    stage: "DNS TCP question",
+                    source,
+                })
+            })?;
+            let mut prefix = [0u8; 2];
+            self.stream.read_exact(&mut prefix).await.map_err(|source| {
+                RelayError::Transport(flowbridge_net::NetError::Io {
+                    stage: "DNS TCP response length",
+                    source,
+                })
+            })?;
+            let length = usize::from(u16::from_be_bytes(prefix));
+            if !(12..=1232).contains(&length) {
+                return Err(RelayError::Transport(flowbridge_net::NetError::Protocol {
+                    protocol: "DNS-over-TCP",
+                    message: "response outside safe UDP payload bound",
+                }));
+            }
+            let mut reply = vec![0u8; length];
+            self.stream.read_exact(&mut reply).await.map_err(|source| {
+                RelayError::Transport(flowbridge_net::NetError::Io {
+                    stage: "DNS TCP response",
+                    source,
+                })
+            })?;
+            Ok(reply)
+        };
+        tokio::select! {
+            biased;
+            () = cancelled(&mut stop) => Err(RelayError::Cancelled),
+            result = tokio::time::timeout(idle_timeout, exchange) => {
+                result.unwrap_or_else(|_| Err(RelayError::Transport(
+                    flowbridge_net::NetError::Timeout { stage: "DNS TCP transaction" },
+                )))
+            }
+        }
+    }
+
     /// Consumes both sockets and its capacity permit on every exit. Half-close
     /// preserves the other direction; cancellation closes both without DIRECT.
     pub async fn forward(mut self, mut native: TcpStream) -> Result<(u64, u64), RelayError> {

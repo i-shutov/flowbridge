@@ -38,6 +38,11 @@ jobs:
           suffix=""; if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=".exe"; fi
           python tools/capture_candidate.py verify --agent "target/release/flowbridge-agent${suffix}" --output build/capture-candidate/verification.json
           python tools/capture_candidate.py package --agent "target/release/flowbridge-agent${suffix}" --cli "target/release/flowbridge${suffix}" --output "build/capture-candidate/FlowBridge-Rust-Candidate-${RUNNER_OS}.zip"
+      - name: Real independent UDP DNS ingress to Rust SOCKS5 to TCP resolver, denial and recovery
+        shell: bash
+        run: |
+          suffix=""; if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=".exe"; fi
+          python tests/dns_udp_via_socks.py --agent "target/release/flowbridge-agent${suffix}" --output build/capture-candidate/dns-udp-socks-lifecycle.json
       - name: Windows real IPv4 and available IPv6 UDP loopback plus IP Helper local owner snapshots
         if: runner.os == 'Windows'
         shell: bash

@@ -1,3 +1,31 @@
+## 2026-11-01: explicit UDP DNS -> Rust SOCKS5 -> DNS-over-TCP transport (CI PENDING)
+
+A new original-Rust bounded laboratory vertical `flowbridge-agent dns-udp-lab
+<JSON>` accepts only an exact opt-in consent, loopback UDP bind, loopback
+upstream FlowBridge SOCKS listener, numeric DNS resolver endpoint, a maximum of
+16 questions, 15-second total time and 1,232-byte DNS UDP payloads. Remote
+non-loopback resolvers are permitted only on DNS TCP port 53. It validates
+uncompressed single-question DNS queries (optional one bounded EDNS OPT),
+reuses the supervised `RelayPool` real SOCKS CONNECT and the new cancellation-
+aware one-transaction TCP DNS length-framed exchange, verifies response ID/QR,
+and returns UDP only to the original loopback source. Malformed packets,
+SOCKS rejection, timeout, oversized response or mismatched DNS ID are dropped
+without connecting to the DNS server directly. It does not change the system
+resolver, DNS registry settings, NDISRD mode or firewall.
+
+Independent three-platform CI exercises a **separate agent process** plus a
+real UDP socket, a real local SOCKS5 listener, a separate TCP DNS resolver
+socket, successful DNS replies, denial while the SOCKS gate is closed, invalid
+DNS before proxy, recovery, exact counters, no unexpected resolver TCP
+connection and missing-consent denial. Native Win10/11 DNS interception and
+DNS leak-free evidence are NOT part of this scenario. In particular, the test
+SOCKS server is a local synthetic fixture, not authenticated OpenSSH; existing
+separately validated real-SSH probes are not equivalent to this new full
+DNS/SSH vertical. Do not mark this item accepted until exact-head CI and
+downloaded artifacts are checked. This is a meaningful real-socket DNS-over-
+SOCKS building block, **not** transparent routing or containment of selected
+application UDP/QUIC/DoH/DoT/IPv6 DNS traffic.
+
 ## 2026-11-01: Native IPv4 canary fragmentation quarantine (exact-HEAD CI/native evidence pending)
 
 The bounded Windows x64 NDISRD **laboratory** reflection now detects IPv4 TCP
