@@ -206,7 +206,10 @@ fn verify_bfe_filter(
             return Err("WFP QA BFE returned an unexpected condition or data type".into());
         }
     }
-    if app_seen == port_only || port_seen == app_only || protocol_seen == app_only {
+    if app_seen == port_only
+        || port_seen == app_only
+        || protocol_seen != (!app_only && !port_only)
+    {
         return Err("WFP QA BFE stored condition set mismatch".into());
     }
     Ok(())
