@@ -143,7 +143,7 @@ fn normalized_utf16_app_id(blob: &FWP_BYTE_BLOB) -> Option<Vec<u16>> {
     // CLASSIFY_DROP header AppId is a UTF-16LE path byte blob. Decode only
     // privately, never serialize the path, bytes, or a stable fingerprint.
     let size = blob.size as usize;
-    if size < 2 || size > 16_384 || size % 2 != 0 || blob.data.is_null() {
+    if !(2..=16_384).contains(&size) || size % 2 != 0 || blob.data.is_null() {
         return None;
     }
     // SAFETY: bounded, non-null BFE-owned event blob during enumeration.
