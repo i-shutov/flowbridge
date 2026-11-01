@@ -1,3 +1,22 @@
+### 2026-11-01 — Win32 GUI Start: explicit null standard handles for installed Rust agent (CI PENDING)
+
+A native Windows-subsystem panel has no guaranteed valid inherited stdin,
+stdout or stderr. Its original same-user child launch inherited all three
+handles implicitly, unlike Python/terminal launches that already passed.
+A GUI-originated CreateProcess may reject invalid handles even though the
+same original Rust agent and profile run successfully from a console. The
+installed panel now explicitly passes Windows null standard streams to
+its sibling original-Rust `flowbridge-agent.exe` with separate arguments and
+`CREATE_NO_WINDOW`, preventing inherited-console assumptions and accidental
+agent output to GUI/parent handles. No shell, elevation, SSH credential
+transfer, driver IOCTL, or routing policy change. Together with the
+already-added preserved Start-error UI, the next full installed-GUI QA
+must establish real same-user agent/SOCKS readiness, then the separate
+authenticated Banner First/OpenSSH route and closed-gate negatives.
+This is a hypothesized root-cause repair, NOT a CI PASS.
+
+---
+
 ### 2026-11-01 — Preserve failed native GUI Start diagnostics under queued Refresh (CI PENDING)
 
 The first exact native-control-command Windows Server 2025 run

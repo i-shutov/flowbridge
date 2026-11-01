@@ -176,6 +176,12 @@ mod panel {
         let mut child = std::process::Command::new(&agent)
             .arg("control-serve")
             .arg(&path)
+            // Native GUI applications may have no valid inherited standard
+            // handles. Never pass a non-console parent's invalid handles into
+            // a same-user background agent. Also avoid leaking its output.
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
             .creation_flags(CREATE_NO_WINDOW)
             .spawn()
             .map_err(|_| "Could not start the same-user Rust agent.")?;
