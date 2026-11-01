@@ -237,21 +237,24 @@ mod panel {
             "STATIC",
             "FlowBridge  |  Windows Rust operator panel",
             0,
-            0, (18, 13, 740, 26),
+            0,
+            (18, 13, 740, 26),
         );
         child(
             window,
             "STATIC",
             "Experimental SSH/SOCKS only. NO protected interception or DNS privacy guarantee.",
             0,
-            0, (18, 43, 790, 24),
+            0,
+            (18, 43, 790, 24),
         );
         child(
             window,
             "STATIC",
             "Explicit JSON profile:",
             0,
-            0, (18, 78, 155, 24),
+            0,
+            (18, 78, 155, 24),
         );
         let default_profile = std::env::var_os("LOCALAPPDATA")
             .map(|root| PathBuf::from(root).join("FlowBridge").join("profile.json"))
@@ -261,19 +264,40 @@ mod panel {
             "EDIT",
             &default_profile.to_string_lossy(),
             ID_PATH,
-            WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL as u32, (177, 75, 610, 27),
+            WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL as u32,
+            (177, 75, 610, 27),
         );
         child(
-            window, "BUTTON", "Start", ID_START, WS_TABSTOP, (18, 116, 130, 32),
+            window,
+            "BUTTON",
+            "Start",
+            ID_START,
+            WS_TABSTOP,
+            (18, 116, 130, 32),
         );
         child(
-            window, "BUTTON", "Refresh", ID_REFRESH, WS_TABSTOP, (157, 116, 130, 32),
+            window,
+            "BUTTON",
+            "Refresh",
+            ID_REFRESH,
+            WS_TABSTOP,
+            (157, 116, 130, 32),
         );
         child(
-            window, "BUTTON", "Reload", ID_RELOAD, WS_TABSTOP, (296, 116, 130, 32),
+            window,
+            "BUTTON",
+            "Reload",
+            ID_RELOAD,
+            WS_TABSTOP,
+            (296, 116, 130, 32),
         );
         child(
-            window, "BUTTON", "Stop", ID_STOP, WS_TABSTOP, (435, 116, 130, 32),
+            window,
+            "BUTTON",
+            "Stop",
+            ID_STOP,
+            WS_TABSTOP,
+            (435, 116, 130, 32),
         );
         child(
             window,
@@ -284,7 +308,8 @@ mod panel {
                 | WS_VSCROLL
                 | ES_MULTILINE as u32
                 | ES_READONLY as u32
-                | ES_AUTOVSCROLL as u32, (18, 162, 769, 426),
+                | ES_AUTOVSCROLL as u32,
+            (18, 162, 769, 426),
         );
     }
 
