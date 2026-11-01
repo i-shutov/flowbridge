@@ -1,3 +1,39 @@
+## 2026-11-01: IPv6 signed-NDISRD self-owned TEST-NET UDP quarantine candidate (CI and native proof PENDING)
+
+An **additional**, opt-in original-Rust `udp6-testnet-drop-lab` complements
+the independently verified IPv4-only native canary. Only Windows x64 with
+separately installed signed NDISRD may use it; it requires exact
+`NATIVE_SELF_IPV6_UDP_TESTNET_DROP_LAB` consent, a preexisting unique
+Ethernet adapter, IPv6 MTU ≥1280, a specific non-loopback/non-link-local
+unicast source and a reachable **IPv6 route to documentation-only**
+`2001:db8::53`. There is **no fallback to IPv4**, no public DNS change,
+no application selection and no automatic NDISRD installation.
+
+The process binds and IP-Helper-checks its **own** local UDP socket before
+activating a bounded NDISRD session, emits only 2–4 datagrams **after**
+adapter diversion, and drops all outbound IPv6 packets from that source to
+that exact documentation destination. This deliberately includes unknown
+upper-layer/extension/fragment packets, because interpreting the initial
+IPv6 next-header as UDP would allow a fragment ambiguity. It may overblock
+unrelated same-source/same-destination protocols in this short lab. Other
+frames are reinjected byte-for-byte. The socket closes before restoring
+adapter mode 0. A separate authenticated VNC recovery path, SYSTEM rescue
+watchdog, signed-driver hash/Defender/network gates and exact-source binary
+manifest verification are mandatory **outside** the Rust process.
+
+Portable Rust regressions cover Ethernet/QinQ, plain UDP, fragment and
+extension headers, unrelated IPv6 sources/destinations, ingress, truncated
+frames, wrong EtherType, explicit consent/bounds and injection-prevention
+inputs. **No native IPv6 DROP success is claimed until the paid-VPS
+driver test and independent rollback evidence are checked.** If the VPS
+lacks an IPv6 unicast source or route, that is a **not-tested capability**
+rather than a fabricated PASS. A real driver trial on Windows Server 2025
+does not establish Windows 10/11 acceptance. Mode 0 is ordinary
+DIRECT-capable networking, not persistent fail-closed. Packet ownership,
+IPv6 leak-free containment, QUIC/DoH/DoT and release remain false.
+
+---
+
 ## 2026-11-01: End-to-end SSH/DNS user-mode crash and deadline containment (NEW CI PENDING)
 
 This original-Rust integration adds two distinct **real process and socket**

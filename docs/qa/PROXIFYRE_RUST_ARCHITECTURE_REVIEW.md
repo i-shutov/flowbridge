@@ -82,3 +82,15 @@ and [issue #41](https://github.com/i-shutov/flowbridge/issues/41#issuecomment-65
 
 ### SSH middlebox hypothesis: diagnostic only
 The opt-in original Rust `flowbridge ssh-diagnose` uses two direct TCP identification-order probes and never enters production SSH supervision, DNS, packet/driver path or protected fail-closed. Until the user's affected route is A/B retested, server-first is not an accepted production workaround; no transparent DIRECT fallback may be introduced.
+
+
+### IPv6 UDP original-Rust bounded driver lab (2026-11-01)
+
+The independent `udp6_quarantine` unit has a fixed RFC 3849 IPv6 target
+and a caller-validated non-link-local source. An exact IPv6 L2 match drops
+all upper-layer forms (including fragment/extension-header forms) rather
+than mistaking the first Next Header for UDP. This avoids an IPv6 fragment
+bypass in the **self-owned** canary, at the cost of deliberate same-pair
+overblocking. No real NDISRD IPv6 packets, arbitrary PID attribution,
+crash-persistent containment, DNS privacy or personal Win10/11 acceptance
+are inferred from offline tests; see the candidate QA log for native proof.

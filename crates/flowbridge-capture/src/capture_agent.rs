@@ -16,7 +16,7 @@ pub fn capabilities() -> Value {
         "native_tcp_owner_candidate_selftest":cfg!(windows),
         "native_udp_local_bind_candidate_selftest":cfg!(windows),
         "dns_leak_free":false, "release_accepted":false,
-        "modes":["status","observe_lab","observe_owner_candidates_lab","observe_protocol_profile_lab","passthrough_lab","relay_loopback_probe","foreground_explicit_socks_control","scm_explicit_socks_candidate","owner_selftest_read_only","udp_owner_selftest_read_only","self_owned_udp_testnet_drop_lab"],
+        "modes":["status","observe_lab","observe_owner_candidates_lab","observe_protocol_profile_lab","passthrough_lab","relay_loopback_probe","foreground_explicit_socks_control","scm_explicit_socks_candidate","owner_selftest_read_only","udp_owner_selftest_read_only","self_owned_udp_testnet_drop_lab","self_owned_ipv6_udp_testnet_drop_lab"],
         "abi":{"adapters":ndis_wire::ADAPTER_LIST_BYTES,"mode":ndis_wire::MODE_BYTES,
             "request":ndis_wire::REQUEST_BYTES,"packet_header":ndis_wire::PACKET_HEADER_BYTES,
             "packet_capacity":ndis_wire::PACKET_BUFFER_BYTES}
