@@ -46,8 +46,7 @@ mod panel {
     static RESPONSE: Mutex<Option<String>> = Mutex::new(None);
     // A real Windows click must never vanish just because the automatic
     // WM_CREATE status probe is still working. Only one IPC worker may run.
-    static PENDING: Mutex<VecDeque<(&'static str, Option<PathBuf>)>> =
-        Mutex::new(VecDeque::new());
+    static PENDING: Mutex<VecDeque<(&'static str, Option<PathBuf>)>> = Mutex::new(VecDeque::new());
     const MAX_PENDING: usize = 16;
 
     fn wide(value: &str) -> Vec<u16> {
@@ -212,7 +211,7 @@ mod panel {
         if pending.len() >= MAX_PENDING {
             drop(pending);
             if let Ok(mut response) = RESPONSE.lock() {
-                *response = Some("Operator queue is full; retry this action after current work finishes.\\r\\nNo protected route is active.".into());
+                *response = Some("Operator queue is full; retry this action after current work finishes.\r\nNo protected route is active.".into());
             }
             let hwnd = WINDOW.load(Ordering::Acquire) as HWND;
             if !hwnd.is_null() {
@@ -249,15 +248,18 @@ mod panel {
             };
             let message = match result {
                 Ok(status) if action == "stop" => format!(
-                    "Stop requested; local proxy is no longer managed by this panel.\\r\\n\\r\\n{}",
+                    "Stop requested; local proxy is no longer managed by this panel.\r\n\r\n{}",
                     status_text(&status)
                 ),
                 Ok(status) => status_text(&status),
                 Err(error) => format!(
-                    "OPERATION: {}\\r\\n{}\\r\\n\\r\\n\\
-                     No driver protection has been enabled by this panel.\\r\\n\\
-                     This candidate must NOT be treated as a system-wide kill switch.",
-                    action, error
+                    concat!(
+                        "OPERATION: {}\r\n{}\r\n\r\n",
+                        "No driver protection has been enabled by this panel.\r\n",
+                        "This candidate must NOT be treated as a system-wide kill switch.",
+                    ),
+                    action,
+                    error
                 ),
             };
             if let Ok(mut response) = RESPONSE.lock() {
