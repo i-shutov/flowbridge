@@ -20,7 +20,7 @@ use windows_sys::Win32::{
         FwpmGetAppIdFromFileName0, FWPM_CONDITION_ALE_APP_ID, FWPM_CONDITION_IP_PROTOCOL,
         FWPM_CONDITION_IP_REMOTE_PORT, FWPM_FILTER0, FWPM_FILTER_CONDITION0,
         FWPM_LAYER_ALE_AUTH_CONNECT_V4, FWPM_SESSION0, FWPM_SESSION_FLAG_DYNAMIC,
-        FWPM_SUBLAYER_UNIVERSAL, FWP_ACTION_BLOCK, FWP_BYTE_BLOB, FWP_BYTE_BLOB_TYPE, FWP_EMPTY,
+        FWPM_SUBLAYER_UNIVERSAL, FWP_ACTION_BLOCK, FWP_BYTE_BLOB, FWP_BYTE_BLOB_TYPE,
         FWP_MATCH_EQUAL, FWP_UINT16, FWP_UINT8,
     },
 };
@@ -114,7 +114,10 @@ pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
     filter.layerKey = FWPM_LAYER_ALE_AUTH_CONNECT_V4;
     filter.subLayerKey = FWPM_SUBLAYER_UNIVERSAL;
     filter.displayData.name = display.as_mut_ptr();
-    filter.weight.r#type = FWP_EMPTY;
+    // Highest explicit BFE weight range within the default sublayer.
+    // FWP_EMPTY placed the real Windows QA filter below an effective permit.
+    filter.weight.r#type = FWP_UINT8;
+    filter.weight.Anonymous.uint8 = 15;
     filter.action.r#type = FWP_ACTION_BLOCK;
     filter.numFilterConditions = 3;
     filter.filterCondition = conditions.as_mut_ptr();
