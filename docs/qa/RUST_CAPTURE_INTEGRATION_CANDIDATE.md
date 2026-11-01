@@ -1,3 +1,35 @@
+## 2026-11-01 — Signed Windows PowerShell startup/three-phase WFP diagnostic unblocking (CI pending)
+
+PR #56 only. Parent source `27ff9f6e22ea6db35dc9a054779cefdbcdeb37b7`, exact work is an integration-harness
+repair, **NOT** application packet-to-PID proof or protected network enforcement.
+The verified previous hosted Windows capture job #41341889375 (GitHub test merge
+`53d8a317c955a734836c20aabf1b48bb27222585`) completed 81 original Rust
+unit tests, real NDISRD ABI read-only, native BFE read-only, Rust SCM install and
+binary upgrade, but failed **before** the strict WFP AppId stage: genuine signed
+in-box PowerShell did not announce its reserved TCP source port within the old
+eight-second startup window. The failed test therefore provided **no new WFP
+classification result**. DNS 3/3, Rust/native 5/5 and managed Windows SSH were
+separately green on the exact parent; raw 512 remained red.
+
+The coordinated Python QA change shares one strict bounded **20-second** cold
+startup reader between both real Microsoft-signed PowerShell canaries. The
+first line must be non-empty, the process must still be alive before GO, and
+the embedded-script port must be a decimal value within the real TCP port
+range. An unreadable pipe, early child exit, timeout, or malformed line remains
+a hard failure. Startup never sends GO or TCP itself. All three pre-GO killed,
+REJECT, real binary HTTP/half-close scenarios remain mandatory, as do the
+unrelated signed OS process and strict WFP BFE readback/event identity trials.
+Only sanitized error classes are persisted; no subprocess stderr, encoded
+command, process identity, endpoint or secret is captured.
+
+**Acceptance pending exact-head GitHub Actions, its test-merge SHA and Windows
+artifact hashes.** The earlier dynamic AppId-only and AppId+TCP filters failed
+on real 127.0.0.1 and non-127 same-host routes, notwithstanding a successful
+port-only block. Do not declare WFP per-app blocking, NDISRD/WFP ordering,
+persistent fail-closed, DNS leak-free, arbitrary packet ownership, Win10/11
+acceptance or release from this harness correction. No mode or security
+setting changed, no additional PR or main/release change.
+
 ## 2026-11-01 — WFP AppId BFE serialization + kernel event identity, strict negative CI
 
 The real Windows Server 2025 test demonstrated the target BFE-derived AppId

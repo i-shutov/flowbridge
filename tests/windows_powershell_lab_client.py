@@ -93,6 +93,37 @@ def embedded_script(path: Path) -> str:
     return script
 
 
+
+def read_startup_line(process: subprocess.Popen, timeout: float = 20.0) -> str:
+    """Read one pre-GO line from the real signed child, with a hard deadline.
+
+    A cold in-box PowerShell startup on a busy Windows runner may exceed the
+    former eight-second timeout. No network authorization is sent while this
+    waits. Never include stderr or the encoded script in failure diagnostics.
+    """
+    require(process.stdout is not None, "Signed PowerShell stdout unavailable")
+    lines: list[str] = []
+    read_errors: list[str] = []
+
+    def read() -> None:
+        try:
+            lines.append(process.stdout.readline())
+        except (OSError, UnicodeError) as exc:
+            read_errors.append(type(exc).__name__)
+
+    reader = threading.Thread(target=read, daemon=True)
+    reader.start()
+    reader.join(timeout=timeout)
+    state = "running" if process.poll() is None else "exited"
+    require(not reader.is_alive(),
+            f"Signed PowerShell startup deadline exceeded (state={state})")
+    require(not read_errors, "Signed PowerShell startup pipe failed")
+    require(len(lines) == 1 and bool(lines[0].strip()),
+            f"Signed PowerShell did not announce readiness (state={state})")
+    require(process.poll() is None,
+            "Signed PowerShell exited before any GO authorization")
+    return lines[0].strip()
+
 def trial(exe: Path, script: str, allowed: bool | None) -> tuple[bool, int]:
     """Run a signed OS child through idle/no-GO, rejected-GO or allowed-GO.
 
@@ -113,15 +144,13 @@ def trial(exe: Path, script: str, allowed: bool | None) -> tuple[bool, int]:
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    text=True, encoding="utf-8")
         try:
-            # The port announcement must happen BEFORE the first connection.
-            # Use one bounded reader thread to enforce a startup deadline.
-            line: list[str] = []
-            ready = threading.Thread(target=lambda: line.append(process.stdout.readline()), daemon=True)
-            ready.start()
-            ready.join(timeout=8)
-            require(not ready.is_alive() and line and line[0].strip().isdigit(),
-                    "PowerShell child did not announce a reserved TCP port")
-            require(1 <= int(line[0].strip()) <= 65535, "Reserved port invalid")
+            # Keep stdin open and the TCP listener armed throughout cold
+            # startup: a slow signed PowerShell launch must not be mistaken
+            # for a missing GO or a permitted direct connection.
+            announced = read_startup_line(process)
+            require(announced.isascii() and announced.isdecimal(),
+                    "Signed PowerShell readiness was not a decimal TCP port")
+            require(1 <= int(announced) <= 65535, "Reserved port invalid")
             server.settimeout(0.35)
             try:
                 connection, _ = server.accept()
@@ -260,6 +289,10 @@ def main() -> None:
         result.update({"idle_child_killed_no_tcp": True,
                        "negative_go_no_tcp": True, "positive_half_close_http": True,
                        "verified_http_reply_bytes": count, "passed": True})
+    except Exception as error:
+        # Classification only: never persist a child command, stderr, PID or path.
+        result["error_class"] = type(error).__name__
+        raise
     finally:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")

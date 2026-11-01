@@ -1,3 +1,14 @@
+### 2026-11-01 — Cold-start integrity of the signed OS-process QA canaries
+
+A hosted Windows CI run failed before entering the strict AppId diagnostic
+because the signed PowerShell canary did not report its reserved socket within
+eight seconds. The fixture now has a shared bounded 20-second pre-GO readiness
+reader, validates live-process and actual port readiness, retains negative
+no-GO/REJECT TCP checks, and logs only a sanitized failure class. This is
+**QA harness reliability**, not a WFP identity, NDISRD interception, protected
+fail-closed or native personal Windows acceptance result; see the candidate
+QA journal for the exact source/test-merge and pending CI evidence.
+
 # Clean-room Rust backend: lessons from ProxiFyre / NDISAPI
 
 **Research snapshot:** 2026-10-30.

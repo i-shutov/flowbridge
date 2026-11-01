@@ -17,7 +17,7 @@ import socket
 import subprocess
 import threading
 
-from windows_powershell_lab_client import executable, REQUEST, RESPONSE, require
+from windows_powershell_lab_client import executable, REQUEST, RESPONSE, require, read_startup_line
 
 _SCRIPT = r"""
 $ErrorActionPreference = 'Stop'
@@ -111,14 +111,10 @@ class ExternalPowerShellCanary:
             env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
             creationflags=subprocess.CREATE_NO_WINDOW)
-        line: list[str] = []
-        reader = threading.Thread(target=lambda: line.append(self.proc.stdout.readline()), daemon=True)
-        reader.start()
-        reader.join(timeout=8)
         try:
-            require(not reader.is_alive() and len(line) == 1,
-                    "Independent PowerShell did not reserve a source socket")
-            ready = json.loads(line[0])
+            # Same bounded, pre-GO signed process startup contract as the
+            # embedded Rust-script fixture; never retry by opening TCP.
+            ready = json.loads(read_startup_line(self.proc))
             self.source_port = int(ready["source_port"])
             self.control_port = int(ready["control_port"])
             require(1024 <= self.source_port <= 65535 and
@@ -234,6 +230,9 @@ def main() -> None:
         trial(True)
         result.update({"negative_go_no_tcp": True, "positive_half_close_http": True,
                        "tested_unrelated_process": True, "passed": True})
+    except Exception as error:
+        result["error_class"] = type(error).__name__
+        raise
     finally:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
