@@ -10,6 +10,8 @@ fn main() {
         [command] if command == "owner-selftest" => capture_agent::owner_self_test(),
         [command] if command == "udp-owner-selftest" => capture_agent::udp_owner_self_test(),
         #[cfg(windows)]
+        [command] if command == "wfp-readonly" => Ok(flowbridge_capture::windows_wfp_readonly::report()),
+        #[cfg(windows)]
         [command, config_path] if command == "service-stage" => {
             flowbridge_capture::windows_service_management::stage(config_path)
         }

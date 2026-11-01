@@ -118,6 +118,9 @@ jobs:
               json.dumps(report, sort_keys=True, indent=2) + '\n', encoding='utf-8')
           print('WINDOWS_REAL_UDP_IPHELPER_LOCAL_BIND_PASS: IPv6_available=' + str(report['ipv6_loopback_available']))
           PY
+      - name: Original Rust actual Windows BFE read-only filter snapshot during real live TCP
+        if: runner.os == 'Windows'
+        run: python tests/windows_wfp_readonly_preflight.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-readonly.json
       - name: Windows restricted named-pipe and live explicit SOCKS lifecycle
         if: runner.os == 'Windows'
         run: python tests/windows_capture_control.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/control-lifecycle.json

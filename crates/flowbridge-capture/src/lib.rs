@@ -35,6 +35,8 @@ pub mod windows_service_management;
 pub mod windows_tcp_owner;
 #[cfg(windows)]
 mod windows_udp_owner;
+#[cfg(windows)]
+pub mod windows_wfp_readonly;
 
 pub fn driver_status() -> serde_json::Value {
     #[cfg(windows)]
