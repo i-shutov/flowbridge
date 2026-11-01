@@ -24,10 +24,10 @@ mod panel {
         CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect,
         GetDlgItem, GetMessageW, GetWindowTextLengthW, GetWindowTextW, MessageBoxW, MoveWindow,
         PostMessageW, PostQuitMessage, RegisterClassW, SetWindowTextW, ShowWindow,
-        TranslateMessage, CW_USEDEFAULT, ES_AUTOHSCROLL, ES_AUTOVSCROLL,
-        ES_MULTILINE, ES_READONLY, IDYES, MB_ICONWARNING, MB_YESNO, MSG, SW_SHOW, WM_APP, WM_CLOSE,
-        WM_COMMAND, WM_CREATE, WM_DESTROY, WM_SIZE, WNDCLASSW, WS_BORDER, WS_CHILD,
-        WS_CLIPCHILDREN, WS_OVERLAPPEDWINDOW, WS_TABSTOP, WS_VISIBLE, WS_VSCROLL,
+        TranslateMessage, CW_USEDEFAULT, ES_AUTOHSCROLL, ES_AUTOVSCROLL, ES_MULTILINE, ES_READONLY,
+        IDYES, MB_ICONWARNING, MB_YESNO, MSG, SW_SHOW, WM_APP, WM_CLOSE, WM_COMMAND, WM_CREATE,
+        WM_DESTROY, WM_SIZE, WNDCLASSW, WS_BORDER, WS_CHILD, WS_CLIPCHILDREN, WS_OVERLAPPEDWINDOW,
+        WS_TABSTOP, WS_VISIBLE, WS_VSCROLL,
     };
 
     const WINDOW_CLASS: &str = "FlowBridgeRustPanelV1";
@@ -54,11 +54,9 @@ mod panel {
         label: &str,
         id: i32,
         style: u32,
-        x: i32,
-        y: i32,
-        w: i32,
-        h: i32,
+        bounds: (i32, i32, i32, i32),
     ) -> HWND {
+        let (x, y, w, h) = bounds;
         let kind = wide(kind);
         let label = wide(label);
         // SAFETY: The parent belongs to the current UI thread; Windows copies
@@ -239,33 +237,21 @@ mod panel {
             "STATIC",
             "FlowBridge  |  Windows Rust operator panel",
             0,
-            0,
-            18,
-            13,
-            740,
-            26,
+            0, (18, 13, 740, 26),
         );
         child(
             window,
             "STATIC",
             "Experimental SSH/SOCKS only. NO protected interception or DNS privacy guarantee.",
             0,
-            0,
-            18,
-            43,
-            790,
-            24,
+            0, (18, 43, 790, 24),
         );
         child(
             window,
             "STATIC",
             "Explicit JSON profile:",
             0,
-            0,
-            18,
-            78,
-            155,
-            24,
+            0, (18, 78, 155, 24),
         );
         let default_profile = std::env::var_os("LOCALAPPDATA")
             .map(|root| PathBuf::from(root).join("FlowBridge").join("profile.json"))
@@ -275,37 +261,30 @@ mod panel {
             "EDIT",
             &default_profile.to_string_lossy(),
             ID_PATH,
-            WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL as u32,
-            177,
-            75,
-            610,
-            27,
+            WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL as u32, (177, 75, 610, 27),
         );
         child(
-            window, "BUTTON", "Start", ID_START, WS_TABSTOP, 18, 116, 130, 32,
+            window, "BUTTON", "Start", ID_START, WS_TABSTOP, (18, 116, 130, 32),
         );
         child(
-            window, "BUTTON", "Refresh", ID_REFRESH, WS_TABSTOP, 157, 116, 130, 32,
+            window, "BUTTON", "Refresh", ID_REFRESH, WS_TABSTOP, (157, 116, 130, 32),
         );
         child(
-            window, "BUTTON", "Reload", ID_RELOAD, WS_TABSTOP, 296, 116, 130, 32,
+            window, "BUTTON", "Reload", ID_RELOAD, WS_TABSTOP, (296, 116, 130, 32),
         );
         child(
-            window, "BUTTON", "Stop", ID_STOP, WS_TABSTOP, 435, 116, 130, 32,
+            window, "BUTTON", "Stop", ID_STOP, WS_TABSTOP, (435, 116, 130, 32),
         );
         child(
             window,
             "EDIT",
             "Checking the local agent...\r\nNo protected application routing is available.",
             ID_STATUS,
-            WS_BORDER | WS_VSCROLL
+            WS_BORDER
+                | WS_VSCROLL
                 | ES_MULTILINE as u32
                 | ES_READONLY as u32
-                | ES_AUTOVSCROLL as u32,
-            18,
-            162,
-            769,
-            426,
+                | ES_AUTOVSCROLL as u32, (18, 162, 769, 426),
         );
     }
 
@@ -407,7 +386,7 @@ mod panel {
             hInstance: instance,
             lpszClassName: class.as_ptr(),
             // Win32 COLOR_WINDOW + 1, expressed as a system-color brush handle.
-            hbrBackground: 6 as usize as _,
+            hbrBackground: 6_usize as _,
             ..unsafe { std::mem::zeroed() }
         };
         if unsafe { RegisterClassW(&settings) } == 0 {
