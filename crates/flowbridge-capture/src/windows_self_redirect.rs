@@ -605,7 +605,8 @@ async fn native(request: Request) -> Result<Value, String> {
     while start.elapsed() < timeout && !worker.is_finished() {
         let outcome = session.poll_lab_redirect(128, &mut |packet| {
             let selected_candidate =
-                crate::self_redirect::candidate_tuple(packet.frame) == Some(original);
+                crate::self_redirect::candidate_tuple(packet.frame) == Some(original)
+                    || crate::self_redirect::ambiguous_fragment_to_target(packet.frame, original);
             let decision = reflect.decide(packet, &mut || {
                 if !matches!(process.evidence(), Ok(now) if now == epoch) {
                     owner_candidate_denials += 1;
@@ -715,6 +716,7 @@ async fn native(request: Request) -> Result<Value, String> {
         "native_client_frames_reflected":reflect.counters.client_reflected,
         "native_relay_frames_reflected":reflect.counters.relay_reflected,
         "selected_frames_dropped":reflect.counters.selected_dropped,
+        "ambiguous_tcp_fragments_quarantined":reflect.counters.ambiguous_fragment_dropped,
         "selected_checksum_or_options_rejected":reflect.counters.checksums_or_options_rejected,
         "unsolicited_wire_replies_dropped":reflect.counters.unsolicited_wire_replies_dropped,
         "self_owned_socket_pid_epoch_consistent":self_epoch,

@@ -148,6 +148,7 @@ pub(crate) struct Counters {
     pub client_reflected: u64,
     pub relay_reflected: u64,
     pub selected_dropped: u64,
+    pub ambiguous_fragment_dropped: u64,
     pub checksums_or_options_rejected: u64,
     pub unsolicited_wire_replies_dropped: u64,
     pub owner_checked: bool,
@@ -196,6 +197,20 @@ impl Reflection {
         owned_socket_check: &mut impl FnMut() -> bool,
     ) -> LabDisposition {
         let frame = packet.frame;
+        // Noninitial IPv4 fragments lack a trustworthy TCP source port.
+        // In this *bounded single-destination lab*, quarantine all outbound
+        // fragmented TCP to the canary endpoint instead of accidentally
+        // reinjecting a selected fragment unchanged onto the physical wire.
+        // This intentionally may drop an unrelated fragmented TCP exchange
+        // to the same IP while the short experiment is active. It cannot
+        // serve as general packet-to-process ownership or protected routing.
+        if packet.direction == Direction::ToAdapter
+            && ambiguous_fragment_to_target(frame, self.original)
+        {
+            self.counters.selected_dropped += 1;
+            self.counters.ambiguous_fragment_dropped += 1;
+            return LabDisposition::Drop;
+        }
         let Some(tuple) = candidate_tuple(frame) else {
             return LabDisposition::Original;
         };
@@ -323,6 +338,50 @@ pub(crate) fn candidate_tuple(frame: &[u8]) -> Option<TcpTuple> {
             u16::from_be_bytes([ip[h + 2], ip[h + 3]]),
         ),
     })
+}
+
+/// Conservative lab-only ambiguity guard for the explicitly selected IPv4
+/// canary destination. Fragment offset/MF are untrusted; no TCP ports can be
+/// inferred from continuation fragments. A separate app with a fragmented TCP
+/// flow to the same IP may be suppressed during the brief lab interval.
+/// Ordinary unfragmented, nonselected flows are unaffected.
+#[cfg(any(all(windows, target_pointer_width = "64"), test))]
+pub(crate) fn ambiguous_fragment_to_target(frame: &[u8], original: TcpTuple) -> bool {
+    let (SocketAddr::V4(source), SocketAddr::V4(destination)) =
+        (original.source, original.destination)
+    else {
+        return false;
+    };
+    if frame.len() < 14 {
+        return false;
+    }
+    let mut ether = u16::from_be_bytes([frame[12], frame[13]]);
+    let mut offset = 14;
+    for _ in 0..2 {
+        if ether != 0x8100 && ether != 0x88a8 {
+            break;
+        }
+        if frame.len() < offset + 4 {
+            return false;
+        }
+        ether = u16::from_be_bytes([frame[offset + 2], frame[offset + 3]]);
+        offset += 4;
+    }
+    if ether != 0x0800 || frame.len() < offset + 20 {
+        return false;
+    }
+    let ip = &frame[offset..];
+    if ip[0] >> 4 != 4 || ip[9] != 6 {
+        return false;
+    }
+    if &ip[12..16] != source.ip().octets().as_slice()
+        || &ip[16..20] != destination.ip().octets().as_slice()
+    {
+        return false;
+    }
+    // The DF bit (0x4000) alone is not fragmentation. Include the MF bit
+    // (0x2000) and the nonzero fragment offset (0x1fff).
+    u16::from_be_bytes([ip[6], ip[7]]) & 0x3fff != 0
 }
 
 #[cfg(test)]
@@ -589,6 +648,67 @@ mod tests {
         }
         assert_eq!(r.counters.client_reflected, 1);
         assert_eq!(r.counters.selected_dropped, 3);
+    }
+
+    #[test]
+    fn selected_ipv4_fragments_never_escape_via_original_lab_passthrough() {
+        let mut r = reflection();
+        let original = r.original;
+        let mut first = frame(original, 0x02, 1);
+        first[20] = 0x20; // MF, first fragment with original TCP ports
+        assert!(ambiguous_fragment_to_target(&first, original));
+        assert!(matches!(
+            r.decide(&packet(&first), &mut || panic!("fragment owner never inferred")),
+            LabDisposition::Drop
+        ));
+
+        let other_port = TcpTuple {
+            source: "192.0.2.10:53000".parse().unwrap(),
+            ..original
+        };
+        let mut continuation = frame(other_port, 0x02, 1);
+        continuation[20] = 0;
+        continuation[21] = 1; // nonzero offset, unreliable TCP port bytes
+        assert!(ambiguous_fragment_to_target(&continuation, original));
+        assert!(matches!(
+            r.decide(&packet(&continuation), &mut || panic!("fragment owner never inferred")),
+            LabDisposition::Drop
+        ));
+
+        let mut vlan = continuation.clone();
+        vlan.splice(12..14, [0x81, 0x00, 0, 1, 0x08, 0x00]);
+        assert!(ambiguous_fragment_to_target(&vlan, original));
+        assert!(matches!(
+            r.decide(&packet(&vlan), &mut || panic!("tagged fragment not owned")),
+            LabDisposition::Drop
+        ));
+        assert_eq!(r.counters.ambiguous_fragment_dropped, 3);
+        assert_eq!(r.counters.selected_dropped, 3);
+        assert_eq!(r.counters.client_reflected, 0);
+
+        // A normal other-port flow to the SAME destination remains DIRECT.
+        let ordinary = frame(other_port, 0x02, 1);
+        assert!(!ambiguous_fragment_to_target(&ordinary, original));
+        assert!(matches!(
+            r.decide(&packet(&ordinary), &mut || panic!("ordinary unselected")),
+            LabDisposition::Original
+        ));
+        // An unrelated remote endpoint's fragmented flow remains untouched.
+        let unrelated = TcpTuple {
+            destination: "203.0.113.10:80".parse().unwrap(),
+            ..original
+        };
+        let mut unrelated_fragment = frame(unrelated, 0x02, 1);
+        unrelated_fragment[20] = 0x20;
+        assert!(!ambiguous_fragment_to_target(&unrelated_fragment, original));
+        assert!(matches!(
+            r.decide(&packet(&unrelated_fragment), &mut || panic!("unrelated destination")),
+            LabDisposition::Original
+        ));
+        // The common IPv4 DF flag alone is NOT a fragment.
+        let mut df_only = frame(original, 0x02, 1);
+        df_only[20] = 0x40;
+        assert!(!ambiguous_fragment_to_target(&df_only, original));
     }
 
     #[test]

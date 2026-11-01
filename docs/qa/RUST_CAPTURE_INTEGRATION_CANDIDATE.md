@@ -1,3 +1,24 @@
+## 2026-11-01: Native IPv4 canary fragmentation quarantine (exact-HEAD CI/native evidence pending)
+
+The bounded Windows x64 NDISRD **laboratory** reflection now detects IPv4 TCP
+fragmentation for the single explicitly configured canary (source IP, remote
+IP, TCP protocol), including Ethernet VLAN tags. Because noninitial IPv4
+fragments do not contain authoritative TCP ports, the lab **DROPs** these
+ambiguous frames rather than reinjecting them as Original/DIRECT. The same
+heuristic is used by the native selected-direct counter, avoiding false zero
+counts when an incomplete fragment cannot yield a TCP tuple. This does not
+rewrite fragments or claim universal packet-to-PID ownership.
+
+The trade-off is explicit: unrelated fragmented TCP traffic to that exact
+remote IP can also be dropped during the bounded lab, while ordinary
+unfragmented unselected TCP and traffic to unrelated destinations remain
+Original. This is not a production DNS/IPv6/UDP solution, a persistent
+fail-closed policy, or Win10/11 acceptance. Offline Rust regressions cover
+first/continuation/VLAN fragments, unselected same-IP unfragmented traffic,
+unrelated fragmented endpoints and the DF-only case. Actual signed-driver
+VPS confirmation and exact PR CI/manifest/ZIP SHA remain REQUIRED before
+claiming this block natively validated.
+
 ## 2026-11-01: Separate real Windows managed OpenSSH acceptance from raw 512 characterization (pending new exact-HEAD CI)
 
 Previous exact-HEAD run [41245389707](https://github.com/i-shutov/flowbridge/actions/runs/41245389707) on Windows Server 2025 **FAILED**, but the machine-readable summary independently reported that the actual managed FlowBridge tests had already passed: 128 live held SSH streams, 1,152 denied at budget, 10,000 byte-verified completed streams, and four independent worker processes. The later **unmanaged raw OpenSSH** saturation experiment reached only **244 simultaneous byte-verified channels**, then failed at real Winsock **10054** (server reset), with sshd reporting **Too many open files** and **ppoll: Not enough space**. Neither 512 stability nor capacity recovery was shown. The former single Windows job conflated these independent acceptance boundaries.
