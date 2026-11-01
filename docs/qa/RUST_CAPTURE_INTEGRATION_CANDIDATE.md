@@ -1,3 +1,39 @@
+### 2026-11-01 — Windows real signed PowerShell TCP canary / denied-GO / forced-idle-stop, hosted CI PENDING
+
+Baseline exact-source `d5c193c22a7963a69dbe1ff8b4e2979d28d43881`
+[Windows capture run #41318846772](https://github.com/i-shutov/flowbridge/actions/runs/41318846772)
+FAILED its separate **live original Rust embedded fixed Microsoft-signed PowerShell client** regression,
+at `tests/windows_powershell_lab_client.py:166`, after the host had already
+completed SCM tests. The failing test waited only 12 seconds for the
+PowerShell process to exit after issuing explicit GO, independently of
+whether the HTTP listener had accepted and completed the transaction;
+`subprocess.TimeoutExpired` also dumped the full
+`-EncodedCommand` in public logs. The run is a real failure, not a
+proven NDISRD or user GUI regression.
+
+The next original cross-process QA block requires **three** independently
+spawned actual Windows PowerShell socket phases using the EXACT Rust-embedded
+immutable script and Microsoft Authenticode check:
+(1) keep stdin open with NO GO, observe no TCP, forcibly terminate the child
+and observe no post-kill TCP; (2) send REJECT and prove no TCP; (3) send GO
+only after an observed pre-GO quiet period, require the bounded HTTP server
+to receive the exact request through TCP half-close, send the exact response,
+then require child termination and matching JSON byte counts. The server
+completion is now its own bounded event instead of racing the child's
+`Popen.wait(12)`. All timeouts still FAIL closed; exceptions for the GO
+and REJECT deadlines no longer print the base64 command, personal socket
+ports or environment. SHA-256 of the tested Rust embedded script is emitted
+without script contents or per-process identity. There is **no** automatic
+retry of a failed GO transaction, no relaxed assertion and no direct-route
+fallback.
+
+This is hosted Windows Server 2025 loopback QA, **not** native NDISRD
+selected-app PID attestation, crash-persistent protected fail-closed, DNS
+leak-freedom, affected external SSH route or Win10/11 acceptance. New exact
+HEAD/test-merge CI jobs and independently audited artifacts are required
+before calling this block PASS. The separate raw 512 SSH experiment remains
+a real FAIL; managed 128/1152/10000/4 must continue untouched.
+
 # ACCEPTED hosted Windows installed GUI / real OpenSSH integration — exact source 2026-11-01
 
 This evidence checkpoint is tied to **code+QA source HEAD `4b157a26c3363b66feb038d95b7e9475bcbabdcc`**, GitHub Actions test merge **`55e16d8eac9bf5fcb6d3f79d81b2e7d311608c85`**, [capture workflow #41318214762](https://github.com/i-shutov/flowbridge/actions/runs/41318214762) **3/3 SUCCESS** on hosted Windows Server 2025, macOS 15, Ubuntu 24.04. The previously failed cross-process Windows EDIT injection was repaired in QA by correctly using system-marshalled `WM_SETTEXT/GETTEXT` and verifying the exact path roundtrip; native parent `WM_COMMAND/BN_CLICKED` now carries an untruncated child HWND. No safety gate or product runtime requirement was disabled.

@@ -93,7 +93,12 @@ def embedded_script(path: Path) -> str:
     return script
 
 
-def trial(exe: Path, script: str, allowed: bool) -> tuple[bool, int]:
+def trial(exe: Path, script: str, allowed: bool | None) -> tuple[bool, int]:
+    """Run a signed OS child through idle/no-GO, rejected-GO or allowed-GO.
+
+    None leaves stdin open until a bounded forced termination, proving that
+    an independently launched process cannot initiate TCP without GO.
+    """
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
         server.bind(("127.0.0.1", 0))
         server.listen(1)
@@ -125,11 +130,43 @@ def trial(exe: Path, script: str, allowed: bool) -> tuple[bool, int]:
             else:
                 connection.close()
                 raise AssertionError("TCP SYN escaped before GO handshake")
+            if allowed is None:
+                # Kill while stdin remains open. Merely closing stdin could
+                # mimic the explicit denied-GO case and obscure a leak.
+                require(process.poll() is None,
+                        "PowerShell child exited unexpectedly while awaiting GO")
+                server.settimeout(0.7)
+                try:
+                    connection, _ = server.accept()
+                except socket.timeout:
+                    pass
+                else:
+                    connection.close()
+                    raise AssertionError("Idle PowerShell child sent TCP before GO")
+                process.kill()
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    raise AssertionError("Idle PowerShell child survived forced termination") from None
+                require(process.returncode != 0,
+                        "Idle PowerShell child did not record forced termination")
+                server.settimeout(0.35)
+                try:
+                    connection, _ = server.accept()
+                except socket.timeout:
+                    pass
+                else:
+                    connection.close()
+                    raise AssertionError("Idle PowerShell child connected after termination")
+                return True, 0
             if not allowed:
                 process.stdin.write("reject\n")
                 process.stdin.flush()
                 process.stdin.close()
-                process.wait(timeout=10)
+                try:
+                    process.wait(timeout=18)
+                except subprocess.TimeoutExpired:
+                    raise AssertionError("Rejected-GO PowerShell child failed to terminate") from None
                 server.settimeout(0.35)
                 try:
                     connection, _ = server.accept()
@@ -142,30 +179,46 @@ def trial(exe: Path, script: str, allowed: bool) -> tuple[bool, int]:
                 return True, 0
             received: list[bytes] = []
             errors: list[str] = []
+            server_done = threading.Event()
+
             def serve() -> None:
                 try:
-                    server.settimeout(8)
+                    server.settimeout(18)
                     with server.accept()[0] as connection:
-                        connection.settimeout(8)
+                        connection.settimeout(18)
                         parts = []
+                        size = 0
                         while True:
                             chunk = connection.recv(4096)
                             if not chunk:
                                 break
+                            size += len(chunk)
+                            require(size <= 2048, "Unexpected oversized request")
                             parts.append(chunk)
-                            require(sum(map(len, parts)) <= 2048, "Unexpected oversized request")
                         received.append(b"".join(parts))
                         connection.sendall(RESPONSE)
                 except Exception as exc:
                     errors.append(type(exc).__name__)
+                finally:
+                    server_done.set()
             worker = threading.Thread(target=serve, daemon=True)
             worker.start()
             process.stdin.write("go\n")
             process.stdin.flush()
             process.stdin.close()
-            process.wait(timeout=12)
-            worker.join(timeout=10)
-            require(not worker.is_alive() and not errors, "HTTP stub failed")
+            # Wait for actual server-side HTTP completion BEFORE the child
+            # process exit. A fixed 12-second Popen.wait() raced the Windows
+            # PowerShell transport on a loaded hosted runner and leaked the
+            # base64 EncodedCommand into TimeoutExpired diagnostics.
+            require(server_done.wait(timeout=24),
+                    "PowerShell GO HTTP exchange did not complete within its bounded deadline")
+            worker.join(timeout=1)
+            require(not worker.is_alive() and not errors, "HTTP stub failed after GO")
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                raise AssertionError(
+                    "PowerShell completed HTTP but failed to exit within deadline") from None
             body = process.stdout.read()
             require(process.returncode == 0 and received == [REQUEST],
                     "PowerShell TCP half-close request mismatched")
@@ -198,10 +251,14 @@ def main() -> None:
         exe = executable()
         result["powershell_sha256"] = hashlib.sha256(exe.read_bytes()).hexdigest()
         script = embedded_script(args.source)
+        result["embedded_script_sha256"] = hashlib.sha256(
+            script.encode("utf-16-le")).hexdigest()
+        idle, _ = trial(exe, script, None)
         denied, _ = trial(exe, script, False)
         granted, count = trial(exe, script, True)
-        require(denied and granted, "Both live child phases required")
-        result.update({"negative_go_no_tcp": True, "positive_half_close_http": True,
+        require(idle and denied and granted, "All three live child phases required")
+        result.update({"idle_child_killed_no_tcp": True,
+                       "negative_go_no_tcp": True, "positive_half_close_http": True,
                        "verified_http_reply_bytes": count, "passed": True})
     finally:
         args.output.parent.mkdir(parents=True, exist_ok=True)
