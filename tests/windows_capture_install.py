@@ -132,6 +132,24 @@ def main() -> None:
         profile(invalid, "0.0.0.0:7777")
 
         try:
+            # These aliases can address a real existing local config, but
+            # none may become an elevated service's command line or input.
+            (directory / "nested").mkdir()
+            unsafe_aliases = [
+                "\\\\?\\" + str(old),
+                "\\\\.\\" + str(old),
+                str(directory) + "\\nested\\..\\v1.json",
+                str(directory) + "\\.\\v1.json",
+                str(old) + ":alternate_stream",
+                r"\\localhost\C$\flowbridge.json",
+                r"C:\windows\CON.json",
+            ]
+            for alias in unsafe_aliases:
+                agent_command(agent, "service-stage", alias, ok=False)
+                agent_command(agent, "service-run", alias, ok=False)
+                if run("sc.exe", "query", NAME, ok=False).returncode == 0:
+                    raise AssertionError("unsafe path created an SCM service")
+
             agent_command(agent, "service-stage", str(invalid), ok=False)
             if run("sc.exe", "query", NAME, ok=False).returncode == 0:
                 raise AssertionError("invalid profile unexpectedly created service")
@@ -158,6 +176,8 @@ def main() -> None:
             await_engine(agent, False)
             port_closed(p1)
 
+            for alias in unsafe_aliases:
+                agent_command(agent, "service-replace", str(old), alias, ok=False)
             agent_command(agent, "service-replace", str(old), str(invalid), ok=False)
             # An invalid replacement must leave the exact previous SCM binary
             # path intact, proved by an exact-match ownership removal denial.
@@ -203,6 +223,9 @@ def main() -> None:
                 "scm_stage_via_original_rust": True,
                 "scm_validated_manual_only": True,
                 "invalid_profile_prevented_creation": True,
+                "unsafe_unc_device_ads_traversal_denied": True,
+                "real_existing_config_aliases_denied": True,
+                "unsafe_replacement_preserved_prior_command": True,
                 "preexisting_service_not_overwritten": True,
                 "running_service_upgrade_denied": True,
                 "invalid_upgrade_preserved_prior_config": True,

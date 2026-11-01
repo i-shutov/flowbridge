@@ -5,7 +5,7 @@
 
 use serde_json::{json, Value};
 use std::ffi::c_void;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
@@ -133,9 +133,7 @@ pub(crate) fn mark_running() -> Result<(), String> {
 static SERVICE_HANDLE: OnceLock<usize> = OnceLock::new();
 
 pub fn run(path: &str) -> Result<Value, String> {
-    if path.len() > 4096 || !Path::new(path).is_absolute() {
-        return Err("service-run requires one absolute bounded config path".into());
-    }
+    crate::windows_service_management::validate_local_file(path)?;
     CONFIG
         .set(PathBuf::from(path))
         .map_err(|_| "SCM config already initialized")?;

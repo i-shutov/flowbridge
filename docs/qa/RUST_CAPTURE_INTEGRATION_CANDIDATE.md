@@ -1163,3 +1163,7 @@ native Windows 10/11 acceptance, macOS Network Extension, GUI/installer
 acceptance and public 1.0 remain unproven. VDSina lacks a non-link-local IPv6
 source/usable documentation route, so no native IPv6 DROP is claimed.
 This checkpoint is native lab acceptance only; **no main merge or release**.
+
+### 2026-11-01 — Rust SCM local file provenance guard (candidate pending exact-HEAD CI)
+
+The original Rust Windows SCM staging, stopped-only profile replacement, service-run, current binary verification and x64 hash-pinned binary upgrade now reject UNC/device/extended-namespace paths, NTFS alternate streams, dot/parent traversal and reserved DOS names. The exact-local-drive validator also canonicalizes existing files to refuse reparse/junction destinations escaping into UNC/device namespaces. Windows hosted end-to-end tests verify malicious aliases do not create or mutate the service, then exercise genuine SOCKS negotiation, SCM and local-pipe STOP, configuration change, executable upgrade and rollback. This only proves local path provenance at verification time, NOT immutable ACLs, atomic disk upgrades, persistent NDISRD fail-closed, arbitrary packet/PID attribution, DNS containment, native Win10/11 acceptance or release readiness. No driver install or protected networking is performed.

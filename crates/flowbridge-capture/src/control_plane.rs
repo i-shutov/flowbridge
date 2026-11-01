@@ -143,9 +143,8 @@ fn validate_managed_route(engine: &Config, ssh: &SshConfig) -> Result<(), String
 
 #[cfg(windows)]
 pub(crate) fn validate_scm_profile(path: &Path) -> Result<(), String> {
-    if !path.is_absolute() {
-        return Err("SCM candidate requires an absolute config file".into());
-    }
+    let path_str = path.to_str().ok_or("SCM config path must be Unicode")?;
+    crate::windows_service_management::validate_local_file(path_str)?;
     let config = load_explicit_profile(path)?;
     if !config.engine.listen.ip().is_loopback() {
         return Err("SCM candidate refuses non-loopback SOCKS listeners".into());
@@ -186,6 +185,12 @@ impl Controller {
     }
 
     fn open_with_mode(config_path: PathBuf, scm_mode: bool) -> Result<Self, String> {
+        #[cfg(windows)]
+        if scm_mode {
+            crate::windows_service_management::validate_local_file(
+                config_path.to_str().ok_or("SCM config path must be Unicode")?,
+            )?;
+        }
         let profile = load_explicit_profile(&config_path)?;
         if scm_mode && (!config_path.is_absolute() || !profile.engine.listen.ip().is_loopback()) {
             return Err(

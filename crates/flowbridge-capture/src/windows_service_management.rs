@@ -43,16 +43,57 @@ fn err(action: &str) -> String {
     })
 }
 
-// Arguments are never passed through cmd.exe. Still reject quoting/control
-// characters to preserve a single, auditable SCM binary command-line grammar.
+// Elevated SCM must never launch a service executable or read a profile
+// through UNC, NT device namespaces, ADS, traversal or reserved DOS paths.
 fn exact_path(path: &str) -> Result<(), String> {
-    if path.is_empty()
-        || path.len() > MAX_PATH_CHARS
+    let bytes = path.as_bytes();
+    let local_drive = bytes.len() >= 4
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'\\' | b'/')
+        && Path::new(path).is_absolute();
+    if !local_drive
+        || bytes.len() > MAX_PATH_CHARS
         || path.contains('"')
         || path.chars().any(char::is_control)
-        || !Path::new(path).is_absolute()
+        || path[3..].contains(':')
     {
-        return Err("SCM staging requires a bounded, absolute, unquoted path".into());
+        return Err("SCM requires a bounded absolute local-drive path, no device or network namespace".into());
+    }
+    for part in path[3..].split(['\\', '/']) {
+        let stem = part.split('.').next().unwrap_or("").to_ascii_uppercase();
+        let dos_device = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$")
+            || (stem.len() == 4
+                && (stem.starts_with("COM") || stem.starts_with("LPT"))
+                && stem.as_bytes()[3].is_ascii_digit()
+                && stem.as_bytes()[3] != b'0');
+        if part.is_empty()
+            || matches!(part, "." | "..")
+            || part.chars().last().is_some_and(|c| c == ' ' || c == '.')
+            || part.chars().any(|c| matches!(c, '<' | '>' | '|' | '?' | '*'))
+            || dos_device
+        {
+            return Err("SCM path has an ambiguous component or reserved DOS filename".into());
+        }
+    }
+    Ok(())
+}
+
+/// Canonicalize to refuse junction/reparse paths to UNC or device targets.
+/// This is a point-in-time local-file check, NOT a guarantee that an ACL
+/// prevents later replacement of the path after the SCM operation.
+pub(crate) fn validate_local_file(path: &str) -> Result<(), String> {
+    exact_path(path)?;
+    let canonical = std::fs::canonicalize(path)
+        .map_err(|_| "SCM local file could not be resolved")?;
+    let canonical_path = canonical
+        .to_str()
+        .ok_or("SCM canonical file path is not Unicode")?;
+    // Windows canonicalize normally returns \\?\C:\..., unlike \\?\UNC\...
+    let drive = canonical_path.strip_prefix(r"\\?\").unwrap_or(canonical_path);
+    exact_path(drive).map_err(|_| "SCM reparse target is not a local-drive file")?;
+    if !canonical.is_file() {
+        return Err("SCM path is not a regular file".into());
     }
     Ok(())
 }
@@ -63,7 +104,7 @@ fn image_command(config: &str) -> Result<String, String> {
     let image = exe
         .to_str()
         .ok_or("current executable path is not Unicode")?;
-    exact_path(image)?;
+    validate_local_file(image)?;
     if !exe.is_file() {
         return Err("current executable does not exist".into());
     }
@@ -226,7 +267,7 @@ fn report(action: &str) -> Value {
 /// Create only a new, manually started SCM record after strict profile
 /// validation. An existing record is never adopted or overwritten.
 pub fn stage(config_path: &str) -> Result<Value, String> {
-    exact_path(config_path)?;
+    validate_local_file(config_path)?;
     crate::control_plane::validate_scm_profile(Path::new(config_path))?;
     let command = image_command(config_path)?;
     let scm = manager()?;
@@ -274,7 +315,7 @@ pub fn stage(config_path: &str) -> Result<Value, String> {
 /// postcondition rolls the SCM binary command back to the prior value.
 pub fn replace(old_config: &str, new_config: &str) -> Result<Value, String> {
     let old = image_command(old_config)?;
-    exact_path(new_config)?;
+    validate_local_file(new_config)?;
     crate::control_plane::validate_scm_profile(Path::new(new_config))?;
     let next = image_command(new_config)?;
     if next == old {
@@ -412,11 +453,13 @@ pub fn binary_replace(
     {
         return Err("Staged Rust candidate must be an .exe file".into());
     }
+    validate_local_file(next_config)?;
     crate::control_plane::validate_scm_profile(Path::new(next_config))?;
 
     let current = std::env::current_exe()
         .and_then(std::fs::canonicalize)
         .map_err(|_| "Current Rust agent executable cannot be resolved")?;
+    validate_local_file(next_executable)?;
     let next = std::fs::canonicalize(next_executable)
         .map_err(|_| "Staged Rust executable cannot be resolved")?;
     let same_folder = current.parent().zip(next.parent()).is_some_and(|(a, b)| {
@@ -499,10 +542,37 @@ mod tests {
     }
 
     #[test]
-    fn exact_quoted_path_only() {
+    fn scm_drive_path_denies_unc_device_ads_and_traversal() {
         assert!(exact_path("relative.json").is_err());
         assert!(exact_path("C:\\bad\"-service").is_err());
         assert!(exact_path("C:\\bad\nservice").is_err());
         assert!(exact_path("C:\\safe\\config.json").is_ok());
+        assert!(exact_path("D:/a/staged/flowbridge-agent.exe").is_ok());
+        for bad in [
+            r"\\server\share\config.json",
+            r"\\?\C:\safe\config.json",
+            r"\\.\C:\safe\config.json",
+            r"\??\C:\safe\config.json",
+            r"C:\safe\..\config.json",
+            r"C:\safe\.\config.json",
+            r"C:\safe\\config.json",
+            r"C:\safe\config.json:extra",
+            r"C:\safe\CON.txt",
+            r"C:\safe\COM1.log",
+            r"C:\safe\trailing. ",
+            r"C:relative\config.json",
+            r"C:\safe\bad|config.json",
+        ] {
+            assert!(exact_path(bad).is_err(), "unexpectedly allowed: {bad}");
+        }
+    }
+
+    #[test]
+    fn local_file_is_distinct_from_device_alias() {
+        let current = std::env::current_exe().unwrap();
+        let path = current.to_str().unwrap();
+        assert!(validate_local_file(path).is_ok());
+        assert!(validate_local_file(&format!(r"\\?\{path}")).is_err());
+        assert!(validate_local_file(r"\\127.0.0.1\C$\any.exe").is_err());
     }
 }

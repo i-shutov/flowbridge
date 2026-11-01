@@ -108,6 +108,15 @@ def main() -> None:
                     agent, "service-binary-replace", str(old_config),
                     str(staged_next), str(invalid_config), new_hash, ok=False,
                 )
+                for alias in (
+                    "\\\\?\\" + str(staged_next),
+                    str(staged_next) + ":alternate_stream",
+                    r"\\localhost\C$\flowbridge-next.exe",
+                ):
+                    agent_command(
+                        agent, "service-binary-replace", str(old_config),
+                        alias, str(new_config), new_hash, ok=False,
+                    )
                 assert_command_contains(agent)
 
                 sc("start", NAME)
@@ -187,6 +196,7 @@ def main() -> None:
                     "running_service_upgrade_denied": True,
                     "wrong_digest_and_non_pe_rejected": True,
                     "invalid_new_profile_rejected": True,
+                    "unc_device_ads_binary_aliases_denied": True,
                     "scm_service_command_matches_expected_binary": True,
                     "actual_stopped_binary_switch": True,
                     "original_binary_restored_after_reverse_switch": True,
