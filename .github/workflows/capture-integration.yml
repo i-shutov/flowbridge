@@ -162,7 +162,7 @@ jobs:
           "FLOWBRIDGE_INSTALL_SSH=$client" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "FLOWBRIDGE_INSTALL_KEYGEN=$keygen" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           'FLOWBRIDGE_HOSTED_WINDOWS_SSH=1' | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-      - name: Original Rust-only unsigned installer, guarded overwrite, installed authenticated SSH/SOCKS and safe uninstall
+      - name: Rust-only NSIS fault rollback, recovered install, installed authenticated SSH/SOCKS and safe uninstall
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -171,7 +171,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/windows_rust_candidate_installer.py --candidate build/capture-candidate/FlowBridge-Rust-Candidate-Windows.zip --output build/capture-candidate/FlowBridge-Rust-Candidate-Windows-UNSIGNED-setup.exe --report build/capture-candidate/windows-rust-installer-build.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python tests/windows_rust_candidate_installer.py --installer build/capture-candidate/FlowBridge-Rust-Candidate-Windows-UNSIGNED-setup.exe --report build/capture-candidate/windows-rust-installer-build.json --output build/capture-candidate/windows-rust-installed-lifecycle.json --ssh "$env:FLOWBRIDGE_INSTALL_SSH" --sshd "$env:FLOWBRIDGE_INSTALL_SSHD" --keygen "$env:FLOWBRIDGE_INSTALL_KEYGEN"
+          python tests/windows_rust_candidate_installer.py --candidate build/capture-candidate/FlowBridge-Rust-Candidate-Windows.zip --installer build/capture-candidate/FlowBridge-Rust-Candidate-Windows-UNSIGNED-setup.exe --report build/capture-candidate/windows-rust-installer-build.json --output build/capture-candidate/windows-rust-installed-lifecycle.json --ssh "$env:FLOWBRIDGE_INSTALL_SSH" --sshd "$env:FLOWBRIDGE_INSTALL_SSHD" --keygen "$env:FLOWBRIDGE_INSTALL_KEYGEN"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build separately allowlisted native-test FFI and original harness (not product payload)
         if: runner.os == 'Windows'

@@ -58,6 +58,7 @@ def main() -> None:
             os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted",
             "Refusing installation outside disposable GitHub-hosted Windows")
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--installer", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -71,10 +72,15 @@ def main() -> None:
         setattr(args, executable, path)
     evidence = json.loads(args.report.read_text(encoding="utf-8"))
     installer = args.installer.resolve(strict=True)
+    candidate = args.candidate.resolve(strict=True)
+    require(evidence.get("candidate_archive_sha256") == sha(candidate),
+            "Candidate ZIP does not match exact installer builder input")
     require(evidence.get("kind") == "unsigned_user_owned_rust_ssh_socks_candidate_installer_NOT_RELEASE"
             and evidence.get("installer_sha256") == sha(installer)
             and evidence.get("passed") is True and evidence.get("signed") is False
-            and evidence.get("release_accepted") is False,
+            and evidence.get("release_accepted") is False
+            and evidence.get("qa_fault_fixture") is False
+            and evidence.get("qa_abort_stage") is None,
             "Installer provenance does not match exact Rust candidate")
     cfgkey = r"Software\FlowBridgeRustCandidate"
     uninstallkey = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\FlowBridgeRustCandidate"
@@ -92,6 +98,10 @@ def main() -> None:
         "real_windows_pipe_socks_reload_stop": False,
         "installed_real_authenticated_banner_ssh_socks": False,
         "occupied_destination_rejected_without_mutation": False,
+        "fault_injected_partial_copy_rolled_back": False,
+        "fault_injected_written_uninstaller_rolled_back": False,
+        "successful_real_install_after_two_fault_rollbacks": False,
+        "qa_fault_installers_not_product_artifacts": False,
         "reinstall_refused_without_partial_mutation": False,
         "uninstaller_preserved_user_profile": False,
         "registry_removed": False,
@@ -124,6 +134,49 @@ def main() -> None:
                     "NSIS overwrote an unregistered existing user directory")
             result["occupied_destination_rejected_without_mutation"] = True
             installed = base / "FlowBridge Rust Candidate With Spaces"
+
+            # Two disposable QA-only installers contain the exact pinned Rust
+            # payload and fail at different real NSIS mutation boundaries.
+            # Neither fixture is an artifact, release or personal-machine test.
+            safe_marker = base / "unrelated-user-file.txt"
+            safe_marker.write_bytes(b"UNRELATED - DO NOT ALTER")
+            for stage, flag in (("after-cli", "fault_injected_partial_copy_rolled_back"),
+                                ("after-uninstaller",
+                                 "fault_injected_written_uninstaller_rolled_back")):
+                bad_setup = base / ("qa-fault-" + stage + ".exe")
+                bad_report = base / ("qa-fault-" + stage + ".json")
+                build = subprocess.run([
+                    sys.executable, "tools/windows_rust_candidate_installer.py",
+                    "--candidate", str(candidate), "--output", str(bad_setup),
+                    "--report", str(bad_report), "--qa-abort-stage", stage,
+                ], capture_output=True, text=True, timeout=150,
+                    cwd=Path(__file__).resolve().parents[1], check=False)
+                require(build.returncode == 0 and bad_setup.is_file() and
+                        bad_report.is_file(), "QA fault installer build failed")
+                provenance = json.loads(bad_report.read_text(encoding="utf-8"))
+                require(provenance.get("kind") ==
+                        "qa_fault_injected_rust_candidate_installer_NEVER_RELEASE"
+                        and provenance.get("qa_fault_fixture") is True
+                        and provenance.get("qa_abort_stage") == stage
+                        and provenance.get("installer_sha256") == sha(bad_setup)
+                        and provenance.get("candidate_archive_sha256") == sha(candidate)
+                        and provenance.get("payload_sha256") == evidence["payload_sha256"]
+                        and provenance.get("source_merge_sha") == evidence["source_merge_sha"]
+                        and provenance.get("pr_head_sha") == evidence["pr_head_sha"],
+                        "Fault-injected installer does not match pinned source/payload")
+                refused_fault = nsis_install(bad_setup, installed)
+                require(refused_fault.returncode != 0,
+                        "QA fault injection unexpectedly accepted a partial install")
+                remaining = ([p.name for p in installed.iterdir()]
+                             if installed.exists() else [])
+                require(not remaining and
+                        hkcu_value(cfgkey, "InstallDir") is None and
+                        hkcu_value(uninstallkey, "DisplayName") is None and
+                        scm_absent() and
+                        safe_marker.read_bytes() == b"UNRELATED - DO NOT ALTER",
+                        "Fault-aborted NSIS left product files/registry or modified a user file")
+                result[flag] = True
+            result["qa_fault_installers_not_product_artifacts"] = True
             install = nsis_install(installer, installed)
             require(install.returncode == 0, "NSIS per-user candidate installation failed")
             require(hkcu_value(cfgkey, "InstallDir") == str(installed),
@@ -149,6 +202,10 @@ def main() -> None:
                     {n.casefold() for n in expected_files},
                     "Unexpected installed file (legacy, vendor or incomplete package)")
             result["installed_hashes_match_manifest"] = True
+            require(result["fault_injected_partial_copy_rolled_back"] and
+                    result["fault_injected_written_uninstaller_rolled_back"],
+                    "Installed product was not preceded by both fault rollbacks")
+            result["successful_real_install_after_two_fault_rollbacks"] = True
 
             cli = installed / "flowbridge.exe"
             agent = installed / "flowbridge-agent.exe"

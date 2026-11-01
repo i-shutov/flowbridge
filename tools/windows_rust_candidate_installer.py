@@ -78,6 +78,7 @@ def main() -> None:
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
+    parser.add_argument("--qa-abort-stage", choices=("after-cli", "after-uninstaller"))
     args = parser.parse_args()
     require(sys.platform == "win32" and os.environ.get("GITHUB_ACTIONS") == "true"
             and os.environ.get("RUNNER_OS") == "Windows",
@@ -106,6 +107,12 @@ def main() -> None:
         cmd = [nsis, "/INPUTCHARSET", "UTF8",
                f"/DPAYLOAD_DIR={stage}", f"/DOUTPUT_FILE={args.output.resolve()}",
                str(ROOT / "packaging/windows/FlowBridgeRustCandidate.nsi")]
+        if args.qa_abort_stage is not None:
+            require(os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted",
+                    "Fault-injected installer is restricted to disposable hosted Windows")
+            define = ("QA_ABORT_AFTER_CLI" if args.qa_abort_stage == "after-cli"
+                      else "QA_ABORT_AFTER_UNINSTALLER")
+            cmd.insert(-1, f"/D{define}=1")
         subprocess.run(cmd, check=True, cwd=ROOT, timeout=120)
     installed = {name: sha256(payload[name]) for name in EXPECTED}
     installed["LICENSE"] = sha256(license_data)
@@ -113,7 +120,11 @@ def main() -> None:
     pe = args.output.read_bytes()
     require(len(pe) > 4096 and pe[:2] == b"MZ", "Invalid NSIS executable")
     result = {
-        "kind": "unsigned_user_owned_rust_ssh_socks_candidate_installer_NOT_RELEASE",
+        "kind": ("unsigned_user_owned_rust_ssh_socks_candidate_installer_NOT_RELEASE"
+                 if args.qa_abort_stage is None else
+                 "qa_fault_injected_rust_candidate_installer_NEVER_RELEASE"),
+        "qa_fault_fixture": args.qa_abort_stage is not None,
+        "qa_abort_stage": args.qa_abort_stage,
         "passed": True, "source_merge_sha": merge, "pr_head_sha": head,
         "candidate_archive_sha256": sha256(args.candidate.read_bytes()),
         "candidate_source_manifest_sha256": sha256(payload["manifest.json"]),

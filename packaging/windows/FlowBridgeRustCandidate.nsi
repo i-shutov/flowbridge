@@ -40,6 +40,22 @@ SetCompressor /SOLID lzma
   ${EndIf}
 !macroend
 
+
+; Best-effort transactional failure cleanup for an empty, unregistered target.
+; Delete ONLY package-owned names; no recursive deletion or profile mutation.
+; This is not power-loss atomicity and does not promise crash-safe upgrade.
+Function RollbackIncompleteInstall
+  DeleteRegKey HKCU "${UNINSTALL_KEY}"
+  DeleteRegKey HKCU "${SETTINGS_KEY}"
+  Delete "$INSTDIR\Uninstall.exe"
+  Delete "$INSTDIR\flowbridge-agent.exe"
+  Delete "$INSTDIR\flowbridge.exe"
+  Delete "$INSTDIR\manifest.json"
+  Delete "$INSTDIR\README.md"
+  Delete "$INSTDIR\LICENSE"
+  ; Leave the selected directory intact (it may predate our attempt).
+FunctionEnd
+
 Function .onInit
   SetShellVarContext current
   SetRegView 64
@@ -70,25 +86,66 @@ Section "Rust SSH/SOCKS candidate" SEC_MAIN
     Abort
   clean_candidate_target:
   SetOutPath "$INSTDIR"
+  ; Fail on EVERY individual copy, never just the final File command.
+  ClearErrors
   File "${PAYLOAD_DIR}\flowbridge.exe"
+  IfErrors install_failed
+!ifdef QA_ABORT_AFTER_CLI
+  ; Compile-time hosted-CI-only fixture; never enabled in the normal build.
+  Call RollbackIncompleteInstall
+  SetErrorLevel 46
+  Abort
+!endif
+  ClearErrors
   File "${PAYLOAD_DIR}\flowbridge-agent.exe"
+  IfErrors install_failed
+  ClearErrors
   File "${PAYLOAD_DIR}\manifest.json"
+  IfErrors install_failed
+  ClearErrors
   File "${PAYLOAD_DIR}\README.md"
+  IfErrors install_failed
+  ClearErrors
   File "${PAYLOAD_DIR}\LICENSE"
-  IfErrors 0 +3
-    SetErrorLevel 43
-    Abort
+  IfErrors install_failed
+  ClearErrors
   WriteUninstaller "$INSTDIR\Uninstall.exe"
-  IfErrors 0 +3
+  IfErrors install_failed
+!ifdef QA_ABORT_AFTER_UNINSTALLER
+  Call RollbackIncompleteInstall
+  SetErrorLevel 47
+  Abort
+!endif
+  ; Registry is the commit marker, written only after ALL payload files.
+  ; On any write failure, remove this candidate's payload and markers.
+  ClearErrors
+  WriteRegStr HKCU "${SETTINGS_KEY}" "InstallDir" "$INSTDIR"
+  IfErrors install_failed
+  ClearErrors
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayName" "FlowBridge Rust Candidate (NOT RELEASE)"
+  IfErrors install_failed
+  ClearErrors
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayVersion" "0.2.0-candidate"
+  IfErrors install_failed
+  ClearErrors
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "InstallLocation" "$INSTDIR"
+  IfErrors install_failed
+  ClearErrors
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
+  IfErrors install_failed
+  ClearErrors
+  WriteRegDWORD HKCU "${UNINSTALL_KEY}" "NoModify" 1
+  IfErrors install_failed
+  ClearErrors
+  WriteRegDWORD HKCU "${UNINSTALL_KEY}" "NoRepair" 1
+  IfErrors install_failed
+  Goto install_committed
+  install_failed:
+    DetailPrint "Rust candidate copy, uninstaller or registry failed; rolling back"
+    Call RollbackIncompleteInstall
     SetErrorLevel 43
     Abort
-  WriteRegStr HKCU "${SETTINGS_KEY}" "InstallDir" "$INSTDIR"
-  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayName" "FlowBridge Rust Candidate (NOT RELEASE)"
-  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayVersion" "0.2.0-candidate"
-  WriteRegStr HKCU "${UNINSTALL_KEY}" "InstallLocation" "$INSTDIR"
-  WriteRegStr HKCU "${UNINSTALL_KEY}" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
-  WriteRegDWORD HKCU "${UNINSTALL_KEY}" "NoModify" 1
-  WriteRegDWORD HKCU "${UNINSTALL_KEY}" "NoRepair" 1
+  install_committed:
 SectionEnd
 
 Section "Uninstall"
