@@ -1,3 +1,63 @@
+## 2026-11-02 — VERIFIED Windows native exact-filter WFP AppId source-canonicalization mismatch (strict RED)
+
+Source code `f0e119623899893ce0e46e8137aef5d38c9a1d86`, GitHub test merge
+`17c0e0f4b178d15a919bf2d9002c0292dc2a4a4d`. Actual
+[capture CI #41353379715](https://github.com/i-shutov/flowbridge/actions/runs/41353379715)
+Windows Server 2025 **FAIL**, deliberately at original strict per-EXE AppId
+enforcement after PASS of Rust-only GUI→IPC→Banner First→authenticated
+OpenSSH→SOCKS, real PowerShell canaries, NSIS recovery and SCM upgrade.
+macOS/Linux capture PASS; [DNS #41353379820](https://github.com/i-shutov/flowbridge/actions/runs/41353379820)
+3/3 PASS. No native Win10/11 or protected policy is inferred.
+
+Independently downloaded actual Windows capture artifact #13102532015:
+outer Actions ZIP SHA256 **`e911288c9082adfe8c4d9db37bcfa503813519c5e15bfb5699457391ffc4b60c`**,
+equals GitHub digest; exactly 19 explicitly enumerated report/package
+entries. Nested exactly five-member original Rust candidate ZIP
+SHA256 `06e303ef3f1d4215450c120b6ee8492fcbc95b959e0b7f9c54c178a92a015b12`,
+sidecar and all manifest hashes match source PR head/merge. Independently
+checked all MZ/PE32+ AMD64 (machine 0x8664, magic 0x20b):
+agent `bc92f97bbd40bbe87870fc1a1ac14d508ae0292b8a6c301bf72c7f27f47853d7`,
+CLI `1063e1bbfa9b49b2c76c7c10c43bb53165f6ea7503ffbd33a38a128f3a2130df`,
+panel `edffe805edb89c8b8fdec442f979ccb8a8976e3f28434b274342de68ac4f0d6b`.
+Unsigned real NSIS SHA256 `dbd7601c89447fb3c789afdad07585cfdf0d9e5272810f196cc933c93de7cf8c`
+matches installer report. No vendor binary, C++/WFP sidecar, secrets or
+false protected/release flags.
+
+**Important new actual BFE diagnosis, BOTH 127.0.0.1 and separately
+host-owned non-127 IPv4:** for each route the exact transient port-only
+filter ID had three CLASSIFY_DROP records, all with structurally valid
+UTF-16LE AppIds. The independently computed Python client AppId was an
+**exact byte match**, one of three. Two original Rust EXE copies with
+different paths were each matched uniquely by executable *basename*,
+but neither complete event AppId BLOB matched the ID returned for its
+file path by `FwpmGetAppIdFromFileName0`. ASCII case/slash
+normalization did not fix the selected copy. The original Rust agent
+AppId matched none. This strongly narrows the problem to full-path
+canonicalization/volume aliasing of the copied executable, NOT random
+unrelated port events or Python identity and NOT merely 127.0.0.1.
+Actual AppId-only and AppId+port filters still **did not** deny selected
+traffic; port-only blocked all three real clients, followed by successful
+process-death recovery. No raw path/PID/ID/packet logged. BFE event
+identity is **not** kernel-verified arbitrary packet→PID authority.
+
+**Independent OpenSSH gate on this exact source:**
+[CI #41353379737](https://github.com/i-shutov/flowbridge/actions/runs/41353379737)
+managed capacity 128 held/1152 denied succeeded, but 10000 churn
+**FAILED at 1655 started / 1654 completed**, WinError 10048,
+Windows TIME_WAIT 6259. Experimental raw test reached only 246
+held and explicitly denies stable 512 even when its characterization
+job returns success. Do not transfer prior SHA's managed 10000 PASS to
+this SHA or weaken tests.
+
+**No release:** DNS leak-free, selected-app PID attribution, persistent
+native protected fail-closed, UDP/IPv6/QUIC, actual Win10/11 and signed
+installer remain open. Disposable dynamic WFP filter only; no driver,
+firewall, Defender or paid VPS modification. Next lab direction:
+compare *live kernel event-observed* native volume path to
+file-handle-canonicalized path in memory and prove actual app-specific
+denial before choosing a protected rule. WFP/NDISRD ordering on VPS
+requires independent rescue and evidence.
+
 ## 2026-11-02 — WFP exact-filter cross-process AppId source discrimination (CI PENDING)
 
 At PR #56 source parent `0bcc0106c8e88e5a048d20461edff3c964b541f0`, a strict hosted-Windows WFP test still

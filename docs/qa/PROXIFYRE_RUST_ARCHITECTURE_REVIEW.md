@@ -1,3 +1,22 @@
+## 2026-11-02 — Native WFP AppId canonicalization root-cause evidence
+
+Exact source `f0e119623899893ce0e46e8137aef5d38c9a1d86` / CI merge `17c0e0f4b178d15a919bf2d9002c0292dc2a4a4d`.
+The real Windows Server 2025 temporary BFE filter ID produces exactly
+three CLASSIFY_DROP events on each of two local TCP destinations.
+Python executable AppId matches its process event **byte-for-byte**;
+both copied Rust executable AppIds match kernel event executable
+**basenames** but NOT full AppId BLOBs from path lookup. App-only and
+App+port WFP block remain ineffective, port-only really blocks.
+This makes full-path canonicalization and NT volume aliasing a concrete
+research hypothesis, NOT a per-app protected policy or packet-PID proof.
+Real installed Rust GUI/SSH and NSIS/SCM tests pass; managed OpenSSH
+10000-churn failed this exact SHA with WinError 10048 after 1654
+completed; raw 512 remains unproved. Byte-level 19-entry ZIP, nested
+five-entry Rust archive, three PE x64 and unsigned NSIS SHA verified.
+See `RUST_CAPTURE_INTEGRATION_CANDIDATE.md` and [issue #41](https://github.com/i-shutov/flowbridge/issues/41#issuecomment-6564380435).
+No vendor driver/host-security change, no Win10/11 acceptance or
+release authorization.
+
 ## 2026-11-02 — Research constraint: actual WFP identity must be cross-correlated
 
 The transient original-Rust WFP AppId filter remains unable to deny a
