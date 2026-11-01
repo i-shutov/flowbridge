@@ -268,6 +268,7 @@ def main() -> None:
                     gui_data.get("agent_sha256") == expected["flowbridge-agent.exe"] and
                     all(gui_data.get(key) is True for key in (
                         "actual_win32_window_and_controls",
+                        "gui_cross_process_edit_verified",
                         "gui_start_same_user_rust_agent",
                         "gui_queued_refresh_after_start",
                         "gui_status_live_socks",

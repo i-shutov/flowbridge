@@ -26,6 +26,7 @@ BM_CLICK = 0x00F5
 WM_CLOSE = 0x0010
 WM_COMMAND = 0x0111
 WM_GETTEXT = 0x000D
+WM_SETTEXT = 0x000C
 SMTO_ABORTIFHUNG = 0x0002
 IDYES = 6
 ID_PATH = 101
@@ -40,8 +41,6 @@ user32.FindWindowW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR]
 user32.FindWindowW.restype = wintypes.HWND
 user32.GetDlgItem.argtypes = [wintypes.HWND, ctypes.c_int]
 user32.GetDlgItem.restype = wintypes.HWND
-user32.SetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPCWSTR]
-user32.SetWindowTextW.restype = wintypes.BOOL
 # GetWindowTextW cannot read a live EDIT control in another process.
 # WM_GETTEXT is a system message and is marshalled across Win32 processes.
 user32.SendMessageTimeoutW.argtypes = [
@@ -103,6 +102,26 @@ def text_of(hwnd: int) -> str:
     return buffer.value
 
 
+def set_edit_text(hwnd: int, value: str) -> None:
+    """Write a genuine EDIT control in another process using WM_SETTEXT.
+
+    SetWindowTextW is NOT guaranteed to change the text of a cross-process
+    child control even when its return value is nonzero. WM_SETTEXT/GETTEXT
+    are system-marshalled messages; require the full exact path round-trip
+    before sending an operator Start. Never include the path in test output.
+    """
+    buffer = ctypes.create_unicode_buffer(value)
+    returned = ctypes.c_size_t(0)
+    sent = user32.SendMessageTimeoutW(
+        hwnd, WM_SETTEXT, 0, ctypes.addressof(buffer),
+        SMTO_ABORTIFHUNG, 1500, ctypes.byref(returned),
+    )
+    require(bool(sent) and returned.value != 0,
+            "Cross-process native WM_SETTEXT to profile EDIT failed")
+    require(text_of(hwnd) == value,
+            "Cross-process native EDIT WM_SETTEXT/WM_GETTEXT round-trip mismatch")
+
+
 def click(hwnd: int) -> None:
     # A posted BM_CLICK can be ignored by a button on the noninteractive
     # hosted runner desktop. Synchronous SendMessage exercises the actual
@@ -148,6 +167,7 @@ def main() -> None:
         "panel_sha256": sha(panel), "agent_sha256": sha(agent),
         "actual_win32_window_and_controls": False,
         "gui_start_same_user_rust_agent": False,
+        "gui_cross_process_edit_verified": False,
         "gui_queued_refresh_after_start": False,
         "gui_status_live_socks": False,
         "actual_socks_block_denied": False,
@@ -188,10 +208,8 @@ def main() -> None:
             for ident in (ID_START, ID_REFRESH, ID_RELOAD, ID_STOP):
                 control(hwnd, ident)
             report["actual_win32_window_and_controls"] = True
-            require(bool(user32.SetWindowTextW(path_edit, str(profile_path))),
-                    "Win32 JSON profile entry rejected")
-            require(text_of(path_edit) == str(profile_path),
-                    "Cross-process profile edit did not retain the exact JSON path")
+            set_edit_text(path_edit, str(profile_path))
+            report["gui_cross_process_edit_verified"] = True
             # Intentionally race the first WM_CREATE status worker. A real
             # user can click Start immediately; no click may be discarded.
             notify_button(hwnd, ID_START)
@@ -310,6 +328,7 @@ def run_managed_ssh(panel: Path, agent: Path, cli: Path, ssh: Path,
         "panel_sha256": sha(panel), "agent_sha256": sha(agent),
         "banner_cli_sha256": sha(cli),
         "gui_immediate_start_not_lost": False,
+        "gui_cross_process_edit_verified": False,
         "gui_real_authenticated_ssh_socks": False,
         "gui_reloaded_live_authenticated_ssh": False,
         "gui_denied_ssh_carrier_swap": False,
@@ -354,10 +373,8 @@ def run_managed_ssh(panel: Path, agent: Path, cli: Path, ssh: Path,
                         12, "installed Rust GUI SSH window")
             status = control(hwnd, ID_STATUS)
             path_edit = control(hwnd, ID_PATH)
-            require(bool(user32.SetWindowTextW(path_edit, str(profile_path))),
-                    "Cannot select explicit same-user managed SSH profile")
-            require(text_of(path_edit) == str(profile_path),
-                    "Cross-process managed SSH JSON profile edit was not retained")
+            set_edit_text(path_edit, str(profile_path))
+            report["gui_cross_process_edit_verified"] = True
             # Queue Start immediately against WM_CREATE auto-Refresh, then
             # queue another Refresh; none may silently cancel the Start.
             notify_button(hwnd, ID_START)
@@ -440,6 +457,7 @@ def run_managed_ssh(panel: Path, agent: Path, cli: Path, ssh: Path,
                     "Installed Win32 GUI did not exit cleanly")
             report["passed"] = all(report[k] is True for k in (
                 "gui_immediate_start_not_lost",
+                "gui_cross_process_edit_verified",
                 "gui_real_authenticated_ssh_socks",
                 "gui_reloaded_live_authenticated_ssh",
                 "gui_denied_ssh_carrier_swap",
