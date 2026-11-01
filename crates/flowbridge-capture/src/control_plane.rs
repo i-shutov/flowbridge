@@ -622,25 +622,27 @@ mod tests {
     fn managed_ssh_envelope_refuses_direct_identity_and_mutable_carrier() {
         use flowbridge_core::{Endpoint, Proxy, ProxyKind};
         let mut engine = config();
-        let mut ssh = SshConfig::default();
-        ssh.host = "127.0.0.1".into();
-        ssh.user = "testuser".into();
-        ssh.local_port = 17415;
-        ssh.ssh_executable = Some(if cfg!(windows) {
-            r"C:\Windows\System32\OpenSSH\ssh.exe".into()
-        } else {
-            "/usr/bin/ssh".into()
-        });
-        ssh.identity_file = Some(if cfg!(windows) {
-            r"C:\flowbridge-test\id_ed25519".into()
-        } else {
-            "/tmp/flowbridge-test/id_ed25519".into()
-        });
-        ssh.known_hosts_file = Some(if cfg!(windows) {
-            r"C:\flowbridge-test\known_hosts".into()
-        } else {
-            "/tmp/flowbridge-test/known_hosts".into()
-        });
+        let ssh = SshConfig {
+            host: "127.0.0.1".into(),
+            user: "testuser".into(),
+            local_port: 17415,
+            ssh_executable: Some(if cfg!(windows) {
+                r"C:\Windows\System32\OpenSSH\ssh.exe".into()
+            } else {
+                "/usr/bin/ssh".into()
+            }),
+            identity_file: Some(if cfg!(windows) {
+                r"C:\flowbridge-test\id_ed25519".into()
+            } else {
+                "/tmp/flowbridge-test/id_ed25519".into()
+            }),
+            known_hosts_file: Some(if cfg!(windows) {
+                r"C:\flowbridge-test\known_hosts".into()
+            } else {
+                "/tmp/flowbridge-test/known_hosts".into()
+            }),
+            ..Default::default()
+        };
         engine.proxies.push(Proxy {
             id: "owned".into(),
             kind: ProxyKind::Socks5,
@@ -685,4 +687,5 @@ mod tests {
         }]);
         std::fs::write(&file.0, denied.to_string()).unwrap();
         assert!(load_explicit_profile(&file.0).is_err());
-    }}
+    }
+}
