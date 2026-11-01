@@ -6,12 +6,15 @@
 //! a persistent rule remains effective after a protected agent crashes.
 #![cfg(windows)]
 use serde_json::{json, Value};
-use std::{ffi::c_void, ptr::{null, null_mut}};
+use std::{
+    ffi::c_void,
+    ptr::{null, null_mut},
+};
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::{
-    FwpmEngineClose0, FwpmEngineOpen0, FwpmFilterCreateEnumHandle0,
-    FwpmFilterDestroyEnumHandle0, FwpmFilterEnum0, FwpmFreeMemory0, FWPM_FILTER0,
-    FWPM_FILTER_FLAG_BOOTTIME, FWPM_FILTER_FLAG_PERSISTENT,
+    FwpmEngineClose0, FwpmEngineOpen0, FwpmFilterCreateEnumHandle0, FwpmFilterDestroyEnumHandle0,
+    FwpmFilterEnum0, FwpmFreeMemory0, FWPM_FILTER0, FWPM_FILTER_FLAG_BOOTTIME,
+    FWPM_FILTER_FLAG_PERSISTENT,
 };
 
 const RPC_C_AUTHN_WINNT: u32 = 10;
@@ -208,10 +211,14 @@ mod tests {
         assert_eq!(result["persistent_sample_count"], 7);
         assert_eq!(result["boot_time_sample_count"], 3);
         for field in [
-            "filter_policy_modified", "native_packet_pid_bound",
-            "arbitrary_selected_app_accepted", "crash_persistent_fail_closed",
-            "wfp_ndisrd_ordering_proved", "dns_leak_free",
-            "win10_11_acceptance", "release_accepted",
+            "filter_policy_modified",
+            "native_packet_pid_bound",
+            "arbitrary_selected_app_accepted",
+            "crash_persistent_fail_closed",
+            "wfp_ndisrd_ordering_proved",
+            "dns_leak_free",
+            "win10_11_acceptance",
+            "release_accepted",
         ] {
             assert_eq!(result[field], false, "{field}");
         }
@@ -226,7 +233,10 @@ mod tests {
         assert_eq!(denied["win32_error"], 5);
         assert!(denied["filter_sample_count"].is_null());
         let truncated = classify(Ok(Counts {
-            filters: 8192, persistent: 11, boot_time: 0, complete: false,
+            filters: 8192,
+            persistent: 11,
+            boot_time: 0,
+            complete: false,
         }));
         assert_eq!(truncated["sample_complete"], false);
         assert_eq!(truncated["crash_persistent_fail_closed"], false);
