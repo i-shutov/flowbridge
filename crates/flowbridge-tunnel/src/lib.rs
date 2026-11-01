@@ -106,14 +106,14 @@ fn safe_windows_banner_path(path: &str) -> bool {
         return false;
     }
     path[3..].split(['/', '\\']).all(|part| {
-        if part.is_empty()
-            || part.starts_with(' ')
-            || part.ends_with(' ')
-            || part.ends_with('.')
-        {
+        if part.is_empty() || part.starts_with(' ') || part.ends_with(' ') || part.ends_with('.') {
             return false;
         }
-        let stem = part.split('.').next().unwrap_or_default().to_ascii_uppercase();
+        let stem = part
+            .split('.')
+            .next()
+            .unwrap_or_default()
+            .to_ascii_uppercase();
         !matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
             && !(stem.len() == 4
                 && (stem.starts_with("COM") || stem.starts_with("LPT"))
@@ -1888,8 +1888,7 @@ mod tests {
         assert!(cfg.validate().is_err());
         cfg.host = "127.0.0.1".into();
         if cfg!(windows) {
-            cfg.banner_gate_executable =
-                Some("C:/Program Files/FlowBridge/flowbridge.exe".into());
+            cfg.banner_gate_executable = Some("C:/Program Files/FlowBridge/flowbridge.exe".into());
             cfg.validate().unwrap();
             assert!(cfg.arguments().iter().any(|arg| {
                 arg.contains(
