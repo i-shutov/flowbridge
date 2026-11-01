@@ -11,9 +11,8 @@ use std::net::Ipv4Addr;
 
 const TARGET: Ipv4Addr = Ipv4Addr::new(198, 51, 100, 53);
 const DNS_QUERY: &[u8] = &[
-    0x46, 0x42, 0x01, 0, 0, 1, 0, 0, 0, 0, 0, 0,
-    7, b'i', b'n', b'v', b'a', b'l', b'i', b'd',
-    0, 0, 1, 0, 1,
+    0x46, 0x42, 0x01, 0, 0, 1, 0, 0, 0, 0, 0, 0, 7, b'i', b'n', b'v', b'a', b'l', b'i', b'd', 0, 0,
+    1, 0, 1,
 ];
 
 #[derive(Debug, Deserialize)]
@@ -24,6 +23,8 @@ pub struct Request {
     pub local_ipv4: Ipv4Addr,
     pub duration_ms: u64,
     pub max_queries: u32,
+    /// Caller assertion only; separate orchestrator must verify VNC rescue.
+    pub rescue_attested: bool,
 }
 
 impl Request {
@@ -38,6 +39,7 @@ impl Request {
             || self.local_ipv4.is_broadcast()
             || !(2000..=8000).contains(&self.duration_ms)
             || !(2..=4).contains(&self.max_queries)
+            || !self.rescue_attested
         {
             return Err("Explicit bounded self-owned IPv4 UDP drop lab required".into());
         }
@@ -45,7 +47,7 @@ impl Request {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct Quarantine {
     local: Ipv4Addr,
     dropped: u64,
@@ -57,7 +59,9 @@ impl Quarantine {
     fn new(local: Ipv4Addr) -> Self {
         Self {
             local,
-            ..Self::default()
+            dropped: 0,
+            fragmented: 0,
+            selected_original_to_adapter: 0,
         }
     }
 
@@ -151,8 +155,8 @@ fn native(request: Request) -> Result<Value, String> {
 
     // Connecting a UDP socket selects its route but sends no datagram.
     // Only this process creates/retains the sending socket; no arbitrary PID.
-    let socket = UdpSocket::bind((request.local_ipv4, 0))
-        .map_err(|_| "UDP canary source bind failed")?;
+    let socket =
+        UdpSocket::bind((request.local_ipv4, 0)).map_err(|_| "UDP canary source bind failed")?;
     socket
         .connect((TARGET, 53))
         .map_err(|_| "UDP canary TEST-NET route unavailable")?;
@@ -229,7 +233,8 @@ fn native(request: Request) -> Result<Value, String> {
         "crash_persistent_fail_closed": false,
         "win10_11_acceptance": false,
         "release_accepted": false,
-        "packet_payload_or_identity_saved": false
+        "packet_payload_or_identity_saved": false,
+        "external_rescue_self_attested_not_verified": request.rescue_attested
     }))
 }
 
@@ -279,30 +284,12 @@ mod tests {
         let mut guard = Quarantine::new(Ipv4Addr::new(192, 0, 2, 10));
         for tags in 0..=2 {
             for fragment in [0, 0x2000, 0x0001] {
-                let original = frame(
-                    tags,
-                    [192, 0, 2, 10],
-                    TARGET.octets(),
-                    17,
-                    fragment,
-                );
+                let original = frame(tags, [192, 0, 2, 10], TARGET.octets(), 17, fragment);
                 assert!(verdict(Direction::ToAdapter, &original, &mut guard));
                 assert!(!verdict(Direction::ToStack, &original, &mut guard));
-                let other = frame(
-                    tags,
-                    [192, 0, 2, 10],
-                    [203, 0, 113, 9],
-                    17,
-                    fragment,
-                );
+                let other = frame(tags, [192, 0, 2, 10], [203, 0, 113, 9], 17, fragment);
                 assert!(!verdict(Direction::ToAdapter, &other, &mut guard));
-                let other_proto = frame(
-                    tags,
-                    [192, 0, 2, 10],
-                    TARGET.octets(),
-                    6,
-                    fragment,
-                );
+                let other_proto = frame(tags, [192, 0, 2, 10], TARGET.octets(), 6, fragment);
                 assert!(!verdict(Direction::ToAdapter, &other_proto, &mut guard));
             }
         }
@@ -319,8 +306,12 @@ mod tests {
             local_ipv4: "192.0.2.10".parse().unwrap(),
             duration_ms: 3000,
             max_queries: 3,
+            rescue_attested: true,
         };
         assert!(request.validate().is_ok());
+        request.rescue_attested = false;
+        assert!(request.validate().is_err());
+        request.rescue_attested = true;
         request.consent.clear();
         assert!(request.validate().is_err());
         request.consent = "NATIVE_SELF_UDP_TESTNET_DROP_LAB".into();

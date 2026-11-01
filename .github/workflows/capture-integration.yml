@@ -51,11 +51,12 @@ jobs:
           suffix = '.exe' if sys.platform == 'win32' else ''
           agent = pathlib.Path('target/release/flowbridge-agent' + suffix).resolve()
           probes = [
-              {'consent':'NATIVE_SELF_UDP_TESTNET_DROP_LAB','adapter_name':'x','local_ipv4':'127.0.0.1','duration_ms':3000,'max_queries':3},
-              {'consent':'NATIVE_SELF_UDP_TESTNET_DROP_LAB','adapter_name':'x','local_ipv4':'192.0.2.10','duration_ms':3000,'max_queries':99},
-              {'consent':'NATIVE_SELF_UDP_TESTNET_DROP_LAB','adapter_name':'x','local_ipv4':'192.0.2.10','duration_ms':3000,'max_queries':3,'protected':True},
-              {'consent':'','adapter_name':'x','local_ipv4':'192.0.2.10','duration_ms':3000,'max_queries':3},
+              {'consent':'NATIVE_SELF_UDP_TESTNET_DROP_LAB','adapter_name':'x','local_ipv4':'127.0.0.1','duration_ms':3000,'max_queries':3,'rescue_attested':True},
+              {'consent':'NATIVE_SELF_UDP_TESTNET_DROP_LAB','adapter_name':'x','local_ipv4':'192.0.2.10','duration_ms':3000,'max_queries':99,'rescue_attested':True},
+              {'consent':'NATIVE_SELF_UDP_TESTNET_DROP_LAB','adapter_name':'x','local_ipv4':'192.0.2.10','duration_ms':3000,'max_queries':3,'protected':True,'rescue_attested':True},
+              {'consent':'','adapter_name':'x','local_ipv4':'192.0.2.10','duration_ms':3000,'max_queries':3,'rescue_attested':True},
           ]
+          probes.append({'consent':'NATIVE_SELF_UDP_TESTNET_DROP_LAB','adapter_name':'x','local_ipv4':'192.0.2.10','duration_ms':3000,'max_queries':3,'rescue_attested':False})
           for req in probes:
               proc = subprocess.run([str(agent), 'udp-testnet-drop-lab', json.dumps(req)],
                                     capture_output=True, text=True, timeout=5)
