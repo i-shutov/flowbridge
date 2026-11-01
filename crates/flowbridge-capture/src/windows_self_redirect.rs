@@ -604,9 +604,9 @@ async fn native(request: Request) -> Result<Value, String> {
     let mut selected_direct_sends = 0u64;
     while start.elapsed() < timeout && !worker.is_finished() {
         let outcome = session.poll_lab_redirect(128, &mut |packet| {
-            let selected_candidate =
-                crate::self_redirect::candidate_tuple(packet.frame) == Some(original)
-                    || crate::self_redirect::ambiguous_fragment_to_target(packet.frame, original);
+            let selected_candidate = crate::self_redirect::candidate_tuple(packet.frame)
+                == Some(original)
+                || crate::self_redirect::ambiguous_fragment_to_target(packet.frame, original);
             let decision = reflect.decide(packet, &mut || {
                 if !matches!(process.evidence(), Ok(now) if now == epoch) {
                     owner_candidate_denials += 1;

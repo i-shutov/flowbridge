@@ -658,7 +658,9 @@ mod tests {
         first[20] = 0x20; // MF, first fragment with original TCP ports
         assert!(ambiguous_fragment_to_target(&first, original));
         assert!(matches!(
-            r.decide(&packet(&first), &mut || panic!("fragment owner never inferred")),
+            r.decide(&packet(&first), &mut || panic!(
+                "fragment owner never inferred"
+            )),
             LabDisposition::Drop
         ));
 
@@ -671,7 +673,9 @@ mod tests {
         continuation[21] = 1; // nonzero offset, unreliable TCP port bytes
         assert!(ambiguous_fragment_to_target(&continuation, original));
         assert!(matches!(
-            r.decide(&packet(&continuation), &mut || panic!("fragment owner never inferred")),
+            r.decide(&packet(&continuation), &mut || panic!(
+                "fragment owner never inferred"
+            )),
             LabDisposition::Drop
         ));
 
@@ -702,7 +706,9 @@ mod tests {
         unrelated_fragment[20] = 0x20;
         assert!(!ambiguous_fragment_to_target(&unrelated_fragment, original));
         assert!(matches!(
-            r.decide(&packet(&unrelated_fragment), &mut || panic!("unrelated destination")),
+            r.decide(&packet(&unrelated_fragment), &mut || panic!(
+                "unrelated destination"
+            )),
             LabDisposition::Original
         ));
         // The common IPv4 DF flag alone is NOT a fragment.
