@@ -27,6 +27,7 @@ use windows_sys::Win32::{
 };
 
 const CONSENT: &str = "DYNAMIC_WFP_QA_LOOPBACK_ONLY";
+const DIAG: &str = "DYNAMIC_WFP_QA_APP_ONLY_DIAGNOSTIC";
 const CLIENT: &str = "FlowBridgeWfpLabClient.exe";
 const RPC_C_AUTHN_WINNT: u32 = 10;
 // Disposable QA-only namespace, never persistent or shipped as protected policy.
@@ -57,7 +58,7 @@ impl Drop for AppBlob {
 
 fn validate(path: &str, port: u16, consent: &str) -> Result<(), String> {
     let bytes = path.as_bytes();
-    if consent != CONSENT || !(1025..=65534).contains(&port) {
+    if (consent != CONSENT && consent != DIAG) || !(1025..=65534).contains(&port) {
         return Err("WFP lab requires exact consent and high port".into());
     }
     if bytes.len() < 4
@@ -82,6 +83,7 @@ fn validate(path: &str, port: u16, consent: &str) -> Result<(), String> {
 /// An actual process crash removes this dynamic filter (NOT persistent).
 pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
     validate(path, port, consent)?;
+    let app_only_diagnostic = consent == DIAG;
     let wide: Vec<u16> = OsStr::new(path).encode_wide().chain(Some(0)).collect();
     let mut raw_app: *mut FWP_BYTE_BLOB = null_mut();
     // SAFETY: NUL-terminated file path and valid returned pointer.
@@ -141,7 +143,9 @@ pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
     filter.weight.r#type = FWP_UINT8;
     filter.weight.Anonymous.uint8 = 15;
     filter.action.r#type = FWP_ACTION_BLOCK;
-    filter.numFilterConditions = 3;
+    // Diagnostic isolates AppId binding from protocol/remote-port matching.
+    // The AppId-only mode is bounded to a disposable QA binary and session.
+    filter.numFilterConditions = if app_only_diagnostic { 1 } else { 3 };
     filter.filterCondition = conditions.as_mut_ptr();
     let mut id = 0;
     // SAFETY: app blob, all conditions and display string are live during call.
@@ -155,7 +159,9 @@ pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
             "ok":true, "kind":"original_rust_dynamic_wfp_lab",
             "wfp_ale_block_installed":true, "app_id_scoped":true,
             "dynamic_private_sublayer":true,
-            "tcp_port_scoped":true, "guard_seconds_max":20,
+            "tcp_port_scoped":!app_only_diagnostic,
+            "diagnostic_app_id_only":app_only_diagnostic,
+            "guard_seconds_max":20,
             "filter_persistent":false, "ndisrd_touched":false,
             "wfp_ndisrd_ordering_proved":false, "crash_persistent_fail_closed":false,
             "release_accepted":false

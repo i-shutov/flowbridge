@@ -48,83 +48,101 @@ def main():
     with tempfile.TemporaryDirectory(prefix="flowbridge-wfp-qa-") as folder, \
          Server(("127.0.0.1", 0), Handler) as server:
         qa = Path(folder) / "FlowBridgeWfpLabClient.exe"
-        shutil.copy2(agent, qa)
-        other_qa = Path(folder) / "FlowBridgeWfpOtherClient.exe"
-        shutil.copy2(agent, other_qa)
+        other = Path(folder) / "FlowBridgeWfpOtherClient.exe"
+        for path in (qa, other):
+            shutil.copy2(agent, path)
         digest = hashlib.sha256(agent.read_bytes()).hexdigest()
-        assert hashlib.sha256(qa.read_bytes()).hexdigest() == digest
-        assert hashlib.sha256(other_qa.read_bytes()).hexdigest() == digest
+        assert all(hashlib.sha256(p.read_bytes()).hexdigest() == digest for p in (qa, other))
         port = server.server_address[1]
         server_thread = threading.Thread(target=server.serve_forever, daemon=True)
         server_thread.start()
         try:
-            denied_optin = subprocess.run(
+            denied = subprocess.run(
                 [str(agent), "wfp-qa-guard", str(qa), str(port), "DENY"],
                 capture_output=True, text=True, timeout=5)
-            assert denied_optin.returncode != 0
+            assert denied.returncode != 0
             baseline = client(qa, port)
             assert baseline.returncode == 0
             assert json.loads(baseline.stdout)["real_tcp_half_close"] is True
-            guard = subprocess.Popen(
-                [str(agent), "wfp-qa-guard", str(qa), str(port), CONSENT],
-                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE, text=True, encoding="utf-8")
-            q = queue.Queue(maxsize=1)
-            threading.Thread(target=lambda: q.put(guard.stdout.readline()), daemon=True).start()
-            try:
-                ready = json.loads(q.get(timeout=10))
-                assert ready["wfp_ale_block_installed"] is True
-                assert ready["filter_persistent"] is False
-                assert ready["dynamic_private_sublayer"] is True
-                time.sleep(.2)
-                blocked = client(qa, port)
-                assert blocked.returncode != 0, "WFP installed but selected QA client still connected"
-                allowed_other_exe = client(other_qa, port)
-                assert allowed_other_exe.returncode == 0, "Different-path client wrongly blocked"
-                assert "WFP QA TCP connect denied" in blocked.stdout
-                with socket.create_connection(("127.0.0.1", port), timeout=2) as independent:
-                    independent.sendall(b"probe")
-                    independent.shutdown(socket.SHUT_WR)
-                    assert independent.recv(4) == b"done"
-            finally:
-                if guard.poll() is None:
-                    guard.kill()
-                guard.wait(timeout=8)
-            for _ in range(15):
-                recovered = client(qa, port)
-                if recovered.returncode == 0:
-                    break
-                time.sleep(.2)
-            assert recovered.returncode == 0, "Dynamic rule outlived guard"
+
+            def run_trial(guard_consent, app_only):
+                guard = subprocess.Popen(
+                    [str(agent), "wfp-qa-guard", str(qa), str(port), guard_consent],
+                    stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE, text=True, encoding="utf-8")
+                q = queue.Queue(maxsize=1)
+                threading.Thread(target=lambda: q.put(guard.stdout.readline()),
+                                 daemon=True).start()
+                trial = {"app_only": app_only, "ready": False, "selected_denied": False,
+                         "different_executable_allowed": False, "python_allowed": False,
+                         "recovered": False}
+                try:
+                    ready = json.loads(q.get(timeout=10))
+                    assert ready["wfp_ale_block_installed"] is True
+                    assert ready["dynamic_private_sublayer"] is True
+                    assert ready["filter_persistent"] is False
+                    assert ready["diagnostic_app_id_only"] is app_only
+                    assert ready["tcp_port_scoped"] is (not app_only)
+                    trial["ready"] = True
+                    time.sleep(.2)
+                    blocked = client(qa, port)
+                    trial["selected_denied"] = (
+                        blocked.returncode != 0 and
+                        "WFP QA TCP connect denied" in blocked.stdout)
+                    other_result = client(other, port)
+                    trial["different_executable_allowed"] = other_result.returncode == 0
+                    with socket.create_connection(("127.0.0.1", port), timeout=2) as independent:
+                        independent.sendall(b"probe")
+                        independent.shutdown(socket.SHUT_WR)
+                        trial["python_allowed"] = independent.recv(4) == b"done"
+                finally:
+                    if guard.poll() is None:
+                        guard.kill()
+                    guard.wait(timeout=8)
+                for attempt in range(15):
+                    recovered = client(qa, port)
+                    if recovered.returncode == 0:
+                        break
+                    time.sleep(.2)
+                trial["recovered"] = recovered.returncode == 0
+                return trial
+
+            # AppId-only distinguishes identity failure from bad remote port
+            # or protocol match. A registered WFP filter is never a PASS alone.
+            identity_trial = run_trial("DYNAMIC_WFP_QA_APP_ONLY_DIAGNOSTIC", True)
+            precise_trial = run_trial(CONSENT, False)
+            stages = (identity_trial, precise_trial)
+            passed = all(all(stage[k] for k in (
+                "ready", "selected_denied", "different_executable_allowed",
+                "python_allowed", "recovered")) for stage in stages)
             result = {
-                "kind":"original_rust_real_wfp_dynamic_qa_lifecycle",
-                "passed":True,
-                "source_commit":subprocess.check_output(["git","rev-parse","HEAD"], text=True).strip(),
-                "agent_sha256":digest,
-                "copied_client_sha256":hashlib.sha256(qa.read_bytes()).hexdigest(),
-                "actual_wfp_ale_block":True,
-                "selected_qa_executable_denied":True,
-                "different_executable_allowed":True,
-                "dynamic_private_sublayer_removed_with_session":True,
-                "unrelated_python_executable_allowed":True,
-                "guard_forcibly_killed":True,
-                "dynamic_filter_removed_after_guard_death":True,
-                "real_tcp_half_close":True,
-                "persistent_filter_created":False,
-                "ndisrd_modified":False,
-                "wfp_ndisrd_ordering_proved":False,
-                "arbitrary_packet_pid_bound":False,
-                "crash_persistent_fail_closed":False,
-                "dns_leak_free":False,
-                "win10_11_acceptance":False,
-                "release_accepted":False
+                "kind": "original_rust_real_wfp_dynamic_qa_diagnostic_matrix",
+                "passed": passed,
+                "source_commit": subprocess.check_output(
+                    ["git", "rev-parse", "HEAD"], text=True).strip(),
+                "agent_sha256": digest,
+                "copied_client_sha256": hashlib.sha256(qa.read_bytes()).hexdigest(),
+                "app_id_only_trial": identity_trial,
+                "app_id_port_protocol_trial": precise_trial,
+                "guard_killed_after_each_trial": True,
+                "persistent_filter_created": False,
+                "ndisrd_modified": False,
+                "wfp_ndisrd_ordering_proved": False,
+                "arbitrary_packet_pid_bound": False,
+                "crash_persistent_fail_closed": False,
+                "dns_leak_free": False,
+                "win10_11_acceptance": False,
+                "release_accepted": False
             }
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
             print(json.dumps(result))
+            if not passed:
+                raise RuntimeError("Actual WFP enforcement failed; inspect redacted matrix JSON")
         finally:
             server.shutdown()
             server_thread.join(timeout=4)
+
 
 if __name__ == "__main__":
     main()
