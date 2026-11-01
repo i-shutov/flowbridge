@@ -8,10 +8,6 @@ use flowbridge_runtime::Engine;
 #[cfg(any(windows, test))]
 use flowbridge_tunnel::{Config as SshConfig, Supervisor};
 #[cfg(any(windows, test))]
-use std::sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex};
-#[cfg(any(windows, test))]
-use std::{thread, time::Duration};
-#[cfg(any(windows, test))]
 use serde::Deserialize;
 #[cfg(any(windows, test))]
 use serde_json::json;
@@ -20,6 +16,13 @@ use serde_json::Value;
 use std::io::Read;
 #[cfg(any(windows, test))]
 use std::path::{Path, PathBuf};
+#[cfg(any(windows, test))]
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
+#[cfg(any(windows, test))]
+use std::{thread, time::Duration};
 
 #[cfg(any(windows, test))]
 const MAX_CONFIG: u64 = 1024 * 1024;
@@ -101,15 +104,18 @@ fn reject_unattested_app_rules(profile: &Config) -> Result<(), String> {
 
 #[cfg(any(windows, test))]
 fn validate_managed_route(engine: &Config, ssh: &SshConfig) -> Result<(), String> {
-    let executable = ssh.ssh_executable.as_deref().ok_or(
-        "managed SSH requires an explicit absolute local OpenSSH executable",
-    )?;
-    let identity = ssh.identity_file.as_deref().ok_or(
-        "managed SSH requires an explicit key path; no implicit agent fallback",
-    )?;
-    let known = ssh.known_hosts_file.as_deref().ok_or(
-        "managed SSH requires an explicit pinned known_hosts path",
-    )?;
+    let executable = ssh
+        .ssh_executable
+        .as_deref()
+        .ok_or("managed SSH requires an explicit absolute local OpenSSH executable")?;
+    let identity = ssh
+        .identity_file
+        .as_deref()
+        .ok_or("managed SSH requires an explicit key path; no implicit agent fallback")?;
+    let known = ssh
+        .known_hosts_file
+        .as_deref()
+        .ok_or("managed SSH requires an explicit pinned known_hosts path")?;
     if ![executable, identity, known]
         .iter()
         .all(|p| Path::new(p).is_absolute())
@@ -172,9 +178,7 @@ impl Controller {
 
     fn open_with_mode(config_path: PathBuf, scm_mode: bool) -> Result<Self, String> {
         let profile = load_explicit_profile(&config_path)?;
-        if scm_mode
-            && (!config_path.is_absolute() || !profile.engine.listen.ip().is_loopback())
-        {
+        if scm_mode && (!config_path.is_absolute() || !profile.engine.listen.ip().is_loopback()) {
             return Err(
                 "SCM candidate requires an absolute config path and loopback-only SOCKS listener"
                     .into(),
@@ -348,8 +352,11 @@ impl Controller {
                         serde_json::to_value(&next.ssh),
                         serde_json::to_value(&self.ssh_config),
                     ) {
-                        (Ok(next), Ok(current)) if next == current => {},
-                        _ => return Err("SSH profile changes require a stopped replacement and revalidation".into()),
+                        (Ok(next), Ok(current)) if next == current => {}
+                        _ => return Err(
+                            "SSH profile changes require a stopped replacement and revalidation"
+                                .into(),
+                        ),
                     }
                     self.engine.reload(next.engine).map_err(|e| e.to_string())
                 });
@@ -365,10 +372,7 @@ impl Controller {
                 let result = self.stop_engine();
                 match result {
                     Ok(()) => (self.status(), true),
-                    Err(e) => (
-                        json!({"ok":false,"error":e,"release_accepted":false}),
-                        true,
-                    ),
+                    Err(e) => (json!({"ok":false,"error":e,"release_accepted":false}), true),
                 }
             }
         }
@@ -616,7 +620,7 @@ mod tests {
     }
     #[test]
     fn managed_ssh_envelope_refuses_direct_identity_and_mutable_carrier() {
-        use flowbridge_core::{Proxy, ProxyKind, Endpoint};
+        use flowbridge_core::{Endpoint, Proxy, ProxyKind};
         let mut engine = config();
         let mut ssh = SshConfig::default();
         ssh.host = "127.0.0.1".into();
@@ -629,14 +633,21 @@ mod tests {
         });
         ssh.identity_file = Some(if cfg!(windows) {
             r"C:\flowbridge-test\id_ed25519".into()
-        } else { "/tmp/flowbridge-test/id_ed25519".into() });
+        } else {
+            "/tmp/flowbridge-test/id_ed25519".into()
+        });
         ssh.known_hosts_file = Some(if cfg!(windows) {
             r"C:\flowbridge-test\known_hosts".into()
-        } else { "/tmp/flowbridge-test/known_hosts".into() });
+        } else {
+            "/tmp/flowbridge-test/known_hosts".into()
+        });
         engine.proxies.push(Proxy {
             id: "owned".into(),
             kind: ProxyKind::Socks5,
-            endpoint: Endpoint { host: "127.0.0.1".into(), port: ssh.local_port },
+            endpoint: Endpoint {
+                host: "127.0.0.1".into(),
+                port: ssh.local_port,
+            },
             username: None,
             password_env: None,
         });
@@ -674,6 +685,4 @@ mod tests {
         }]);
         std::fs::write(&file.0, denied.to_string()).unwrap();
         assert!(load_explicit_profile(&file.0).is_err());
-    }
-
-}
+    }}
