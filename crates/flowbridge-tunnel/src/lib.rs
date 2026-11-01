@@ -1929,10 +1929,13 @@ mod tests {
 
     #[test]
     fn readiness_requires_child_and_socks_and_stop_reaps_without_restart() {
-        let config = config();
-        let port = config.local_port;
-        let supervisor = supervisor(config, "healthy");
-        let start = supervisor.start().unwrap();
+        // Port allocation on shared macOS CI runners can race a peer process
+        // between the non-ephemeral port probe and our pre-child bind. Reuse
+        // the exact test-only, bounded PRE-CHILD collision retry; never retry
+        // an already-started child, health failure, or authentication error.
+        let (supervisor, _) = started_mock_with_preflight_retry(config(), "healthy");
+        let start = supervisor.snapshot();
+        let port = start.status.local_port;
         assert!(matches!(start.status.state.as_str(), "starting" | "ready"));
         let ready = wait(&supervisor, |s| s.status.state == "ready");
         assert_eq!(ready.status.attempt, 1);
