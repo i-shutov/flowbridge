@@ -43,6 +43,8 @@ user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
 user32.GetWindowTextW.restype = ctypes.c_int
 user32.PostMessageW.argtypes = [wintypes.HWND, ctypes.c_uint, wintypes.WPARAM, wintypes.LPARAM]
 user32.PostMessageW.restype = wintypes.BOOL
+user32.SendMessageW.argtypes = [wintypes.HWND, ctypes.c_uint, wintypes.WPARAM, wintypes.LPARAM]
+user32.SendMessageW.restype = wintypes.LPARAM
 
 
 def require(ok: bool, message: str) -> None:
@@ -78,6 +80,15 @@ def text_of(hwnd: int) -> str:
 
 
 def click(hwnd: int) -> None:
+    # A posted BM_CLICK can be ignored by a button on the noninteractive
+    # hosted runner desktop. Synchronous SendMessage exercises the actual
+    # button's Win32 procedure; UI callback starts an asynchronous worker.
+    user32.SendMessageW(hwnd, BM_CLICK, 0, 0)
+
+
+def click_async(hwnd: int) -> None:
+    # STOP opens a native modal MessageBox. Do not block this test thread
+    # waiting for its return; it must click the confirmation independently.
     require(bool(user32.PostMessageW(hwnd, BM_CLICK, 0, 0)),
             "Cannot post native button action")
 
@@ -146,8 +157,17 @@ def main() -> None:
             require(bool(user32.SetWindowTextW(path_edit, str(profile_path))),
                     "Win32 JSON profile entry rejected")
             click(control(hwnd, ID_START))
-            wait(lambda: "SOCKS engine: RUNNING" in text_of(status),
-                 15, "panel -> agent start and live status")
+            try:
+                wait(lambda: "SOCKS engine: RUNNING" in text_of(status),
+                     15, "panel -> agent start and live status")
+            except AssertionError as original:
+                # Safe public status only, never reveal config path/key.
+                observed = text_of(status)
+                state = "running" if observed.startswith("RUST SOCKS") else "not-running"
+                raise AssertionError(
+                    f"GUI start failed; panel_status_class={state}; "
+                    f"panel_status_excerpt={observed[:280]!r}"
+                ) from original
             report["gui_start_same_user_rust_agent"] = True
             state = command(agent, "status")
             require(state["engine"]["running"] is True and state["engine"]["listen"] ==
@@ -180,7 +200,7 @@ def main() -> None:
 
             # Post BM_CLICK rather than blocking on SendMessage. Then accept
             # the real native modal STOP confirmation through its Win32 YES.
-            click(control(hwnd, ID_STOP))
+            click_async(control(hwnd, ID_STOP))
             dialog = wait(lambda: user32.FindWindowW(
                 "#32770", "FlowBridge candidate - stop"), 6,
                 "native explicit STOP confirmation")
