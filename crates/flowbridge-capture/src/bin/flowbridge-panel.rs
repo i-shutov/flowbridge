@@ -228,47 +228,58 @@ mod panel {
         if !launch_worker {
             return;
         }
-        std::thread::spawn(|| loop {
-            let next = {
-                let mut pending = PENDING.lock().unwrap_or_else(|e| e.into_inner());
-                match pending.pop_front() {
-                    Some(next) => Some(next),
-                    None => {
-                        BUSY.store(false, Ordering::Release);
-                        None
+        std::thread::spawn(|| {
+            let mut suppress_queued_refresh = false;
+            loop {
+                let next = {
+                    let mut pending = PENDING.lock().unwrap_or_else(|e| e.into_inner());
+                    match pending.pop_front() {
+                        Some(next) => Some(next),
+                        None => {
+                            BUSY.store(false, Ordering::Release);
+                            None
+                        }
                     }
+                };
+                let Some((action, path)) = next else { break };
+                // A stale queued Refresh must not erase a failed Start's error.
+                // When Start succeeds, Refresh still executes in FIFO order.
+                if action == "status" && suppress_queued_refresh {
+                    continue;
                 }
-            };
-            let Some((action, path)) = next else { break };
-            let result = match action {
-                "start" => start_agent(path.expect("UI validated profile before dispatch")),
-                "status" | "reload" | "stop" => control_plane::command(action)
-                    .map_err(|_| "Local Rust agent unavailable or command rejected."),
-                _ => Err("Unsupported operator action."),
-            };
-            let message = match result {
-                Ok(status) if action == "stop" => format!(
-                    "Stop requested; local proxy is no longer managed by this panel.\r\n\r\n{}",
-                    status_text(&status)
-                ),
-                Ok(status) => status_text(&status),
-                Err(error) => format!(
-                    concat!(
-                        "OPERATION: {}\r\n{}\r\n\r\n",
-                        "No driver protection has been enabled by this panel.\r\n",
-                        "This candidate must NOT be treated as a system-wide kill switch.",
+                let result = match action {
+                    "start" => start_agent(path.expect("UI validated profile before dispatch")),
+                    "status" | "reload" | "stop" => control_plane::command(action)
+                        .map_err(|_| "Local Rust agent unavailable or command rejected."),
+                    _ => Err("Unsupported operator action."),
+                };
+                if action == "start" {
+                    suppress_queued_refresh = result.is_err();
+                }
+                let message = match result {
+                    Ok(status) if action == "stop" => format!(
+                        "Stop requested; local proxy is no longer managed by this panel.\r\n\r\n{}",
+                        status_text(&status)
                     ),
-                    action, error
-                ),
-            };
-            if let Ok(mut response) = RESPONSE.lock() {
-                *response = Some(message);
-            }
-            // SAFETY: A destroyed HWND simply rejects the post; the
-            // worker cannot mutate UI controls outside the owning thread.
-            let hwnd = WINDOW.load(Ordering::Acquire) as HWND;
-            if !hwnd.is_null() {
-                unsafe { PostMessageW(hwnd, STATUS_CHANGED, 0, 0) };
+                    Ok(status) => status_text(&status),
+                    Err(error) => format!(
+                        concat!(
+                            "OPERATION: {}\r\n{}\r\n\r\n",
+                            "No driver protection has been enabled by this panel.\r\n",
+                            "This candidate must NOT be treated as a system-wide kill switch.",
+                        ),
+                        action, error
+                    ),
+                };
+                if let Ok(mut response) = RESPONSE.lock() {
+                    *response = Some(message);
+                }
+                // SAFETY: A destroyed HWND simply rejects the post; the
+                // worker cannot mutate UI controls outside the owning thread.
+                let hwnd = WINDOW.load(Ordering::Acquire) as HWND;
+                if !hwnd.is_null() {
+                    unsafe { PostMessageW(hwnd, STATUS_CHANGED, 0, 0) };
+                }
             }
         });
     }

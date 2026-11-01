@@ -1,3 +1,22 @@
+### 2026-11-01 — Preserve failed native GUI Start diagnostics under queued Refresh (CI PENDING)
+
+The first exact native-control-command Windows Server 2025 run
+[#41311313166](https://github.com/i-shutov/flowbridge/actions/runs/41311313166)
+compiled and reached the real unsigned installed Rust panel, but **FAILED**
+its actual Start->agent->SOCKS assertion. Its final text still showed an
+unavailable *status* result, which may have overwritten a failed Start
+result: neither operator nor QA could see whether the Start action was
+dispatched but rejected or never dispatched. The Rust GUI worker now keeps
+a failed Start error visible when an already-queued auto/manual Refresh
+follows it in the *same worker batch*, while retaining FIFO Refresh after
+successful Start and permitting later explicit Refresh after worker idle.
+No test assertion, driver guard, protection rule or SSH gate is weakened.
+Exact-head Windows installation and real SSH/SOCKS CI must still pass.
+The native Windows button source-HWND check and honest noninteractive QA
+scope from the preceding checkpoint remain in place.
+
+---
+
 ### 2026-11-01 — Hosted Windows GUI input: native BN_CLICKED dispatch with source HWND validation (CI PENDING)
 
 The Rust operator panel's strict Start/Refresh/Reload/Stop handler now validates
