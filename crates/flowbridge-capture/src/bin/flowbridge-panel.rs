@@ -389,7 +389,19 @@ mod panel {
                 0
             }
             WM_COMMAND if ((wp >> 16) as u16) == 0 => {
-                match (wp as u16) as i32 {
+                // BN_CLICKED is the only operator notification accepted.
+                // Ignore menu/accelerator commands (LPARAM=0) and forged
+                // unrelated controls: a valid notification carries the exact
+                // live child button HWND.
+                let control_id = (wp as u16) as i32;
+                if !matches!(
+                    control_id,
+                    ID_START | ID_REFRESH | ID_RELOAD | ID_STOP
+                ) || lp != control(window, control_id) as isize
+                {
+                    return 0;
+                }
+                match control_id {
                     ID_START => match path_from_edit(window) {
                         Ok(path) => launch("start", Some(path)),
                         Err(error) => set_text(window, ID_STATUS, error),

@@ -1,3 +1,24 @@
+### 2026-11-01 — Hosted Windows GUI input: native BN_CLICKED dispatch with source HWND validation (CI PENDING)
+
+The Rust operator panel's strict Start/Refresh/Reload/Stop handler now validates
+that a zero-notification WM_COMMAND comes from its *own existing* corresponding
+button HWND, never from unrelated menus/accelerators. The actual installed
+Windows GUI acceptance now drives this **exact native BN_CLICKED command
+notification** through the genuine Win32 parent procedure, including immediate
+Start-vs-initial-Refresh ordering, same-user restricted IPC, installed agent
+and authenticated Banner First/OpenSSH/SOCKS. On a noninteractive hosted runner,
+a cross-process BM_CLICK may be silently ignored when its button is inactive;
+WM_COMMAND with the exact installed child HWND tests the native command
+handler deterministically without inventing any agent or proxy response.
+The native modal Stop confirmation is still shown and accepted by its real
+button. These checks do NOT prove physical mouse input, UI focus/keyboard
+accessibility, arbitrary selected application interception, protected
+fail-closed, DNS privacy or Windows 10/11 acceptance. Preserve all original
+install/recovery, real SSH, and managed-load checks. A fully completed
+exact-head CI and byte-verified artifact are required to accept this block.
+
+---
+
 ### 2026-11-01 — Actual hosted Win32 GUI QA: cross-process EDIT status oracle correction (CI PENDING)
 
 A real installed GUI Windows run on source `69f5ca82ffb72d4b30ec518e7b11665e5456741a`

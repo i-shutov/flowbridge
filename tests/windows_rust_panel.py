@@ -24,6 +24,7 @@ from windows_capture_control import blocked_socks_connect, command, profile
 
 BM_CLICK = 0x00F5
 WM_CLOSE = 0x0010
+WM_COMMAND = 0x0111
 WM_GETTEXT = 0x000D
 SMTO_ABORTIFHUNG = 0x0002
 IDYES = 6
@@ -101,11 +102,25 @@ def click(hwnd: int) -> None:
     user32.SendMessageW(hwnd, BM_CLICK, 0, 0)
 
 
-def click_async(hwnd: int) -> None:
-    # STOP opens a native modal MessageBox. Do not block this test thread
-    # waiting for its return; it must click the confirmation independently.
-    require(bool(user32.PostMessageW(hwnd, BM_CLICK, 0, 0)),
-            "Cannot post native button action")
+def notify_button(window: int, ident: int, asynchronous: bool = False) -> None:
+    """Exercise the real parent Win32 BN_CLICKED command handler.
+
+    BM_CLICK on a button in an inactive GUI can be ignored on the hosted,
+    noninteractive Windows desktop. Send the exact WM_COMMAND notification
+    produced by a real control instead. This proves the UI action/IPC code,
+    NOT physical pointer/keyboard acceptance on Win10/11.
+    """
+    button = control(window, ident)
+    if asynchronous:
+        # Stop opens a modal native confirmation: don't block this caller.
+        require(bool(user32.PostMessageW(window, WM_COMMAND, ident, button)),
+                "Cannot post native control command")
+    else:
+        result = ctypes.c_size_t(0)
+        require(bool(user32.SendMessageTimeoutW(
+            window, WM_COMMAND, ident, button, SMTO_ABORTIFHUNG,
+            2000, ctypes.byref(result),
+        )), "Native Win32 button notification did not return")
 
 
 def main() -> None:
@@ -141,6 +156,7 @@ def main() -> None:
         "ndisrd_activated": False, "native_packet_pid_proof": False,
         "protected_fail_closed": False, "dns_leak_free": False,
         "win10_11_acceptance": False, "release_accepted": False,
+        "physical_button_input_accepted": False,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     process = None
@@ -174,8 +190,8 @@ def main() -> None:
                     "Win32 JSON profile entry rejected")
             # Intentionally race the first WM_CREATE status worker. A real
             # user can click Start immediately; no click may be discarded.
-            click(control(hwnd, ID_START))
-            click(control(hwnd, ID_REFRESH))
+            notify_button(hwnd, ID_START)
+            notify_button(hwnd, ID_REFRESH)
             try:
                 wait(lambda: "SOCKS engine: RUNNING" in text_of(status),
                      15, "panel -> agent start and live status")
@@ -203,7 +219,7 @@ def main() -> None:
                     f"127.0.0.1:{port}" and state["driver_capture_active"] is False
                     and state["protected_redirect_available"] is False,
                     "GUI-launched agent did not own expected live loopback listener")
-            click(control(hwnd, ID_REFRESH))
+            notify_button(hwnd, ID_REFRESH)
             wait(lambda: f"127.0.0.1:{port}" in text_of(status),
                  6, "real live SOCKS status refresh")
             shown = text_of(status)
@@ -220,7 +236,7 @@ def main() -> None:
             report["actual_socks_block_denied"] = True
             data["connect_timeout_ms"] = 1800
             profile_path.write_text(json.dumps(data), encoding="utf-8")
-            click(control(hwnd, ID_RELOAD))
+            notify_button(hwnd, ID_RELOAD)
             wait(lambda: "Config generation: 2" in text_of(status),
                  6, "atomic config reload through panel and pipe")
             require(command(agent, "status")["engine"]["generation"] == 2,
@@ -229,7 +245,7 @@ def main() -> None:
 
             # Post BM_CLICK rather than blocking on SendMessage. Then accept
             # the real native modal STOP confirmation through its Win32 YES.
-            click_async(control(hwnd, ID_STOP))
+            notify_button(hwnd, ID_STOP, asynchronous=True)
             dialog = wait(lambda: user32.FindWindowW(
                 "#32770", "FlowBridge candidate - stop"), 6,
                 "native explicit STOP confirmation")
@@ -298,6 +314,7 @@ def run_managed_ssh(panel: Path, agent: Path, cli: Path, ssh: Path,
         "ndisrd_activated": False, "native_packet_pid_proof": False,
         "protected_fail_closed": False, "dns_leak_free": False,
         "win10_11_acceptance": False, "release_accepted": False,
+        "physical_button_input_accepted": False,
     }
     process = None
     hwnd = None
@@ -337,14 +354,14 @@ def run_managed_ssh(panel: Path, agent: Path, cli: Path, ssh: Path,
                     "Cannot select explicit same-user managed SSH profile")
             # Queue Start immediately against WM_CREATE auto-Refresh, then
             # queue another Refresh; none may silently cancel the Start.
-            click(control(hwnd, ID_START))
-            click(control(hwnd, ID_REFRESH))
+            notify_button(hwnd, ID_START)
+            notify_button(hwnd, ID_REFRESH)
             next_refresh = [0.0]
 
             def gui_ready():
                 state = pipe_command(agent, "status", accept_failure=True)
                 if time.monotonic() >= next_refresh[0]:
-                    click(control(hwnd, ID_REFRESH))
+                    notify_button(hwnd, ID_REFRESH)
                     next_refresh[0] = time.monotonic() + 0.6
                 if (state and state.get("engine", {}).get("running") is True
                         and state.get("managed_ssh_gate_ready") is True
@@ -359,7 +376,7 @@ def run_managed_ssh(panel: Path, agent: Path, cli: Path, ssh: Path,
                     "GUI started wrong listener or falsely advertised NDISRD")
             report["gui_immediate_start_not_lost"] = True
             round_trip(ingress, echo_port)
-            click(control(hwnd, ID_REFRESH))
+            notify_button(hwnd, ID_REFRESH)
             wait(lambda: "SSH: ready" in text_of(status), 6,
                  "GUI actual SSH state")
             shown = text_of(status)
@@ -373,7 +390,7 @@ def run_managed_ssh(panel: Path, agent: Path, cli: Path, ssh: Path,
 
             config["engine"]["connect_timeout_ms"] = 2500
             profile_path.write_text(json.dumps(config), encoding="utf-8")
-            click(control(hwnd, ID_RELOAD))
+            notify_button(hwnd, ID_RELOAD)
             wait(lambda: "Config generation: 2" in text_of(status), 8,
                  "GUI live managed SSH profile reload")
             round_trip(ingress, echo_port)
@@ -382,7 +399,7 @@ def run_managed_ssh(panel: Path, agent: Path, cli: Path, ssh: Path,
             unsafe = copy.deepcopy(config)
             unsafe["ssh"]["port"] = ssh_port + 1
             profile_path.write_text(json.dumps(unsafe), encoding="utf-8")
-            click(control(hwnd, ID_RELOAD))
+            notify_button(hwnd, ID_RELOAD)
             wait(lambda: "OPERATION: reload" in text_of(status), 8,
                  "GUI rejection of SSH carrier swap")
             retained = pipe_command(agent, "status")
@@ -393,7 +410,7 @@ def run_managed_ssh(panel: Path, agent: Path, cli: Path, ssh: Path,
             report["gui_denied_ssh_carrier_swap"] = True
             profile_path.write_text(json.dumps(config), encoding="utf-8")
 
-            click_async(control(hwnd, ID_STOP))
+            notify_button(hwnd, ID_STOP, asynchronous=True)
             dialog = wait(lambda: user32.FindWindowW(
                 "#32770", "FlowBridge candidate - stop"), 8,
                 "real native GUI SSH stop confirmation")
