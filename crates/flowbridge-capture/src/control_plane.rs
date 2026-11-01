@@ -150,6 +150,15 @@ pub(crate) fn validate_scm_profile(path: &Path) -> Result<(), String> {
     if !config.engine.listen.ip().is_loopback() {
         return Err("SCM candidate refuses non-loopback SOCKS listeners".into());
     }
+    // A demand-start SCM service may run as LocalSystem. A mutable config
+    // must never permit that service to launch an arbitrary SSH executable.
+    // The SSH-owned candidate is foreground same-user only until a secure
+    // identity/ACL/privilege model and upgrade isolation are independently proven.
+    if config.ssh.is_some() {
+        return Err(
+            "SCM candidate refuses SSH process launch pending secure service-account identity and configuration ACLs".into(),
+        );
+    }
     Ok(())
 }
 
@@ -182,6 +191,11 @@ impl Controller {
             return Err(
                 "SCM candidate requires an absolute config path and loopback-only SOCKS listener"
                     .into(),
+            );
+        }
+        if scm_mode && profile.ssh.is_some() {
+            return Err(
+                "SCM candidate refuses managed SSH until secure service-account identity and configuration ACLs are proven".into(),
             );
         }
         let engine = Arc::new(Engine::new(profile.engine).map_err(|e| e.to_string())?);
@@ -663,6 +677,9 @@ mod tests {
         });
         std::fs::write(&file.0, valid.to_string()).unwrap();
         assert!(load_explicit_profile(&file.0).unwrap().ssh.is_some());
+        // SCM paths are administrative, possibly LocalSystem. Never let an
+        // owner-writable SSH executable/key path cross that privilege boundary.
+        assert!(Controller::open_with_mode(file.0.clone(), true).is_err());
 
         let mut denied = valid.clone();
         denied["consent"] = "UNSAFE".into();

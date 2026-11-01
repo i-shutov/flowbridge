@@ -936,8 +936,13 @@ The code and these notes are a single integrated safety-and-CI correction on the
 
 The optional, explicitly consented `RUST_MANAGED_SSH_SOCKS_CANDIDATE`
 configuration envelope joins our **original Rust** OpenSSH supervisor to our
-existing original Rust TCP SOCKS engine and Windows restricted named-pipe/SCM
-controller. Legacy explicit-SOCKS configuration remains supported unchanged.
+existing original Rust TCP SOCKS engine and same-user foreground restricted
+Windows named-pipe controller. Legacy explicit-SOCKS configuration remains
+supported unchanged. **SCM stage/replace and service-run reject managed SSH**
+until an independently proven privileged service-account identity, config ACL,
+SSH credential and binary provenance model exists. This prevents an
+owner-writable config from turning an elevated service into arbitrary process
+execution; ordinary explicit-SOCKS SCM staging remains supported.
 The supervisor owns OpenSSH process lifecycle; the local SOCKS route is pinned
 to one literal 127.0.0.1 port, one SOCKS5 proxy, no DIRECT/default-chain/rule,
 max 128 admission slots, explicit absolute client binary/key/known_hosts paths,
