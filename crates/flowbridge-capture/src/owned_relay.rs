@@ -408,15 +408,14 @@ mod tests {
             // over .await in an argument expression, falsely keeping it alive.
             let (closed_supervisor, receiver) = watch::channel(false);
             drop(closed_supervisor);
-            let connected =
-                connect_owned(
-                    &pool,
-                    pipeline.clone(),
-                    new_ticket,
-                    context(retry_ms + 1),
-                    receiver,
-                )
-                .await;
+            let connected = connect_owned(
+                &pool,
+                pipeline.clone(),
+                new_ticket,
+                context(retry_ms + 1),
+                receiver,
+            )
+            .await;
             // The supervisor sender was dropped immediately: fail closed,
             // either before or after SOCKS opens. No pending ticket survives.
             match connected {
@@ -495,7 +494,9 @@ mod tests {
                     &mut frame,
                 )
                 .unwrap();
-            state.finish_relay(unaffected, context(packet_ms + 1).owner).unwrap();
+            state
+                .finish_relay(unaffected, context(packet_ms + 1).owner)
+                .unwrap();
             assert_eq!(state.active_records(), 0);
             assert_eq!(pool.active(), 0);
         })
