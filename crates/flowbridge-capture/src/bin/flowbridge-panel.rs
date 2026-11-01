@@ -24,11 +24,10 @@ mod panel {
         CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect,
         GetDlgItem, GetMessageW, GetWindowTextLengthW, GetWindowTextW, MessageBoxW, MoveWindow,
         PostMessageW, PostQuitMessage, RegisterClassW, SetWindowTextW, ShowWindow,
-        TranslateMessage, UpdateWindow, WNDCLASSW, MSG, CW_USEDEFAULT, ES_AUTOHSCROLL,
-        ES_AUTOVSCROLL, ES_MULTILINE, ES_READONLY, IDYES, MB_ICONWARNING, MB_YESNO,
-        SW_SHOW, WM_APP, WM_CLOSE, WM_COMMAND, WM_CREATE, WM_DESTROY, WM_SIZE,
-        WS_BORDER, WS_CHILD, WS_CLIPCHILDREN, WS_OVERLAPPEDWINDOW, WS_TABSTOP, WS_VISIBLE,
-        WS_VSCROLL,
+        TranslateMessage, CW_USEDEFAULT, ES_AUTOHSCROLL, ES_AUTOVSCROLL,
+        ES_MULTILINE, ES_READONLY, IDYES, MB_ICONWARNING, MB_YESNO, MSG, SW_SHOW, WM_APP, WM_CLOSE,
+        WM_COMMAND, WM_CREATE, WM_DESTROY, WM_SIZE, WNDCLASSW, WS_BORDER, WS_CHILD,
+        WS_CLIPCHILDREN, WS_OVERLAPPEDWINDOW, WS_TABSTOP, WS_VISIBLE, WS_VSCROLL,
     };
 
     const WINDOW_CLASS: &str = "FlowBridgeRustPanelV1";
@@ -49,16 +48,36 @@ mod panel {
         value.encode_utf16().chain(Some(0)).collect()
     }
 
-    fn child(parent: HWND, kind: &str, label: &str, id: i32, style: u32,
-             x: i32, y: i32, w: i32, h: i32) -> HWND {
+    fn child(
+        parent: HWND,
+        kind: &str,
+        label: &str,
+        id: i32,
+        style: u32,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+    ) -> HWND {
         let kind = wide(kind);
         let label = wide(label);
         // SAFETY: The parent belongs to the current UI thread; Windows copies
         // both terminating UTF-16 strings during synchronous control creation.
         unsafe {
-            CreateWindowExW(0, kind.as_ptr(), label.as_ptr(),
-                WS_CHILD | WS_VISIBLE | style, x, y, w, h,
-                parent, id as usize as _, GetModuleHandleW(null()), null())
+            CreateWindowExW(
+                0,
+                kind.as_ptr(),
+                label.as_ptr(),
+                WS_CHILD | WS_VISIBLE | style,
+                x,
+                y,
+                w,
+                h,
+                parent,
+                id as usize as _,
+                GetModuleHandleW(null()),
+                null(),
+            )
         }
     }
 
@@ -91,7 +110,10 @@ mod panel {
         let path = PathBuf::from(value.trim());
         if !path.is_absolute()
             || !path.is_file()
-            || !path.extension().is_some_and(|ext| ext.to_str().is_some_and(|value| value.eq_ignore_ascii_case("json")))
+            || !path.extension().is_some_and(|ext| {
+                ext.to_str()
+                    .is_some_and(|value| value.eq_ignore_ascii_case("json"))
+            })
         {
             return Err("Profile must be an existing absolute .json file.");
         }
@@ -105,9 +127,11 @@ mod panel {
         let ssh_status = if ssh.is_null() {
             "not configured (explicit SOCKS only)".to_owned()
         } else {
-            format!("{} (gate ready: {})",
+            format!(
+                "{} (gate ready: {})",
                 ssh["state"].as_str().unwrap_or("unknown"),
-                value["managed_ssh_gate_ready"] == true)
+                value["managed_ssh_gate_ready"] == true
+            )
         };
         format!(
             "RUST SOCKS / SSH CANDIDATE\r\n\r\n\
@@ -126,7 +150,10 @@ mod panel {
             if running { "RUNNING" } else { "STOPPED" },
             engine["listen"].as_str().unwrap_or("unavailable"),
             ssh_status,
-            engine["active"], engine["accepted"], engine["completed"], engine["failed"],
+            engine["active"],
+            engine["accepted"],
+            engine["completed"],
+            engine["failed"],
             engine["generation"],
         )
     }
@@ -136,8 +163,7 @@ mod panel {
         if control_plane::command("status").is_ok() {
             return Err("An agent already owns the local control pipe. Use Refresh.");
         }
-        let exe = std::env::current_exe()
-            .map_err(|_| "Panel executable is unavailable.")?;
+        let exe = std::env::current_exe().map_err(|_| "Panel executable is unavailable.")?;
         let agent = exe.with_file_name("flowbridge-agent.exe");
         if !agent.is_file() || agent.is_symlink() {
             return Err("Original Rust agent is missing or is a link.");
@@ -154,7 +180,9 @@ mod panel {
             if let Ok(report) = control_plane::command("status") {
                 return Ok(report);
             }
-            if child.try_wait().map_err(|_| "Agent startup status is unavailable.")?
+            if child
+                .try_wait()
+                .map_err(|_| "Agent startup status is unavailable.")?
                 .is_some()
             {
                 return Err("Agent exited: check the JSON profile and SSH prerequisites.");
@@ -182,13 +210,15 @@ mod panel {
             let text = match result {
                 Ok(status) if action == "stop" => format!(
                     "Stop requested; local proxy is no longer managed by this panel.\r\n\r\n{}",
-                    status_text(&status)),
+                    status_text(&status)
+                ),
                 Ok(status) => status_text(&status),
                 Err(error) => format!(
                     "OPERATION: {}\r\n{}\r\n\r\n\
                      No driver protection has been enabled by this panel.\r\n\
                      This candidate must NOT be treated as a system-wide kill switch.",
-                    action, error),
+                    action, error
+                ),
             };
             if let Ok(mut guard) = RESPONSE.lock() {
                 *guard = Some(text);
@@ -204,30 +234,87 @@ mod panel {
     }
 
     fn create_controls(window: HWND) {
-        child(window, "STATIC", "FlowBridge  |  Windows Rust operator panel", 0, 0,
-              18, 13, 740, 26);
-        child(window, "STATIC",
-              "Experimental SSH/SOCKS only. NO protected interception or DNS privacy guarantee.",
-              0, 0, 18, 43, 790, 24);
-        child(window, "STATIC", "Explicit JSON profile:", 0, 0, 18, 78, 155, 24);
+        child(
+            window,
+            "STATIC",
+            "FlowBridge  |  Windows Rust operator panel",
+            0,
+            0,
+            18,
+            13,
+            740,
+            26,
+        );
+        child(
+            window,
+            "STATIC",
+            "Experimental SSH/SOCKS only. NO protected interception or DNS privacy guarantee.",
+            0,
+            0,
+            18,
+            43,
+            790,
+            24,
+        );
+        child(
+            window,
+            "STATIC",
+            "Explicit JSON profile:",
+            0,
+            0,
+            18,
+            78,
+            155,
+            24,
+        );
         let default_profile = std::env::var_os("LOCALAPPDATA")
             .map(|root| PathBuf::from(root).join("FlowBridge").join("profile.json"))
             .unwrap_or_default();
-        child(window, "EDIT", &default_profile.to_string_lossy(),
-              ID_PATH, WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL, 177, 75, 610, 27);
-        child(window, "BUTTON", "Start", ID_START, WS_TABSTOP, 18, 116, 130, 32);
-        child(window, "BUTTON", "Refresh", ID_REFRESH, WS_TABSTOP, 157, 116, 130, 32);
-        child(window, "BUTTON", "Reload", ID_RELOAD, WS_TABSTOP, 296, 116, 130, 32);
-        child(window, "BUTTON", "Stop", ID_STOP, WS_TABSTOP, 435, 116, 130, 32);
-        child(window, "EDIT",
-              "Checking the local agent...\r\nNo protected application routing is available.",
-              ID_STATUS, WS_BORDER | WS_VSCROLL | ES_MULTILINE
-                | ES_READONLY | ES_AUTOVSCROLL,
-              18, 162, 769, 426);
+        child(
+            window,
+            "EDIT",
+            &default_profile.to_string_lossy(),
+            ID_PATH,
+            WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL as u32,
+            177,
+            75,
+            610,
+            27,
+        );
+        child(
+            window, "BUTTON", "Start", ID_START, WS_TABSTOP, 18, 116, 130, 32,
+        );
+        child(
+            window, "BUTTON", "Refresh", ID_REFRESH, WS_TABSTOP, 157, 116, 130, 32,
+        );
+        child(
+            window, "BUTTON", "Reload", ID_RELOAD, WS_TABSTOP, 296, 116, 130, 32,
+        );
+        child(
+            window, "BUTTON", "Stop", ID_STOP, WS_TABSTOP, 435, 116, 130, 32,
+        );
+        child(
+            window,
+            "EDIT",
+            "Checking the local agent...\r\nNo protected application routing is available.",
+            ID_STATUS,
+            WS_BORDER | WS_VSCROLL
+                | ES_MULTILINE as u32
+                | ES_READONLY as u32
+                | ES_AUTOVSCROLL as u32,
+            18,
+            162,
+            769,
+            426,
+        );
     }
 
-    unsafe extern "system" fn window_proc(window: HWND, msg: u32,
-                                            wp: WPARAM, lp: LPARAM) -> LRESULT {
+    unsafe extern "system" fn window_proc(
+        window: HWND,
+        msg: u32,
+        wp: WPARAM,
+        lp: LPARAM,
+    ) -> LRESULT {
         match msg {
             WM_CREATE => {
                 WINDOW.store(window as isize, Ordering::Release);
@@ -242,10 +329,15 @@ mod panel {
                     let width = (bounds.right - bounds.left - 36).max(420);
                     let height = (bounds.bottom - bounds.top - 179).max(160);
                     unsafe {
-                        MoveWindow(control(window, ID_PATH), 177, 75,
-                            (width - 159).max(220), 27, 1);
-                        MoveWindow(control(window, ID_STATUS), 18, 162,
-                            width, height, 1);
+                        MoveWindow(
+                            control(window, ID_PATH),
+                            177,
+                            75,
+                            (width - 159).max(220),
+                            27,
+                            1,
+                        );
+                        MoveWindow(control(window, ID_STATUS), 18, 162, width, height, 1);
                     }
                 }
                 0
@@ -261,12 +353,17 @@ mod panel {
                     ID_STOP => {
                         let explanation = wide(
                             "Stop the current same-user Rust SOCKS/SSH agent?\n\
-                             This DOES NOT activate a firewall or protected mode.");
+                             This DOES NOT activate a firewall or protected mode.",
+                        );
                         let title = wide("FlowBridge candidate - stop");
                         // SAFETY: Modal confirmation is attached to this panel only.
                         let approved = unsafe {
-                            MessageBoxW(window, explanation.as_ptr(), title.as_ptr(),
-                                        MB_YESNO | MB_ICONWARNING)
+                            MessageBoxW(
+                                window,
+                                explanation.as_ptr(),
+                                title.as_ptr(),
+                                MB_YESNO | MB_ICONWARNING,
+                            )
                         };
                         if approved == IDYES {
                             launch("stop", None);
@@ -317,17 +414,26 @@ mod panel {
             return Err("Window class registration failed");
         }
         let window = unsafe {
-            CreateWindowExW(0, class.as_ptr(), title.as_ptr(),
+            CreateWindowExW(
+                0,
+                class.as_ptr(),
+                title.as_ptr(),
                 WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPCHILDREN,
-                CW_USEDEFAULT, CW_USEDEFAULT, 830, 650,
-                null_mut(), null_mut(), instance, null())
+                CW_USEDEFAULT,
+                CW_USEDEFAULT,
+                830,
+                650,
+                null_mut(),
+                null_mut(),
+                instance,
+                null(),
+            )
         };
         if window.is_null() {
             return Err("Window creation failed");
         }
         unsafe {
             ShowWindow(window, SW_SHOW);
-            UpdateWindow(window);
         }
         let mut message: MSG = unsafe { std::mem::zeroed() };
         loop {
