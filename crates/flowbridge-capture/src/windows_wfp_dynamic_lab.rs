@@ -139,7 +139,6 @@ fn blob_matches(expected: &AppBlob, actual: &FWP_BYTE_BLOB) -> bool {
     actual_bytes == expected_bytes
 }
 
-
 fn normalized_utf16_app_id(blob: &FWP_BYTE_BLOB) -> Option<Vec<u16>> {
     // CLASSIFY_DROP header AppId is a UTF-16LE path byte blob. Decode only
     // privately, never serialize the path, bytes, or a stable fingerprint.
