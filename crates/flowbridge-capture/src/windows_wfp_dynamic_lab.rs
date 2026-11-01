@@ -22,9 +22,9 @@ use windows_sys::Win32::{
         FwpmNetEventEnum0, FwpmSubLayerAdd0, FWPM_CONDITION_ALE_APP_ID, FWPM_CONDITION_IP_PROTOCOL,
         FWPM_CONDITION_IP_REMOTE_PORT, FWPM_FILTER0, FWPM_FILTER_CONDITION0,
         FWPM_LAYER_ALE_AUTH_CONNECT_V4, FWPM_NET_EVENT0, FWPM_NET_EVENT_FLAG_APP_ID_SET,
-        FWPM_NET_EVENT_TYPE_CLASSIFY_DROP,
-        FWPM_SESSION0, FWPM_SESSION_FLAG_DYNAMIC, FWPM_SUBLAYER0, FWP_ACTION_BLOCK, FWP_BYTE_BLOB,
-        FWP_BYTE_BLOB_TYPE, FWP_MATCH_EQUAL, FWP_UINT16, FWP_UINT8,
+        FWPM_NET_EVENT_TYPE_CLASSIFY_DROP, FWPM_SESSION0, FWPM_SESSION_FLAG_DYNAMIC,
+        FWPM_SUBLAYER0, FWP_ACTION_BLOCK, FWP_BYTE_BLOB, FWP_BYTE_BLOB_TYPE, FWP_MATCH_EQUAL,
+        FWP_UINT16, FWP_UINT8,
     },
 };
 
@@ -248,19 +248,15 @@ fn verify_active_qa_filter(engine: HANDLE, filter_id: u64, port: u16) -> Result<
     }
     // SAFETY: the BFE count has been checked within the exact three-condition bound.
     let conditions = unsafe {
-        std::slice::from_raw_parts(
-            filter.filterCondition,
-            filter.numFilterConditions as usize,
-        )
+        std::slice::from_raw_parts(filter.filterCondition, filter.numFilterConditions as usize)
     };
     for condition in conditions {
-        if same_guid(&condition.fieldKey, &FWPM_CONDITION_IP_REMOTE_PORT) {
-            if condition.matchType != FWP_MATCH_EQUAL
+        if same_guid(&condition.fieldKey, &FWPM_CONDITION_IP_REMOTE_PORT)
+            && (condition.matchType != FWP_MATCH_EQUAL
                 || condition.conditionValue.r#type != FWP_UINT16
-                || unsafe { condition.conditionValue.Anonymous.uint16 } != port
-            {
-                return Err("WFP QA event filter port mismatch".into());
-            }
+                || unsafe { condition.conditionValue.Anonymous.uint16 } != port)
+        {
+            return Err("WFP QA event filter port mismatch".into());
         }
     }
     Ok(true)
@@ -292,7 +288,9 @@ pub fn event_identity_probe(
     // SAFETY: read-only local BFE connection; no dynamic/persistent rule created.
     let status = unsafe { FwpmEngineOpen0(null(), RPC_C_AUTHN_WINNT, null(), null(), &mut raw) };
     if status != 0 || raw.is_null() {
-        return Err(format!("WFP QA event read-only engine open failed: {status}"));
+        return Err(format!(
+            "WFP QA event read-only engine open failed: {status}"
+        ));
     }
     let engine = Engine(raw);
     let filter_present = verify_active_qa_filter(engine.0, filter_id, port)?;
