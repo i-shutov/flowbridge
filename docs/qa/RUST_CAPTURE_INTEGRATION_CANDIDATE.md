@@ -1269,3 +1269,47 @@ no arbitrary application packet-to-PID/creation-time proof, no persistent
 protected fail-closed after service/driver crash, no selected-app DNS/UDP/IPv6
 leak-freedom, no tested affected external route for this exact Rust build,
 and no Win10/11 native-driver acceptance. Do not merge main or publish 1.0.
+
+
+#### Independently verified installed Windows SSH acceptance — source HEAD 96087b9 (NOT Win10/11)
+
+The preceding installed-binary acceptance was **actually run and accepted for
+Windows Server 2025 only** on PR #56 HEAD
+96087b9de17fbf8139779469fae82ada95e47063, GitHub Actions test merge
+9297de22e09b514fc3647ad1e3c20431ba19d43a, base main unchanged.
+[Capture integration #41299054965](https://github.com/i-shutov/flowbridge/actions/runs/41299054965)
+completed 3/3 PASS; verified Windows artifact
+13079864214 outer ZIP SHA-256
+3b57b11f871f4d7e0b090997ab0e8fd0019b24b22a5e981ebfe186e84c497f12,
+equal to GitHub's artifact digest. Original-Rust nested candidate ZIP SHA-256
+34536e1f7ebf1de46a5aa96666b7fef985edbc449fdb1b1a2e29ff1e8b557ee1.
+Both original-Rust EXEs individually match manifest, are AMD64 0x8664 /
+PE32+ 0x20b: agent
+257381b00ea8066797777d03faf6637d4a4f7c0b1e4dc1a4e8f26f9f0a4f937b,
+CLI f84c02d277ac515ef3fd24249f958bda85641c978e49b8e1bba98e7716f4c06a.
+Four allowed inner files only; no legacy C++/WFP, vendor binary, GUI,
+selected-app native packet identity, protected mode or release claim.
+
+The actual unsigned NSIS setup SHA-256 is
+68faa94765f366793e129c4799a3ebfac9ffa54622b6c8ddfd56ddf2939b698d,
+verified from downloaded setup bytes. Actual JSON reports
+windows-rust-installed-lifecycle, installed-real-openssh and
+installed-managed-ssh-control each have passed:true. The *installed* agent
+and *installed* CLI passed genuine signed OpenSSH strict host-key/public-key
+authentication, binary SOCKS5/half-close, restricted Win32 pipe, atomic live
+SOCKS reload, no DIRECT on unreachable SSH, refusal of carrier swap,
+explicit stop, forced crash closing both owned listeners, no-consent and
+injection/ADS rejection, occupied-directory no-overwrite, refused unsafe
+reinstallation and uninstaller preserving a user-owned profile and removing
+registry entries. Verified ephemeral keys removed; no system sshd service,
+driver or firewall modified.
+
+**Separate nonwaived regressions from this source HEAD:** full Rust/native
+macOS unit matrix hit a genuine intermittent test-fixture Lease(ClockRewind)
+in the synthetic PacketBound fixture after real async SOCKS handshake. The
+integration correction uses consistent monotonic test timestamps after an
+actual awaited handshake; production ledger ClockRewind denial is unchanged.
+The experimental raw backend 512-channel Windows characterization also
+failed again (actual peak below 512). Managed 128/1152/10000/4 acceptance
+is an *independent* gate; avoid calling all workflows green before its
+exact-head result is available. No public release or main update.

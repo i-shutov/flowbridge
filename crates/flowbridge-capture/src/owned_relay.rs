@@ -269,8 +269,17 @@ mod tests {
                     socket.shutdown().await.unwrap();
                 });
                 let (supervisor, stop) = watch::channel(false);
+                // Real async SOCKS negotiation advances the lease clock by
+                // elapsed monotonic milliseconds. A hardcoded context(3)
+                // after an arbitrarily slow handshake is a false rewind.
+                // Use the SAME monotonic origin for subsequent packet legs.
+                let negotiation_started = Instant::now();
                 let connected = connect_owned(&pool, pipeline.clone(), ticket, context(2), stop)
                     .await
+                    .unwrap();
+                let packet_ms = elapsed_ms(2, negotiation_started)
+                    .unwrap()
+                    .checked_add(1)
                     .unwrap();
                 assert_eq!(pool.active(), 1);
                 assert_eq!(pipeline.lock().unwrap().active_records(), 1);
@@ -281,12 +290,22 @@ mod tests {
                     let mut state = pipeline.lock().unwrap();
                     let mut sent = syn.clone();
                     state
-                        .rewrite(ticket, context(3), Leg::ApplicationToRelay, &mut sent)
+                        .rewrite(
+                            ticket,
+                            context(packet_ms),
+                            Leg::ApplicationToRelay,
+                            &mut sent,
+                        )
                         .unwrap();
                     assert_eq!(inspect_ethernet_tcp(&sent).unwrap().tcp.tuple, alias_tuple);
                     let mut reply = frame(reverse(alias_tuple), 0x12);
                     state
-                        .rewrite(ticket, context(4), Leg::RelayToApplication, &mut reply)
+                        .rewrite(
+                            ticket,
+                            context(packet_ms + 1),
+                            Leg::RelayToApplication,
+                            &mut reply,
+                        )
                         .unwrap();
                     assert_eq!(
                         inspect_ethernet_tcp(&reply).unwrap().tcp.tuple,
@@ -350,10 +369,15 @@ mod tests {
                 reply_socks5(&mut socket, 5).await.unwrap();
             });
             let (supervisor, rx) = watch::channel(false);
+            let failed_started = Instant::now();
             assert!(matches!(
                 connect_owned(&pool, pipeline.clone(), ticket, context(2), rx).await,
                 Err(OwnedRelayError::Transport(_))
             ));
+            let retry_ms = elapsed_ms(2, failed_started)
+                .unwrap()
+                .checked_add(1)
+                .unwrap();
             rejected.await.unwrap();
             assert_eq!(pipeline.lock().unwrap().active_records(), 0);
             assert_eq!(pool.active(), 0);
@@ -361,7 +385,7 @@ mod tests {
             let new_ticket = pipeline
                 .lock()
                 .unwrap()
-                .begin(context(3), &syn, alias(original))
+                .begin(context(retry_ms), &syn, alias(original))
                 .unwrap();
             let proxy = TcpListener::bind("127.0.0.1:0").await.unwrap();
             let pool = RelayPool::new(
@@ -385,7 +409,14 @@ mod tests {
             let (closed_supervisor, receiver) = watch::channel(false);
             drop(closed_supervisor);
             let connected =
-                connect_owned(&pool, pipeline.clone(), new_ticket, context(4), receiver).await;
+                connect_owned(
+                    &pool,
+                    pipeline.clone(),
+                    new_ticket,
+                    context(retry_ms + 1),
+                    receiver,
+                )
+                .await;
             // The supervisor sender was dropped immediately: fail closed,
             // either before or after SOCKS opens. No pending ticket survives.
             match connected {
@@ -441,20 +472,30 @@ mod tests {
             .unwrap();
             let (supervisor, receiver) = watch::channel(false);
             drop(supervisor);
+            let failed_started = Instant::now();
             assert!(matches!(
                 connect_owned(&pool, pipeline.clone(), failed, context(3), receiver).await,
                 Err(OwnedRelayError::Transport(RelayError::Cancelled))
             ));
+            let packet_ms = elapsed_ms(3, failed_started)
+                .unwrap()
+                .checked_add(1)
+                .unwrap();
             let mut state = pipeline.lock().unwrap();
             assert_eq!(state.active_records(), 1);
             state
-                .activate(unaffected, context(4).owner, 4, true)
+                .activate(unaffected, context(packet_ms).owner, packet_ms, true)
                 .unwrap();
             let mut frame = frame(second, 0x10);
             state
-                .rewrite(unaffected, context(5), Leg::ApplicationToRelay, &mut frame)
+                .rewrite(
+                    unaffected,
+                    context(packet_ms + 1),
+                    Leg::ApplicationToRelay,
+                    &mut frame,
+                )
                 .unwrap();
-            state.finish_relay(unaffected, context(5).owner).unwrap();
+            state.finish_relay(unaffected, context(packet_ms + 1).owner).unwrap();
             assert_eq!(state.active_records(), 0);
             assert_eq!(pool.active(), 0);
         })
