@@ -78,7 +78,7 @@ fn main() {
                 .map_err(|e| e.to_string())
                 .and_then(flowbridge_capture::relay_probe::run)
         }
-        _ => Err("Usage: flowbridge-agent status | capabilities | owner-selftest | udp-owner-selftest | control-serve <explicit config path> | service-run <absolute loopback config> | service-stage <absolute config> | service-replace <old absolute config> <new absolute config> | service-remove <absolute config> | service-binary-replace <old config> <next sibling x64 exe> <new config> <sha256> | control <status|reload|stop> | lab <bounded JSON> | relay-probe <loopback JSON> | dns-udp-lab <explicit local SOCKS DNS JSON> | udp-testnet-drop-lab <explicit self-owned NDISRD TEST-NET DROP JSON> | udp6-testnet-drop-lab <explicit IPv6 signed-driver drop JSON>. Protected redirect is unavailable.".to_owned()),
+        _ => Err("Usage: flowbridge-agent status | capabilities | owner-selftest | udp-owner-selftest | control-serve <explicit config path> | service-run <absolute loopback config> | service-stage <absolute config> | service-replace <old absolute config> <new absolute config> | service-remove <absolute config> | service-binary-replace <old config> <next sibling x64 exe> <new config> <sha256> | control <status|reload|stop> | lab <bounded JSON> | relay-probe <loopback JSON> | dns-udp-lab <explicit local SOCKS DNS JSON> | udp-testnet-drop-lab <bounded self-owned IPv4 UDP or separately consented fragmentation TEST-NET DROP JSON> | udp6-testnet-drop-lab <explicit IPv6 signed-driver drop JSON>. Protected redirect is unavailable.".to_owned()),
     };
     match result {
         Ok(value) => {

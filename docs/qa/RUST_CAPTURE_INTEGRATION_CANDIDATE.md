@@ -1050,3 +1050,36 @@ The workflow retrieved the audited hosted Rust x64 candidate from [capture CI #4
 **Independent downloaded native report:** private [evidence issue #1 comment #6553884226](https://github.com/i-shutov/flowbridge-vps-qa/issues/1#issuecomment-6553884226), private Actions artifact **13071785449**. Its actual ZIP SHA-256 was independently computed as `053a7198fec8a4fd5260171ac7e754e6a4c2259b2919dcecf0bc71b15afb1022`, matching GitHub's artifact digest; the archive contains exactly one sanitized `result.json` with agreeing SHA/counters. At original code HEAD, capture **3/3**, DNS **3/3**, Rust/native **5/5** PASS. Windows OpenSSH **managed** passed strict 128 held / 1,152 refused / 10,000 byte-verified completions / four independent processes; separate raw 512 experimental check remains **FAIL** at 244 held (Winsock 10054), not waived.
 
 **Accepted only:** bounded self-created IPv4 TEST-NET UDP drop with *real signed NDISRD* on *Windows Server 2025*. It is NOT proof of arbitrary selected-app packet→PID/creation-time identity, general DNS/UDP interception, leak-free DNS, IPv6/QUIC/DoH/DoT containment, persistent protected fail-closed after agent/SSH crash, Windows 10/11 acceptance or GUI/installer readiness. Driver mode 0 is ordinary DIRECT-capable networking, not a kill switch. No main merge, public beta/1.0 release or owner signoff is implied. Keep the paid VDSina VPS for remaining feasible native-driver work.
+
+
+## 2026-11-01: bounded actual-driver IPv4 fragmentation trial — evidence PENDING
+
+The separately consented IPv4 UDP fragment experiment extends the existing
+self-owned TEST-NET-only original Rust quarantine. An optional JSON field
+"fragmented_canary":true requires consent NATIVE_SELF_IPV4_FRAGMENT_TESTNET_DROP_LAB,
+exactly two synthetic 2048-byte UDP datagrams, a 4–8 second window and an
+independently verified signed NDISRD, single physical Ethernet adapter with
+MTU <=1500, and independently armed SYSTEM rescue plus owner VNC. The only
+remote endpoint remains the reserved, non-resolving 198.51.100.53:53.
+All canaries are sent only AFTER TUNNEL_BOTH confirmation, with the owned
+socket dropped before mode-zero rollback. The default 25-byte trial and its
+old consent are unchanged. No production DNS, driver installer, traffic rule,
+firewall setting, Defender setting or remote address is modified.
+
+The driver reports actual fragmented outgoing UDP frames separately from
+large unfragmented/offload frames. The fragment trial fails its acceptance
+condition unless at least one actual IPv4 fragment is seen for each emitted
+canary, zero selected original frames are reinjected, the signed-driver
+transaction finishes and rollback is confirmed. NIC offload can postpone
+fragmentation: in that case the correct verdict is NOT PROVEN, not PASS.
+Other network frames are reinjected unchanged. Mode 0 is ordinary DIRECT.
+
+Before acceptance: cross-platform strict CI and negative JSON/fragment tests,
+exact PR HEAD and test merge SHA, Windows PE x64 candidate and SHA-256, then
+an independently audited controlled signed-driver trial on Windows Server 2025
+with real VNC/SYSTEM rescue, active Defender/firewall, no network regression,
+and private issue #1 + public issue #41 evidence/real artifact ZIP hashes.
+Code and synthetic fixtures do NOT prove native fragmentation; the native
+experiment must be explicitly reported on its own. General packet-to-PID,
+protected crash persistence, arbitrary-app DNS leak-free, Windows 10/11
+acceptance, and release remain OPEN.

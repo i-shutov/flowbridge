@@ -16,6 +16,8 @@ use std::net::Ipv4Addr;
 #[cfg(any(all(windows, target_pointer_width = "64"), test))]
 const TARGET: Ipv4Addr = Ipv4Addr::new(198, 51, 100, 53);
 #[cfg(all(windows, target_pointer_width = "64"))]
+const FRAGMENT_CANARY_PAYLOAD_BYTES: usize = 2048;
+#[cfg(all(windows, target_pointer_width = "64"))]
 const DNS_QUERY: &[u8] = &[
     0x46, 0x42, 0x01, 0, 0, 1, 0, 0, 0, 0, 0, 0, 7, b'i', b'n', b'v', b'a', b'l', b'i', b'd', 0, 0,
     1, 0, 1,
@@ -31,11 +33,20 @@ pub struct Request {
     pub max_queries: u32,
     /// Caller assertion only; separate orchestrator must verify VNC rescue.
     pub rescue_attested: bool,
+    /// Separately consented IPv4 fragmentation trial; not app attribution.
+    #[serde(default)]
+    pub fragmented_canary: bool,
 }
 
 impl Request {
     pub fn validate(&self) -> Result<(), String> {
-        if self.consent != "NATIVE_SELF_UDP_TESTNET_DROP_LAB"
+        let expected_consent = if self.fragmented_canary {
+            "NATIVE_SELF_IPV4_FRAGMENT_TESTNET_DROP_LAB"
+        } else {
+            "NATIVE_SELF_UDP_TESTNET_DROP_LAB"
+        };
+        if self.consent != expected_consent
+            || (self.fragmented_canary && (self.max_queries != 2 || self.duration_ms < 4000))
             || self.adapter_name.is_empty()
             || self.adapter_name.len() > 255
             || !self.adapter_name.bytes().all(|b| b.is_ascii_graphic())
@@ -157,6 +168,7 @@ fn native(request: Request) -> Result<Value, String> {
         || adapter.medium != 0
         || adapter.mtu < 576
         || usize::from(adapter.mtu) + 14 > crate::ndis_wire::MAX_FRAME_BYTES
+        || (request.fragmented_canary && adapter.mtu > 1500)
     {
         return Err("UDP drop lab Ethernet adapter or MTU prerequisite failed".into());
     }
@@ -182,6 +194,12 @@ fn native(request: Request) -> Result<Value, String> {
     let mut session = PacketSession::start(&mut device, adapter.handle, LabMode::Passthrough)
         .map_err(|e| e.to_string())?;
     let mut quarantine = Quarantine::new(request.local_ipv4);
+    // The dedicated synthetic canary exceeds the verified physical MTU;
+    // a NIC offload may still postpone IP fragmentation until after NDISRD.
+    let mut payload = DNS_QUERY.to_vec();
+    if request.fragmented_canary {
+        payload.resize(FRAGMENT_CANARY_PAYLOAD_BYTES, 0x5a);
+    }
     let start = Instant::now();
     let duration = Duration::from_millis(request.duration_ms);
     let mut next_send = start;
@@ -189,8 +207,8 @@ fn native(request: Request) -> Result<Value, String> {
     let mut fault: Option<String> = None;
     while start.elapsed() < duration {
         if sent < request.max_queries && Instant::now() >= next_send {
-            match socket.send(DNS_QUERY) {
-                Ok(length) if length == DNS_QUERY.len() => {
+            match socket.send(&payload) {
+                Ok(length) if length == payload.len() => {
                     sent += 1;
                     next_send = Instant::now() + Duration::from_millis(250);
                 }
@@ -217,7 +235,10 @@ fn native(request: Request) -> Result<Value, String> {
         && sent == request.max_queries
         && quarantine.dropped >= u64::from(sent)
         && stats.dropped >= quarantine.dropped
-        && quarantine.selected_original_to_adapter == 0;
+        && quarantine.selected_original_to_adapter == 0
+        // Observing only a large pre-segmentation frame is NOT a native
+        // IP fragmentation PASS. Require evidence for each emitted datagram.
+        && (!request.fragmented_canary || quarantine.fragmented >= u64::from(sent));
     Ok(json!({
         "kind": "bounded_real_ndisrd_self_owned_udp_testnet_drop_lab",
         "passed": passed,
@@ -229,6 +250,10 @@ fn native(request: Request) -> Result<Value, String> {
         "adapter_mode_restored_to_ordinary_network": cleanup.is_ok(),
         "elapsed_ms": start.elapsed().as_millis(),
         "queries_sent_after_mode_activation": sent,
+        "fragment_trial_requested": request.fragmented_canary,
+        "fragment_trial_payload_bytes": payload.len(),
+        "native_ipv4_fragment_evidence_accepted": request.fragmented_canary
+            && quarantine.fragmented >= u64::from(sent) && passed,
         "selected_udp_frames_dropped": quarantine.dropped,
         "ambiguous_ipv4_fragments_dropped": quarantine.fragmented,
         "selected_original_frames_sent_to_adapter": quarantine.selected_original_to_adapter,
@@ -315,6 +340,7 @@ mod tests {
             duration_ms: 3000,
             max_queries: 3,
             rescue_attested: true,
+            fragmented_canary: false,
         };
         assert!(request.validate().is_ok());
         request.rescue_attested = false;
@@ -333,5 +359,30 @@ mod tests {
         assert!(request.validate().is_err());
         let deny = run(request);
         assert!(deny.is_err());
+    }
+
+    #[test]
+    fn fragmented_wire_trial_requires_distinct_consent_two_sends_and_bounded_mtu() {
+        let mut request = Request {
+            consent: "NATIVE_SELF_IPV4_FRAGMENT_TESTNET_DROP_LAB".into(),
+            adapter_name: "device".into(),
+            local_ipv4: "192.0.2.10".parse().unwrap(),
+            duration_ms: 5000,
+            max_queries: 2,
+            rescue_attested: true,
+            fragmented_canary: true,
+        };
+        assert!(request.validate().is_ok());
+        request.consent = "NATIVE_SELF_UDP_TESTNET_DROP_LAB".into();
+        assert!(request.validate().is_err());
+        request.consent = "NATIVE_SELF_IPV4_FRAGMENT_TESTNET_DROP_LAB".into();
+        request.max_queries = 3;
+        assert!(request.validate().is_err());
+        request.max_queries = 2;
+        request.duration_ms = 3000;
+        assert!(request.validate().is_err());
+        request.duration_ms = 5000;
+        request.fragmented_canary = false;
+        assert!(request.validate().is_err());
     }
 }
