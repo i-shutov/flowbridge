@@ -1,3 +1,40 @@
+## 2026-11-01 — WFP AppId BFE serialization + kernel event identity, strict negative CI
+
+The real Windows Server 2025 test demonstrated the target BFE-derived AppId
+matching its own lookup, while AppId-scoped ALE filters did not block TCP on
+either loopback or same-host non-127 IPv4. The port-only negative control did
+block all three independent processes; neither observation proves per-app
+enforcement. **This P0 AppId gate stays FAIL until native enforcement works.**
+
+New original-Rust dual-observability QA is intentionally nonpersistent:
+- Immediately after `FwpmFilterAdd0`, `FwpmFilterGetById0` retrieves the
+  registered BFE filter and verifies *all* condition GUIDs, values, types,
+  equality operators, target AppId BLOB bytes, layer, action, and private
+  sublayer. Any mismatch hard-fails before a PASS-like guard-ready message.
+  This separates user-mode pointer/serialization defects from actual ALE
+  kernel classification; it does not prove kernel AppId matching.
+- After a real three-process port-only denial, a bounded read-only
+  `FwpmNetEventEnum0` correlates **at most 256** preexisting BFE event
+  AppId BLOBs against the two hash-identical, different-path QA executables
+  on the unique ephemeral TCP port. The report exposes only counts/booleans
+  and no raw event, path, PIDs, addresses, payload or BLOB bytes. If event
+  collection was disabled or no matching event is available, it records
+  *inconclusive*; it **never** enables global auditing, logging or security
+  settings. A BFE event is NOT packet-to-arbitrary-PID authority.
+- The same installed-product/GUI/Banner First/real OpenSSH/SCM/NSIS
+  integration runs ahead of this strict WFP gate. No app-specific
+  authorization or protected-mode claim is made on the strength of BFE
+  registration or event readback alone.
+
+**Status when authored: implementation pending exact-source GitHub Actions,
+Windows JSON, signed source/test-merge identity and downloaded binary SHA
+inspection.** No server driver mode changed, no VDSina workflow launched,
+no production persistent WFP rule, no third-party binaries or secrets.
+Native arbitrary selected-app routing, crash-persistent fail-closed,
+DNS/UDP/IPv6 leak freedom, Windows 10/11 and release remain unaccepted.
+Raw SSH 512 stability remains unproved; managed 128/1152/10000/four-child
+load remains a separate nonwaived gate.
+
 ## 2026-11-01 — STRICT second-route WFP ALE AppId integration, host-owned IPv4 (candidate; CI NOT YET ACCEPTED)
 
 This block extends the **still-failing**, nonpersistent, isolated hosted-Windows WFP QA matrix in the same PR #56. It never changes production routing or grants protected-mode acceptance. The original five loopback AppId/port trials remain hard assertions. A new independent host-owned **non-127 IPv4 local-interface destination** (discovered by local OS address assignment and verified with a local bind, never an Internet test server) exercises an actual Rust TCP client through the same short-lived BFE AppId-only, AppId+TCP+port and port-only negative control. The original Rust client **refuses** a non-local destination: a successful local UDP bind is mandatory before any connect, and that bind emits no datagram. Independent Python and byte-identical different-path Rust executables must remain permitted under scoped AppId rules and denied by the diagnostic port-only rule. Guard force-kill must restore TCP every time.

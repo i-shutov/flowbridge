@@ -108,3 +108,15 @@ Real hosted WinServer 2025 dynamic WFP QA on exact PR #56 code `433ad39ffe2ddb60
 ### 2026-11-01: WFP AppId classification — independent local-interface route diagnostic
 
 After exact hosted-Windows real-TCP WFP AppId filters failed on 127.0.0.1 while a TCP-port-only control enforced, the next original-Rust QA experiment uses an independently bound **host-owned non-127 IPv4** address and disposable TCP server. The client refuses IPs it cannot itself bind locally, preventing an arbitrary external destination. This distinguishes pure 127/8 behavior from host-interface local delivery; it **does not** prove physical NIC traversal. Five original loopback assertions and the additional local-interface controls remain strict, dynamic, killed-guard recovery must hold, and filter registration without actual denied connect is never accepted. No WFP/NDISRD ordering, persistent crash protection, kernel PacketBound owner authority or leak-free DNS/UDP/IPv6 can be inferred. See the exact-source CI checkpoint in `RUST_CAPTURE_INTEGRATION_CANDIDATE.md`.
+
+### 2026-11-01: BFE AppId diagnostic evidence boundary
+
+A disposable original-Rust WFP laboratory now verifies a registered filter's
+**actual BFE read-back**, including AppId BLOB, matched conditions and type,
+then queries bounded read-only existing network events for OS event AppIds.
+The event lookup never enables audit collection or stores sensitive event data.
+Either successful BFE serialization or an observed event AppId is distinct
+from a proven kernel ALE AppId match, packet-to-PID authority, persistent
+fail-closed or Windows 10/11 acceptance. Existing live failures still block
+release. See the precise QA acceptance/evidence in
+`RUST_CAPTURE_INTEGRATION_CANDIDATE.md`.

@@ -21,6 +21,16 @@ fn main() {
             flowbridge_capture::windows_wfp_dynamic_lab::identity_probe(path, consent)
         }
         #[cfg(windows)]
+        [command, selected, other, port, consent] if command == "wfp-qa-event-identity" => {
+            port.parse::<u16>()
+                .map_err(|_| "Invalid WFP QA event port".to_owned())
+                .and_then(|p| {
+                    flowbridge_capture::windows_wfp_dynamic_lab::event_identity_probe(
+                        selected, other, p, consent,
+                    )
+                })
+        }
+        #[cfg(windows)]
         [command, port, consent] if command == "wfp-qa-client" => {
             port.parse::<u16>().map_err(|_| "Invalid WFP QA port".to_owned())
                 .and_then(|p| flowbridge_capture::windows_wfp_dynamic_lab::client(p, consent))

@@ -141,6 +141,7 @@ def main():
                 try:
                     ready = json.loads(q.get(timeout=10))
                     assert ready["wfp_ale_block_installed"] is True
+                    assert ready["bfe_filter_readback_verified"] is True
                     assert ready["dynamic_private_sublayer"] is True
                     assert ready["filter_persistent"] is False
                     assert ready["diagnostic_app_id_only"] is app_only
@@ -178,6 +179,19 @@ def main():
             # port; AppId-only and precise trials must deny only selected EXE.
             # This discriminates ineffective BFE filtering from AppId mismatch.
             port_trial = run_trial("DYNAMIC_WFP_QA_PORT_ONLY_DIAGNOSTIC", port_only=True)
+            # Observe the OS's BFE net events without enabling auditing,
+            # copying paths, collecting packets or modifying global options.
+            # No events is explicitly inconclusive, never a false PASS.
+            event_result = subprocess.run(
+                [str(agent), "wfp-qa-event-identity", str(qa),
+                 str(other), str(port), CONSENT],
+                capture_output=True, text=True, encoding="utf-8", timeout=8)
+            assert event_result.returncode == 0
+            event_diagnostic = json.loads(event_result.stdout)
+            assert event_diagnostic["ok"] is True
+            assert event_diagnostic["redacted"] is True
+            assert event_diagnostic["kernel_packet_owner_bound"] is False
+            assert event_diagnostic["release_accepted"] is False
             identity_trial = run_trial("DYNAMIC_WFP_QA_APP_ONLY_DIAGNOSTIC", app_only=True)
             precise_trial = run_trial(CONSENT)
             # Counterfactual: create exactly the same filter while the
@@ -261,6 +275,8 @@ def main():
                 "agent_sha256": digest,
                 "copied_client_sha256": hashlib.sha256(qa.read_bytes()).hexdigest(),
                 "app_id_lookup_consistency": identity,
+                "bfe_stored_conditions_verified": all(s["ready"] for s in stages),
+                "read_only_net_event_appid_correlation": event_diagnostic,
                 "port_only_trial": port_trial,
                 "app_id_only_trial": identity_trial,
                 "app_id_port_protocol_trial": precise_trial,
