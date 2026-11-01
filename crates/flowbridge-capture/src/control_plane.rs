@@ -188,7 +188,9 @@ impl Controller {
         #[cfg(windows)]
         if scm_mode {
             crate::windows_service_management::validate_local_file(
-                config_path.to_str().ok_or("SCM config path must be Unicode")?,
+                config_path
+                    .to_str()
+                    .ok_or("SCM config path must be Unicode")?,
             )?;
         }
         let profile = load_explicit_profile(&config_path)?;

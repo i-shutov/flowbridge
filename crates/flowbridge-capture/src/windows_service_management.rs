@@ -58,19 +58,26 @@ fn exact_path(path: &str) -> Result<(), String> {
         || path.chars().any(char::is_control)
         || path[3..].contains(':')
     {
-        return Err("SCM requires a bounded absolute local-drive path, no device or network namespace".into());
+        return Err(
+            "SCM requires a bounded absolute local-drive path, no device or network namespace"
+                .into(),
+        );
     }
     for part in path[3..].split(['\\', '/']) {
         let stem = part.split('.').next().unwrap_or("").to_ascii_uppercase();
-        let dos_device = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$")
-            || (stem.len() == 4
-                && (stem.starts_with("COM") || stem.starts_with("LPT"))
-                && stem.as_bytes()[3].is_ascii_digit()
-                && stem.as_bytes()[3] != b'0');
+        let dos_device = matches!(
+            stem.as_str(),
+            "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
+        ) || (stem.len() == 4
+            && (stem.starts_with("COM") || stem.starts_with("LPT"))
+            && stem.as_bytes()[3].is_ascii_digit()
+            && stem.as_bytes()[3] != b'0');
         if part.is_empty()
             || matches!(part, "." | "..")
             || part.chars().last().is_some_and(|c| c == ' ' || c == '.')
-            || part.chars().any(|c| matches!(c, '<' | '>' | '|' | '?' | '*'))
+            || part
+                .chars()
+                .any(|c| matches!(c, '<' | '>' | '|' | '?' | '*'))
             || dos_device
         {
             return Err("SCM path has an ambiguous component or reserved DOS filename".into());
@@ -84,13 +91,15 @@ fn exact_path(path: &str) -> Result<(), String> {
 /// prevents later replacement of the path after the SCM operation.
 pub(crate) fn validate_local_file(path: &str) -> Result<(), String> {
     exact_path(path)?;
-    let canonical = std::fs::canonicalize(path)
-        .map_err(|_| "SCM local file could not be resolved")?;
+    let canonical =
+        std::fs::canonicalize(path).map_err(|_| "SCM local file could not be resolved")?;
     let canonical_path = canonical
         .to_str()
         .ok_or("SCM canonical file path is not Unicode")?;
     // Windows canonicalize normally returns \\?\C:\..., unlike \\?\UNC\...
-    let drive = canonical_path.strip_prefix(r"\\?\").unwrap_or(canonical_path);
+    let drive = canonical_path
+        .strip_prefix(r"\\?\")
+        .unwrap_or(canonical_path);
     exact_path(drive).map_err(|_| "SCM reparse target is not a local-drive file")?;
     if !canonical.is_file() {
         return Err("SCM path is not a regular file".into());
