@@ -3,13 +3,19 @@
 //! interception, Windows DNS configuration, remote UDP ownership, or protection
 //! across process/OS crashes. Mode 0 restores ordinary DIRECT networking.
 
+#[cfg(any(all(windows, target_pointer_width = "64"), test))]
 use crate::ndis_session::LabDisposition;
+#[cfg(any(all(windows, target_pointer_width = "64"), test))]
 use crate::ndis_wire::{Direction, PacketView};
 use serde::Deserialize;
-use serde_json::{json, Value};
+#[cfg(all(windows, target_pointer_width = "64"))]
+use serde_json::json;
+use serde_json::Value;
 use std::net::Ipv4Addr;
 
+#[cfg(any(all(windows, target_pointer_width = "64"), test))]
 const TARGET: Ipv4Addr = Ipv4Addr::new(198, 51, 100, 53);
+#[cfg(all(windows, target_pointer_width = "64"))]
 const DNS_QUERY: &[u8] = &[
     0x46, 0x42, 0x01, 0, 0, 1, 0, 0, 0, 0, 0, 0, 7, b'i', b'n', b'v', b'a', b'l', b'i', b'd', 0, 0,
     1, 0, 1,
@@ -47,6 +53,7 @@ impl Request {
     }
 }
 
+#[cfg(any(all(windows, target_pointer_width = "64"), test))]
 #[derive(Debug)]
 struct Quarantine {
     local: Ipv4Addr,
@@ -55,6 +62,7 @@ struct Quarantine {
     selected_original_to_adapter: u64,
 }
 
+#[cfg(any(all(windows, target_pointer_width = "64"), test))]
 impl Quarantine {
     fn new(local: Ipv4Addr) -> Self {
         Self {
