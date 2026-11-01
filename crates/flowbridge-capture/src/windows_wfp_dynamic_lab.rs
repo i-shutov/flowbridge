@@ -82,7 +82,6 @@ fn lookup_app(path: &Path) -> Result<AppBlob, String> {
     Ok(app)
 }
 
-
 // Resolve the disposable executable through a real file handle, not merely
 // the caller's DOS spelling. The Win32 canonical path is for the documented
 // FwpmGetAppIdFromFileName0 API; NT volume paths are read-only comparators.
@@ -152,8 +151,7 @@ fn normalized_native_units(path: &[u16]) -> Vec<u16> {
 }
 
 fn native_path_matches_event(path: &[u16], observed: &FWP_BYTE_BLOB) -> bool {
-    normalized_utf16_app_id(observed)
-        .is_some_and(|units| units == normalized_native_units(path))
+    normalized_utf16_app_id(observed).is_some_and(|units| units == normalized_native_units(path))
 }
 
 fn same_app_id(first: &AppBlob, second: &AppBlob) -> bool {
