@@ -6,6 +6,9 @@ A real disposable hosted Windows Server 2025 CI user installs it into a path **w
 
 **No release claim:** packaging and Windows CI results PENDING for the first new exact-source commit; this isolated candidate has **no GUI, arbitrary packet-to-PID attestation, crash-persistent fail-closed, native DNS/IPv6 leak-free guarantee, driver installation, Win10/11 acceptance or release approval**. Its unsigned installer is only suitable for private engineering QA and should never be shipped as 1.0. A correct future product must integrate Rust user-mode GUI/service with signed separately obtained NDISRD, safe update/rollback, privacy gating and genuine Win10/11 tests.
 
+**First CI run #41297327342 failed the new installation assertion on Windows-only NTFS name casefolding (test checked forbidden `FlowBridge.exe`, which aliases the legitimate Rust `flowbridge.exe`).** The actual NSIS build and exact original-Rust candidate SHA checks PASSED; failure was an incorrect test oracle, not observed legacy payload. Corrected test uses exact directory allowlist with case-insensitive filenames and same file count; next exact-head Windows CI must still pass before this is called accepted. No security/driver gates waived.
+
+
 ## 2026-11-01: Windows original-Rust managed Banner First under spaced install path — exact-head CI PENDING
 
 The owner's affected-route Python gate on macOS successfully authenticated;

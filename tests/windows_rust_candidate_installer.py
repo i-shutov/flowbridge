@@ -112,10 +112,15 @@ def main() -> None:
                 require(path.is_file() and sha(path) == digest,
                         f"Installed Rust payload SHA mismatch: {name}")
             require((installed / "Uninstall.exe").is_file(), "Uninstaller missing")
-            require(not any((installed / name).exists() for name in
-                            ("FlowBridge.exe", "FlowBridgeCapture.exe", "ndisapi.dll",
-                             "ndisrd.sys", "ProxiFyre.exe")),
-                    "Legacy C++/driver/vendor binary unexpectedly installed")
+            # NTFS paths are case-insensitive: "FlowBridge.exe" is our
+            # legitimate "flowbridge.exe", NOT the legacy GUI. Inspect the
+            # entire installed file inventory instead of a case-alias check.
+            installed_files = [p.name for p in installed.iterdir() if p.is_file()]
+            expected_files = set(expected) | {"Uninstall.exe"}
+            require(len(installed_files) == len(expected_files) and
+                    {n.casefold() for n in installed_files} ==
+                    {n.casefold() for n in expected_files},
+                    "Unexpected installed file (legacy, vendor or incomplete package)")
             result["installed_hashes_match_manifest"] = True
 
             cli = installed / "flowbridge.exe"
