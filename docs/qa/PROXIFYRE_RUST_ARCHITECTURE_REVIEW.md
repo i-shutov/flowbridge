@@ -191,3 +191,22 @@ cleanup before this experimental AppId path can be considered functional.
 It cannot establish arbitrary packet ownership, persistent fail-closed or
 Windows 10/11 native acceptance. See the exact code/CI/ZIP evidence in
 `RUST_CAPTURE_INTEGRATION_CANDIDATE.md`.
+
+### 2026-11-02 — Verified native transient WFP AppId DENY (Windows Server 2025 QA, not protected mode)
+
+Functional source `a45cab065da98f6bd220584c246b815076b05d7f`
+(merge `01faf2b6b573fb32f3049d7473c8c3e33f717379`) passes the real
+selected-only, independent-other/Python-allowed WFP dynamic BFE filter
+matrix on both 127.0.0.1 and host-owned non-127 local IPv4 in
+[Windows capture #41359888484](https://github.com/i-shutov/flowbridge/actions/runs/41359888484).
+The app-only and app+port guards now derive AppId from the actual
+file-handle canonical final DOS path. Exact live BFE filter-ID drop events
+match handle-canonical AppIds and native paths for both Rust EXE copies.
+Original DOS spelling does not match; the independent running-process
+native image-vs-handle comparison remains unequal and not authoritative.
+Downloaded outer Windows artifact SHA256
+`31b56299c6a1f964f16d2456b6f30d23b26e1c65a53655c6b406df56eae1fe0f`
+matches GitHub; full nested PE/NSIS provenance is recorded in the
+`RUST_CAPTURE_INTEGRATION_CANDIDATE.md` checkpoint. The dynamic QA
+guard is NOT persistent crash fail-closed; general NDISRD packet→PID,
+DNS/UDP/IPv6 privacy and Win10/11 acceptance remain unproved.

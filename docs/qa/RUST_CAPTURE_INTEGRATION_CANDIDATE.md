@@ -1872,3 +1872,69 @@ packet-to-PID proof, crash-persistent fail-closed, DNS privacy, Win10/11
 acceptance or permission to publish a release. Source, CI merge SHA,
 Windows JSON, artifact and PE SHA-256 must be recorded only after actual
 CI and byte-level artifact inspection.
+
+
+### 2026-11-02 — **VERIFIED** canonical file-handle AppId: real selected-app WFP denial (Windows Server 2025 QA ONLY)
+
+The parent functional source `a45cab065da98f6bd220584c246b815076b05d7f`
+was exercised by GitHub test-merge
+`01faf2b6b573fb32f3049d7473c8c3e33f717379`, actual
+[capture integration run #41359888484](https://github.com/i-shutov/flowbridge/actions/runs/41359888484):
+**3/3 Windows Server 2025, macOS 15, Ubuntu 24.04 SUCCESS**. The strict
+Windows real-process WFP dynamic QA AppId matrix reports `passed:true`
+with NO test waivers. All app-only and app+port transient BFE guards,
+both from the independent agent and from the copied selected Rust EXE,
+**actually denied the selected EXE only**, while allowing both the
+different-name byte-identical Rust EXE and the unrelated Python TCP
+client; rollback after killing each dynamic guard really restored traffic.
+The independent host-owned non-127 local IPv4 route was available and
+independently passed the same strict application-specific matrix. This
+is same-host local delivery, NOT external physical-interface capture.
+
+Read-only EXACT active filter-ID event evidence: 3 `CLASSIFY_DROP` events
+with nonempty UTF-16LE AppId; both selected and other copied Rust image
+events matched their **file-handle-canonical** BFE AppIds (1 each) and
+NT-volume handle paths (1 each), with the Python event matching the original
+AppId (1). Original caller-spelled AppIds did not match either copied
+Rust event. This is strong functional evidence that the prior failure
+was caused by path representation/canonicalization when constructing the
+BFE application condition. The independent
+`QueryFullProcessImageNameW(PROCESS_NAME_NATIVE)` paths do **not** yet
+compare equal to `GetFinalPathNameByHandleW` native paths; this additional
+identity comparison remains a negative diagnostic, NOT a security gate.
+The **actual live BFE enforcement**, rather than this secondary equality,
+is the success criterion.
+
+Independently DOWNLOADED and byte-audited [Windows artifact #13104917343](https://github.com/i-shutov/flowbridge/actions/runs/41359888484):
+the outer 19-file GitHub ZIP SHA-256 is
+`31b56299c6a1f964f16d2456b6f30d23b26e1c65a53655c6b406df56eae1fe0f`,
+matching GitHub's reported digest. Five-file original Rust nested ZIP:
+`f0e832ee810639068853eca1604f92757ed740bb016618d33cacf7ec4b10bf4b`,
+sidecar + manifest consistent, PR source/test-merge pinned. Verified all
+three PE32+ AMD64 machine `0x8664` / magic `0x20b`:
+agent `4e62dde15f607ee109efd0160efdb6304808796ce9ba93f444d950a017ce6935`,
+CLI `addd9ca6e959310abcc86925f27add015bf9bbdd681d8fd12182174ba145ebd5`,
+panel `b7bb46831827e1ec26080c306a5094121296e48168e216999a79c8ba3c22d612`.
+Actual unsigned NSIS installer
+`9837b7105a767669eccca598377df470d035a87656ca3fc455f638d1e637eeb0`
+matches recorded build manifest. Installed Rust panel → IPC → real strict
+host-key Microsoft-signed OpenSSH → SOCKS, SCM lifecycle/upgrade, genuine
+signed PowerShell, two NSIS fault injection recovery cases all PASS.
+Rust/native [#41359888514](https://github.com/i-shutov/flowbridge/actions/runs/41359888514)
+5/5 SUCCESS, DNS [#41359888495](https://github.com/i-shutov/flowbridge/actions/runs/41359888495)
+3/3 SUCCESS.
+
+Windows OpenSSH [#41359888626](https://github.com/i-shutov/flowbridge/actions/runs/41359888626):
+experimental raw job SUCCESS only as a **characterization**, peak 246 held;
+`raw_backend_512_stability_proved=false`. Managed 128/1152/10000/four-worker
+gate must be checked independently on that exact SHA (PENDING at
+documentation checkpoint). No inference of 512 stable channels.
+
+**Critical security limits STILL OPEN**: the passing disposable *dynamic*
+WFP ALE filter disappears when its process dies, so it is NOT persistent
+protected fail-closed. No general arbitrary NDISRD packet→PID+epoch binding,
+no verified NDISRD/WFP ordering under native traffic, no leak-free
+DNS/UDP/IPv6/QUIC, no native Windows 10/11 acceptance, no release. WFP
+dynamic QA never activated NDISRD or changed Defender/Windows security
+settings. The paid VPS #3293462 was not modified. This documentation-only
+follow-up commit does not change the verified executable code.
