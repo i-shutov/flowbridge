@@ -197,12 +197,15 @@ impl ConnectedUpstream {
                 })
             })?;
             let mut prefix = [0u8; 2];
-            self.stream.read_exact(&mut prefix).await.map_err(|source| {
-                RelayError::Transport(flowbridge_net::NetError::Io {
-                    stage: "DNS TCP response length",
-                    source,
-                })
-            })?;
+            self.stream
+                .read_exact(&mut prefix)
+                .await
+                .map_err(|source| {
+                    RelayError::Transport(flowbridge_net::NetError::Io {
+                        stage: "DNS TCP response length",
+                        source,
+                    })
+                })?;
             let length = usize::from(u16::from_be_bytes(prefix));
             if !(12..=1232).contains(&length) {
                 return Err(RelayError::Transport(flowbridge_net::NetError::Protocol {
@@ -223,7 +226,7 @@ impl ConnectedUpstream {
             biased;
             () = cancelled(&mut stop) => Err(RelayError::Cancelled),
             result = tokio::time::timeout(idle_timeout, exchange) => {
-                result.unwrap_or_else(|_| Err(RelayError::Transport(
+                result.unwrap_or(Err(RelayError::Transport(
                     flowbridge_net::NetError::Timeout { stage: "DNS TCP transaction" },
                 )))
             }

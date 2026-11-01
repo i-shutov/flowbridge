@@ -40,7 +40,9 @@ impl Request {
             || !(500..=15000).contains(&self.duration_ms)
             || !(1..=MAX_QUERIES).contains(&self.max_queries)
         {
-            return Err("Explicit bounded local DNS-over-SOCKS lab consent and endpoints required".into());
+            return Err(
+                "Explicit bounded local DNS-over-SOCKS lab consent and endpoints required".into(),
+            );
         }
         Ok(())
     }
@@ -48,6 +50,36 @@ impl Request {
 
 /// Parse the complete uncompressed DNS question, plus at most one EDNS OPT.
 /// Do not treat arbitrary UDP payloads as authorized proxy destinations.
+fn question_end(message: &[u8]) -> Option<usize> {
+    if message.len() < 17 {
+        return None;
+    }
+    let mut pos = 12usize;
+    let mut name_bytes = 0usize;
+    loop {
+        let size = usize::from(*message.get(pos)?);
+        pos += 1;
+        if size == 0 {
+            break;
+        }
+        if size > 63 || pos + size > message.len() {
+            return None;
+        }
+        pos += size;
+        name_bytes += size + 1;
+        if name_bytes > 253 {
+            return None;
+        }
+    }
+    if pos + 4 > message.len()
+        || message[pos..pos + 2] == [0, 0]
+        || message[pos + 2..pos + 4] == [0, 0]
+    {
+        return None;
+    }
+    Some(pos + 4)
+}
+
 fn valid_query(query: &[u8]) -> bool {
     if !(17..=MAX_DNS_UDP).contains(&query.len())
         || query[2] & 0x80 != 0
@@ -59,28 +91,14 @@ fn valid_query(query: &[u8]) -> bool {
     {
         return false;
     }
-    let mut pos = 12usize;
-    let mut name_bytes = 0usize;
-    loop {
-        if pos >= query.len() { return false; }
-        let size = usize::from(query[pos]);
-        pos += 1;
-        if size == 0 { break; }
-        if size > 63 || pos + size > query.len() { return false; }
-        pos += size;
-        name_bytes += size + 1;
-        if name_bytes > 253 { return false; }
-    }
-    if pos + 4 > query.len() || query[pos..pos + 2] == [0, 0] {
+    let Some(pos) = question_end(query) else {
         return false;
+    };
+    if query[11] == 0 {
+        return pos == query.len();
     }
-    pos += 4;
-    if query[11] == 0 { return pos == query.len(); }
     // Exactly one well-formed EDNS(0) OPT pseudo-RR, no compression.
-    if pos + 11 > query.len()
-        || query[pos] != 0
-        || query[pos + 1..pos + 3] != [0, 41]
-    {
+    if pos + 11 > query.len() || query[pos] != 0 || query[pos + 1..pos + 3] != [0, 41] {
         return false;
     }
     let opt_len = u16::from_be_bytes([query[pos + 9], query[pos + 10]]) as usize;
@@ -88,11 +106,20 @@ fn valid_query(query: &[u8]) -> bool {
 }
 
 fn valid_reply(query: &[u8], reply: &[u8]) -> bool {
-    (12..=MAX_DNS_UDP).contains(&reply.len())
-        && reply[..2] == query[..2]
-        && reply[2] & 0x80 != 0
-        && reply[2] & 0x78 == 0
-        && reply[4..6] == [0, 1]
+    if !(12..=MAX_DNS_UDP).contains(&reply.len())
+        || reply[..2] != query[..2]
+        || reply[2] & 0x80 == 0
+        || reply[2] & 0x78 != 0
+        || reply[4..6] != [0, 1]
+    {
+        return false;
+    }
+    let (Some(query_end), Some(reply_end)) = (question_end(query), question_end(reply)) else {
+        return false;
+    };
+    query_end == reply_end
+        && query[12..query_end - 4].eq_ignore_ascii_case(&reply[12..reply_end - 4])
+        && query[query_end - 4..query_end] == reply[reply_end - 4..reply_end]
 }
 
 /// This operation creates only explicitly consented loopback UDP ingress and
@@ -109,7 +136,8 @@ async fn serve(request: Request) -> Result<Value, String> {
         Duration::from_secs(2),
         Duration::from_secs(2),
         Duration::from_secs(3),
-    ).map_err(|_| "Local SOCKS relay configuration rejected")?;
+    )
+    .map_err(|_| "Local SOCKS relay configuration rejected")?;
     let destination = Endpoint {
         host: request.resolver.ip().to_string(),
         port: request.resolver.port(),
@@ -127,9 +155,13 @@ async fn serve(request: Request) -> Result<Value, String> {
     eprintln!("FLOWBRIDGE_DNS_LAB_READY");
     while received < request.max_queries {
         let remaining = deadline.saturating_duration_since(Instant::now());
-        if remaining.is_zero() { break; }
+        if remaining.is_zero() {
+            break;
+        }
         let result = time::timeout(remaining, socket.recv_from(&mut buffer)).await;
-        let Ok(Ok((length, peer))) = result else { break; };
+        let Ok(Ok((length, peer))) = result else {
+            break;
+        };
         received += 1;
         if !peer.ip().is_loopback() || !valid_query(&buffer[..length]) {
             rejected += 1;
@@ -137,9 +169,16 @@ async fn serve(request: Request) -> Result<Value, String> {
         }
         accepted += 1;
         let result = time::timeout(Duration::from_secs(5), async {
-            let upstream = pool.connect(&destination, stop_rx.clone()).await.map_err(|_| ())?;
-            upstream.dns_tcp_exchange(&buffer[..length]).await.map_err(|_| ())
-        }).await;
+            let upstream = pool
+                .connect(&destination, stop_rx.clone())
+                .await
+                .map_err(|_| ())?;
+            upstream
+                .dns_tcp_exchange(&buffer[..length])
+                .await
+                .map_err(|_| ())
+        })
+        .await;
         let reply = match result {
             Ok(Ok(reply)) => reply,
             _ => {
@@ -190,9 +229,10 @@ pub fn run(request: Request) -> Result<Value, String> {
 mod tests {
     use super::*;
     fn query() -> Vec<u8> {
-        vec![0x12, 0x34, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 3, b'w', b'w', b'w',
-            7, b'e', b'x', b'a', b'm', b'p', b'l', b'e', 3, b'c', b'o', b'm',
-            0, 0, 1, 0, 1]
+        vec![
+            0x12, 0x34, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 3, b'w', b'w', b'w', 7, b'e', b'x', b'a',
+            b'm', b'p', b'l', b'e', 3, b'c', b'o', b'm', 0, 0, 1, 0, 1,
+        ]
     }
     #[test]
     fn strict_dns_query_and_reply_wire_contract() {
@@ -204,6 +244,17 @@ mod tests {
         assert!(valid_reply(&good, &reply));
         reply[0] ^= 1;
         assert!(!valid_reply(&good, &reply));
+        let mut swapped_question = good.clone();
+        swapped_question[2] = 0x81;
+        swapped_question[13] = b'v';
+        assert!(!valid_reply(&good, &swapped_question));
+        let mut changed_type = good.clone();
+        changed_type[2] = 0x81;
+        changed_type[good.len() - 3] = 2;
+        assert!(!valid_reply(&good, &changed_type));
+        let mut short_answer = good[..12].to_vec();
+        short_answer[2] = 0x81;
+        assert!(!valid_reply(&good, &short_answer));
         let mut bad = good.clone();
         bad[4] = 2;
         assert!(!valid_query(&bad));

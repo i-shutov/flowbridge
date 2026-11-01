@@ -52,6 +52,7 @@ def main():
     resolver, proxy = listen(), listen()
     gate = threading.Event()
     gate.set()
+    corrupt_dns_answer = threading.Event()
     stopped = threading.Event()
     counts = {'socks_connects': 0, 'socks_denials': 0, 'resolver_tcp_connections': 0}
     failures = queue.Queue()
@@ -72,6 +73,9 @@ def main():
                     counts['resolver_tcp_connections'] += 1
                     reply = bytearray(data)
                     reply[2:4] = bytes.fromhex('8180')
+                    if corrupt_dns_answer.is_set():
+                        reply[0] ^= 1  # Wrong transaction ID must never reach UDP client.
+                        corrupt_dns_answer.clear()
                     client.sendall(len(reply).to_bytes(2, 'big') + reply)
         except Exception as exc:
             failures.put(f'resolver: {type(exc).__name__}')
@@ -120,13 +124,21 @@ def main():
     udp_reservation.bind(('127.0.0.1', 0))
     bind_port = udp_reservation.getsockname()[1]
     udp_reservation.close()
+    for _ in range(12):
+        if bind_port != proxy.getsockname()[1]:
+            break
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as reserve_again:
+            reserve_again.bind(('127.0.0.1', 0))
+            bind_port = reserve_again.getsockname()[1]
+    require(bind_port != proxy.getsockname()[1],
+            'Could not reserve distinct UDP DNS and SOCKS ports')
     req = {
         'consent': 'DNS_UDP_OVER_SOCKS_LAB',
         'bind': f'127.0.0.1:{bind_port}',
         'upstream': f'127.0.0.1:{proxy.getsockname()[1]}',
         'resolver': f'127.0.0.1:{resolver.getsockname()[1]}',
         'duration_ms': 12000,
-        'max_queries': 4,
+        'max_queries': 5,
     }
     process = subprocess.Popen([str(args.agent), 'dns-udp-lab', json.dumps(req)],
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -162,22 +174,24 @@ def main():
             invalid[5] = 2
             exchange(0x3333, False, bytes(invalid))
             gate.set()
+            corrupt_dns_answer.set()
+            exchange(0x5555, False)
             exchange(0x4444, True)
         output, errors = process.communicate(timeout=20)
         require(process.returncode == 0, 'DNS laboratory agent returned error')
         report = json.loads(output)
         require(report['loop_completed'] is True
-                and report['queries_received'] == 4
-                and report['queries_accepted'] == 3
+                and report['queries_received'] == 5
+                and report['queries_accepted'] == 4
                 and report['queries_rejected_before_proxy'] == 1
                 and report['replies_returned'] == 2
                 and report['upstream_failures_without_direct_retry'] == 1
-                and report['invalid_upstream_replies_dropped'] == 0
+                and report['invalid_upstream_replies_dropped'] == 1
                 and report['direct_resolver_connections'] == 0
                 and report['active_relay_slots_at_exit'] == 0,
                 'DNS SOCKS gate/return/cleanup counters violated')
-        require(counts == {'socks_connects': 3, 'socks_denials': 1,
-                           'resolver_tcp_connections': 2},
+        require(counts == {'socks_connects': 4, 'socks_denials': 1,
+                           'resolver_tcp_connections': 3},
                 'Unexpected real socket counts or DIRECT fallback')
         for name in ('native_ndisrd_interception', 'selected_app_dns_protected',
                      'system_dns_modified', 'dns_leak_free', 'protected_mode',
@@ -198,9 +212,10 @@ def main():
                                                   text=True).strip(),
             'actual_loopback_udp': True, 'actual_tcp_dns_resolver': True,
             'actual_socks5_connect': True, 'authenticated_ssh_in_this_fixture': False,
-            'successful_udp_dns_replies': 2, 'socks_connect_attempts': 3,
-            'socks_denials': 1, 'actual_resolver_connections': 2,
+            'successful_udp_dns_replies': 2, 'socks_connect_attempts': 4,
+            'socks_denials': 1, 'actual_resolver_connections': 3,
             'invalid_query_denied_before_proxy': True,
+            'tampered_dns_reply_rejected': True,
             'no_direct_fallback': True, 'consent_denial': True,
             'native_ndisrd_interception': False, 'selected_app_dns_protected': False,
             'dns_leak_free': False, 'release_accepted': False,

@@ -281,6 +281,11 @@ def main(repetition=0):
                     Path(os.environ['FLOWBRIDGE_CAPTURE_AGENT']), engine_port, capture_gate,
                     ready['pid'], args.output / 'capture-relay-real-ssh.json')
                 passed('Rust relay -> FlowBridge SOCKS -> real OpenSSH: half-close, deny and recovery')
+                from dns_udp_via_real_ssh import run as dns_ssh_lab
+                report['dns_udp_via_real_ssh'] = dns_ssh_lab(
+                    Path(os.environ['FLOWBRIDGE_CAPTURE_AGENT']), engine_port, capture_gate,
+                    ready['pid'], args.output / 'dns-udp-via-real-ssh.json')
+                passed('Real UDP DNS -> original Rust -> FlowBridge SOCKS -> authenticated OpenSSH TCP DNS resolver; denied and recovered')
             from native_vertical_integration import actual_ssh
             actual_ssh(abi, profile, endpoint, target_port, limits=ssh_limits)
             passed('Native capture ABI: selected application -> real SSH -> target, without SOCKS ingress')

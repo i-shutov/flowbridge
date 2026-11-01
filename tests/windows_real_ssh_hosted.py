@@ -188,6 +188,11 @@ def main():
                             report['capture_relay'] = capture_relay(
                                 Path(os.environ['FLOWBRIDGE_CAPTURE_AGENT']), ingress, capture_gate,
                                 snapshot()['pid'], args.output / 'capture-relay-real-ssh.json')
+                            from dns_udp_via_real_ssh import run as dns_ssh_lab
+                            report['dns_udp_via_real_ssh'] = dns_ssh_lab(
+                                Path(os.environ['FLOWBRIDGE_CAPTURE_AGENT']), ingress,
+                                capture_gate, snapshot()['pid'],
+                                args.output / 'dns-udp-via-real-ssh.json')
                         from real_ssh_capacity import run as capacity
                         result = capacity(abi,engine,ingress,echo.server_address[1],snapshot,
                                           output=args.output/'managed-capacity.json',churn=args.churn,

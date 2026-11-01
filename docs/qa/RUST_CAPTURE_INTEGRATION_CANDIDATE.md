@@ -13,6 +13,20 @@ SOCKS rejection, timeout, oversized response or mismatched DNS ID are dropped
 without connecting to the DNS server directly. It does not change the system
 resolver, DNS registry settings, NDISRD mode or firewall.
 
+An additional integration fixture now targets the **real authenticated OpenSSH**
+supervisor already established in the existing Linux and Windows managed SSH
+acceptance harnesses. The same explicitly consented Rust UDP DNS listener
+negotiates a DNS TCP query over FlowBridge SOCKS and the managed SSH tunnel to
+an independent loopback TCP DNS server. It proves a positive answer, a closed
+SOCKS gate with no TCP resolver contact, invalid DNS denied before SSH, and
+recovery with the same supervisor. The fixture emits only aggregate counters,
+source and binary SHA, and explicit false release flags. Neither this fixture
+nor its new source has been accepted until the exact-head hosted OpenSSH runs
+and downloadable JSON evidence are checked. The separately tested independent
+SOCKS-only fixture is retained; two levels of evidence must remain distinct.
+The helper does not use NDISRD or authenticate arbitrary Windows applications,
+and it changes no global DNS resolver settings.
+
 Independent three-platform CI exercises a **separate agent process** plus a
 real UDP socket, a real local SOCKS5 listener, a separate TCP DNS resolver
 socket, successful DNS replies, denial while the SOCKS gate is closed, invalid
