@@ -930,3 +930,32 @@ The fix extends the original Rust supervisor's strictly opt-in experimental `Pro
 The same full-source run split Windows OpenSSH into real managed and raw jobs: managed `128 held / 1152 refused / 10000 verified / four SSH processes` **SUCCESS**; raw experimental `512` **FAILURE** at 244 held with Winsock 10054. It is an *unresolved raw capacity characterization*, not a reason to obscure or relax the managed acceptance. Keep the jobs, their JSON reports and job statuses independent; do not make raw failure green with `continue-on-error`. Neither result is native Win10/11 driver acceptance.
 
 The code and these notes are a single integrated safety-and-CI correction on the existing PR, **not** a release or evidence that the user's affected external SSH host benefits from Banner Gate. CI, exact source/test merge SHA and actual candidate ZIP/agent SHA-256 must be verified after commit before marking this block accepted. Packet-to-PID, protected crash persistence, DNS/UDP/IPv6 containment, real Win10/11 native acceptance and macOS NE remain open. No changes to `main`.
+
+
+## Rust-owned OpenSSH + SOCKS Windows control candidate (pending exact-HEAD CI)
+
+The optional, explicitly consented `RUST_MANAGED_SSH_SOCKS_CANDIDATE`
+configuration envelope joins our **original Rust** OpenSSH supervisor to our
+existing original Rust TCP SOCKS engine and Windows restricted named-pipe/SCM
+controller. Legacy explicit-SOCKS configuration remains supported unchanged.
+The supervisor owns OpenSSH process lifecycle; the local SOCKS route is pinned
+to one literal 127.0.0.1 port, one SOCKS5 proxy, no DIRECT/default-chain/rule,
+max 128 admission slots, explicit absolute client binary/key/known_hosts paths,
+and strict public-key/host-key OpenSSH options. The engine starts with the
+upstream gate **closed**, a bounded worker only opens it when managed OpenSSH
+reports local SOCKS readiness, and stop/reload refuse to replace carrier
+identity while running. Status does not emit SSH key paths, usernames,
+hostnames or credentials. The gate closes if SSH degrades and never retries
+DIRECT; this does **not** establish remote authenticated readiness before
+first SOCKS CONNECT. The original SSH process is Windows job-object owned.
+
+A real hosted Windows OpenSSH/loopback fixture validates failed SSH denial,
+authenticated SSH+SOCKS binary half-close, restricted pipe status/stop and
+invalid direct/mismatched-profile refusal. The fixture does not claim native
+NDISRD packet ownership, system DNS containment, a crash-persistent
+kernel kill-switch or personal Windows 10/11 acceptance. SCM launch under
+a service account requires separately provisioned and secured per-account SSH
+identity material. No credentials are included in CI artifacts.
+
+**Acceptance is pending exact HEAD, test-merge SHA, all hosted CI and actual
+downloaded artifact inspection. Do not claim a completed beta or release.**

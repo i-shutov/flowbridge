@@ -175,6 +175,13 @@ def main():
                         abi.call('fb_engine_start_json',engine)
                         round_trip(ingress,echo.server_address[1])
                         if os.environ.get('FLOWBRIDGE_CAPTURE_AGENT'):
+                            from windows_rust_managed_ssh_control import run as rust_managed_control
+                            report['rust_owned_ssh_control'] = rust_managed_control(
+                                Path(os.environ['FLOWBRIDGE_CAPTURE_AGENT']),
+                                args.ssh, root / 'client_key', known, user,
+                                ssh_port, echo.server_address[1],
+                                args.output / 'rust-owned-ssh-control.json')
+                        if os.environ.get('FLOWBRIDGE_CAPTURE_AGENT'):
                             from capture_real_ssh import run as capture_relay
 
                             def capture_gate(ready):

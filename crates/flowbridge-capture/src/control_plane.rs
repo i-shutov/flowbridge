@@ -2,9 +2,15 @@
 //! service, NDISRD protected routing or a substitute for packet/PID attestation.
 //! No arbitrary paths, process identities, driver modes or secrets travel over IPC.
 #[cfg(any(windows, test))]
-use flowbridge_core::Config;
+use flowbridge_core::{Action, Config, Endpoint, ProxyKind};
 #[cfg(any(windows, test))]
 use flowbridge_runtime::Engine;
+#[cfg(any(windows, test))]
+use flowbridge_tunnel::{Config as SshConfig, Supervisor};
+#[cfg(any(windows, test))]
+use std::sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex};
+#[cfg(any(windows, test))]
+use std::{thread, time::Duration};
 #[cfg(any(windows, test))]
 use serde::Deserialize;
 #[cfg(any(windows, test))]
@@ -28,7 +34,26 @@ enum Request {
 }
 
 #[cfg(any(windows, test))]
-fn load_explicit_profile(path: &Path) -> Result<Config, String> {
+#[derive(Debug)]
+#[cfg(any(windows, test))]
+struct LoadedProfile {
+    engine: Config,
+    ssh: Option<SshConfig>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg(any(windows, test))]
+struct ManagedEnvelope {
+    consent: String,
+    engine: Config,
+    ssh: SshConfig,
+}
+
+/// Two strictly separate formats: legacy explicit SOCKS configuration or
+/// opt-in Rust-owned SSH + SOCKS. No implicit SSH process or route fallback.
+#[cfg(any(windows, test))]
+fn load_explicit_profile(path: &Path) -> Result<LoadedProfile, String> {
     let file = std::fs::File::open(path).map_err(|e| format!("configuration open failed: {e}"))?;
     let mut bytes = Vec::new();
     file.take(MAX_CONFIG + 1)
@@ -37,8 +62,31 @@ fn load_explicit_profile(path: &Path) -> Result<Config, String> {
     if bytes.len() as u64 > MAX_CONFIG {
         return Err("configuration exceeds 1 MiB".into());
     }
-    let json = std::str::from_utf8(&bytes).map_err(|_| "configuration is not UTF-8")?;
-    let profile = Config::from_json(json).map_err(|e| e.to_string())?;
+    let data = std::str::from_utf8(&bytes).map_err(|_| "configuration is not UTF-8")?;
+    let raw: serde_json::Value =
+        serde_json::from_str(data).map_err(|_| "invalid strict control profile JSON")?;
+    if raw.get("engine").is_none() {
+        let engine = Config::from_json(data).map_err(|e| e.to_string())?;
+        reject_unattested_app_rules(&engine)?;
+        return Ok(LoadedProfile { engine, ssh: None });
+    }
+    let envelope: ManagedEnvelope =
+        serde_json::from_value(raw).map_err(|_| "invalid strict managed SSH envelope")?;
+    if envelope.consent != "RUST_MANAGED_SSH_SOCKS_CANDIDATE" {
+        return Err("Rust-managed SSH requires exact explicit consent".into());
+    }
+    envelope.engine.validate().map_err(|e| e.to_string())?;
+    envelope.ssh.validate().map_err(|e| e.to_string())?;
+    reject_unattested_app_rules(&envelope.engine)?;
+    validate_managed_route(&envelope.engine, &envelope.ssh)?;
+    Ok(LoadedProfile {
+        engine: envelope.engine,
+        ssh: Some(envelope.ssh),
+    })
+}
+
+#[cfg(any(windows, test))]
+fn reject_unattested_app_rules(profile: &Config) -> Result<(), String> {
     if profile
         .rules
         .iter()
@@ -48,7 +96,43 @@ fn load_explicit_profile(path: &Path) -> Result<Config, String> {
             "explicit SOCKS cannot authenticate application identity; app-specific rules require unimplemented native owner proof".into(),
         );
     }
-    Ok(profile)
+    Ok(())
+}
+
+#[cfg(any(windows, test))]
+fn validate_managed_route(engine: &Config, ssh: &SshConfig) -> Result<(), String> {
+    let executable = ssh.ssh_executable.as_deref().ok_or(
+        "managed SSH requires an explicit absolute local OpenSSH executable",
+    )?;
+    let identity = ssh.identity_file.as_deref().ok_or(
+        "managed SSH requires an explicit key path; no implicit agent fallback",
+    )?;
+    let known = ssh.known_hosts_file.as_deref().ok_or(
+        "managed SSH requires an explicit pinned known_hosts path",
+    )?;
+    if ![executable, identity, known]
+        .iter()
+        .all(|p| Path::new(p).is_absolute())
+    {
+        return Err("managed SSH executable, key and host-key paths must be absolute".into());
+    }
+    if engine.proxies.len() != 1
+        || !engine.rules.is_empty()
+        || !engine.chains.is_empty()
+        || !engine.remote_dns_via_ssh
+        || engine.max_connections > 128
+        || engine.listen.port() == ssh.local_port
+        || !matches!(&engine.default_action,
+            Action::Proxy { id } if id == &engine.proxies[0].id)
+        || !matches!(&engine.proxies[0].kind, ProxyKind::Socks5)
+        || engine.proxies[0].endpoint.host != "127.0.0.1"
+        || engine.proxies[0].endpoint.port != ssh.local_port
+        || engine.proxies[0].username.is_some()
+        || engine.proxies[0].password_env.is_some()
+    {
+        return Err("managed SSH requires one pinned local SOCKS5 hop, default PROXY, no DIRECT/rules/chains, remote DNS and <=128 connections".into());
+    }
+    Ok(())
 }
 
 #[cfg(windows)]
@@ -57,7 +141,7 @@ pub(crate) fn validate_scm_profile(path: &Path) -> Result<(), String> {
         return Err("SCM candidate requires an absolute config file".into());
     }
     let config = load_explicit_profile(path)?;
-    if !config.listen.ip().is_loopback() {
+    if !config.engine.listen.ip().is_loopback() {
         return Err("SCM candidate refuses non-loopback SOCKS listeners".into());
     }
     Ok(())
@@ -65,9 +149,19 @@ pub(crate) fn validate_scm_profile(path: &Path) -> Result<(), String> {
 
 #[cfg(any(windows, test))]
 pub(crate) struct Controller {
-    engine: Engine,
+    engine: Arc<Engine>,
     config_path: PathBuf,
     scm_mode: bool,
+    ssh: Option<Arc<Supervisor>>,
+    ssh_config: Option<SshConfig>,
+    gate_worker: Mutex<Option<GateWorker>>,
+    gate_ready: Arc<AtomicBool>,
+}
+
+#[cfg(any(windows, test))]
+struct GateWorker {
+    stop: Arc<AtomicBool>,
+    task: thread::JoinHandle<()>,
 }
 
 #[cfg(any(windows, test))]
@@ -77,34 +171,141 @@ impl Controller {
     }
 
     fn open_with_mode(config_path: PathBuf, scm_mode: bool) -> Result<Self, String> {
-        let config = load_explicit_profile(&config_path)?;
-        if scm_mode && (!config_path.is_absolute() || !config.listen.ip().is_loopback()) {
+        let profile = load_explicit_profile(&config_path)?;
+        if scm_mode
+            && (!config_path.is_absolute() || !profile.engine.listen.ip().is_loopback())
+        {
             return Err(
                 "SCM candidate requires an absolute config path and loopback-only SOCKS listener"
                     .into(),
             );
         }
-        let engine = Engine::new(config).map_err(|e| e.to_string())?;
-        engine.start().map_err(|e| e.to_string())?;
+        let engine = Arc::new(Engine::new(profile.engine).map_err(|e| e.to_string())?);
+        let mut ssh = None;
+        let mut worker = None;
+        let gate_ready = Arc::new(AtomicBool::new(false));
+        if let Some(config) = profile.ssh.clone() {
+            let endpoint = Endpoint {
+                host: "127.0.0.1".into(),
+                port: config.local_port,
+            };
+            // Gate must be CLOSED before the SOCKS listener becomes reachable.
+            engine
+                .set_upstream_gate(Some(endpoint.clone()), false, 0)
+                .map_err(|e| e.to_string())?;
+            let supervisor = Arc::new(Supervisor::new(config).map_err(|e| e.to_string())?);
+            engine.start().map_err(|e| e.to_string())?;
+            if let Err(error) = supervisor.start() {
+                let _ = engine.stop();
+                return Err(error.to_string());
+            }
+            let stop = Arc::new(AtomicBool::new(false));
+            let signal = stop.clone();
+            let watched = supervisor.clone();
+            let gated = engine.clone();
+            let tracked = gate_ready.clone();
+            let task = thread::Builder::new()
+                .name("flowbridge-managed-ssh-gate".into())
+                .spawn(move || {
+                    let mut previous = false;
+                    while !signal.load(Ordering::Acquire) {
+                        let state = watched.snapshot().status;
+                        let ready = state.state == "ready" && state.pid.is_some();
+                        if ready != previous {
+                            if gated
+                                .set_upstream_gate(Some(endpoint.clone()), ready, 0)
+                                .is_err()
+                            {
+                                let _ = gated.stop();
+                                break;
+                            }
+                            tracked.store(ready, Ordering::Release);
+                            previous = ready;
+                        }
+                        thread::sleep(Duration::from_millis(50));
+                    }
+                    let _ = gated.set_upstream_gate(Some(endpoint), false, 0);
+                    tracked.store(false, Ordering::Release);
+                });
+            match task {
+                Ok(task) => worker = Some(GateWorker { stop, task }),
+                Err(error) => {
+                    let _ = engine.stop();
+                    let _ = supervisor.stop();
+                    return Err(format!("managed SSH gate worker failed: {error}"));
+                }
+            }
+            ssh = Some(supervisor);
+        } else {
+            engine.start().map_err(|e| e.to_string())?;
+        }
         Ok(Self {
             engine,
             config_path,
             scm_mode,
+            ssh,
+            ssh_config: profile.ssh,
+            gate_worker: Mutex::new(worker),
+            gate_ready,
         })
     }
 
     pub(crate) fn stop_engine(&self) -> Result<(), String> {
-        self.engine
-            .stop()
-            .map(|_| ())
-            .map_err(|error| error.to_string())
+        let worker = self
+            .gate_worker
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .take();
+        let joined = if let Some(worker) = worker {
+            worker.stop.store(true, Ordering::Release);
+            worker.task.join().is_ok()
+        } else {
+            true
+        };
+        self.gate_ready.store(false, Ordering::Release);
+        if let Some(config) = &self.ssh_config {
+            let endpoint = Endpoint {
+                host: "127.0.0.1".into(),
+                port: config.local_port,
+            };
+            self.engine
+                .set_upstream_gate(Some(endpoint), false, 0)
+                .map_err(|e| e.to_string())?;
+        }
+        let engine = self.engine.stop().map(|_| ()).map_err(|e| e.to_string());
+        let ssh = self
+            .ssh
+            .as_ref()
+            .map(|supervisor| supervisor.stop().map(|_| ()).map_err(|e| e.to_string()))
+            .transpose();
+        engine?;
+        ssh?;
+        if !joined {
+            return Err("SSH gate worker panicked".into());
+        }
+        Ok(())
     }
 
     pub(crate) fn status(&self) -> Value {
         let s = self.engine.snapshot().status;
+        let ssh = self.ssh.as_ref().map(|supervisor| {
+            let state = supervisor.snapshot().status;
+            json!({
+                "state": state.state,
+                "socks_ready_observed": state.state == "ready" && state.pid.is_some(),
+                "local_port": state.local_port,
+                "restarts": state.restarts,
+                "diagnostic_code": state.diagnostic_code,
+                "host_key_or_credentials_reported": false
+            })
+        });
         json!({
             "ok": true,
-            "mode": if self.scm_mode { "scm_explicit_socks_only" } else { "foreground_explicit_socks_only" },
+            "mode": if self.ssh.is_some() {
+                if self.scm_mode { "scm_rust_owned_ssh_socks_candidate" } else { "foreground_rust_owned_ssh_socks_candidate" }
+            } else if self.scm_mode { "scm_explicit_socks_only" } else { "foreground_explicit_socks_only" },
+            "managed_ssh": ssh,
+            "managed_ssh_gate_ready": self.gate_ready.load(Ordering::Acquire),
             "scm_service_installed": self.scm_mode,
             "scm_service_running": self.scm_mode,
             "driver_capture_active": false,
@@ -142,8 +343,16 @@ impl Controller {
             Request::Reload {} => {
                 // Validate before touching live state; Engine.reload additionally
                 // rejects changes to listener/capacity without stopping it.
-                let result = load_explicit_profile(&self.config_path)
-                    .and_then(|config| self.engine.reload(config).map_err(|e| e.to_string()));
+                let result = load_explicit_profile(&self.config_path).and_then(|next| {
+                    match (
+                        serde_json::to_value(&next.ssh),
+                        serde_json::to_value(&self.ssh_config),
+                    ) {
+                        (Ok(next), Ok(current)) if next == current => {},
+                        _ => return Err("SSH profile changes require a stopped replacement and revalidation".into()),
+                    }
+                    self.engine.reload(next.engine).map_err(|e| e.to_string())
+                });
                 match result {
                     Ok(_) => (self.status(), false),
                     Err(e) => (
@@ -153,11 +362,11 @@ impl Controller {
                 }
             }
             Request::Stop {} => {
-                let result = self.engine.stop();
+                let result = self.stop_engine();
                 match result {
-                    Ok(_) => (self.status(), true),
+                    Ok(()) => (self.status(), true),
                     Err(e) => (
-                        json!({"ok":false,"error":e.to_string(),"release_accepted":false}),
+                        json!({"ok":false,"error":e,"release_accepted":false}),
                         true,
                     ),
                 }
@@ -405,4 +614,66 @@ mod tests {
         assert!(load_explicit_profile(&file.0).is_err());
         ctl.engine.stop().unwrap();
     }
+    #[test]
+    fn managed_ssh_envelope_refuses_direct_identity_and_mutable_carrier() {
+        use flowbridge_core::{Proxy, ProxyKind, Endpoint};
+        let mut engine = config();
+        let mut ssh = SshConfig::default();
+        ssh.host = "127.0.0.1".into();
+        ssh.user = "testuser".into();
+        ssh.local_port = 17415;
+        ssh.ssh_executable = Some(if cfg!(windows) {
+            r"C:\Windows\System32\OpenSSH\ssh.exe".into()
+        } else {
+            "/usr/bin/ssh".into()
+        });
+        ssh.identity_file = Some(if cfg!(windows) {
+            r"C:\flowbridge-test\id_ed25519".into()
+        } else { "/tmp/flowbridge-test/id_ed25519".into() });
+        ssh.known_hosts_file = Some(if cfg!(windows) {
+            r"C:\flowbridge-test\known_hosts".into()
+        } else { "/tmp/flowbridge-test/known_hosts".into() });
+        engine.proxies.push(Proxy {
+            id: "owned".into(),
+            kind: ProxyKind::Socks5,
+            endpoint: Endpoint { host: "127.0.0.1".into(), port: ssh.local_port },
+            username: None,
+            password_env: None,
+        });
+        engine.default_action = Action::Proxy { id: "owned".into() };
+        assert!(validate_managed_route(&engine, &ssh).is_ok());
+        let file = ConfigFile::new(&engine);
+        let valid = serde_json::json!({
+            "consent": "RUST_MANAGED_SSH_SOCKS_CANDIDATE",
+            "engine": engine,
+            "ssh": ssh
+        });
+        std::fs::write(&file.0, valid.to_string()).unwrap();
+        assert!(load_explicit_profile(&file.0).unwrap().ssh.is_some());
+
+        let mut denied = valid.clone();
+        denied["consent"] = "UNSAFE".into();
+        std::fs::write(&file.0, denied.to_string()).unwrap();
+        assert!(load_explicit_profile(&file.0).is_err());
+        let mut denied = valid.clone();
+        denied["engine"]["default_action"] = serde_json::json!({"type": "direct"});
+        std::fs::write(&file.0, denied.to_string()).unwrap();
+        assert!(load_explicit_profile(&file.0).is_err());
+        let mut denied = valid.clone();
+        denied["engine"]["proxies"][0]["endpoint"]["port"] = 12345.into();
+        std::fs::write(&file.0, denied.to_string()).unwrap();
+        assert!(load_explicit_profile(&file.0).is_err());
+        let mut denied = valid.clone();
+        denied["ssh"]["known_hosts_file"] = serde_json::Value::Null;
+        std::fs::write(&file.0, denied.to_string()).unwrap();
+        assert!(load_explicit_profile(&file.0).is_err());
+        let mut denied = valid.clone();
+        denied["engine"]["rules"] = serde_json::json!([{
+            "id":"hidden-direct","enabled":true,"applications":[],
+            "hosts":[],"networks":[],"ports":[],"action":{"type":"direct"}
+        }]);
+        std::fs::write(&file.0, denied.to_string()).unwrap();
+        assert!(load_explicit_profile(&file.0).is_err());
+    }
+
 }
