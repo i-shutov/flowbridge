@@ -1,3 +1,43 @@
+## 2026-11-01: Windows original-Rust managed Banner First under spaced install path — exact-head CI PENDING
+
+The owner's affected-route Python gate on macOS successfully authenticated;
+this remains **distinct** from the original Rust helper and from Windows 10/11.
+The existing Windows Server 2025 hosted tests already proved both direct
+Rust-gate -> authenticated OpenSSH -> SOCKS and Rust Supervisor -> Rust gate ->
+OpenSSH -> SOCKS on loopback. This change extends the **same-user Rust agent
+and restricted Windows IPC vertical**: copy the real compiled original-Rust
+CLI to an ordinary installation-like directory with spaces, apply a strict
+file ACL, start the agent with explicit opt-in Banner First in its managed
+SSH profile, verify a real authenticated SOCKS5 binary/half-close roundtrip,
+reload only the user-mode SOCKS profile, refuse an attempted carrier change,
+and forcibly kill the owner to require BOTH local listeners to close.
+
+For Windows only, the Banner First path grammar now permits spaces in
+normal local-drive directory components and quotes the entire executable
+in OpenSSH ProxyCommand. It still denies network/UNC/NT device paths,
+relative paths, dot components, shell controls, environment-variable
+expansion, alternate data streams, DOS device names and trailing
+dot/space aliases. Missing explicit consent, shell metacharacters and ADS
+are independently rejected before launch. The destination SSH server
+remains verified by OpenSSH host-key pinning and public-key auth; Rust
+does NOT replace the SSH cryptographic implementation. Tests fail if
+the spaced helper cannot execute through OpenSSH on hosted Windows.
+
+**Boundaries:** the test uses loopback SSH and debug-built local Rust
+binaries, with no NDISRD driver activation and no selected application
+packet/PID proof. The helper's path/ACL is tested for this fixture, not a
+full production immutable installer or TOCTOU-proof provenance. Killing
+the agent may clean up its owned user-mode listeners; it does NOT install
+a persistent kernel fail-closed rule. This is **not** proof the user's
+specific affected Internet route is fixed by the Rust implementation,
+Windows 10/11 acceptance, DNS leak-free behavior or release 1.0.
+Exact-head CI logs, all job conclusions, source/test-merge SHAs and
+independently verified ZIP/binary SHA-256 must be recorded below and in
+issue #41 before this block is called accepted.
+
+---
+
+
 ## 2026-11-01: IPv6 signed-NDISRD self-owned TEST-NET UDP quarantine candidate (CI and native proof PENDING)
 
 An **additional**, opt-in original-Rust `udp6-testnet-drop-lab` complements

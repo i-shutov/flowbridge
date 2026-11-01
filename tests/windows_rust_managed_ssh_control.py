@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import shutil
 from pathlib import Path
 import socket
 import subprocess
@@ -73,8 +74,9 @@ def socks_connect_rejected(port: int, target_port: int):
 
 
 def make_config(ssh: Path, identity: Path, known: Path, user: str,
-                ssh_port: int, socks: int, ingress: int):
-    return {
+                ssh_port: int, socks: int, ingress: int,
+                banner_cli: Path | None = None):
+    profile = {
         "consent": "RUST_MANAGED_SSH_SOCKS_CANDIDATE",
         "engine": {
             "version": 1, "listen": f"127.0.0.1:{ingress}",
@@ -96,6 +98,13 @@ def make_config(ssh: Path, identity: Path, known: Path, user: str,
             "max_restarts": 3,
         }
     }
+    if banner_cli is not None:
+        profile["ssh"].update({
+            "banner_gate_executable": str(banner_cli.resolve(strict=True)),
+            "banner_gate_consent": "BANNER_FIRST_EXPERIMENTAL",
+            "banner_gate_timeout_ms": 5000,
+        })
+    return profile
 
 
 def run(agent: Path, ssh: Path, identity: Path, known: Path, user: str,
@@ -125,6 +134,16 @@ def run(agent: Path, ssh: Path, identity: Path, known: Path, user: str,
         "windows_10_11_accepted": False, "release_accepted": False,
     }
     with tempfile.TemporaryDirectory(prefix="flowbridge-rust-ssh-control-") as td:
+        # Exercise the actual original-Rust helper from an installation-like
+        # Windows path with spaces, not a hand-written Python ProxyCommand.
+        source_cli = Path("target/debug/flowbridge.exe").resolve(strict=True)
+        helper = Path(td) / "FlowBridge Program Files" / "flowbridge.exe"
+        helper.parent.mkdir(parents=True)
+        shutil.copy2(source_cli, helper)
+        secure_test_file(helper)
+        require(" " in str(helper) and sha256(source_cli) == sha256(helper),
+                "Rust banner helper copy or spaced-path fixture invalid")
+        report["banner_helper_sha256"] = sha256(helper)
         config_path = Path(td) / "managed.json"
         def write(profile):
             config_path.write_text(json.dumps(profile), encoding="utf-8")
@@ -145,7 +164,34 @@ def run(agent: Path, ssh: Path, identity: Path, known: Path, user: str,
             require(not stderr or "password" not in stderr.lower(),
                     "Sensitive configuration appeared in stderr")
 
-        good = make_config(ssh, identity, known, user, ssh_port, socks, ingress)
+        good = make_config(ssh, identity, known, user, ssh_port, socks, ingress,
+                           banner_cli=helper)
+
+        def reject_profile(profile, reason):
+            child = launch(profile)
+            try:
+                child.communicate(timeout=7)
+                require(child.returncode != 0, reason)
+            finally:
+                if child.poll() is None:
+                    child.kill()
+                    child.communicate(timeout=5)
+
+        missing_consent = copy.deepcopy(good)
+        del missing_consent["ssh"]["banner_gate_consent"]
+        reject_profile(missing_consent, "Rust Banner First accepted without opt-in")
+        report["banner_gate_no_consent_rejected"] = True
+
+        shell_injection = copy.deepcopy(good)
+        shell_injection["ssh"]["banner_gate_executable"] += " & whoami"
+        reject_profile(shell_injection, "Rust Banner First accepted shell metacharacters")
+        report["banner_gate_shell_injection_rejected"] = True
+
+        ads_injection = copy.deepcopy(good)
+        ads_injection["ssh"]["banner_gate_executable"] += ":other"
+        reject_profile(ads_injection, "Rust Banner First accepted Windows ADS alias")
+        report["banner_gate_ads_rejected"] = True
+
         invalid = copy.deepcopy(good)
         invalid["engine"]["default_action"] = {"type": "direct"}
         proc = launch(invalid)
@@ -158,7 +204,8 @@ def run(agent: Path, ssh: Path, identity: Path, known: Path, user: str,
                 proc.communicate(timeout=5)
         report["invalid_direct_profile_rejected"] = True
 
-        broken = make_config(ssh, identity, known, user, dead_ssh, bad_socks, bad_ingress)
+        broken = make_config(ssh, identity, known, user, dead_ssh, bad_socks,
+                             bad_ingress, banner_cli=helper)
         proc = launch(broken)
         try:
             def unready():
@@ -192,6 +239,7 @@ def run(agent: Path, ssh: Path, identity: Path, known: Path, user: str,
             round_trip(ingress, target_port)
             report["authenticated_ssh_traffic"] = True
             report["actual_binary_half_close"] = True
+            report["windows_banner_first_spaced_helper_authenticated"] = True
             revised = copy.deepcopy(good)
             revised["engine"]["idle_timeout_ms"] = 35000
             write(revised)
@@ -254,6 +302,8 @@ def run(agent: Path, ssh: Path, identity: Path, known: Path, user: str,
                 proc.kill()
                 proc.communicate(timeout=5)
     report["passed"] = all(report.get(key) is True for key in (
+        "banner_gate_no_consent_rejected", "banner_gate_shell_injection_rejected",
+        "banner_gate_ads_rejected", "windows_banner_first_spaced_helper_authenticated",
         "invalid_direct_profile_rejected", "ssh_unreachable_rejected_without_direct",
         "authenticated_ssh_traffic", "actual_binary_half_close",
         "live_socks_reload_without_carrier_change",

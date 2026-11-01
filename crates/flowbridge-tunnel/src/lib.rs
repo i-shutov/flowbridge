@@ -91,6 +91,36 @@ impl Default for Config {
         }
     }
 }
+// Only ASCII drive paths with unambiguous Windows components may cross the
+// OpenSSH ProxyCommand shell boundary. Spaces are permitted in ordinary
+// installation directories, but all shell controls, ADS, device paths and
+// DOS reserved components remain forbidden by Config::validate.
+fn safe_windows_banner_path(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    if bytes.len() < 6
+        || !bytes[0].is_ascii_alphabetic()
+        || bytes[1] != b':'
+        || !matches!(bytes[2], b'/' | b'\\')
+        || path[3..].contains(':')
+    {
+        return false;
+    }
+    path[3..].split(['/', '\\']).all(|part| {
+        if part.is_empty()
+            || part.starts_with(' ')
+            || part.ends_with(' ')
+            || part.ends_with('.')
+        {
+            return false;
+        }
+        let stem = part.split('.').next().unwrap_or_default().to_ascii_uppercase();
+        !matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+            && !(stem.len() == 4
+                && (stem.starts_with("COM") || stem.starts_with("LPT"))
+                && matches!(stem.as_bytes()[3], b'1'..=b'9'))
+    })
+}
+
 impl Config {
     pub fn from_json(text: &str) -> Result<Self, TunnelError> {
         if text.len() > 65536 {
@@ -223,9 +253,12 @@ impl Config {
                     // On Unix, a backslash could be a shell escape; on
                     // Windows, both separators must be checked for dot paths.
                     || (!cfg!(windows) && path.contains('\\'))
+                    || (cfg!(windows) && !safe_windows_banner_path(path))
                     || path.split(['/', '\\']).any(|part| part == "." || part == "..")
                     || !path.chars().all(|c| {
-                        c.is_ascii_alphanumeric() || matches!(c, '/' | '\\' | '.' | '_' | '-' | ':')
+                        c.is_ascii_alphanumeric()
+                            || matches!(c, '/' | '\\' | '.' | '_' | '-' | ':')
+                            || (cfg!(windows) && c == ' ')
                     })
                     || file.components().any(|c| {
                         matches!(
@@ -387,9 +420,18 @@ impl Config {
                 self.host.parse().expect("validated numeric gate host"),
                 self.port,
             );
+            // OpenSSH invokes ProxyCommand via a shell. The config validator
+            // makes this token inert: on Windows quote the full drive path so
+            // a normal "Program Files" installation does not split at spaces.
+            let normalized = path.replace('\\', "/");
+            let executable = if cfg!(windows) {
+                format!("\"{normalized}\"")
+            } else {
+                normalized
+            };
             let command = format!(
                 "{} ssh-banner-gate --endpoint {} --timeout-ms {} --consent BANNER_FIRST_EXPERIMENTAL",
-                path.replace('\\', "/"),
+                executable,
                 target,
                 self.banner_gate_timeout_ms
             );
@@ -1845,6 +1887,16 @@ mod tests {
         cfg.host = "example.com".into();
         assert!(cfg.validate().is_err());
         cfg.host = "127.0.0.1".into();
+        if cfg!(windows) {
+            cfg.banner_gate_executable =
+                Some("C:/Program Files/FlowBridge/flowbridge.exe".into());
+            cfg.validate().unwrap();
+            assert!(cfg.arguments().iter().any(|arg| {
+                arg.contains(
+                    "ProxyCommand=\"C:/Program Files/FlowBridge/flowbridge.exe\" ssh-banner-gate",
+                )
+            }));
+        }
         for bad in [
             "/tmp/a & b/flowbridge",
             "/tmp/a$(whoami)/flowbridge",
@@ -1856,6 +1908,10 @@ mod tests {
             "/opt/./flowbridge",
             "/opt/../flowbridge",
             r"/opt\..\flowbridge",
+            "C:/Program Files /FlowBridge/flowbridge.exe",
+            "C:/FlowBridge//bin/flowbridge.exe",
+            "C:/FlowBridge/NUL/flowbridge.exe",
+            "C:/FlowBridge/bin/flowbridge.exe:ads",
         ] {
             cfg.banner_gate_executable = Some(bad.into());
             assert!(cfg.validate().is_err(), "dangerous path: {bad}");
