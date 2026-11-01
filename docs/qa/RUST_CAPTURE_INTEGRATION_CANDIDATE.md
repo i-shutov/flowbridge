@@ -1,3 +1,11 @@
+## 2026-11-01: installed Win32 GUI SOCKS / managed SSH — pointer-width QA correction (CI PENDING)
+
+Actual [capture #41312113733](https://github.com/i-shutov/flowbridge/actions/runs/41312113733), source `3f25386f3e87205917b3d713c705b2ed1d807c41`: all Rust/native, DNS and hosted Windows managed OpenSSH jobs passed but **installed Win32 GUI Start did NOT produce an agent pipe**; status remained the initial `OPERATION: status`. This is NOT a passing GUI acceptance. A suspect QA defect is its use of `ctypes.wintypes.LPARAM/WPARAM`, which may truncate an x64 child HWND; the production Rust panel intentionally rejects parent commands with an incorrect child HWND. The QA now posts parent `WM_COMMAND/BN_CLICKED` using explicit full-width `c_size_t/c_ssize_t`, checks the cross-process profile EDIT value before Start and retains genuine installed Rust panel -> restricted pipe -> real SOCKS5, installed authenticated OpenSSH/Banner First and safe uninstall acceptance. No physical pointer/keyboard proof is inferred; `physical_button_input_accepted=false` remains. No NDISRD or OS security modifications.
+
+**Do not accept this correction before fresh exact-head Windows GUI/IPC/SOCKS/real OpenSSH PASS**, both NSIS fault-injected rollback stages PASS and the downloaded SHA-bound candidate/installer artifacts are independently inspected. Managed OpenSSH 128 held / 1152 denied / 10000 verified / four independent processes remains required; raw-512 experimental status remains separate. Arbitrary packet-to-PID, persistent native protected fail-closed, leak-free DNS and Win10/11 acceptance remain unproven.
+
+---
+
 ### 2026-11-01 — Win32 GUI Start: explicit null standard handles for installed Rust agent (CI PENDING)
 
 A native Windows-subsystem panel has no guaranteed valid inherited stdin,

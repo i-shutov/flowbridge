@@ -49,10 +49,18 @@ user32.SendMessageTimeoutW.argtypes = [
     ctypes.c_uint, ctypes.c_uint, ctypes.POINTER(ctypes.c_size_t),
 ]
 user32.SendMessageTimeoutW.restype = wintypes.BOOL
-user32.PostMessageW.argtypes = [wintypes.HWND, ctypes.c_uint, wintypes.WPARAM, wintypes.LPARAM]
+# Win32 WPARAM/LPARAM are pointer-sized even on 64-bit Windows. The ctypes
+# wintypes aliases can be 32-bit C longs and silently truncate a child HWND.
+# A truncated BN_CLICKED LPARAM is correctly REJECTED by the Rust UI's strict
+# parent/child validation, leaving the Start action apparently untouched.
+user32.PostMessageW.argtypes = [
+    wintypes.HWND, ctypes.c_uint, ctypes.c_size_t, ctypes.c_ssize_t,
+]
 user32.PostMessageW.restype = wintypes.BOOL
-user32.SendMessageW.argtypes = [wintypes.HWND, ctypes.c_uint, wintypes.WPARAM, wintypes.LPARAM]
-user32.SendMessageW.restype = wintypes.LPARAM
+user32.SendMessageW.argtypes = [
+    wintypes.HWND, ctypes.c_uint, ctypes.c_size_t, ctypes.c_ssize_t,
+]
+user32.SendMessageW.restype = ctypes.c_ssize_t
 
 
 def require(ok: bool, message: str) -> None:
@@ -102,25 +110,19 @@ def click(hwnd: int) -> None:
     user32.SendMessageW(hwnd, BM_CLICK, 0, 0)
 
 
-def notify_button(window: int, ident: int, asynchronous: bool = False) -> None:
-    """Exercise the real parent Win32 BN_CLICKED command handler.
+def notify_button(window: int, ident: int) -> None:
+    """Queue the same native WM_COMMAND/BN_CLICKED sent by a real button.
 
-    BM_CLICK on a button in an inactive GUI can be ignored on the hosted,
-    noninteractive Windows desktop. Send the exact WM_COMMAND notification
-    produced by a real control instead. This proves the UI action/IPC code,
-    NOT physical pointer/keyboard acceptance on Win10/11.
+    No mouse, keyboard, synthetic owner, NDISRD or privilege assumption:
+    this exercises the real UI handler, child-HWND provenance, worker
+    serialization and downstream IPC. On a noninteractive hosted desktop,
+    BM_CLICK may be ignored; cross-process SendMessageTimeout can also run
+    during WM_CREATE. A posted parent notification preserves queue ordering
+    while the full-width HWND is validated by the installed Rust panel.
     """
     button = control(window, ident)
-    if asynchronous:
-        # Stop opens a modal native confirmation: don't block this caller.
-        require(bool(user32.PostMessageW(window, WM_COMMAND, ident, button)),
-                "Cannot post native control command")
-    else:
-        result = ctypes.c_size_t(0)
-        require(bool(user32.SendMessageTimeoutW(
-            window, WM_COMMAND, ident, button, SMTO_ABORTIFHUNG,
-            2000, ctypes.byref(result),
-        )), "Native Win32 button notification did not return")
+    require(bool(user32.PostMessageW(window, WM_COMMAND, ident, button)),
+            "Cannot queue pointer-size native Win32 control notification")
 
 
 def main() -> None:
@@ -188,6 +190,8 @@ def main() -> None:
             report["actual_win32_window_and_controls"] = True
             require(bool(user32.SetWindowTextW(path_edit, str(profile_path))),
                     "Win32 JSON profile entry rejected")
+            require(text_of(path_edit) == str(profile_path),
+                    "Cross-process profile edit did not retain the exact JSON path")
             # Intentionally race the first WM_CREATE status worker. A real
             # user can click Start immediately; no click may be discarded.
             notify_button(hwnd, ID_START)
@@ -245,7 +249,7 @@ def main() -> None:
 
             # Post BM_CLICK rather than blocking on SendMessage. Then accept
             # the real native modal STOP confirmation through its Win32 YES.
-            notify_button(hwnd, ID_STOP, asynchronous=True)
+            notify_button(hwnd, ID_STOP)
             dialog = wait(lambda: user32.FindWindowW(
                 "#32770", "FlowBridge candidate - stop"), 6,
                 "native explicit STOP confirmation")
@@ -349,9 +353,11 @@ def run_managed_ssh(panel: Path, agent: Path, cli: Path, ssh: Path,
                         if process.poll() is None else 0,
                         12, "installed Rust GUI SSH window")
             status = control(hwnd, ID_STATUS)
-            require(bool(user32.SetWindowTextW(control(hwnd, ID_PATH),
-                                               str(profile_path))),
+            path_edit = control(hwnd, ID_PATH)
+            require(bool(user32.SetWindowTextW(path_edit, str(profile_path))),
                     "Cannot select explicit same-user managed SSH profile")
+            require(text_of(path_edit) == str(profile_path),
+                    "Cross-process managed SSH JSON profile edit was not retained")
             # Queue Start immediately against WM_CREATE auto-Refresh, then
             # queue another Refresh; none may silently cancel the Start.
             notify_button(hwnd, ID_START)
@@ -410,7 +416,7 @@ def run_managed_ssh(panel: Path, agent: Path, cli: Path, ssh: Path,
             report["gui_denied_ssh_carrier_swap"] = True
             profile_path.write_text(json.dumps(config), encoding="utf-8")
 
-            notify_button(hwnd, ID_STOP, asynchronous=True)
+            notify_button(hwnd, ID_STOP)
             dialog = wait(lambda: user32.FindWindowW(
                 "#32770", "FlowBridge candidate - stop"), 8,
                 "real native GUI SSH stop confirmation")
