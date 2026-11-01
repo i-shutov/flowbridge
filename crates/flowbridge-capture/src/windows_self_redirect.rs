@@ -716,7 +716,6 @@ async fn native(request: Request) -> Result<Value, String> {
         "native_client_frames_reflected":reflect.counters.client_reflected,
         "native_relay_frames_reflected":reflect.counters.relay_reflected,
         "selected_frames_dropped":reflect.counters.selected_dropped,
-        "ambiguous_tcp_fragments_quarantined":reflect.counters.ambiguous_fragment_dropped,
         "selected_checksum_or_options_rejected":reflect.counters.checksums_or_options_rejected,
         "unsolicited_wire_replies_dropped":reflect.counters.unsolicited_wire_replies_dropped,
         "self_owned_socket_pid_epoch_consistent":self_epoch,
@@ -753,5 +752,7 @@ async fn native(request: Request) -> Result<Value, String> {
     // already large recursive laboratory JSON macro expansion.
     report["fresh_tcp_owner_candidate_denials_dropped"] =
         json!(owner_candidate_denials <= reflect.counters.selected_dropped);
+    report["ambiguous_tcp_fragments_quarantined"] =
+        json!(reflect.counters.ambiguous_fragment_dropped);
     Ok(report)
 }
