@@ -137,6 +137,17 @@ jobs:
       - name: Windows unrelated signed OS PowerShell process with loopback GO denial and HTTP
         if: runner.os == 'Windows'
         run: python tests/windows_external_powershell_lab.py --output build/capture-candidate/unrelated-powershell-lifecycle.json
+      - name: Original Rust-only unsigned Windows installer, installed Banner Gate and IPC/SOCKS lifecycle
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          choco install nsis --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/windows_rust_candidate_installer.py --candidate build/capture-candidate/FlowBridge-Rust-Candidate-Windows.zip --output build/capture-candidate/FlowBridge-Rust-Candidate-Windows-UNSIGNED-setup.exe --report build/capture-candidate/windows-rust-installer-build.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/windows_rust_candidate_installer.py --installer build/capture-candidate/FlowBridge-Rust-Candidate-Windows-UNSIGNED-setup.exe --report build/capture-candidate/windows-rust-installer-build.json --output build/capture-candidate/windows-rust-installed-lifecycle.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build separately allowlisted native-test FFI and original harness (not product payload)
         if: runner.os == 'Windows'
         shell: bash
