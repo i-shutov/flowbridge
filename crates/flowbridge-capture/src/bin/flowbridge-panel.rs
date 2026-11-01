@@ -258,8 +258,7 @@ mod panel {
                         "No driver protection has been enabled by this panel.\r\n",
                         "This candidate must NOT be treated as a system-wide kill switch.",
                     ),
-                    action,
-                    error
+                    action, error
                 ),
             };
             if let Ok(mut response) = RESPONSE.lock() {
