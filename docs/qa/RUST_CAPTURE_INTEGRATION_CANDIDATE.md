@@ -8,6 +8,8 @@ A real disposable hosted Windows Server 2025 CI user installs it into a path **w
 
 **First CI run #41297327342 failed the new installation assertion on Windows-only NTFS name casefolding (test checked forbidden `FlowBridge.exe`, which aliases the legitimate Rust `flowbridge.exe`).** The actual NSIS build and exact original-Rust candidate SHA checks PASSED; failure was an incorrect test oracle, not observed legacy payload. Corrected test uses exact directory allowlist with case-insensitive filenames and same file count; next exact-head Windows CI must still pass before this is called accepted. No security/driver gates waived.
 
+**Second exact-head Windows run #41297710720:** real Rust candidate NSIS installation, payload hashes, installed Rust Banner First, installed Rust Win32 named-pipe/SOCKS lifecycle, and rejected second install passed through to the uninstall stage; test then asserted immediate file deletion after NSIS `/S` launcher exit. NSIS self-copy uninstaller may complete asynchronously, so the QA oracle now waits up to 20s for **both** file and HKCU uninstall-registry removal and verifies the user profile remains intact. A deadline failure remains a hard FAIL with exact remaining filenames (no private paths). Result pending a fresh exact-SHA rerun.
+
 
 ## 2026-11-01: Windows original-Rust managed Banner First under spaced install path — exact-head CI PENDING
 

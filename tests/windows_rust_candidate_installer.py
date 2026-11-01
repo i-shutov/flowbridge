@@ -14,6 +14,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 
 from ssh_banner_gate import binary_fixture, interactive_kex_fixture, timeout_fixture
 
@@ -172,14 +173,32 @@ def main() -> None:
             profile.write_text('{"keep":true}\n', encoding="utf-8")
             uninstall = subprocess.run([str(installed / "Uninstall.exe"), "/S"],
                                        capture_output=True, timeout=45, check=False)
-            require(uninstall.returncode == 0 and profile.read_text() == '{"keep":true}\n',
-                    "Uninstall failed or deleted user profile")
-            require(all(not (installed / name).exists() for name in
-                        (*expected, "Uninstall.exe")), "Uninstall left candidate binaries")
+            require(uninstall.returncode == 0, "NSIS uninstall launcher failed")
+            # NSIS self-copy execution is asynchronous: /S returns from the
+            # first launcher before its temp uninstaller deletes its own EXE.
+            # Observe *actual* file and registry removal, not process exit
+            # alone, with a strict deadline (never waive leftovers).
+            deadline = time.monotonic() + 20.0
+            leftovers = []
+            registry_remaining = True
+            while True:
+                leftovers = [n for n in (*expected, "Uninstall.exe")
+                             if (installed / n).exists()]
+                registry_remaining = (
+                    hkcu_value(cfgkey, "InstallDir") is not None or
+                    hkcu_value(uninstallkey, "DisplayName") is not None
+                )
+                if not leftovers and not registry_remaining:
+                    break
+                if time.monotonic() >= deadline:
+                    break
+                time.sleep(0.15)
+            require(not leftovers and not registry_remaining,
+                    "NSIS uninstall did not finish within 20s: remaining files=" +
+                    repr(leftovers) + ", registry_remaining=" + str(registry_remaining))
+            require(profile.read_text() == '{"keep":true}\n',
+                    "NSIS uninstaller removed user-created profile")
             result["uninstaller_preserved_user_profile"] = True
-            require(hkcu_value(cfgkey, "InstallDir") is None and
-                    hkcu_value(uninstallkey, "DisplayName") is None,
-                    "Rust candidate uninstall keys remained registered")
             result["registry_removed"] = True
             require(scm_absent(), "Rust SCM was installed by the package")
             result["scm_service_unmodified"] = True
