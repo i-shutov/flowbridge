@@ -37,6 +37,21 @@ def client(exe, port):
         [str(exe), "wfp-qa-client", str(port), CONSENT],
         capture_output=True, text=True, encoding="utf-8", timeout=8)
 
+def identity_probe(exe, target):
+    # Run the actual Windows executable, not a mocked ID resolver. The
+    # original Rust code compares BFE-owned AppId blobs in-process and only
+    # reveals an equality boolean, never paths, blobs or process identities.
+    result = subprocess.run(
+        [str(exe), "wfp-qa-identity", str(target), CONSENT],
+        capture_output=True, text=True, encoding="utf-8", timeout=8)
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    assert data["ok"] is True and data["redacted"] is True
+    assert data["wfp_filter_created"] is False
+    assert data["packet_pid_bound"] is False
+    return data["own_app_id_equals_target"]
+
+
 def main():
     if os.name != "nt":
         raise RuntimeError("Windows WFP native QA only")
@@ -64,16 +79,27 @@ def main():
             baseline = client(qa, port)
             assert baseline.returncode == 0
             assert json.loads(baseline.stdout)["real_tcp_half_close"] is True
+            # Both QA processes have byte-identical PE images, but different
+            # absolute paths. This distinguishes BFE app-ID lookup identity
+            # from filter classification; no hash or path enters the report.
+            identity = {
+                "selected_self_matches_target": identity_probe(qa, qa),
+                "different_copy_self_matches_target": identity_probe(other, qa),
+                "agent_self_matches_target": identity_probe(agent, qa),
+            }
 
-            def run_trial(guard_consent, app_only=False, port_only=False):
+            def run_trial(guard_consent, app_only=False, port_only=False,
+                          guard_executable=None):
                 guard = subprocess.Popen(
-                    [str(agent), "wfp-qa-guard", str(qa), str(port), guard_consent],
+                    [str(guard_executable or agent), "wfp-qa-guard",
+                     str(qa), str(port), guard_consent],
                     stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE, text=True, encoding="utf-8")
                 q = queue.Queue(maxsize=1)
                 threading.Thread(target=lambda: q.put(guard.stdout.readline()),
                                  daemon=True).start()
                 trial = {"app_only": app_only, "port_only": port_only,
+                         "guard_from_selected_exe": guard_executable == qa,
                          "ready": False, "selected_denied": False,
                          "different_executable_allowed": False, "python_allowed": False,
                          "recovered": False}
@@ -119,12 +145,26 @@ def main():
             port_trial = run_trial("DYNAMIC_WFP_QA_PORT_ONLY_DIAGNOSTIC", port_only=True)
             identity_trial = run_trial("DYNAMIC_WFP_QA_APP_ONLY_DIAGNOSTIC", app_only=True)
             precise_trial = run_trial(CONSENT)
-            stages = (port_trial, identity_trial, precise_trial)
-            passed = all(
+            # Counterfactual: create exactly the same filter while the
+            # guard itself is executing from the selected QA binary path.
+            # If AppId matching changes, path/canonicalization may matter;
+            # otherwise the failure is deeper in runtime BFE classification.
+            self_guard_app_only = run_trial(
+                "DYNAMIC_WFP_QA_APP_ONLY_DIAGNOSTIC",
+                app_only=True, guard_executable=qa)
+            self_guard_precise = run_trial(CONSENT, guard_executable=qa)
+            stages = (port_trial, identity_trial, precise_trial,
+                      self_guard_app_only, self_guard_precise)
+            passed = (
+                identity["selected_self_matches_target"] is True and
+                identity["different_copy_self_matches_target"] is False and
+                identity["agent_self_matches_target"] is False and
+                all(
                 stage["ready"] and stage["selected_denied"] and
                 stage["different_executable_allowed"] is (not stage["port_only"]) and
                 stage["python_allowed"] is (not stage["port_only"]) and
                 stage["recovered"] for stage in stages)
+            )
             result = {
                 "kind": "original_rust_real_wfp_dynamic_qa_diagnostic_matrix",
                 "passed": passed,
@@ -132,9 +172,12 @@ def main():
                     ["git", "rev-parse", "HEAD"], text=True).strip(),
                 "agent_sha256": digest,
                 "copied_client_sha256": hashlib.sha256(qa.read_bytes()).hexdigest(),
+                "app_id_lookup_consistency": identity,
                 "port_only_trial": port_trial,
                 "app_id_only_trial": identity_trial,
                 "app_id_port_protocol_trial": precise_trial,
+                "self_guard_app_id_only_trial": self_guard_app_only,
+                "self_guard_app_id_port_trial": self_guard_precise,
                 "guard_killed_after_each_trial": True,
                 "unrestricted_port_trial_qa_loopback_only": True,
                 "persistent_filter_created": False,

@@ -4,7 +4,7 @@
 #![cfg(windows)]
 use serde_json::{json, Value};
 use std::{
-    ffi::{c_void, OsStr},
+    ffi::c_void,
     io::{Read, Write},
     net::{Ipv4Addr, SocketAddrV4, TcpStream},
     os::windows::ffi::OsStrExt,
@@ -57,6 +57,63 @@ impl Drop for AppBlob {
     }
 }
 
+
+// A deliberately read-only identity cross-check. An AppId returned from a
+// filename is NOT proof that the kernel attached it to any network packet.
+// The two BFE blobs stay private; neither path nor raw AppId is reported.
+fn lookup_app(path: &Path) -> Result<AppBlob, String> {
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let mut raw: *mut FWP_BYTE_BLOB = null_mut();
+    // SAFETY: Windows null-terminated path and valid out pointer.
+    let status = unsafe { FwpmGetAppIdFromFileName0(wide.as_ptr(), &mut raw) };
+    if status != 0 || raw.is_null() {
+        return Err(format!("WFP AppId lookup failed: {status}"));
+    }
+    let app = AppBlob(raw);
+    // SAFETY: returned successful BFE-owned FWP_BYTE_BLOB, still owned by app.
+    let (size, data) = unsafe { ((*app.0).size as usize, (*app.0).data) };
+    if size == 0 || size > 16_384 || data.is_null() {
+        return Err("Invalid WFP AppId blob".into());
+    }
+    Ok(app)
+}
+
+fn same_app_id(first: &AppBlob, second: &AppBlob) -> bool {
+    // SAFETY: blobs passed validation in lookup_app and remain alive.
+    let (a, b) = unsafe {
+        (
+            std::slice::from_raw_parts((*first.0).data, (*first.0).size as usize),
+            std::slice::from_raw_parts((*second.0).data, (*second.0).size as usize),
+        )
+    };
+    a == b
+}
+
+/// Compare the actual running EXE's BFE AppId with the selected disposable
+/// QA target, never exposing filenames, IDs, packet data, or process details.
+/// This is read-only and DOES NOT authorize interception or protected mode.
+pub fn identity_probe(path: &str, consent: &str) -> Result<Value, String> {
+    validate(path, 49_152, consent)?;
+    if consent != CONSENT {
+        return Err("WFP identity probe requires exact QA consent".into());
+    }
+    let target = lookup_app(Path::new(path))?;
+    let own = std::env::current_exe()
+        .map_err(|_| "Unable to resolve the QA executable".to_owned())?;
+    let self_id = lookup_app(&own)?;
+    Ok(json!({
+        "ok": true,
+        "kind": "wfp_qa_running_executable_appid_comparison",
+        "own_app_id_equals_target": same_app_id(&self_id, &target),
+        "redacted": true,
+        "wfp_filter_created": false,
+        "ndisrd_modified": false,
+        "packet_pid_bound": false,
+        "protected_fail_closed": false,
+        "release_accepted": false
+    }))
+}
+
 fn validate(path: &str, port: u16, consent: &str) -> Result<(), String> {
     let bytes = path.as_bytes();
     if (consent != CONSENT && consent != DIAG && consent != PORT_DIAG)
@@ -88,14 +145,7 @@ pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
     validate(path, port, consent)?;
     let app_only_diagnostic = consent == DIAG;
     let port_only_diagnostic = consent == PORT_DIAG;
-    let wide: Vec<u16> = OsStr::new(path).encode_wide().chain(Some(0)).collect();
-    let mut raw_app: *mut FWP_BYTE_BLOB = null_mut();
-    // SAFETY: NUL-terminated file path and valid returned pointer.
-    let status = unsafe { FwpmGetAppIdFromFileName0(wide.as_ptr(), &mut raw_app) };
-    if status != 0 || raw_app.is_null() {
-        return Err(format!("WFP AppId lookup failed: {status}"));
-    }
-    let app = AppBlob(raw_app);
+    let app = lookup_app(Path::new(path))?;
     // SAFETY: zero is a valid default for these Win32 C repr structures.
     let mut session: FWPM_SESSION0 = unsafe { std::mem::zeroed() };
     session.flags = FWPM_SESSION_FLAG_DYNAMIC;
