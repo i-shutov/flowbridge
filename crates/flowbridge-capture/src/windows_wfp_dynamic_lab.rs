@@ -139,10 +139,7 @@ fn blob_matches(expected: &AppBlob, actual: &FWP_BYTE_BLOB) -> bool {
 }
 
 fn same_guid(a: &GUID, b: &GUID) -> bool {
-    a.data1 == b.data1
-        && a.data2 == b.data2
-        && a.data3 == b.data3
-        && a.data4 == b.data4
+    a.data1 == b.data1 && a.data2 == b.data2 && a.data3 == b.data3 && a.data4 == b.data4
 }
 
 /// Read back the actual BFE-serialized filter. Success from FwpmFilterAdd0
