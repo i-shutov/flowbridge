@@ -12,6 +12,16 @@ fn main() {
         #[cfg(windows)]
         [command] if command == "wfp-readonly" => Ok(flowbridge_capture::windows_wfp_readonly::report()),
         #[cfg(windows)]
+        [command, path, port, consent] if command == "wfp-qa-guard" => {
+            port.parse::<u16>().map_err(|_| "Invalid WFP QA port".to_owned())
+                .and_then(|p| flowbridge_capture::windows_wfp_dynamic_lab::guard(path, p, consent))
+        }
+        #[cfg(windows)]
+        [command, port, consent] if command == "wfp-qa-client" => {
+            port.parse::<u16>().map_err(|_| "Invalid WFP QA port".to_owned())
+                .and_then(|p| flowbridge_capture::windows_wfp_dynamic_lab::client(p, consent))
+        }
+        #[cfg(windows)]
         [command, config_path] if command == "service-stage" => {
             flowbridge_capture::windows_service_management::stage(config_path)
         }

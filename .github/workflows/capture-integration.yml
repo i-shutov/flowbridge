@@ -121,6 +121,9 @@ jobs:
       - name: Original Rust actual Windows BFE read-only filter snapshot during real live TCP
         if: runner.os == 'Windows'
         run: python tests/windows_wfp_readonly_preflight.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-readonly.json
+      - name: Real original Rust dynamic WFP app-ID block and killed-guard cleanup
+        if: matrix.os == 'windows-2025'
+        run: python tests/windows_wfp_dynamic_loopback.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-dynamic-lifecycle.json
       - name: Windows restricted named-pipe and live explicit SOCKS lifecycle
         if: runner.os == 'Windows'
         run: python tests/windows_capture_control.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/control-lifecycle.json

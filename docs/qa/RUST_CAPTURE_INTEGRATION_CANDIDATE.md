@@ -1,3 +1,9 @@
+## 2026-11-01 — Real WFP dynamic scoped app/TCP guard experiment (CI pending)
+
+A new independent original Rust QA-only WFP ALE_AUTH_CONNECT_V4 block, with BFE `FWPM_SESSION_FLAG_DYNAMIC`, targets only a temporary copy of the client binary named `FlowBridgeWfpLabClient.exe`, a single high destination port, and TCP. A real Windows test proves selected-executable connectivity before and after guard death, attempted block while guard is active, and unaffected Python client concurrently. Force-killing the Rust guard must cause the WFP rule to disappear. The filter is nonpersistent; neither NDISRD nor any system security settings are changed. The test records binary/source hashes and explicit negative acceptance fields.
+
+**Important: this does NOT implement crash-persistent protected fail-closed.** Dynamic session cleanup on a process crash explicitly permits later direct connections. This QA experiment cannot establish WFP/NDISRD ALE ordering, arbitrary packet-to-PID, leak-free DNS/UDP/IPv6, Win10/11 native acceptance or release readiness. No claim is accepted until exact-source Windows CI and downloaded byte-level artifacts are audited.
+
 # ACCEPTED 2026-11-01 — original Rust Windows BFE read-only + live TCP, exact SHA evidence
 
 **Tested code HEAD:** `9fbb3c16398594df938ab36e95a84175715abbb6` (existing PR #56, no main/release). **GitHub test merge:** `92c640d05bec036ea881414a6afb5727a272691a`. The new original Rust `wfp-readonly` CLI enumerated 648 accessible Base Filtering Engine filter records on hosted Windows Server 2025 in three read-only snapshots **before, during and after a separately held real TCP socket**. All samples complete, socket bytes survived; no process identity, address, filter ID/name/provider GUID or packet contents logged. `windows-wfp-readonly.json.passed=true`. This is **BFE inventory feasibility, not a fail-closed or packet-to-PID result**. No WFP filter rule or NDISRD mode altered; no protective policy installed.
