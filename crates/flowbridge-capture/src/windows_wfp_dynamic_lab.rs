@@ -59,7 +59,9 @@ impl Drop for AppBlob {
 
 fn validate(path: &str, port: u16, consent: &str) -> Result<(), String> {
     let bytes = path.as_bytes();
-    if (consent != CONSENT && consent != DIAG && consent != PORT_DIAG) || !(1025..=65534).contains(&port) {
+    if (consent != CONSENT && consent != DIAG && consent != PORT_DIAG)
+        || !(1025..=65534).contains(&port)
+    {
         return Err("WFP lab requires exact consent and high port".into());
     }
     if bytes.len() < 4
