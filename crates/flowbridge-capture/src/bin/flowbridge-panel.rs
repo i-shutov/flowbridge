@@ -13,6 +13,7 @@ fn main() {
 mod panel {
     use flowbridge_capture::control_plane;
     use serde_json::Value;
+    use std::collections::VecDeque;
     use std::path::PathBuf;
     use std::ptr::{null, null_mut};
     use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
@@ -43,6 +44,11 @@ mod panel {
     static WINDOW: AtomicIsize = AtomicIsize::new(0);
     static BUSY: AtomicBool = AtomicBool::new(false);
     static RESPONSE: Mutex<Option<String>> = Mutex::new(None);
+    // A real Windows click must never vanish just because the automatic
+    // WM_CREATE status probe is still working. Only one IPC worker may run.
+    static PENDING: Mutex<VecDeque<(&'static str, Option<PathBuf>)>> =
+        Mutex::new(VecDeque::new());
+    const MAX_PENDING: usize = 16;
 
     fn wide(value: &str) -> Vec<u16> {
         value.encode_utf16().chain(Some(0)).collect()
@@ -195,39 +201,74 @@ mod panel {
     }
 
     fn launch(action: &'static str, path: Option<PathBuf>) {
-        if BUSY.swap(true, Ordering::AcqRel) {
+        // Serialize actual operator actions, including a Start pressed while
+        // WM_CREATE's asynchronous status probe is in flight. Dropping that
+        // click was a genuine hosted-Windows GUI failure, not a test problem.
+        let mut pending = PENDING.lock().unwrap_or_else(|e| e.into_inner());
+        if action == "status" && pending.iter().any(|(queued, _)| *queued == "status") {
+            // Redundant Refresh requests can be coalesced; mutations cannot.
             return;
         }
-        std::thread::spawn(move || {
+        if pending.len() >= MAX_PENDING {
+            drop(pending);
+            if let Ok(mut response) = RESPONSE.lock() {
+                *response = Some("Operator queue is full; retry this action after current work finishes.\\r\\nNo protected route is active.".into());
+            }
+            let hwnd = WINDOW.load(Ordering::Acquire) as HWND;
+            if !hwnd.is_null() {
+                // SAFETY: HWND owns the status control; UI mutation stays on UI thread.
+                unsafe { PostMessageW(hwnd, STATUS_CHANGED, 0, 0) };
+            }
+            return;
+        }
+        pending.push_back((action, path));
+        // Both setting BUSY and clearing it happen under PENDING's mutex:
+        // no action can be lost in the worker's queue-empty transition.
+        let launch_worker = !BUSY.swap(true, Ordering::AcqRel);
+        drop(pending);
+        if !launch_worker {
+            return;
+        }
+        std::thread::spawn(|| loop {
+            let next = {
+                let mut pending = PENDING.lock().unwrap_or_else(|e| e.into_inner());
+                match pending.pop_front() {
+                    Some(next) => Some(next),
+                    None => {
+                        BUSY.store(false, Ordering::Release);
+                        None
+                    }
+                }
+            };
+            let Some((action, path)) = next else { break };
             let result = match action {
                 "start" => start_agent(path.expect("UI validated profile before dispatch")),
                 "status" | "reload" | "stop" => control_plane::command(action)
                     .map_err(|_| "Local Rust agent unavailable or command rejected."),
                 _ => Err("Unsupported operator action."),
             };
-            let text = match result {
+            let message = match result {
                 Ok(status) if action == "stop" => format!(
-                    "Stop requested; local proxy is no longer managed by this panel.\r\n\r\n{}",
+                    "Stop requested; local proxy is no longer managed by this panel.\\r\\n\\r\\n{}",
                     status_text(&status)
                 ),
                 Ok(status) => status_text(&status),
                 Err(error) => format!(
-                    "OPERATION: {}\r\n{}\r\n\r\n\
-                     No driver protection has been enabled by this panel.\r\n\
+                    "OPERATION: {}\\r\\n{}\\r\\n\\r\\n\\
+                     No driver protection has been enabled by this panel.\\r\\n\\
                      This candidate must NOT be treated as a system-wide kill switch.",
                     action, error
                 ),
             };
-            if let Ok(mut guard) = RESPONSE.lock() {
-                *guard = Some(text);
+            if let Ok(mut response) = RESPONSE.lock() {
+                *response = Some(message);
             }
-            // SAFETY: An old HWND may have been destroyed; PostMessageW then
-            // fails harmlessly. The UI thread owns all actual control mutation.
+            // SAFETY: A destroyed HWND simply rejects the post; the
+            // worker cannot mutate UI controls outside the owning thread.
             let hwnd = WINDOW.load(Ordering::Acquire) as HWND;
             if !hwnd.is_null() {
                 unsafe { PostMessageW(hwnd, STATUS_CHANGED, 0, 0) };
             }
-            BUSY.store(false, Ordering::Release);
         });
     }
 

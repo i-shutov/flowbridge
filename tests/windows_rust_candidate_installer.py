@@ -97,6 +97,7 @@ def main() -> None:
         "real_windows_ssh_banner_transport": False,
         "real_windows_pipe_socks_reload_stop": False,
         "installed_real_authenticated_banner_ssh_socks": False,
+        "installed_gui_real_authenticated_ssh_socks": False,
         "installed_native_rust_panel_operated_real_socks": False,
         "occupied_destination_rejected_without_mutation": False,
         "fault_injected_partial_copy_rolled_back": False,
@@ -268,6 +269,7 @@ def main() -> None:
                     all(gui_data.get(key) is True for key in (
                         "actual_win32_window_and_controls",
                         "gui_start_same_user_rust_agent",
+                        "gui_queued_refresh_after_start",
                         "gui_status_live_socks",
                         "actual_socks_block_denied",
                         "gui_reload_atomic_configuration",
@@ -295,9 +297,11 @@ def main() -> None:
                     and ssh_result["installed_rust_banner_cli_sha256"] ==
                         expected["flowbridge.exe"]
                     and ssh_result["actual_installed_ssh_authentication"] is True
+                    and ssh_result["actual_installed_gui_managed_ssh"] is True
                     and ssh_result["no_direct_on_unready_ssh"] is True,
                     "Actually installed Banner First + managed SSH acceptance failed")
             result["installed_real_authenticated_banner_ssh_socks"] = True
+            result["installed_gui_real_authenticated_ssh_socks"] = True
 
             # Explicitly reject in-place reinstallation instead of silently
             # overwriting an installed binary, service image or user profile.

@@ -1,3 +1,34 @@
+## 2026-11-01 — Integrated native Windows GUI -> installed Banner First / real OpenSSH / SOCKS (CI PENDING)
+
+The installed Rust-only NSIS candidate now must pass **two actual Win32 control
+verticals** on disposable hosted Windows Server 2025. The first presses Start
+immediately after the automatic WM_CREATE status request, then Refresh, runs a
+real SOCKS5 BLOCK, accepts atomic configuration reload, and performs confirmed
+Stop. Native button commands are serialized with a bounded same-user action
+queue: the previous GUI silently discarded Start while the initial status
+worker was busy. The test deliberately races these commands; it cannot pass
+merely because the window opens.
+
+The second reuses the separately signature-verified Microsoft OpenSSH fixture,
+temporary pinned host key and ephemeral test-only identity. The **actually
+installed Win32 panel** starts its sibling original-Rust agent with a managed
+profile, invokes the **actually installed** original Rust Banner First helper,
+observes real authenticated OpenSSH readiness, transfers binary SOCKS5 TCP
+bytes, reloads engine-only configuration, rejects an SSH-carrier swap without
+breaking the live tunnel, and confirms Stop closes both owned listeners.
+The new `installed-panel-real-ssh.json` report and the installer acceptance
+are hard-fail gates; no mock SSH success is accepted. Exact source SHA,
+Actions test-merge SHA and independently verified binary/artifact SHA-256
+must be recorded only after the workflow completes.
+
+This is **same-user SSH/SOCKS GUI functionality**, NOT privileged NDISRD
+capture, arbitrary selected-app PID binding, permanent protected fail-closed,
+DNS/UDP/IPv6 privacy, Windows 10/11 acceptance, signed final installer or
+release 1.0. No driver installed, no Defender/Secure Boot/Memory Integrity
+changes, no keys in product or artifacts. Release flags remain FALSE.
+
+---
+
 ## 2026-11-01 — Original Rust native Windows operator panel + installed SOCKS/SSH candidate (CI PENDING)
 
 Integrated block for **PR #56 only**: add a real, separate-subsystem **native Win32

@@ -54,6 +54,7 @@ def run(installed_agent: Path, installed_cli: Path, ssh: Path, sshd: Path,
         "isolated_signed_ssh_server_sha256": sha256(sshd),
         "actual_installed_ssh_authentication": False,
         "actual_installed_binary_half_close": False,
+        "actual_installed_gui_managed_ssh": False,
         "installed_helper_not_developer_binary": False,
         "no_direct_on_unready_ssh": False,
         "owned_ssh_and_rust_listeners_closed_after_forced_crash": False,
@@ -133,6 +134,21 @@ def run(installed_agent: Path, installed_cli: Path, ssh: Path, sshd: Path,
                     report["no_direct_on_unready_ssh"] = outcome["ssh_unreachable_rejected_without_direct"]
                     report["owned_ssh_and_rust_listeners_closed_after_forced_crash"] = (
                         outcome["forced_agent_crash_closed_rust_and_openssh_listeners"])
+                    # This is the *same installed* Rust Banner First/agent
+                    # but launched and controlled through the actual Win32 GUI.
+                    from windows_rust_panel import run_managed_ssh
+                    panel_ssh = run_managed_ssh(
+                        agent.with_name("flowbridge-panel.exe"), agent, cli,
+                        ssh, root / "client_key", known, user, port,
+                        echo.server_address[1],
+                        output.parent / "installed-panel-real-ssh.json")
+                    require(panel_ssh.get("passed") is True
+                            and panel_ssh.get("agent_sha256") ==
+                                report["installed_rust_agent_sha256"]
+                            and panel_ssh.get("banner_cli_sha256") ==
+                                report["installed_rust_banner_cli_sha256"],
+                            "Actually installed Win32 operator failed authenticated Banner First")
+                    report["actual_installed_gui_managed_ssh"] = True
             finally:
                 if daemon is not None:
                     daemon.terminate()
@@ -146,6 +162,7 @@ def run(installed_agent: Path, installed_cli: Path, ssh: Path, sshd: Path,
         report["passed"] = all(report[key] is True for key in (
             "actual_installed_ssh_authentication", "actual_installed_binary_half_close",
             "installed_helper_not_developer_binary", "no_direct_on_unready_ssh",
+            "actual_installed_gui_managed_ssh",
             "owned_ssh_and_rust_listeners_closed_after_forced_crash",
             "ephemeral_host_user_keys_not_persisted",
         ))
