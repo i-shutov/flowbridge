@@ -1,3 +1,28 @@
+## 2026-11-01: End-to-end SSH/DNS user-mode crash and deadline containment (NEW CI PENDING)
+
+This original-Rust integration adds two distinct **real process and socket**
+safety regressions. The DNS-over-SOCKS lab now applies its requested **single
+absolute wall-clock deadline** to both an in-flight SOCKS5 handshake/DNS TCP
+transaction and the final local UDP reply, not merely the next `recv_from`.
+The old code could overrun a 650 ms consented session by waiting up to two
+seconds for SOCKS and five seconds for the outer DNS transaction. Its
+separate-process three-platform fixture now exercises a genuine stalled local
+SOCKS peer, checks the 650 ms deadline (<1750 ms wall elapsed to accommodate
+hosted scheduling), confirms zero UDP reply, no direct resolver contact and
+zero leaked relay permits, while retaining the full normal query, closed-gate
+and recovery scenarios. This is **not** native DNS packet interception.
+
+The original-Rust Windows-managed SSH control fixture additionally starts
+real authenticated OpenSSH under the **same-user Rust controller**, verifies
+binary/half-close through the live Rust SOCKS listener, then forcibly kills
+the owning agent process without clean IPC stop. It requires **both** the Rust
+SOCKS listener and the separately spawned OpenSSH dynamic SOCKS listener to
+be unreachable, validating Windows Job Object kill-on-close rather than merely
+a graceful `stop`. Failure must fail the existing hosted managed SSH job.
+Neither test provides persistent Windows firewall/kernel fail-closed; all
+unselected OS traffic and NDISRD modes are unchanged. No raw 512 acceptance,
+Win10/11, general packet-to-process or DNS leak-free claim.
+
 ## 2026-11-01: explicit UDP DNS -> Rust SOCKS5 -> DNS-over-TCP transport (CI PENDING)
 
 A new original-Rust bounded laboratory vertical `flowbridge-agent dns-udp-lab

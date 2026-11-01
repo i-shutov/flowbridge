@@ -168,7 +168,11 @@ async fn serve(request: Request) -> Result<Value, String> {
             continue;
         }
         accepted += 1;
-        let result = time::timeout(Duration::from_secs(5), async {
+        // A slow SOCKS handshake or DNS-over-TCP peer must not extend the
+        // single overall laboratory budget. Dropping this future cancels the
+        // SOCKS admission permit instead of holding a live relay after expiry.
+        let transaction_deadline = deadline.min(Instant::now() + Duration::from_secs(5));
+        let result = time::timeout_at(transaction_deadline, async {
             let upstream = pool
                 .connect(&destination, stop_rx.clone())
                 .await
@@ -190,14 +194,23 @@ async fn serve(request: Request) -> Result<Value, String> {
             response_rejections += 1;
             continue;
         }
-        if socket.send_to(&reply, peer).await.is_ok() {
-            replies += 1;
+        // Never deliver a late UDP answer after the bounded session expires.
+        // Even a temporarily back-pressured local send observes the same cap.
+        if Instant::now() >= deadline {
+            break;
+        }
+        match time::timeout_at(deadline, socket.send_to(&reply, peer)).await {
+            Ok(Ok(_)) => replies += 1,
+            _ if Instant::now() >= deadline => break,
+            _ => {}
         }
     }
     drop(stop_tx);
     Ok(json!({
         "kind": "explicit_local_udp_dns_via_supervised_socks_tcp_lab",
         "loop_completed": true,
+        "bounded_duration_ms": request.duration_ms,
+        "overall_deadline_exhausted": Instant::now() >= deadline,
         "queries_received": received,
         "queries_rejected_before_proxy": rejected,
         "queries_accepted": accepted,

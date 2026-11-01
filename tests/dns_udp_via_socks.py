@@ -13,6 +13,7 @@ import queue
 import socket
 import subprocess
 import threading
+import time
 
 
 def require(condition, message):
@@ -42,6 +43,92 @@ def listen():
     listener.listen(8)
     listener.settimeout(0.5)
     return listener
+
+
+
+def bounded_stall_probe(agent, resolver_port):
+    """An actual stalled SOCKS greeting must not outlive the TOTAL UDP budget.
+
+    No fake time or mocked transport: the Rust process dials a real TCP peer
+    which accepts its greeting but never sends the SOCKS selection response.
+    """
+    stalled = listen()
+    observed_greeting = threading.Event()
+    release = threading.Event()
+    failures = queue.Queue()
+
+    def stall_server():
+        try:
+            conn, _ = stalled.accept()
+            with conn:
+                conn.settimeout(3)
+                require(read_exact(conn, 3) == b'\x05\x01\x00',
+                        'Rust did not send a real SOCKS5 greeting to stalled peer')
+                observed_greeting.set()
+                release.wait(timeout=3)
+        except Exception as exc:
+            failures.put(type(exc).__name__)
+
+    worker = threading.Thread(target=stall_server, daemon=True)
+    worker.start()
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as reserve:
+        reserve.bind(('127.0.0.1', 0))
+        udp_port = reserve.getsockname()[1]
+    require(udp_port != stalled.getsockname()[1],
+            'Stall test UDP and TCP ports must be distinct')
+    request = {
+        'consent': 'DNS_UDP_OVER_SOCKS_LAB',
+        'bind': f'127.0.0.1:{udp_port}',
+        'upstream': f'127.0.0.1:{stalled.getsockname()[1]}',
+        'resolver': f'127.0.0.1:{resolver_port}',
+        'duration_ms': 650,
+        'max_queries': 1,
+    }
+    process = subprocess.Popen([str(agent), 'dns-udp-lab', json.dumps(request)],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               text=True)
+    try:
+        ready = queue.Queue()
+        threading.Thread(target=lambda: ready.put(process.stderr.readline()),
+                         daemon=True).start()
+        require(ready.get(timeout=7).strip() == 'FLOWBRIDGE_DNS_LAB_READY',
+                'Stalled DNS lab did not bind the real loopback UDP socket')
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
+            udp.bind(('127.0.0.1', 0))
+            udp.sendto(question(0x6666), ('127.0.0.1', udp_port))
+            start = time.monotonic()
+            stdout, _stderr = process.communicate(timeout=5)
+            elapsed_ms = int((time.monotonic() - start) * 1000)
+            udp.settimeout(.2)
+            try:
+                late_reply, _ = udp.recvfrom(4096)
+            except socket.timeout:
+                late_reply = None
+            require(late_reply is None, 'Stalled SOCKS sent a late DNS UDP answer')
+        report = json.loads(stdout)
+        require(process.returncode == 0 and observed_greeting.is_set()
+                and elapsed_ms < 1750
+                and report['bounded_duration_ms'] == 650
+                and report['overall_deadline_exhausted'] is True
+                and report['queries_received'] == 1
+                and report['queries_accepted'] == 1
+                and report['replies_returned'] == 0
+                and report['upstream_failures_without_direct_retry'] == 1
+                and report['active_relay_slots_at_exit'] == 0
+                and report['direct_resolver_connections'] == 0,
+                'Real stalled SOCKS handshake exceeded absolute UDP deadline')
+        require(failures.empty(), 'Stalled TCP SOCKS peer failed')
+        return {'passed': True, 'elapsed_ms': elapsed_ms,
+                'total_budget_ms': 650, 'real_stalled_socks_tcp': True,
+                'no_udp_reply': True, 'no_direct_fallback': True,
+                'relay_slots_released': True}
+    finally:
+        release.set()
+        if process.poll() is None:
+            process.kill()
+            process.communicate(timeout=5)
+        stalled.close()
+        worker.join(timeout=3)
 
 
 def main():
@@ -193,6 +280,10 @@ def main():
         require(counts == {'socks_connects': 4, 'socks_denials': 1,
                            'resolver_tcp_connections': 3},
                 'Unexpected real socket counts or DIRECT fallback')
+        resolver_before_stall = counts['resolver_tcp_connections']
+        stall_evidence = bounded_stall_probe(args.agent, resolver.getsockname()[1])
+        require(counts['resolver_tcp_connections'] == resolver_before_stall,
+                'Stalled SOCKS handshake leaked a direct resolver connection')
         for name in ('native_ndisrd_interception', 'selected_app_dns_protected',
                      'system_dns_modified', 'dns_leak_free', 'protected_mode',
                      'win10_11_acceptance', 'release_accepted'):
@@ -217,6 +308,7 @@ def main():
             'invalid_query_denied_before_proxy': True,
             'tampered_dns_reply_rejected': True,
             'no_direct_fallback': True, 'consent_denial': True,
+            'absolute_session_deadline_stalled_socks': stall_evidence,
             'native_ndisrd_interception': False, 'selected_app_dns_protected': False,
             'dns_leak_free': False, 'release_accepted': False,
             'agent_report': report,

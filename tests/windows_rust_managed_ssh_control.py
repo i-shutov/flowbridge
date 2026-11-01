@@ -218,12 +218,48 @@ def run(agent: Path, ssh: Path, identity: Path, known: Path, user: str,
                 raise AssertionError("Rust SOCKS listener survived explicit stop")
         except OSError:
             report["listener_closed_after_stop"] = True
+
+        # A real forced termination (not graceful IPC stop) must close the
+        # independent OpenSSH -D child through Windows JOB_OBJECT kill-on-close.
+        # This proves only user-mode listener cleanup, NOT kernel fail-closed.
+        proc = launch(good)
+        try:
+            def crash_ready():
+                if proc.poll() is not None:
+                    raise AssertionError("Crash acceptance SSH process exited before ready")
+                status = control(agent, "status", accept_failure=True)
+                if status is not None and status.get("managed_ssh_gate_ready") is True:
+                    return True
+                return None
+            wait_for(crash_ready, seconds=35)
+            round_trip(ingress, target_port)
+            proc.kill()
+            proc.communicate(timeout=15)
+            require(proc.returncode != 0, "Agent was not force-terminated")
+
+            def both_owned_listeners_closed():
+                for port in (ingress, socks):
+                    try:
+                        probe = socket.create_connection(("127.0.0.1", port),
+                                                         timeout=.2)
+                    except OSError:
+                        continue
+                    probe.close()
+                    return None
+                return True
+            wait_for(both_owned_listeners_closed, seconds=12)
+            report["forced_agent_crash_closed_rust_and_openssh_listeners"] = True
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.communicate(timeout=5)
     report["passed"] = all(report.get(key) is True for key in (
         "invalid_direct_profile_rejected", "ssh_unreachable_rejected_without_direct",
         "authenticated_ssh_traffic", "actual_binary_half_close",
         "live_socks_reload_without_carrier_change",
         "carrier_change_rejected_and_existing_connection_survived",
-        "listener_closed_after_stop"))
+        "listener_closed_after_stop",
+        "forced_agent_crash_closed_rust_and_openssh_listeners"))
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     require(report["passed"], "Rust-owned SSH Windows control acceptance failed")
