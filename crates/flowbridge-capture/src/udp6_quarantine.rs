@@ -17,8 +17,8 @@ use std::net::Ipv6Addr;
 const TARGET: Ipv6Addr = Ipv6Addr::new(0x2001, 0x0db8, 0, 0, 0, 0, 0, 0x0053);
 #[cfg(all(windows, target_pointer_width = "64"))]
 const QUERY: &[u8] = &[
-    0x46, 0x42, 0x06, 0, 0, 1, 0, 0, 0, 0, 0, 0, 7, b'i', b'n', b'v', b'a', b'l', b'i', b'd', 0,
-    0, 28, 0, 1,
+    0x46, 0x42, 0x06, 0, 0, 1, 0, 0, 0, 0, 0, 0, 7, b'i', b'n', b'v', b'a', b'l', b'i', b'd', 0, 0,
+    28, 0, 1,
 ];
 
 #[derive(Debug, Deserialize)]
@@ -51,7 +51,9 @@ impl Request {
             || !(2..=4).contains(&self.max_queries)
             || !self.rescue_attested
         {
-            return Err("Explicit bounded IPv6 TEST-NET drop lab and non-link-local source required".into());
+            return Err(
+                "Explicit bounded IPv6 TEST-NET drop lab and non-link-local source required".into(),
+            );
         }
         Ok(())
     }
@@ -106,10 +108,7 @@ impl Quarantine {
             return LabDisposition::Original;
         }
         let ip = &frame[offset..];
-        if ip[0] >> 4 != 6
-            || ip[8..24] != self.source.octets()
-            || ip[24..40] != TARGET.octets()
-        {
+        if ip[0] >> 4 != 6 || ip[8..24] != self.source.octets() || ip[24..40] != TARGET.octets() {
             return LabDisposition::Original;
         }
         self.dropped += 1;
@@ -163,10 +162,14 @@ fn native(request: Request) -> Result<Value, String> {
     }
     // Establish the route *before* activating interception. No packet is
     // transmitted by connect(); send occurs only with a live driver session.
-    let socket = UdpSocket::bind((request.local_ipv6, 0))
-        .map_err(|_| "IPv6 canary source bind failed")?;
-    socket.connect((TARGET, 53)).map_err(|_| "IPv6 documentation route unavailable")?;
-    let local: SocketAddr = socket.local_addr().map_err(|_| "IPv6 source endpoint unavailable")?;
+    let socket =
+        UdpSocket::bind((request.local_ipv6, 0)).map_err(|_| "IPv6 canary source bind failed")?;
+    socket
+        .connect((TARGET, 53))
+        .map_err(|_| "IPv6 documentation route unavailable")?;
+    let local: SocketAddr = socket
+        .local_addr()
+        .map_err(|_| "IPv6 source endpoint unavailable")?;
     if local.ip() != request.local_ipv6 {
         return Err("IPv6 canary route changed source address".into());
     }
@@ -243,7 +246,8 @@ mod tests {
 
     fn frame(tags: u8, source: Ipv6Addr, target: Ipv6Addr, next: u8) -> Vec<u8> {
         let mut bytes = vec![0u8; 14];
-        bytes[12..14].copy_from_slice(&(if tags == 0 { 0x86ddu16 } else { 0x8100u16 }).to_be_bytes());
+        bytes[12..14]
+            .copy_from_slice(&(if tags == 0 { 0x86ddu16 } else { 0x8100u16 }).to_be_bytes());
         for index in 0..tags {
             bytes.extend_from_slice(&[0, index + 1, 0x81, 0]);
         }
@@ -284,8 +288,16 @@ mod tests {
                 let target = frame(tags, source, TARGET, next);
                 assert!(drop_frame(&mut q, Direction::ToAdapter, &target));
                 assert!(!drop_frame(&mut q, Direction::ToStack, &target));
-                assert!(!drop_frame(&mut q, Direction::ToAdapter, &frame(tags, source, "2001:db8::99".parse().unwrap(), next)));
-                assert!(!drop_frame(&mut q, Direction::ToAdapter, &frame(tags, "2001:db8:abcd::43".parse().unwrap(), TARGET, next)));
+                assert!(!drop_frame(
+                    &mut q,
+                    Direction::ToAdapter,
+                    &frame(tags, source, "2001:db8::99".parse().unwrap(), next)
+                ));
+                assert!(!drop_frame(
+                    &mut q,
+                    Direction::ToAdapter,
+                    &frame(tags, "2001:db8:abcd::43".parse().unwrap(), TARGET, next)
+                ));
             }
         }
         assert_eq!(q.dropped, 15);
