@@ -61,6 +61,14 @@ FunctionEnd
 
 Section "Rust SSH/SOCKS candidate" SEC_MAIN
   SectionIn RO
+  ; An arbitrary /D target may be user-selected. Fail BEFORE SetOutPath
+  ; and File if the target already contains unrelated files or profiles.
+  ; Never silently replace a same-name EXE in an unregistered directory.
+  IfFileExists "$INSTDIR\*.*" 0 clean_candidate_target
+    DetailPrint "Candidate target is occupied; refusing to overwrite any user file"
+    SetErrorLevel 45
+    Abort
+  clean_candidate_target:
   SetOutPath "$INSTDIR"
   File "${PAYLOAD_DIR}\flowbridge.exe"
   File "${PAYLOAD_DIR}\flowbridge-agent.exe"

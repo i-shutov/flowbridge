@@ -108,7 +108,8 @@ def make_config(ssh: Path, identity: Path, known: Path, user: str,
 
 
 def run(agent: Path, ssh: Path, identity: Path, known: Path, user: str,
-        ssh_port: int, target_port: int, output: Path) -> dict:
+        ssh_port: int, target_port: int, output: Path,
+        installed_banner_helper: Path | None = None) -> dict:
     require(sys.platform == "win32", "This process-level acceptance requires Windows")
     agent = agent.resolve(strict=True)
     ssh = ssh.resolve(strict=True)
@@ -136,14 +137,23 @@ def run(agent: Path, ssh: Path, identity: Path, known: Path, user: str,
     with tempfile.TemporaryDirectory(prefix="flowbridge-rust-ssh-control-") as td:
         # Exercise the actual original-Rust helper from an installation-like
         # Windows path with spaces, not a hand-written Python ProxyCommand.
-        source_cli = Path("target/debug/flowbridge.exe").resolve(strict=True)
-        helper = Path(td) / "FlowBridge Program Files" / "flowbridge.exe"
-        helper.parent.mkdir(parents=True)
-        shutil.copy2(source_cli, helper)
-        secure_test_file(helper)
-        require(" " in str(helper) and sha256(source_cli) == sha256(helper),
-                "Rust banner helper copy or spaced-path fixture invalid")
+        if installed_banner_helper is None:
+            source_cli = Path("target/debug/flowbridge.exe").resolve(strict=True)
+            helper = Path(td) / "FlowBridge Program Files" / "flowbridge.exe"
+            helper.parent.mkdir(parents=True)
+            shutil.copy2(source_cli, helper)
+            secure_test_file(helper)
+            require(sha256(source_cli) == sha256(helper),
+                    "Rust banner helper copy or SHA fixture invalid")
+        else:
+            # Exercise the *actually installed* original-Rust NSIS payload.
+            # No development-tree CLI, Python ProxyCommand or copied sidecar.
+            helper = installed_banner_helper.resolve(strict=True)
+            require(helper.name.lower() == "flowbridge.exe" and helper.is_file(),
+                    "Installed Rust banner executable is missing or renamed")
+        require(" " in str(helper), "Banner helper path-with-spaces was not exercised")
         report["banner_helper_sha256"] = sha256(helper)
+        report["installed_banner_helper_exercised"] = installed_banner_helper is not None
         config_path = Path(td) / "managed.json"
         def write(profile):
             config_path.write_text(json.dumps(profile), encoding="utf-8")

@@ -137,7 +137,32 @@ jobs:
       - name: Windows unrelated signed OS PowerShell process with loopback GO denial and HTTP
         if: runner.os == 'Windows'
         run: python tests/windows_external_powershell_lab.py --output build/capture-candidate/unrelated-powershell-lifecycle.json
-      - name: Original Rust-only unsigned Windows installer, installed Banner Gate and IPC/SOCKS lifecycle
+      - name: Independently pin and verify signed isolated Windows OpenSSH server for installed-binary acceptance
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_ENVIRONMENT -ne 'github-hosted') { throw 'Refuse OpenSSH fixture outside hosted Windows' }
+          $root = Join-Path $env:RUNNER_TEMP 'flowbridge-installed-rust-ssh-fixture'
+          New-Item -ItemType Directory -Force $root | Out-Null
+          $archive = Join-Path $root 'OpenSSH-Win64.zip'
+          Invoke-WebRequest 'https://github.com/PowerShell/Win32-OpenSSH/releases/download/10.4.0.0p1-Preview/OpenSSH-Win64.zip' -OutFile $archive
+          $expected = 'b67ff8becd203502190ec42ac7787c24c2cd3325ed7700485fe7a1c83d2a7957'
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'Pinned official sshd ZIP SHA mismatch' }
+          Expand-Archive $archive -DestinationPath $root
+          $server = Join-Path $root 'OpenSSH-Win64/sshd.exe'
+          $client = Join-Path $env:WINDIR 'System32/OpenSSH/ssh.exe'
+          $keygen = Join-Path $env:WINDIR 'System32/OpenSSH/ssh-keygen.exe'
+          foreach ($exe in @($server, $client, $keygen)) {
+            if (-not (Test-Path $exe -PathType Leaf)) { throw 'Pinned Windows SSH executable missing' }
+            $sig = Get-AuthenticodeSignature $exe
+            if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'Microsoft') { throw 'Microsoft SSH signature invalid' }
+          }
+          "FLOWBRIDGE_INSTALL_SSHD=$server" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "FLOWBRIDGE_INSTALL_SSH=$client" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "FLOWBRIDGE_INSTALL_KEYGEN=$keygen" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          'FLOWBRIDGE_HOSTED_WINDOWS_SSH=1' | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Original Rust-only unsigned installer, guarded overwrite, installed authenticated SSH/SOCKS and safe uninstall
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -146,7 +171,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/windows_rust_candidate_installer.py --candidate build/capture-candidate/FlowBridge-Rust-Candidate-Windows.zip --output build/capture-candidate/FlowBridge-Rust-Candidate-Windows-UNSIGNED-setup.exe --report build/capture-candidate/windows-rust-installer-build.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python tests/windows_rust_candidate_installer.py --installer build/capture-candidate/FlowBridge-Rust-Candidate-Windows-UNSIGNED-setup.exe --report build/capture-candidate/windows-rust-installer-build.json --output build/capture-candidate/windows-rust-installed-lifecycle.json
+          python tests/windows_rust_candidate_installer.py --installer build/capture-candidate/FlowBridge-Rust-Candidate-Windows-UNSIGNED-setup.exe --report build/capture-candidate/windows-rust-installer-build.json --output build/capture-candidate/windows-rust-installed-lifecycle.json --ssh "$env:FLOWBRIDGE_INSTALL_SSH" --sshd "$env:FLOWBRIDGE_INSTALL_SSHD" --keygen "$env:FLOWBRIDGE_INSTALL_KEYGEN"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build separately allowlisted native-test FFI and original harness (not product payload)
         if: runner.os == 'Windows'

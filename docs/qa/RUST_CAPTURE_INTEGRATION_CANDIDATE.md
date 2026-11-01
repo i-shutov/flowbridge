@@ -1220,3 +1220,52 @@ This checkpoint is native lab acceptance only; **no main merge or release**.
 ### 2026-11-01 — Rust SCM local file provenance guard (candidate pending exact-HEAD CI)
 
 The original Rust Windows SCM staging, stopped-only profile replacement, service-run, current binary verification and x64 hash-pinned binary upgrade now reject UNC/device/extended-namespace paths, NTFS alternate streams, dot/parent traversal and reserved DOS names. The exact-local-drive validator also canonicalizes existing files to refuse reparse/junction destinations escaping into UNC/device namespaces. Windows hosted end-to-end tests verify malicious aliases do not create or mutate the service, then exercise genuine SOCKS negotiation, SCM and local-pipe STOP, configuration change, executable upgrade and rollback. This only proves local path provenance at verification time, NOT immutable ACLs, atomic disk upgrades, persistent NDISRD fail-closed, arbitrary packet/PID attribution, DNS containment, native Win10/11 acceptance or release readiness. No driver install or protected networking is performed.
+
+
+### 2026-11-01 — installed Windows original-Rust Banner First / authenticated SOCKS vertical (CI evidence pending)
+
+The Windows **unsigned, experimental, per-user** NSIS Rust-only candidate now
+has a separate reproducible test path from **installed binaries on disk** all
+the way through a genuine Windows OpenSSH handshake, strict pinned ephemeral
+host key and public-key authentication, original-Rust Banner First transport,
+SOCKS5 binary half-close, engine reload, unreachable SSH rejection without
+DIRECT fallback, and termination of both Rust and OpenSSH listeners after
+forced agent exit. The test must also complete an uninstall and verify user
+files survive. It is deliberately NOT a privileged packet-capture installer.
+
+The capture workflow builds the exact GitHub test-merge Rust agent+CLI, checks
+the four-file SHA-256/PE32+ manifest before NSIS packaging and performs a
+guarded, consented disposable Windows Server 2025 install. It independently
+downloads a hash-pinned official OpenSSH-Win64 server archive and verifies
+Microsoft Authenticode for sshd, Windows' ssh.exe and ssh-keygen.exe. Isolated
+sshd binds loopback only and uses fresh short-lived test keys; the server
+configuration, keys and stderr log are **not uploaded**. The installed
+flowbridge-agent.exe controls the installed flowbridge.exe in a path with
+spaces through the restricted Windows pipe; neither developer-tree executable
+is substituted in the installed-path control scenario. Outputs contain
+only SHA-256 and booleans, not credentials/process IDs/host keys.
+
+The installer now rejects a pre-occupied unregistered installation directory
+BEFORE copying any files; CI places an unrelated same-name flowbridge.exe
+and a user profile in that directory, verifies both remain byte-for-byte
+unchanged and no registry install marker/uninstaller is created. In-place
+reinstallation is separately denied, and uninstall removes only allowlisted
+Rust payloads while keeping any user-created profile. Native NDISRD, SCM
+service, global firewall, Defender, DNS and Windows system SSH service are
+never modified in this scenario.
+
+**Gate requires fresh evidence**: actual PR HEAD and GitHub test-merge SHA,
+Windows hosted capture job success including
+windows-rust-installed-lifecycle.json,
+installed-real-openssh.json and installed-managed-ssh-control.json,
+installer/executable SHA-256, and independent artifact inspection before this
+can be called an accepted Windows Server lab candidate. A green build alone
+does not prove the installed authenticated path. Raw 512-channel backend is
+a separately nonwaivable characterization; 128 managed held/1152 refused/
+10000 verified/4 independent SSH processes remain a separate acceptance gate.
+
+This is still **NOT** a Windows 10/11 beta or public release. It has no GUI,
+no arbitrary application packet-to-PID/creation-time proof, no persistent
+protected fail-closed after service/driver crash, no selected-app DNS/UDP/IPv6
+leak-freedom, no tested affected external route for this exact Rust build,
+and no Win10/11 native-driver acceptance. Do not merge main or publish 1.0.

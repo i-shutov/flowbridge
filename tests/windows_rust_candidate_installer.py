@@ -61,7 +61,14 @@ def main() -> None:
     parser.add_argument("--installer", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--ssh", type=Path, required=True)
+    parser.add_argument("--sshd", type=Path, required=True)
+    parser.add_argument("--keygen", type=Path, required=True)
     args = parser.parse_args()
+    for executable in ("ssh", "sshd", "keygen"):
+        path = getattr(args, executable).resolve(strict=True)
+        require(path.is_file(), "Missing explicitly verified Windows OpenSSH fixture")
+        setattr(args, executable, path)
     evidence = json.loads(args.report.read_text(encoding="utf-8"))
     installer = args.installer.resolve(strict=True)
     require(evidence.get("kind") == "unsigned_user_owned_rust_ssh_socks_candidate_installer_NOT_RELEASE"
@@ -83,6 +90,8 @@ def main() -> None:
         "installed_hashes_match_manifest": False,
         "real_windows_ssh_banner_transport": False,
         "real_windows_pipe_socks_reload_stop": False,
+        "installed_real_authenticated_banner_ssh_socks": False,
+        "occupied_destination_rejected_without_mutation": False,
         "reinstall_refused_without_partial_mutation": False,
         "uninstaller_preserved_user_profile": False,
         "registry_removed": False,
@@ -97,6 +106,23 @@ def main() -> None:
         with tempfile.TemporaryDirectory(prefix="flowbridge-rust-install-",
                                           dir=os.environ["RUNNER_TEMP"]) as temporary:
             base = Path(temporary)
+            # The directory selector must NEVER overwrite an existing file,
+            # even if HKCU has no prior candidate registration.
+            occupied = base / "Occupied Rust Candidate With Spaces"
+            occupied.mkdir()
+            marker = occupied / "flowbridge.exe"
+            marker.write_bytes(b"UNRELATED USER FILE - NEVER OVERWRITE\n")
+            personal = occupied / "my-profile.json"
+            personal.write_bytes(b'{"preserve":true}\n')
+            occupied_response = nsis_install(installer, occupied)
+            require(occupied_response.returncode != 0
+                    and marker.read_bytes() == b"UNRELATED USER FILE - NEVER OVERWRITE\n"
+                    and personal.read_bytes() == b'{"preserve":true}\n'
+                    and not (occupied / "Uninstall.exe").exists()
+                    and hkcu_value(cfgkey, "InstallDir") is None
+                    and hkcu_value(uninstallkey, "DisplayName") is None,
+                    "NSIS overwrote an unregistered existing user directory")
+            result["occupied_destination_rejected_without_mutation"] = True
             installed = base / "FlowBridge Rust Candidate With Spaces"
             install = nsis_install(installer, installed)
             require(install.returncode == 0, "NSIS per-user candidate installation failed")
@@ -159,6 +185,25 @@ def main() -> None:
                     lifecycle.get("stop_closed_listener") is True,
                     "Installed Rust process/sockets did not match archive or stop")
             result["real_windows_pipe_socks_reload_stop"] = True
+
+            # The *installed* agent controls actual Microsoft-signed OpenSSH
+            # through the *installed* Rust Banner First helper. Strict known
+            # hosts, ephemeral keys, SOCKS relay and crash/rollback are real
+            # Windows processes; no NDISRD driver, system SSH service or DNS
+            # configuration is modified.
+            from windows_installed_real_ssh import run as installed_ssh_run
+            ssh_result = installed_ssh_run(
+                agent, cli, args.ssh, args.sshd, args.keygen,
+                args.output.parent / "installed-real-openssh.json")
+            require(ssh_result["passed"] is True
+                    and ssh_result["installed_rust_agent_sha256"] ==
+                        expected["flowbridge-agent.exe"]
+                    and ssh_result["installed_rust_banner_cli_sha256"] ==
+                        expected["flowbridge.exe"]
+                    and ssh_result["actual_installed_ssh_authentication"] is True
+                    and ssh_result["no_direct_on_unready_ssh"] is True,
+                    "Actually installed Banner First + managed SSH acceptance failed")
+            result["installed_real_authenticated_banner_ssh_socks"] = True
 
             # Explicitly reject in-place reinstallation instead of silently
             # overwriting an installed binary, service image or user profile.
