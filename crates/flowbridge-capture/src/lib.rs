@@ -14,6 +14,7 @@ mod protocol_profile;
 pub mod relay;
 pub mod relay_probe;
 pub mod self_redirect;
+pub mod udp_quarantine;
 #[cfg(all(windows, target_pointer_width = "64"))]
 mod windows_self_redirect;
 

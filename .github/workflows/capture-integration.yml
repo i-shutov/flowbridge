@@ -43,6 +43,27 @@ jobs:
         run: |
           suffix=""; if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=".exe"; fi
           python tests/dns_udp_via_socks.py --agent "target/release/flowbridge-agent${suffix}" --output build/capture-candidate/dns-udp-socks-lifecycle.json
+      - name: Non-privileged UDP quarantine input denial on all OSes
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, pathlib, subprocess, sys
+          suffix = '.exe' if sys.platform == 'win32' else ''
+          agent = pathlib.Path('target/release/flowbridge-agent' + suffix).resolve()
+          probes = [
+              {'consent':'NATIVE_SELF_UDP_TESTNET_DROP_LAB','adapter_name':'x','local_ipv4':'127.0.0.1','duration_ms':3000,'max_queries':3},
+              {'consent':'NATIVE_SELF_UDP_TESTNET_DROP_LAB','adapter_name':'x','local_ipv4':'192.0.2.10','duration_ms':3000,'max_queries':99},
+              {'consent':'NATIVE_SELF_UDP_TESTNET_DROP_LAB','adapter_name':'x','local_ipv4':'192.0.2.10','duration_ms':3000,'max_queries':3,'protected':True},
+              {'consent':'','adapter_name':'x','local_ipv4':'192.0.2.10','duration_ms':3000,'max_queries':3},
+          ]
+          for req in probes:
+              proc = subprocess.run([str(agent), 'udp-testnet-drop-lab', json.dumps(req)],
+                                    capture_output=True, text=True, timeout=5)
+              report = json.loads(proc.stdout)
+              assert proc.returncode != 0 and report['ok'] is False, (req, report)
+              assert report['release_accepted'] is False
+          print('UDP_TESTNET_DROP_INPUT_DENY_PASS')
+          PY
       - name: Windows real IPv4 and available IPv6 UDP loopback plus IP Helper local owner snapshots
         if: runner.os == 'Windows'
         shell: bash

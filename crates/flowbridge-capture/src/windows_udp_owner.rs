@@ -204,6 +204,12 @@ fn assert_self_owned(local: SocketAddr) -> Result<(), String> {
     Ok(())
 }
 
+/// Lab-only consistency check of a process-owned UDP local bind. This does
+/// not authenticate any captured NDISRD packet or grant routing authority.
+pub(crate) fn require_self_owned_candidate(local: SocketAddr) -> Result<(), String> {
+    assert_self_owned(local)
+}
+
 /// Real Windows UDP loopback send/receive + two actual IP Helper snapshots.
 /// A successful result is NOT remote UDP-flow or NDISRD packet attribution.
 pub fn self_test() -> Result<Value, String> {
