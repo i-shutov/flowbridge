@@ -394,10 +394,8 @@ mod panel {
                 // unrelated controls: a valid notification carries the exact
                 // live child button HWND.
                 let control_id = (wp as u16) as i32;
-                if !matches!(
-                    control_id,
-                    ID_START | ID_REFRESH | ID_RELOAD | ID_STOP
-                ) || lp != control(window, control_id) as isize
+                if !matches!(control_id, ID_START | ID_REFRESH | ID_RELOAD | ID_STOP)
+                    || lp != control(window, control_id) as isize
                 {
                     return 0;
                 }
