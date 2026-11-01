@@ -13,14 +13,16 @@ use std::{
     thread,
     time::Duration,
 };
+use windows_sys::core::GUID;
 use windows_sys::Win32::{
     Foundation::HANDLE,
     NetworkManagement::WindowsFilteringPlatform::{
         FwpmEngineClose0, FwpmEngineOpen0, FwpmFilterAdd0, FwpmFreeMemory0,
+        FwpmSubLayerAdd0,
         FwpmGetAppIdFromFileName0, FWPM_CONDITION_ALE_APP_ID, FWPM_CONDITION_IP_PROTOCOL,
         FWPM_CONDITION_IP_REMOTE_PORT, FWPM_FILTER0, FWPM_FILTER_CONDITION0,
         FWPM_LAYER_ALE_AUTH_CONNECT_V4, FWPM_SESSION0, FWPM_SESSION_FLAG_DYNAMIC,
-        FWPM_SUBLAYER_UNIVERSAL, FWP_ACTION_BLOCK, FWP_BYTE_BLOB, FWP_BYTE_BLOB_TYPE,
+        FWPM_SUBLAYER0, FWP_ACTION_BLOCK, FWP_BYTE_BLOB, FWP_BYTE_BLOB_TYPE,
         FWP_MATCH_EQUAL, FWP_UINT16, FWP_UINT8,
     },
 };
@@ -28,6 +30,11 @@ use windows_sys::Win32::{
 const CONSENT: &str = "DYNAMIC_WFP_QA_LOOPBACK_ONLY";
 const CLIENT: &str = "FlowBridgeWfpLabClient.exe";
 const RPC_C_AUTHN_WINNT: u32 = 10;
+// Disposable QA-only namespace, never persistent or shipped as protected policy.
+const QA_SUBLAYER: GUID = GUID {
+    data1: 0xa39c7ed8, data2: 0x7301, data3: 0x44d1,
+    data4: [0xb4, 0x54, 0x9d, 0x0e, 0x80, 0xa9, 0x67, 0x3a],
+};
 
 struct Engine(HANDLE);
 impl Drop for Engine {
@@ -92,6 +99,19 @@ pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
         return Err(format!("WFP engine open failed: {status}"));
     }
     let engine = Engine(raw);
+    // Separate the QA block from same-sublayer terminating permits. Objects
+    // registered in this dynamic BFE session vanish when the guard dies.
+    let mut name: Vec<u16> = "FlowBridge temporary QA sublayer\0".encode_utf16().collect();
+    // SAFETY: zero is a valid C default; no PERSISTENT flag is set.
+    let mut sublayer: FWPM_SUBLAYER0 = unsafe { std::mem::zeroed() };
+    sublayer.subLayerKey = QA_SUBLAYER;
+    sublayer.displayData.name = name.as_mut_ptr();
+    sublayer.weight = 0xe000;
+    // SAFETY: live engine and valid sublayer for its dynamic lifetime.
+    let status = unsafe { FwpmSubLayerAdd0(engine.0, &sublayer, null()) };
+    if status != 0 {
+        return Err(format!("WFP QA dynamic sublayer add failed: {status}"));
+    }
     // SAFETY: zero is the documented default for all condition fields.
     let mut conditions: [FWPM_FILTER_CONDITION0; 3] = [unsafe { std::mem::zeroed() }; 3];
     conditions[0].fieldKey = FWPM_CONDITION_ALE_APP_ID;
@@ -112,10 +132,9 @@ pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
     // SAFETY: zero initialized C repr filter, all required fields populated.
     let mut filter: FWPM_FILTER0 = unsafe { std::mem::zeroed() };
     filter.layerKey = FWPM_LAYER_ALE_AUTH_CONNECT_V4;
-    filter.subLayerKey = FWPM_SUBLAYER_UNIVERSAL;
+    filter.subLayerKey = QA_SUBLAYER;
     filter.displayData.name = display.as_mut_ptr();
-    // Highest explicit BFE weight range within the default sublayer.
-    // FWP_EMPTY placed the real Windows QA filter below an effective permit.
+    // Highest filter weight range *within the private dynamic sublayer*.
     filter.weight.r#type = FWP_UINT8;
     filter.weight.Anonymous.uint8 = 15;
     filter.action.r#type = FWP_ACTION_BLOCK;
@@ -132,6 +151,7 @@ pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
         json!({
             "ok":true, "kind":"original_rust_dynamic_wfp_lab",
             "wfp_ale_block_installed":true, "app_id_scoped":true,
+            "dynamic_private_sublayer":true,
             "tcp_port_scoped":true, "guard_seconds_max":20,
             "filter_persistent":false, "ndisrd_touched":false,
             "wfp_ndisrd_ordering_proved":false, "crash_persistent_fail_closed":false,
