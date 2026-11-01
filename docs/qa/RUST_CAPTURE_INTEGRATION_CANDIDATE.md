@@ -1083,3 +1083,83 @@ Code and synthetic fixtures do NOT prove native fragmentation; the native
 experiment must be explicitly reported on its own. General packet-to-PID,
 protected crash persistence, arbitrary-app DNS leak-free, Windows 10/11
 acceptance, and release remain OPEN.
+
+
+## 2026-11-01: REAL signed-NDISRD IPv4 UDP fragmentation DROP, independent native lab PASS (NOT beta)
+
+This checkpoint **supersedes only the pending native-evidence status** of the
+separately consented IPv4 fragmented-UDP candidate above, not its exclusions.
+Actual Rust **implementation HEAD** `7e8c84fc9f94ea9afdb6637b114a5ba0170b0d12`;
+actual GitHub Actions test **merge-SHA** `39d4ccaff3d2fb0e00499a8ad127178627e16656`
+(main base `5b5afc2feeda2195f302380e615ba003d4906e09`).
+Original Rust code introduces an opt-in **separate consent string**, exactly two
+bounded 2048-byte self-owned UDP sends to the fixed reserved TEST-NET address
+`198.51.100.53:53` after signed NDISRD TUNNEL_BOTH activation, and requires
+actual observed IPv4 fragment frames and complete cleanup. Default 25-byte
+UDP-drop lab is unchanged. These are controlled canaries, not arbitrary
+selected-application traffic or a production DNS server.
+
+Independently pinned **private** QA workflow SHA
+`f813613478dd9d068858ba8011ca665a9a456065`; actual
+[VDSina native Actions run #41284856306](https://github.com/i-shutov/flowbridge-vps-qa/actions/runs/41284856306)
+**SUCCESS** on Windows Server 2025 with the separately installed genuine
+signed NDISRD driver (driver SHA-256
+`8623a9c34531cf73de4286ad518b84af03a331c78959769a1ca38723e3258984`).
+**Native counters:** 2 x 2048-byte canaries issued, **4 actual IPv4-fragmented
+outbound frames selected and dropped**, 0 selected originals transmitted to
+adapter, 37 driver frames observed, 33 unrelated frames reinjected unchanged.
+These counters prove real driver-observed fragment DROP; they do **not** include
+individual IPv4 identification values, so do not upgrade the aggregate to
+per-datagram PacketBound proof. No real Windows 10/11 was tested.
+
+The job checked Active Defender and Windows firewall, authenticated signed
+driver and pinned candidate **before** any adapter mode change; user-confirmed
+provider VNC and an independently armed SYSTEM MSI-uninstall rescue were used.
+Afterward adapter mode 0 re-entry, external network and Defender health were
+verified; rescue was disarmed without recovery, no packet payload or
+host/process identities were logged. **Mode 0 enables ordinary DIRECT**
+and is NOT a protected crash-persistent kill switch.
+
+**Independent downloaded-byte QA**:
+- Public Windows capture Actions run
+  [#41284517082](https://github.com/i-shutov/flowbridge/actions/runs/41284517082)
+  **3/3 SUCCESS**. Actions outer ZIP SHA-256:
+  `8c55d90eaed1c70e6755a93c3fd01bed955204b53dac6a8c09ba03cff8db3d5a`;
+  nested allowlisted original-Rust candidate ZIP SHA-256:
+  `9bad7a22ab88cee4cd65cd20a62d42c5a23acd9e5dd10956a5d05f7e632430d1`;
+  PE AMD64 original Rust `flowbridge-agent.exe` SHA-256:
+  `a18b42d0af96411ad22707e9185957f4b89abb9842be9955cbfaabf74cab6d2a`.
+  Its exact four files, manifest HEAD/test-merge, both PE AMD64 machine
+  `0x8664`, inner SHA-256 and no-vendor/no-legacy/no-release flags were checked.
+- Independent Linux and macOS outer capture ZIPs SHA-256:
+  `1c1b089f4846068b819c9469106b1c5ce04c76388fe6edc1151bd7beb4e21b9b`
+  and
+  `118237d0ddfd122222dd4a26f52418f6a3b5fd937b5e6bf26885730be8d8424c`.
+  Their nested four-file manifest/HEAD/test-merge and all payload hashes passed.
+- Private native report Actions artifact **13074895840**, independently
+  downloaded one-file JSON ZIP SHA-256
+  `3d2fba01ec269541d2021f697d5dccb884661b118b66b8b0865dd6f27677e841`,
+  matching GitHub artifact digest and
+  [private issue #1 evidence #6554967126](https://github.com/i-shutov/flowbridge-vps-qa/issues/1#issuecomment-6554967126).
+  Exact source/merge/binary/driver SHA, aggregate counts, rescue/rollback
+  and explicit false acceptance flags independently checked.
+
+**Unweakened hosted gates for implementation HEAD:** DNS **3/3 PASS**;
+capture **3/3 PASS**; Rust/native matrix **5/5 PASS after Windows-only
+unchanged-SHA rerun**. The original Windows Rust test attempt had a real
+transient bind/port race (Winsock 10048) in the unrelated runtime lifecycle
+test; retain that failure in history, do not suppress it. Windows **managed**
+OpenSSH 128 held / 1152 refused / 10000 verified / four independent processes
+**PASS**; **separate raw-512 characterization FAIL** at 244 held with
+Winsock 10054, as a nonwaived experimental capacity limit. Public
+[issue #41 checkpoint #6554982282](https://github.com/i-shutov/flowbridge/issues/41#issuecomment-6554982282)
+contains the exact original source and downloaded artifact evidence.
+
+**Open/forbidden claims:** NDISRD has no trustworthy embedded process owner;
+IP Helper local bind snapshots are NOT PacketBound. Arbitrary-application
+packet-to-PID/creation-time attribution, persistent protected fail-closed
+across agent/SSH crash, leak-free DNS/UDP/IPv6 including QUIC/DoH/DoT,
+native Windows 10/11 acceptance, macOS Network Extension, GUI/installer
+acceptance and public 1.0 remain unproven. VDSina lacks a non-link-local IPv6
+source/usable documentation route, so no native IPv6 DROP is claimed.
+This checkpoint is native lab acceptance only; **no main merge or release**.
