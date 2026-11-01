@@ -121,9 +121,6 @@ jobs:
       - name: Original Rust actual Windows BFE read-only filter snapshot during real live TCP
         if: runner.os == 'Windows'
         run: python tests/windows_wfp_readonly_preflight.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-readonly.json
-      - name: Real original Rust dynamic WFP app-ID block and killed-guard cleanup
-        if: matrix.os == 'windows-2025'
-        run: python tests/windows_wfp_dynamic_loopback.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-dynamic-lifecycle.json
       - name: Windows restricted named-pipe and live explicit SOCKS lifecycle
         if: runner.os == 'Windows'
         run: python tests/windows_capture_control.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/control-lifecycle.json
@@ -209,6 +206,12 @@ jobs:
                     'native_test_executed':False,'release_accepted':False}
           (root / 'manifest.json').write_text(json.dumps(report, indent=2)+'\n',encoding='utf-8')
           PY
+      # Preserve all independent installed GUI/SSH/SCM/native-test evidence
+      # before the deliberately strict, currently-failing WFP AppId research
+      # gate. This test still fails this Windows job on any unmet assertion.
+      - name: Real WFP AppId loopback and host-owned interface IPv4 matrix (strict)
+        if: matrix.os == 'windows-2025'
+        run: python tests/windows_wfp_dynamic_loopback.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-dynamic-lifecycle.json
       - name: Verify formatting (never auto-commit or waive failure)
         if: always()
         run: cargo fmt --all -- --check

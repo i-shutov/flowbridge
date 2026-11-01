@@ -26,6 +26,11 @@ fn main() {
                 .and_then(|p| flowbridge_capture::windows_wfp_dynamic_lab::client(p, consent))
         }
         #[cfg(windows)]
+        [command, address, port, consent] if command == "wfp-qa-client-local-ipv4" => {
+            port.parse::<u16>().map_err(|_| "Invalid WFP QA local-interface port".to_owned())
+                .and_then(|p| flowbridge_capture::windows_wfp_dynamic_lab::client_local_interface_ipv4(address, p, consent))
+        }
+        #[cfg(windows)]
         [command, config_path] if command == "service-stage" => {
             flowbridge_capture::windows_service_management::stage(config_path)
         }

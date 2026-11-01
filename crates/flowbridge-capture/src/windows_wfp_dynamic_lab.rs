@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use std::{
     ffi::c_void,
     io::{Read, Write},
-    net::{Ipv4Addr, SocketAddrV4, TcpStream},
+    net::{Ipv4Addr, SocketAddrV4, TcpStream, UdpSocket},
     os::windows::ffi::OsStrExt,
     path::Path,
     ptr::{null, null_mut},
@@ -236,11 +236,7 @@ pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
         "crash_persistent_fail_closed":false, "release_accepted":false}))
 }
 
-pub fn client(port: u16, consent: &str) -> Result<Value, String> {
-    if consent != CONSENT || !(1025..=65534).contains(&port) {
-        return Err("WFP QA client consent or port invalid".into());
-    }
-    let endpoint = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);
+fn probe_tcp_half_close(endpoint: SocketAddrV4) -> Result<Value, String> {
     let mut tcp = TcpStream::connect_timeout(&endpoint.into(), Duration::from_secs(2))
         .map_err(|_| "WFP QA TCP connect denied")?;
     tcp.set_read_timeout(Some(Duration::from_secs(3)))
@@ -255,6 +251,44 @@ pub fn client(port: u16, consent: &str) -> Result<Value, String> {
         return Err("WFP QA response mismatch".into());
     }
     Ok(json!({"ok":true,"real_tcp_half_close":true,"release_accepted":false}))
+}
+
+pub fn client(port: u16, consent: &str) -> Result<Value, String> {
+    if consent != CONSENT || !(1025..=65534).contains(&port) {
+        return Err("WFP QA client consent or port invalid".into());
+    }
+    probe_tcp_half_close(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port))
+}
+
+/// Second, independent hosted-Windows QA diagnostic: the destination IPv4
+/// must be currently assigned to this same host. The UDP bind is strictly a
+/// local-address ownership check; it sends no packets or changes networking.
+/// This is NOT evidence that the test traversed an external physical NIC.
+pub fn client_local_interface_ipv4(
+    address: &str,
+    port: u16,
+    consent: &str,
+) -> Result<Value, String> {
+    if consent != CONSENT || !(1025..=65534).contains(&port) {
+        return Err("WFP QA local-interface consent or port invalid".into());
+    }
+    let ip: Ipv4Addr = address
+        .parse()
+        .map_err(|_| "WFP QA local-interface IPv4 invalid")?;
+    let octets = ip.octets();
+    if ip.is_loopback()
+        || ip.is_unspecified()
+        || ip.is_multicast()
+        || octets[0] == 0
+        || octets[0] == 255
+        || (octets[0] == 169 && octets[1] == 254)
+    {
+        return Err("WFP QA requires a non-loopback assigned IPv4".into());
+    }
+    let binding = UdpSocket::bind(SocketAddrV4::new(ip, 0))
+        .map_err(|_| "WFP QA IPv4 is not bound to a local interface")?;
+    drop(binding);
+    probe_tcp_half_close(SocketAddrV4::new(ip, port))
 }
 
 #[cfg(test)]

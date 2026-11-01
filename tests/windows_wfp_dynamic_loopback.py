@@ -7,6 +7,7 @@ persistent fail-closed, NDISRD packet ownership, or Windows 10/11 acceptance.
 import argparse
 import hashlib
 import json
+import ipaddress
 import os
 from pathlib import Path
 import queue
@@ -32,10 +33,42 @@ class Handler(socketserver.BaseRequestHandler):
         if payload == b"probe":
             self.request.sendall(b"done")
 
-def client(exe, port):
+def client(exe, port, ip="127.0.0.1"):
+    command = ([str(exe), "wfp-qa-client", str(port), CONSENT]
+               if ip == "127.0.0.1" else
+               [str(exe), "wfp-qa-client-local-ipv4", ip, str(port), CONSENT])
     return subprocess.run(
-        [str(exe), "wfp-qa-client", str(port), CONSENT],
-        capture_output=True, text=True, encoding="utf-8", timeout=8)
+        command, capture_output=True, text=True, encoding="utf-8", timeout=8)
+
+
+def local_interface_candidate():
+    """Host-owned non-127 IPv4 only. UDP route lookup sends zero datagrams."""
+    candidates = set()
+    try:
+        candidates.update(item[4][0] for item in socket.getaddrinfo(
+            socket.gethostname(), None, socket.AF_INET, socket.SOCK_STREAM))
+    except OSError:
+        pass
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("192.0.2.1", 9))  # no send; local routing lookup
+            candidates.add(sock.getsockname()[0])
+    except OSError:
+        pass
+    for text in sorted(candidates):
+        try:
+            ip = ipaddress.IPv4Address(text)
+        except ipaddress.AddressValueError:
+            continue
+        if ip.is_loopback or ip.is_unspecified or ip.is_multicast or ip.is_link_local:
+            continue
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.bind((text, 0))  # proves assigned local address
+            return text
+        except OSError:
+            continue
+    return None
 
 def identity_probe(exe, target):
     # Run the actual Windows executable, not a mocked ID resolver. The
@@ -89,10 +122,12 @@ def main():
             }
 
             def run_trial(guard_consent, app_only=False, port_only=False,
-                          guard_executable=None):
+                          guard_executable=None, probe_ip="127.0.0.1",
+                          probe_port=None):
+                selected_port = port if probe_port is None else probe_port
                 guard = subprocess.Popen(
                     [str(guard_executable or agent), "wfp-qa-guard",
-                     str(qa), str(port), guard_consent],
+                     str(qa), str(selected_port), guard_consent],
                     stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE, text=True, encoding="utf-8")
                 q = queue.Queue(maxsize=1)
@@ -114,14 +149,14 @@ def main():
                     assert ready["tcp_port_scoped"] is (not app_only)
                     trial["ready"] = True
                     time.sleep(.2)
-                    blocked = client(qa, port)
+                    blocked = client(qa, selected_port, probe_ip)
                     trial["selected_denied"] = (
                         blocked.returncode != 0 and
                         "WFP QA TCP connect denied" in blocked.stdout)
-                    other_result = client(other, port)
+                    other_result = client(other, selected_port, probe_ip)
                     trial["different_executable_allowed"] = other_result.returncode == 0
                     try:
-                        with socket.create_connection(("127.0.0.1", port), timeout=2) as independent:
+                        with socket.create_connection((probe_ip, selected_port), timeout=2) as independent:
                             independent.sendall(b"probe")
                             independent.shutdown(socket.SHUT_WR)
                             trial["python_allowed"] = independent.recv(4) == b"done"
@@ -132,7 +167,7 @@ def main():
                         guard.kill()
                     guard.wait(timeout=8)
                 for attempt in range(15):
-                    recovered = client(qa, port)
+                    recovered = client(qa, selected_port, probe_ip)
                     if recovered.returncode == 0:
                         break
                     time.sleep(.2)
@@ -155,6 +190,58 @@ def main():
             self_guard_precise = run_trial(CONSENT, guard_executable=qa)
             stages = (port_trial, identity_trial, precise_trial,
                       self_guard_app_only, self_guard_precise)
+            # Independent second route: same-host non-127 interface IPv4.
+            # This is local-delivery traffic, not an external/on-wire trial.
+            # Keep the original loopback matrix mandatory even if this passes.
+            nic = {"available": False, "baseline_ok": False, "tested": False,
+                   "port_only_trial": None, "app_id_only_trial": None,
+                   "app_id_port_protocol_trial": None,
+                   "app_id_scoped_proven": False,
+                   "same_host_local_delivery_only": True,
+                   "actual_external_network_traffic": False,
+                   "host_network_modified": False, "ndisrd_modified": False,
+                   "address_and_process_identity_redacted": True}
+            nic_ip = local_interface_candidate()
+            if nic_ip is not None:
+                nic["available"] = True
+                try:
+                    with Server((nic_ip, 0), Handler) as nic_server:
+                        nic_port = nic_server.server_address[1]
+                        nic_thread = threading.Thread(
+                            target=nic_server.serve_forever, daemon=True)
+                        nic_thread.start()
+                        try:
+                            nic["baseline_ok"] = client(
+                                qa, nic_port, nic_ip).returncode == 0
+                            if nic["baseline_ok"]:
+                                nic["tested"] = True
+                                nic["port_only_trial"] = run_trial(
+                                    "DYNAMIC_WFP_QA_PORT_ONLY_DIAGNOSTIC",
+                                    port_only=True, probe_ip=nic_ip,
+                                    probe_port=nic_port)
+                                nic["app_id_only_trial"] = run_trial(
+                                    "DYNAMIC_WFP_QA_APP_ONLY_DIAGNOSTIC",
+                                    app_only=True, probe_ip=nic_ip,
+                                    probe_port=nic_port)
+                                nic["app_id_port_protocol_trial"] = run_trial(
+                                    CONSENT, probe_ip=nic_ip, probe_port=nic_port)
+                                a = nic["port_only_trial"]
+                                b = nic["app_id_only_trial"]
+                                c = nic["app_id_port_protocol_trial"]
+                                nic["app_id_scoped_proven"] = (
+                                    a["ready"] and a["selected_denied"] and
+                                    not a["different_executable_allowed"] and
+                                    not a["python_allowed"] and a["recovered"] and
+                                    all(t["ready"] and t["selected_denied"] and
+                                        t["different_executable_allowed"] and
+                                        t["python_allowed"] and t["recovered"]
+                                        for t in (b, c)))
+                        finally:
+                            nic_server.shutdown()
+                            nic_thread.join(timeout=4)
+                except (OSError, RuntimeError, AssertionError,
+                        subprocess.TimeoutExpired) as error:
+                    nic["error_class"] = type(error).__name__
             passed = (
                 identity["selected_self_matches_target"] is True and
                 identity["different_copy_self_matches_target"] is False and
@@ -163,7 +250,8 @@ def main():
                 stage["ready"] and stage["selected_denied"] and
                 stage["different_executable_allowed"] is (not stage["port_only"]) and
                 stage["python_allowed"] is (not stage["port_only"]) and
-                stage["recovered"] for stage in stages)
+                stage["recovered"] for stage in stages) and
+                (not nic["tested"] or nic["app_id_scoped_proven"])
             )
             result = {
                 "kind": "original_rust_real_wfp_dynamic_qa_diagnostic_matrix",
@@ -178,6 +266,7 @@ def main():
                 "app_id_port_protocol_trial": precise_trial,
                 "self_guard_app_id_only_trial": self_guard_app_only,
                 "self_guard_app_id_port_trial": self_guard_precise,
+                "local_interface_ipv4_diagnostic": nic,
                 "guard_killed_after_each_trial": True,
                 "unrestricted_port_trial_qa_loopback_only": True,
                 "persistent_filter_created": False,
