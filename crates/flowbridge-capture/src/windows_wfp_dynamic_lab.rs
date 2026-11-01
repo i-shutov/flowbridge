@@ -95,15 +95,15 @@ pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
     let mut conditions: [FWPM_FILTER_CONDITION0; 3] = [unsafe { std::mem::zeroed() }; 3];
     conditions[0].fieldKey = FWPM_CONDITION_ALE_APP_ID;
     conditions[0].matchType = FWP_MATCH_EQUAL;
-    conditions[0].conditionValue.type = FWP_BYTE_BLOB_TYPE;
+    conditions[0].conditionValue.r#type = FWP_BYTE_BLOB_TYPE;
     conditions[0].conditionValue.Anonymous.byteBlob = app.0;
     conditions[1].fieldKey = FWPM_CONDITION_IP_REMOTE_PORT;
     conditions[1].matchType = FWP_MATCH_EQUAL;
-    conditions[1].conditionValue.type = FWP_UINT16;
+    conditions[1].conditionValue.r#type = FWP_UINT16;
     conditions[1].conditionValue.Anonymous.uint16 = port;
     conditions[2].fieldKey = FWPM_CONDITION_IP_PROTOCOL;
     conditions[2].matchType = FWP_MATCH_EQUAL;
-    conditions[2].conditionValue.type = FWP_UINT8;
+    conditions[2].conditionValue.r#type = FWP_UINT8;
     conditions[2].conditionValue.Anonymous.uint8 = 6;
     let mut display: Vec<u16> = "FlowBridge disposable dynamic QA guard\0".encode_utf16().collect();
     // SAFETY: zero initialized C repr filter, all required fields populated.
@@ -111,8 +111,8 @@ pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
     filter.layerKey = FWPM_LAYER_ALE_AUTH_CONNECT_V4;
     filter.subLayerKey = FWPM_SUBLAYER_UNIVERSAL;
     filter.displayData.name = display.as_mut_ptr();
-    filter.weight.type = FWP_EMPTY;
-    filter.action.type = FWP_ACTION_BLOCK;
+    filter.weight.r#type = FWP_EMPTY;
+    filter.action.r#type = FWP_ACTION_BLOCK;
     filter.numFilterConditions = 3;
     filter.filterCondition = conditions.as_mut_ptr();
     let mut id = 0;
