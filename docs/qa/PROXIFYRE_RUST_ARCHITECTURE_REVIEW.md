@@ -94,3 +94,8 @@ bypass in the **self-owned** canary, at the cost of deliberate same-pair
 overblocking. No real NDISRD IPv6 packets, arbitrary PID attribution,
 crash-persistent containment, DNS privacy or personal Win10/11 acceptance
 are inferred from offline tests; see the candidate QA log for native proof.
+
+## Accepted read-only WFP/BFE visibility does not prove protected fail-closed (2026-11-01)
+
+On PR #56 code `9fbb3c16398594df938ab36e95a84175715abbb6`, test merge `92c640d05bec036ea881414a6afb5727a272691a`, an original Rust bounded `FwpmFilterEnum0` enumeration succeeded in a hosted Windows Server 2025 real TCP test. All three BFE snapshots observed 648 accessible filters while a separate socket's bytes survived. This confirms **enumeration API availability and safe coexistence with ordinary TCP only**, not filter enforcement, packet/PID attestation, native WFP→NDISRD ordering, crash-persistent blocking, or Windows 10/11 acceptance. See `RUST_CAPTURE_INTEGRATION_CANDIDATE.md` and [issue #41](https://github.com/i-shutov/flowbridge/issues/41). Next safe P0 design experiment requires explicit VNC recovery, independent SYSTEM rollback and a testable allowlisted selected flow; no custom WFP callout or silent firewall changes.
+
