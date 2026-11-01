@@ -165,11 +165,13 @@ def main() -> None:
                         and provenance.get("pr_head_sha") == evidence["pr_head_sha"],
                         "Fault-injected installer does not match pinned source/payload")
                 refused_fault = nsis_install(bad_setup, installed)
-                require(refused_fault.returncode != 0,
-                        "QA fault injection unexpectedly accepted a partial install")
+                require(refused_fault.returncode ==
+                        (46 if stage == "after-cli" else 47),
+                        "Expected specific NSIS QA injected-abort code, "
+                        "not an unrelated preflight refusal")
                 remaining = ([p.name for p in installed.iterdir()]
                              if installed.exists() else [])
-                require(not remaining and
+                require(not remaining and not installed.exists() and
                         hkcu_value(cfgkey, "InstallDir") is None and
                         hkcu_value(uninstallkey, "DisplayName") is None and
                         scm_absent() and
@@ -178,7 +180,8 @@ def main() -> None:
                 result[flag] = True
             result["qa_fault_installers_not_product_artifacts"] = True
             install = nsis_install(installer, installed)
-            require(install.returncode == 0, "NSIS per-user candidate installation failed")
+            require(install.returncode == 0,
+                    f"NSIS per-user candidate install failed (code={install.returncode})")
             require(hkcu_value(cfgkey, "InstallDir") == str(installed),
                     "Installed registry path does not match expected user directory")
             require(hkcu_value(uninstallkey, "InstallLocation") == str(installed),

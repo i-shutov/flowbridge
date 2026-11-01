@@ -53,7 +53,12 @@ Function RollbackIncompleteInstall
   Delete "$INSTDIR\manifest.json"
   Delete "$INSTDIR\README.md"
   Delete "$INSTDIR\LICENSE"
-  ; Leave the selected directory intact (it may predate our attempt).
+  ; The preflight rejected ANY existing directory, including empty ones.
+  ; We may remove ONLY the freshly created empty candidate directory, never
+  ; recurse into it. NSIS cannot delete its current SetOutPath directory.
+  ; If anyone creates a concurrent file, nonrecursive RMDir safely fails.
+  SetOutPath "$TEMP"
+  RMDir "$INSTDIR"
 FunctionEnd
 
 Function .onInit

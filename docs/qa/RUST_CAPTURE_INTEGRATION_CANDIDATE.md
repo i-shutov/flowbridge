@@ -1,3 +1,25 @@
+### CI correction — rollback of newly created EMPTY directory (before acceptance)
+
+First implementation HEAD `f4830874fe9c8e6d749bd6eeb1f6dec078347f28`,
+[Windows capture job #124834787482](https://github.com/i-shutov/flowbridge/actions/runs/41302027291)
+**FAILED** the recovered-normal-install stage. Both QA injected faults returned nonzero
+and left no files or HKCU registration, but the rollback intentionally left
+the now-empty target folder. NSIS `IfFileExists "$INSTDIR\\*.*"` treats an
+**existing empty directory** as an occupied target, so the subsequent normal
+install refused. This is a genuine integration failure, not acceptable evidence.
+
+Correction: the NSIS rollback now switches `SetOutPath` to `$TEMP` and
+issues **nonrecursive `RMDir "$INSTDIR"`** only after deleting allowlisted
+payload names. The preflight always refuses ANY pre-existing directory before
+mutation, so on an ordinary successful preflight this only removes the new
+installer-created empty directory; if another file appears, RMDir fails rather
+than deleting it. No recursive delete, no user-profile cleanup. CI also now
+requires stage-specific NSIS exit codes **46/47**, zero product files and
+**absent directory** after each injected failure, then the exact same normal
+installer's full real SSH/SOCKS lifecycle. This change is **not accepted** until
+new exact-source CI and artifact audit finish. Raw-512 characterization
+remains separately failed (244 held, WinError 10054), not silently waived.
+
 ## 2026-11-01 — Windows Rust-only NSIS: fault-injected partial-install rollback and recovered authenticated SSH (CI PENDING)
 
 Within the existing PR #56, the unsigned **user-owned** original-Rust NSIS candidate now checks every individual file copy, uninstaller creation and HKCU registry write, with rollback restricted to candidate-owned filenames and registry keys. Registry registration remains the final commit marker; occupied directories and in-place upgrades still fail without mutation.
