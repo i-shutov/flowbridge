@@ -65,7 +65,7 @@ def main():
             assert baseline.returncode == 0
             assert json.loads(baseline.stdout)["real_tcp_half_close"] is True
 
-            def run_trial(guard_consent, app_only):
+            def run_trial(guard_consent, app_only=False, port_only=False):
                 guard = subprocess.Popen(
                     [str(agent), "wfp-qa-guard", str(qa), str(port), guard_consent],
                     stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -73,7 +73,8 @@ def main():
                 q = queue.Queue(maxsize=1)
                 threading.Thread(target=lambda: q.put(guard.stdout.readline()),
                                  daemon=True).start()
-                trial = {"app_only": app_only, "ready": False, "selected_denied": False,
+                trial = {"app_only": app_only, "port_only": port_only,
+                         "ready": False, "selected_denied": False,
                          "different_executable_allowed": False, "python_allowed": False,
                          "recovered": False}
                 try:
@@ -82,6 +83,8 @@ def main():
                     assert ready["dynamic_private_sublayer"] is True
                     assert ready["filter_persistent"] is False
                     assert ready["diagnostic_app_id_only"] is app_only
+                    assert ready["diagnostic_port_only"] is port_only
+                    assert ready["app_id_scoped"] is (not port_only)
                     assert ready["tcp_port_scoped"] is (not app_only)
                     trial["ready"] = True
                     time.sleep(.2)
@@ -91,10 +94,13 @@ def main():
                         "WFP QA TCP connect denied" in blocked.stdout)
                     other_result = client(other, port)
                     trial["different_executable_allowed"] = other_result.returncode == 0
-                    with socket.create_connection(("127.0.0.1", port), timeout=2) as independent:
-                        independent.sendall(b"probe")
-                        independent.shutdown(socket.SHUT_WR)
-                        trial["python_allowed"] = independent.recv(4) == b"done"
+                    try:
+                        with socket.create_connection(("127.0.0.1", port), timeout=2) as independent:
+                            independent.sendall(b"probe")
+                            independent.shutdown(socket.SHUT_WR)
+                            trial["python_allowed"] = independent.recv(4) == b"done"
+                    except OSError:
+                        trial["python_allowed"] = False
                 finally:
                     if guard.poll() is None:
                         guard.kill()
@@ -107,14 +113,18 @@ def main():
                 trial["recovered"] = recovered.returncode == 0
                 return trial
 
-            # AppId-only distinguishes identity failure from bad remote port
-            # or protocol match. A registered WFP filter is never a PASS alone.
-            identity_trial = run_trial("DYNAMIC_WFP_QA_APP_ONLY_DIAGNOSTIC", True)
-            precise_trial = run_trial(CONSENT, False)
-            stages = (identity_trial, precise_trial)
-            passed = all(all(stage[k] for k in (
-                "ready", "selected_denied", "different_executable_allowed",
-                "python_allowed", "recovered")) for stage in stages)
+            # Port-only must deny ALL clients on the one unique ephemeral QA
+            # port; AppId-only and precise trials must deny only selected EXE.
+            # This discriminates ineffective BFE filtering from AppId mismatch.
+            port_trial = run_trial("DYNAMIC_WFP_QA_PORT_ONLY_DIAGNOSTIC", port_only=True)
+            identity_trial = run_trial("DYNAMIC_WFP_QA_APP_ONLY_DIAGNOSTIC", app_only=True)
+            precise_trial = run_trial(CONSENT)
+            stages = (port_trial, identity_trial, precise_trial)
+            passed = all(
+                stage["ready"] and stage["selected_denied"] and
+                stage["different_executable_allowed"] is (not stage["port_only"]) and
+                stage["python_allowed"] is (not stage["port_only"]) and
+                stage["recovered"] for stage in stages)
             result = {
                 "kind": "original_rust_real_wfp_dynamic_qa_diagnostic_matrix",
                 "passed": passed,
@@ -122,9 +132,11 @@ def main():
                     ["git", "rev-parse", "HEAD"], text=True).strip(),
                 "agent_sha256": digest,
                 "copied_client_sha256": hashlib.sha256(qa.read_bytes()).hexdigest(),
+                "port_only_trial": port_trial,
                 "app_id_only_trial": identity_trial,
                 "app_id_port_protocol_trial": precise_trial,
                 "guard_killed_after_each_trial": True,
+                "unrestricted_port_trial_qa_loopback_only": True,
                 "persistent_filter_created": False,
                 "ndisrd_modified": False,
                 "wfp_ndisrd_ordering_proved": False,
