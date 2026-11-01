@@ -1,3 +1,21 @@
+### 2026-11-01 — Actual hosted Win32 GUI QA: cross-process EDIT status oracle correction (CI PENDING)
+
+A real installed GUI Windows run on source `69f5ca82ffb72d4b30ec518e7b11665e5456741a`
+failed because its Python QA process continued seeing the EDIT control's
+initial `Checking the local agent...` text, even after serializing Start
+against WM_CREATE status. **Root cause investigated at the Windows API
+boundary:** Microsoft documents that `GetWindowTextW` cannot retrieve
+changing control text from another process; for another application's EDIT,
+send `WM_GETTEXT` instead. The QA now uses bounded
+`SendMessageTimeoutW(WM_GETTEXT, SMTO_ABORTIFHUNG)` with an explicit
+buffer/timeout, and on failure reports only boolean pipe reachability and
+GUI liveness (no profile path, keys or secrets). This is a correction of
+an invalid cross-process GUI test oracle, **not** a waiver of real click,
+SOCKS, SSH or lifecycle assertions. A new exact-head CI run must actually
+prove the panel works. The existing bounded action queue remains to ensure
+Start/Refresh clicks cannot be silently dropped.
+
+---
 ## 2026-11-01 — Integrated native Windows GUI -> installed Banner First / real OpenSSH / SOCKS (CI PENDING)
 
 The installed Rust-only NSIS candidate now must pass **two actual Win32 control

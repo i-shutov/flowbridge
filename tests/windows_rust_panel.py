@@ -24,6 +24,8 @@ from windows_capture_control import blocked_socks_connect, command, profile
 
 BM_CLICK = 0x00F5
 WM_CLOSE = 0x0010
+WM_GETTEXT = 0x000D
+SMTO_ABORTIFHUNG = 0x0002
 IDYES = 6
 ID_PATH = 101
 ID_START = 102
@@ -39,8 +41,13 @@ user32.GetDlgItem.argtypes = [wintypes.HWND, ctypes.c_int]
 user32.GetDlgItem.restype = wintypes.HWND
 user32.SetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPCWSTR]
 user32.SetWindowTextW.restype = wintypes.BOOL
-user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-user32.GetWindowTextW.restype = ctypes.c_int
+# GetWindowTextW cannot read a live EDIT control in another process.
+# WM_GETTEXT is a system message and is marshalled across Win32 processes.
+user32.SendMessageTimeoutW.argtypes = [
+    wintypes.HWND, ctypes.c_uint, ctypes.c_size_t, ctypes.c_size_t,
+    ctypes.c_uint, ctypes.c_uint, ctypes.POINTER(ctypes.c_size_t),
+]
+user32.SendMessageTimeoutW.restype = wintypes.BOOL
 user32.PostMessageW.argtypes = [wintypes.HWND, ctypes.c_uint, wintypes.WPARAM, wintypes.LPARAM]
 user32.PostMessageW.restype = wintypes.BOOL
 user32.SendMessageW.argtypes = [wintypes.HWND, ctypes.c_uint, wintypes.WPARAM, wintypes.LPARAM]
@@ -73,9 +80,17 @@ def control(window: int, ident: int) -> int:
 
 
 def text_of(hwnd: int) -> str:
+    # This tester is ANOTHER process. GetWindowTextW returns only the
+    # cross-process caption/cache and cannot read changing EDIT text.
+    # WM_GETTEXT is natively marshalled; timeout bounds a hung panel.
     buffer = ctypes.create_unicode_buffer(8192)
-    size = user32.GetWindowTextW(hwnd, buffer, len(buffer))
-    require(size >= 0, "Win32 text retrieval failed")
+    copied = ctypes.c_size_t(0)
+    sent = user32.SendMessageTimeoutW(
+        hwnd, WM_GETTEXT, len(buffer), ctypes.addressof(buffer),
+        SMTO_ABORTIFHUNG, 1500, ctypes.byref(copied),
+    )
+    require(bool(sent) and copied.value < len(buffer),
+            "Cross-process WM_GETTEXT failed or status exceeds bounded buffer")
     return buffer.value
 
 
@@ -168,8 +183,17 @@ def main() -> None:
                 # Safe public status only, never reveal config path/key.
                 observed = text_of(status)
                 state = "running" if observed.startswith("RUST SOCKS") else "not-running"
+                # Do not expose profile/SSH identity. Differentiate a failed
+                # Win32 action from an incorrect status-control test oracle.
+                probe = subprocess.run(
+                    [str(agent), "control", "status"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    timeout=5, check=False,
+                )
                 raise AssertionError(
                     f"GUI start failed; panel_status_class={state}; "
+                    f"agent_pipe_reachable={probe.returncode == 0}; "
+                    f"panel_alive={process.poll() is None}; "
                     f"panel_status_excerpt={observed[:280]!r}"
                 ) from original
             report["gui_start_same_user_rust_agent"] = True
