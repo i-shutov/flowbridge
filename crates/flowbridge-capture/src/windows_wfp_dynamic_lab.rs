@@ -57,7 +57,6 @@ impl Drop for AppBlob {
     }
 }
 
-
 // A deliberately read-only identity cross-check. An AppId returned from a
 // filename is NOT proof that the kernel attached it to any network packet.
 // The two BFE blobs stay private; neither path nor raw AppId is reported.
@@ -98,8 +97,8 @@ pub fn identity_probe(path: &str, consent: &str) -> Result<Value, String> {
         return Err("WFP identity probe requires exact QA consent".into());
     }
     let target = lookup_app(Path::new(path))?;
-    let own = std::env::current_exe()
-        .map_err(|_| "Unable to resolve the QA executable".to_owned())?;
+    let own =
+        std::env::current_exe().map_err(|_| "Unable to resolve the QA executable".to_owned())?;
     let self_id = lookup_app(&own)?;
     Ok(json!({
         "ok": true,
