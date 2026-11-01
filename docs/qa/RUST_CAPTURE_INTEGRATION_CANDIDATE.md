@@ -1,3 +1,36 @@
+## 2026-11-02 — WFP exact-filter cross-process AppId source discrimination (CI PENDING)
+
+At PR #56 source parent `0bcc0106c8e88e5a048d20461edff3c964b541f0`, a strict hosted-Windows WFP test still
+observed three actual `CLASSIFY_DROP` events tied to the **exact ephemeral
+port-only filter ID**, all with an AppId but none byte-equal to either copied
+Rust QA executable. At the same time the AppId-scoped real TCP tests failed
+on both loopback and same-host non-127 IPv4; filter readback was exact.
+This is a root-cause investigation, not an app-level routing fix.
+
+This coordinated original Rust + real Windows Python QA change now cross-checks
+each exact-filter event against FOUR independently obtained BFE executable AppIds:
+selected Rust copy, different-path byte-identical Rust copy, original Rust agent
+and the actual Python fixture executable. It reports only aggregate equality
+counts, UTF-16LE structural validity, case/slash-normalized equality and
+executable-basename equality; no raw path, PID, filter ID, packet, user or
+stable fingerprint is persisted. The same source-owned guard is tested at
+both 127.0.0.1 and independently bound host-owned non-127 local IPv4, with
+read-only exact-filter net-event correlation on both routes. The original
+real selected-vs-independent-user TCP matrix and port-only negative
+control remain strict; a successful event lookup NEVER overrides a failed
+application filter test.
+
+Hypothesis discriminators: a Python/agent AppId match suggests the kernel
+event belongs to a different executable; a basename-only or ASCII
+normalization match suggests image-path canonicalization; no match leaves
+kernel identity/driver ordering unresolved. All are **observations**, not
+trusted packet-to-process evidence. No BFE audit setting, permanent filter,
+host firewall, NDISRD mode, security protection or paid VPS is changed.
+**Exact new HEAD CI, test-merge and independently downloaded artifact hashes
+are required before this block is accepted.** Native Win10/11,
+crash-persistent protected fail-closed, DNS/UDP/IPv6 leak containment, raw
+512 OpenSSH stability and release 1.0 remain unproven.
+
 ## 2026-11-01 — Exact ephemeral BFE filter-ID / WFP CLASSIFY_DROP causal correlation (CI PENDING)
 
 After exact code SHA \`8f3a5d14d30f9f624680d71b5d1b9af28cd5854f\`, Windows Server

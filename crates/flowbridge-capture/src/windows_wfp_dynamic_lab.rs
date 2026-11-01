@@ -139,6 +139,55 @@ fn blob_matches(expected: &AppBlob, actual: &FWP_BYTE_BLOB) -> bool {
     actual_bytes == expected_bytes
 }
 
+
+fn normalized_utf16_app_id(blob: &FWP_BYTE_BLOB) -> Option<Vec<u16>> {
+    // CLASSIFY_DROP header AppId is a UTF-16LE path byte blob. Decode only
+    // privately, never serialize the path, bytes, or a stable fingerprint.
+    let size = blob.size as usize;
+    if size < 2 || size > 16_384 || size % 2 != 0 || blob.data.is_null() {
+        return None;
+    }
+    // SAFETY: bounded, non-null BFE-owned event blob during enumeration.
+    let bytes = unsafe { std::slice::from_raw_parts(blob.data, size) };
+    let mut units: Vec<u16> = bytes
+        .chunks_exact(2)
+        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+        .collect();
+    if units.last() == Some(&0) {
+        units.pop();
+    }
+    if units.is_empty() || units.contains(&0) {
+        return None;
+    }
+    for unit in &mut units {
+        if (b'A' as u16..=b'Z' as u16).contains(unit) {
+            *unit += 32;
+        } else if *unit == b'/' as u16 {
+            *unit = b'\\' as u16;
+        }
+    }
+    Some(units)
+}
+
+fn app_id_unicode_comparison(expected: &AppBlob, observed: &FWP_BYTE_BLOB) -> (bool, bool) {
+    // Strict bytes are checked separately; these supplementary counters can
+    // diagnose ASCII casing and executable-basename mismatches but must NEVER
+    // authorize a user-selected flow or a WFP security rule.
+    let expected_blob = unsafe { &*expected.0 };
+    let (Some(left), Some(right)) = (
+        normalized_utf16_app_id(expected_blob),
+        normalized_utf16_app_id(observed),
+    ) else {
+        return (false, false);
+    };
+    let left_name = left.rsplit(|&unit| unit == b'\\' as u16).next();
+    let right_name = right.rsplit(|&unit| unit == b'\\' as u16).next();
+    (
+        left == right,
+        left_name.is_some() && left_name == right_name,
+    )
+}
+
 fn same_guid(a: &GUID, b: &GUID) -> bool {
     a.data1 == b.data1 && a.data2 == b.data2 && a.data3 == b.data3 && a.data4 == b.data4
 }
@@ -269,6 +318,8 @@ fn verify_active_qa_filter(engine: HANDLE, filter_id: u64, port: u16) -> Result<
 pub fn event_identity_probe(
     selected_path: &str,
     other_path: &str,
+    python_path: &str,
+    agent_path: &str,
     port: u16,
     filter_id: u64,
     consent: &str,
@@ -284,6 +335,13 @@ pub fn event_identity_probe(
     }
     let selected = lookup_app(Path::new(selected_path))?;
     let other = lookup_app(Path::new(other_path))?;
+    // These two independent executable paths are read-only comparators.
+    // They do not enter the transient WFP filter or a protected policy.
+    if !Path::new(python_path).is_file() || !Path::new(agent_path).is_file() {
+        return Err("WFP QA source comparator binary missing".into());
+    }
+    let python = lookup_app(Path::new(python_path))?;
+    let agent = lookup_app(Path::new(agent_path))?;
     let mut raw: HANDLE = null_mut();
     // SAFETY: read-only local BFE connection; no dynamic/persistent rule created.
     let status = unsafe { FwpmEngineOpen0(null(), RPC_C_AUTHN_WINNT, null(), null(), &mut raw) };
@@ -326,6 +384,14 @@ pub fn event_identity_probe(
         unsafe { FwpmNetEventEnum0(engine.0, enumerator.handle, 256, &mut events, &mut returned) };
     let mut selected_matches = 0usize;
     let mut other_matches = 0usize;
+    let mut python_matches = 0usize;
+    let mut agent_matches = 0usize;
+    let mut selected_ascii_normalized = 0usize;
+    let mut selected_basename_only = 0usize;
+    let mut other_basename_only = 0usize;
+    let mut python_basename_only = 0usize;
+    let mut agent_basename_only = 0usize;
+    let mut valid_unicode_appids = 0usize;
     let mut unmatched = 0usize;
     let mut no_app_id = 0usize;
     let mut unrelated_drop_events = 0usize;
@@ -358,10 +424,40 @@ pub fn event_identity_probe(
             exact_filter_drops += 1;
             if event.header.flags & FWPM_NET_EVENT_FLAG_APP_ID_SET == 0 {
                 no_app_id += 1;
-            } else if blob_matches(&selected, &event.header.appId) {
+                continue;
+            }
+            let observed = &event.header.appId;
+            if normalized_utf16_app_id(observed).is_some() {
+                valid_unicode_appids += 1;
+            }
+            let (selected_normalized, selected_basename) =
+                app_id_unicode_comparison(&selected, observed);
+            let (_, other_basename) = app_id_unicode_comparison(&other, observed);
+            let (_, python_basename) = app_id_unicode_comparison(&python, observed);
+            let (_, agent_basename) = app_id_unicode_comparison(&agent, observed);
+            if selected_normalized && !blob_matches(&selected, observed) {
+                selected_ascii_normalized += 1;
+            }
+            if selected_basename && !selected_normalized {
+                selected_basename_only += 1;
+            }
+            if other_basename && !blob_matches(&other, observed) {
+                other_basename_only += 1;
+            }
+            if python_basename && !blob_matches(&python, observed) {
+                python_basename_only += 1;
+            }
+            if agent_basename && !blob_matches(&agent, observed) {
+                agent_basename_only += 1;
+            }
+            if blob_matches(&selected, observed) {
                 selected_matches += 1;
-            } else if blob_matches(&other, &event.header.appId) {
+            } else if blob_matches(&other, observed) {
                 other_matches += 1;
+            } else if blob_matches(&python, observed) {
+                python_matches += 1;
+            } else if blob_matches(&agent, observed) {
+                agent_matches += 1;
             } else {
                 unmatched += 1;
             }
@@ -381,6 +477,16 @@ pub fn event_identity_probe(
         "unrelated_filter_classify_drops_same_port":unrelated_drop_events,
         "selected_event_appid_matches":selected_matches,
         "other_event_appid_matches":other_matches,
+        "python_event_appid_matches":python_matches,
+        "agent_event_appid_matches":agent_matches,
+        "event_appid_utf16_path_shape_valid":valid_unicode_appids,
+        "selected_appid_ascii_case_only_matches":selected_ascii_normalized,
+        "selected_basename_only_matches":selected_basename_only,
+        "other_basename_only_matches":other_basename_only,
+        "python_basename_only_matches":python_basename_only,
+        "agent_basename_only_matches":agent_basename_only,
+        "event_appid_expected_source_identity_complete":
+            selected_matches == 1 && other_matches == 1 && python_matches == 1,
         "other_or_unresolved_event_appid":unmatched,
         "exact_filter_events_without_appid":no_app_id,
         "bounded_scan_max":256,"redacted":true,"read_only":true,
@@ -592,6 +698,8 @@ mod tests {
         assert!(event_identity_probe(
             r"C:\Windows\System32\powershell.exe",
             r"C:\Windows\System32\not-a-lab.exe",
+            r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+            r"C:\Windows\System32\powershell.exe",
             50001,
             0,
             CONSENT

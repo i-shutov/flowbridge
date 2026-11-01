@@ -15,6 +15,7 @@ import shutil
 import socket
 import socketserver
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -177,7 +178,8 @@ def main():
                         else:
                             event = subprocess.run(
                                 [str(agent), "wfp-qa-event-identity", str(qa),
-                                 str(other), str(selected_port), str(filter_id), CONSENT],
+                                 str(other), str(Path(sys.executable).resolve()),
+                                 str(agent), str(selected_port), str(filter_id), CONSENT],
                                 capture_output=True, text=True, encoding="utf-8",
                                 timeout=8)
                             if event.returncode != 0:
@@ -250,7 +252,9 @@ def main():
                                 nic["port_only_trial"] = run_trial(
                                     "DYNAMIC_WFP_QA_PORT_ONLY_DIAGNOSTIC",
                                     port_only=True, probe_ip=nic_ip,
-                                    probe_port=nic_port)
+                                    probe_port=nic_port, inspect_events=True)
+                                nic["read_only_net_event_appid_correlation"] = (
+                                    nic["port_only_trial"].pop("event_probe"))
                                 nic["app_id_only_trial"] = run_trial(
                                     "DYNAMIC_WFP_QA_APP_ONLY_DIAGNOSTIC",
                                     app_only=True, probe_ip=nic_ip,

@@ -1,3 +1,15 @@
+## 2026-11-02 — Research constraint: actual WFP identity must be cross-correlated
+
+The transient original-Rust WFP AppId filter remains unable to deny a
+selected copied executable on hosted Server 2025 even though BFE readback
+matches its requested AppId and port-only ALE denial succeeds. A fresh
+read-only exact-filter-id event provenance check now compares live OS BFE
+event AppIds with selected, other, supervising Rust agent and Python client
+as separate identities, including in-memory normalized path-shape metrics.
+This is diagnostic only, never a packet-to-PID or protected routing authority.
+See RUST_CAPTURE_INTEGRATION_CANDIDATE.md. Permanent WFP, custom WFP
+drivers and premature release/protected/DNS assertions remain prohibited.
+
 ### 2026-11-01 — Exact-filter WFP event diagnostics, not a packet identity token
 
 Port-only WFP classification on actual hosted Windows produced three BFE

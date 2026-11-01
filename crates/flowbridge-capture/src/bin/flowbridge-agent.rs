@@ -21,7 +21,7 @@ fn main() {
             flowbridge_capture::windows_wfp_dynamic_lab::identity_probe(path, consent)
         }
         #[cfg(windows)]
-        [command, selected, other, port, filter_id, consent]
+        [command, selected, other, python, agent, port, filter_id, consent]
             if command == "wfp-qa-event-identity" =>
         {
             let port = port.parse::<u16>()
@@ -31,7 +31,7 @@ fn main() {
             port.and_then(|p| {
                 filter_id.and_then(|id| {
                     flowbridge_capture::windows_wfp_dynamic_lab::event_identity_probe(
-                        selected, other, p, id, consent,
+                        selected, other, python, agent, p, id, consent,
                     )
                 })
             })
