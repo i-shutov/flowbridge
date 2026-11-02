@@ -29,6 +29,34 @@ fn main() {
                 .and_then(|p| flowbridge_capture::windows_wfp_dynamic_lab::client_udp4(p, consent))
         }
         #[cfg(windows)]
+        [command, path, port, consent] if command == "wfp-qa-tcp6-guard" => {
+            port.parse::<u16>()
+                .map_err(|_| "Invalid WFP IPv6 TCP QA port".to_owned())
+                .and_then(|p| {
+                    flowbridge_capture::windows_wfp_dynamic_lab::guard_tcp6(path, p, consent)
+                })
+        }
+        #[cfg(windows)]
+        [command, path, port, consent] if command == "wfp-qa-udp6-guard" => {
+            port.parse::<u16>()
+                .map_err(|_| "Invalid WFP IPv6 UDP QA port".to_owned())
+                .and_then(|p| {
+                    flowbridge_capture::windows_wfp_dynamic_lab::guard_udp6(path, p, consent)
+                })
+        }
+        #[cfg(windows)]
+        [command, port, consent] if command == "wfp-qa-tcp6-client" => {
+            port.parse::<u16>()
+                .map_err(|_| "Invalid WFP IPv6 TCP QA port".to_owned())
+                .and_then(|p| flowbridge_capture::windows_wfp_dynamic_lab::client_tcp6(p, consent))
+        }
+        #[cfg(windows)]
+        [command, port, consent] if command == "wfp-qa-udp6-client" => {
+            port.parse::<u16>()
+                .map_err(|_| "Invalid WFP IPv6 UDP QA port".to_owned())
+                .and_then(|p| flowbridge_capture::windows_wfp_dynamic_lab::client_udp6(p, consent))
+        }
+        #[cfg(windows)]
         [command, path, consent] if command == "wfp-qa-identity" => {
             flowbridge_capture::windows_wfp_dynamic_lab::identity_probe(path, consent)
         }

@@ -1959,3 +1959,8 @@ The test must stay red until live Windows kernel enforcement is observed.
 No persistent WFP policy, system resolver, Defender, packet diversion,
 external route or Win10/11 release flag changes. Exact-head CI and artifact
 hashes are required before recording PASS.
+
+
+### 2026-11-02 — Native Windows IPv6 dual-protocol WFP lab integration (CI PENDING)
+
+New original Rust disposable `ALE_AUTH_CONNECT_V6` AppId+high-port guards and `::1` socket probes for **both TCP half-close and UDP echo**. Strict Windows CI must see selected EXE denied, identically copied different-name EXE and independent Python allowed, no selected packet/connection at real server, and full selected recovery after forced guard-process termination; no skips when IPv6 loopback unavailable. BFE filter readback validates exact V6 layer, AppId and protocol. No NDISRD, protected persistence, DNS resolver, general arbitrary packet PID ownership, real Win10/11 acceptance, or release claims. This checkpoint is **unverified until exact HEAD CI and artifacts finish**.

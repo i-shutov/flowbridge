@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use std::{
     ffi::c_void,
     io::{Read, Write},
-    net::{Ipv4Addr, SocketAddrV4, TcpStream, UdpSocket},
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpStream, UdpSocket},
     os::windows::{ffi::OsStrExt, io::AsRawHandle},
     path::{Path, PathBuf},
     ptr::{null, null_mut},
@@ -21,7 +21,8 @@ use windows_sys::Win32::{
         FwpmGetAppIdFromFileName0, FwpmNetEventCreateEnumHandle0, FwpmNetEventDestroyEnumHandle0,
         FwpmNetEventEnum0, FwpmSubLayerAdd0, FWPM_CONDITION_ALE_APP_ID, FWPM_CONDITION_IP_PROTOCOL,
         FWPM_CONDITION_IP_REMOTE_PORT, FWPM_FILTER0, FWPM_FILTER_CONDITION0,
-        FWPM_LAYER_ALE_AUTH_CONNECT_V4, FWPM_NET_EVENT0, FWPM_NET_EVENT_FLAG_APP_ID_SET,
+        FWPM_LAYER_ALE_AUTH_CONNECT_V4, FWPM_LAYER_ALE_AUTH_CONNECT_V6, FWPM_NET_EVENT0,
+        FWPM_NET_EVENT_FLAG_APP_ID_SET,
         FWPM_NET_EVENT_TYPE_CLASSIFY_DROP, FWPM_SESSION0, FWPM_SESSION_FLAG_DYNAMIC,
         FWPM_SUBLAYER0, FWP_ACTION_BLOCK, FWP_BYTE_BLOB, FWP_BYTE_BLOB_TYPE, FWP_MATCH_EQUAL,
         FWP_UINT16, FWP_UINT8,
@@ -32,6 +33,8 @@ use windows_sys::Win32::{
 
 const CONSENT: &str = "DYNAMIC_WFP_QA_LOOPBACK_ONLY";
 const UDP4_CONSENT: &str = "DYNAMIC_WFP_QA_UDP4_APP_PORT_ONLY";
+const TCP6_CONSENT: &str = "DYNAMIC_WFP_QA_TCP6_APP_PORT_ONLY";
+const UDP6_CONSENT: &str = "DYNAMIC_WFP_QA_UDP6_APP_PORT_ONLY";
 const DIAG: &str = "DYNAMIC_WFP_QA_APP_ONLY_DIAGNOSTIC";
 const PORT_DIAG: &str = "DYNAMIC_WFP_QA_PORT_ONLY_DIAGNOSTIC";
 const CLIENT: &str = "FlowBridgeWfpLabClient.exe";
@@ -286,6 +289,7 @@ fn verify_bfe_filter(
     app_only: bool,
     port_only: bool,
     ip_protocol: u8,
+    ipv6: bool,
 ) -> Result<(), String> {
     let mut raw: *mut FWPM_FILTER0 = null_mut();
     // SAFETY: live BFE engine, valid output pointer, observed filter ID.
@@ -297,7 +301,12 @@ fn verify_bfe_filter(
     // SAFETY: successfully retrieved live BFE filter.
     let filter = unsafe { &*stored.0 };
     let count = if port_only || app_only { 1 } else { 3 };
-    if !same_guid(&filter.layerKey, &FWPM_LAYER_ALE_AUTH_CONNECT_V4)
+    let layer = if ipv6 {
+        &FWPM_LAYER_ALE_AUTH_CONNECT_V6
+    } else {
+        &FWPM_LAYER_ALE_AUTH_CONNECT_V4
+    };
+    if !same_guid(&filter.layerKey, layer)
         || !same_guid(&filter.subLayerKey, &QA_SUBLAYER)
         || filter.action.r#type != FWP_ACTION_BLOCK
         || filter.numFilterConditions != count
@@ -640,7 +649,7 @@ fn validate(path: &str, port: u16, consent: &str) -> Result<(), String> {
 /// An actual process crash removes this dynamic filter (NOT persistent).
 pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
     validate(path, port, consent)?;
-    guard_protocol(path, port, consent, 6)
+    guard_protocol(path, port, consent, 6, false)
 }
 
 /// Actual IPv4 UDP AppId+destination-port denial, strictly a disposable
@@ -652,10 +661,34 @@ pub fn guard_udp4(path: &str, port: u16, consent: &str) -> Result<Value, String>
         return Err("WFP UDP QA requires separate exact consent".into());
     }
     validate(path, port, CONSENT)?;
-    guard_protocol(path, port, consent, 17)
+    guard_protocol(path, port, consent, 17, false)
 }
 
-fn guard_protocol(path: &str, port: u16, consent: &str, ip_protocol: u8) -> Result<Value, String> {
+/// Native Windows IPv6, disposable app-specific high-port TCP guard only.
+pub fn guard_tcp6(path: &str, port: u16, consent: &str) -> Result<Value, String> {
+    if consent != TCP6_CONSENT {
+        return Err("WFP IPv6 TCP QA requires separate exact consent".into());
+    }
+    validate(path, port, CONSENT)?;
+    guard_protocol(path, port, consent, 6, true)
+}
+
+/// Native Windows IPv6, disposable app-specific high-port UDP guard only.
+pub fn guard_udp6(path: &str, port: u16, consent: &str) -> Result<Value, String> {
+    if consent != UDP6_CONSENT {
+        return Err("WFP IPv6 UDP QA requires separate exact consent".into());
+    }
+    validate(path, port, CONSENT)?;
+    guard_protocol(path, port, consent, 17, true)
+}
+
+fn guard_protocol(
+    path: &str,
+    port: u16,
+    consent: &str,
+    ip_protocol: u8,
+    ipv6: bool,
+) -> Result<Value, String> {
     if ip_protocol != 6 && ip_protocol != 17 {
         return Err("WFP QA transport protocol unsupported".into());
     }
@@ -707,7 +740,11 @@ fn guard_protocol(path: &str, port: u16, consent: &str, ip_protocol: u8) -> Resu
         .collect();
     // SAFETY: zero initialized C repr filter, all required fields populated.
     let mut filter: FWPM_FILTER0 = unsafe { std::mem::zeroed() };
-    filter.layerKey = FWPM_LAYER_ALE_AUTH_CONNECT_V4;
+    filter.layerKey = if ipv6 {
+        FWPM_LAYER_ALE_AUTH_CONNECT_V6
+    } else {
+        FWPM_LAYER_ALE_AUTH_CONNECT_V4
+    };
     filter.subLayerKey = QA_SUBLAYER;
     filter.displayData.name = display.as_mut_ptr();
     // Highest filter weight range *within the private dynamic sublayer*.
@@ -739,6 +776,7 @@ fn guard_protocol(path: &str, port: u16, consent: &str, ip_protocol: u8) -> Resu
         app_only_diagnostic,
         port_only_diagnostic,
         ip_protocol,
+        ipv6,
     )?;
     println!(
         "{}",
@@ -752,7 +790,9 @@ fn guard_protocol(path: &str, port: u16, consent: &str, ip_protocol: u8) -> Resu
             "app_id_from_canonical_file_handle":true,
             "dynamic_private_sublayer":true,
             "tcp_port_scoped":ip_protocol == 6 && !app_only_diagnostic,
-            "udp_ipv4_port_scoped":ip_protocol == 17,
+            "udp_ipv4_port_scoped":ip_protocol == 17 && !ipv6,
+            "udp_ipv6_port_scoped":ip_protocol == 17 && ipv6,
+            "ipv6_ale_layer":ipv6,
             "ip_protocol":ip_protocol,
             "diagnostic_app_id_only":app_only_diagnostic,
             "diagnostic_port_only":port_only_diagnostic,
@@ -770,8 +810,8 @@ fn guard_protocol(path: &str, port: u16, consent: &str, ip_protocol: u8) -> Resu
         "crash_persistent_fail_closed":false, "release_accepted":false}))
 }
 
-fn probe_tcp_half_close(endpoint: SocketAddrV4) -> Result<Value, String> {
-    let mut tcp = TcpStream::connect_timeout(&endpoint.into(), Duration::from_secs(2))
+fn probe_tcp_half_close(endpoint: SocketAddr) -> Result<Value, String> {
+    let mut tcp = TcpStream::connect_timeout(&endpoint, Duration::from_secs(2))
         .map_err(|_| "WFP QA TCP connect denied")?;
     tcp.set_read_timeout(Some(Duration::from_secs(3)))
         .map_err(|_| "WFP QA read timeout setup failed")?;
@@ -791,7 +831,7 @@ pub fn client(port: u16, consent: &str) -> Result<Value, String> {
     if consent != CONSENT || !(1025..=65534).contains(&port) {
         return Err("WFP QA client consent or port invalid".into());
     }
-    probe_tcp_half_close(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port))
+    probe_tcp_half_close(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port).into())
 }
 
 /// Second, independent hosted-Windows QA diagnostic: the destination IPv4
@@ -822,7 +862,7 @@ pub fn client_local_interface_ipv4(
     let binding = UdpSocket::bind(SocketAddrV4::new(ip, 0))
         .map_err(|_| "WFP QA IPv4 is not bound to a local interface")?;
     drop(binding);
-    probe_tcp_half_close(SocketAddrV4::new(ip, port))
+    probe_tcp_half_close(SocketAddrV4::new(ip, port).into())
 }
 
 /// Real UDP/IPv4 localhost canary with explicit bounded receive timeout.
@@ -858,6 +898,46 @@ pub fn client_udp4(port: u16, consent: &str) -> Result<Value, String> {
     }))
 }
 
+/// Actual IPv6 TCP/half-close loopback probe, not DNS or packet-ownership evidence.
+pub fn client_tcp6(port: u16, consent: &str) -> Result<Value, String> {
+    if consent != TCP6_CONSENT || !(1025..=65534).contains(&port) {
+        return Err("WFP IPv6 TCP QA consent or port invalid".into());
+    }
+    probe_tcp_half_close(SocketAddrV6::new(Ipv6Addr::LOCALHOST, port, 0, 0).into())?;
+    Ok(json!({
+        "ok":true, "real_tcp_ipv6":true, "loopback_only":true,
+        "ndisrd_touched":false, "dns_leak_free":false,
+        "protected_fail_closed":false, "release_accepted":false
+    }))
+}
+
+/// Actual IPv6 UDP echo with explicit deadline and independent server oracle.
+pub fn client_udp6(port: u16, consent: &str) -> Result<Value, String> {
+    if consent != UDP6_CONSENT || !(1025..=65534).contains(&port) {
+        return Err("WFP IPv6 UDP QA consent or port invalid".into());
+    }
+    let socket = UdpSocket::bind(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0))
+        .map_err(|_| "WFP IPv6 UDP bind failed")?;
+    socket
+        .set_read_timeout(Some(Duration::from_millis(900)))
+        .map_err(|_| "WFP IPv6 UDP timeout failed")?;
+    let endpoint = SocketAddrV6::new(Ipv6Addr::LOCALHOST, port, 0, 0);
+    if socket.send_to(b"probe", endpoint).map_err(|_| "WFP IPv6 UDP denied")? != 5 {
+        return Err("WFP IPv6 UDP partial send".into());
+    }
+    let mut received = [0u8; 8];
+    let (n, peer) = socket.recv_from(&mut received)
+        .map_err(|_| "WFP IPv6 UDP echo not received")?;
+    if peer != endpoint.into() || received[..n] != *b"done" {
+        return Err("WFP IPv6 UDP echo mismatch".into());
+    }
+    Ok(json!({
+        "ok":true, "real_udp_ipv6":true, "loopback_only":true,
+        "ndisrd_touched":false, "dns_leak_free":false,
+        "protected_fail_closed":false, "release_accepted":false
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -869,6 +949,12 @@ mod tests {
         assert!(guard_udp4(r"C:\tmp\FlowBridgeWfpLabClient.exe", 50001, "DENY").is_err());
         assert!(client_udp4(53, UDP4_CONSENT).is_err());
         assert!(client_udp4(50001, "NO_CONSENT").is_err());
+        assert!(guard_tcp6(r"C:\tmp\FlowBridgeWfpLabClient.exe", 50001, "DENY").is_err());
+        assert!(guard_udp6(r"C:\tmp\FlowBridgeWfpLabClient.exe", 50001, "DENY").is_err());
+        assert!(client_tcp6(53, TCP6_CONSENT).is_err());
+        assert!(client_udp6(53, UDP6_CONSENT).is_err());
+        assert!(client_tcp6(50001, "DENY").is_err());
+        assert!(client_udp6(50001, "DENY").is_err());
         assert!(validate(r"C:\Windows\System32\powershell.exe", 50001, CONSENT).is_err());
         assert!(validate(r"\\server\share\FlowBridgeWfpLabClient.exe", 50001, CONSENT).is_err());
         assert!(event_identity_probe(
