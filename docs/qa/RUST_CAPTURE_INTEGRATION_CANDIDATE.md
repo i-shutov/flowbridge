@@ -1,3 +1,27 @@
+## 2026-11-02 — EXACT-CODE integrated Windows security audit + signed-driver native recheck (PASS within narrow scope)
+
+**Pin all evidence to the implementation HEAD, NOT to this documentation-only follow-up commit:** PR #56 `892812bb74d4225759a4d4a957c0d9d1df62e81f`, unchanged main `5b5afc2feeda2195f302380e615ba003d4906e09`, GitHub PR test-merge `717053184d6215d8c6eed92ac38350954fe392bc` (verified parents main + implementation HEAD).
+
+All four exact-source Actions completed **SUCCESS**: [capture #41415306058](https://github.com/i-shutov/flowbridge/actions/runs/41415306058) **3/3**, [Rust/native #41415306106](https://github.com/i-shutov/flowbridge/actions/runs/41415306106) **5/5**, [DNS #41415305980](https://github.com/i-shutov/flowbridge/actions/runs/41415305980) **3/3** (**not** leak-free), [real Windows OpenSSH #41415305991](https://github.com/i-shutov/flowbridge/actions/runs/41415305991) managed **128 real held / 1,152 rejected / 10,000 authenticated byte/half-close verified / four independent supervised processes**. Raw capacity experiment reaches only **246 held** before failure; a green bounded raw characterization job **does NOT** prove stable raw 512.
+
+**Actual Windows Server 2025 hosted candidate product + WFP verified**: the new required Python byte/security audit passes the exact allowlisted five-member Rust candidate, manifest, AMD64 PE32+, installed original Rust GUI → restricted IPC → authenticated OpenSSH/SOCKS, unsigned NSIS installer/fault rollback and **all 33 actual native-host WFP soft-lease checks**, including independently vetoed flow, held TCP revoked after temporary permit process death, persistent selected-AppId deny maintained, independent SYSTEM cleanup. The hosted test **did not activate NDISRD**. Synthetic negative contract tests 11/11; Rust capture unit tests 84/84. Independent audit JSON explicitly sets `actual_driver_divert_tested=false`, `protected_fail_closed=false`, `native_packet_to_pid_proven=false`, `dns_leak_free=false`, and `windows_10_11_accepted=false`.
+
+The Windows hosted CI **computed** SHA-256 for nested five-file candidate ZIP `ac4c0b3c794a76a9cc015643c78023e8f9af99ae68fd7a533b5b696ead2e3f7d`, Rust x64 agent `5493b62129263aa7eb97f544a221890557c3cb6eddc858cb517c8101edf71d0f`, unsigned setup `4efe58976fb8cb3ef96c348480fd69f39a9a81cf01ccb06ed984cdabdec30c32`, manifest `7c212f8a0c48ea39dc73e99dfc994a87645399f390cb27be0af45929518ff7e5`. Outer capture Actions artifact #`13128360077` SHA-256 `9faa84a721bf7d58011e640734be52ab5e05b91e16540f893ade9428b2c41ac8` was **independently downloaded by private VDSina Windows runner** (its Actions log verifies download hash equals GitHub published digest); not a locally downloaded artifact in this documentation work.
+
+**Real separately installed signed NDISRD on VDSina, SAME implementation SHA + GitHub test merge:** private QA branch fast-forward (expected SHA, no force) commit `f0753beabbb3565cf5b55422d1d9e8fcadae4fb9`, private [Actions #41420892324](https://github.com/i-shutov/flowbridge-vps-qa/actions/runs/41420892324) **SUCCESS**, private [issue #1 evidence](https://github.com/i-shutov/flowbridge-vps-qa/issues/1#issuecomment-6573678007). NDISRD kernel signed-driver SHA-256 `8623a9c34531cf73de4286ad518b84af03a331c78959769a1ca38723e3258984` verified; active Defender and all firewall profiles. With original verified agent and two byte-identical copied Rust QA EXE files, three bounded actual signed-driver `LISTEN_BOTH` **copy-only** sessions observed outbound TEST-NET IPv4 UDP canaries while original Rust WFP dynamic AppId rule changed:
+
+| Native phase | Selected QA EXE frames | Sibling QA EXE frames |
+|---|---:|---:|
+| Positive baseline without WFP rule | 2 | 2 |
+| Guard installed/read back; selected AppId + port denied | **0** | **2** |
+| WFP guard intentionally terminated, rule removed | 2 | 2 |
+
+Independent local SYSTEM MSI-uninstall rescue was armed **before** the first NDISRD mode change; each of all three sessions was explicitly returned to adapter mode **0** and read back; rescue disarmed only after verified driver/Defender/network health. No raw address, PID, payload, packet identity or credentials saved. Artifact #`13129443479`, published outer SHA-256 `24e51855dad3fd9d8c39c6268f9a8065c74372066cc131e41d68cc43c182d0ca`. The native report was independently **parsed and strictly checked field by field** against the source/test-merge, exact binary hashes, 2/2→0/2→2/2, signer, health, rollback and all negative flags. Scope **PASS** is only WFP-denied selected QA outbound UDP against a genuine signed-driver **LISTEN-only observer**.
+
+**CRITICAL nonclaims.** This is NOT packet→arbitrary PID+creation epoch ownership; WFP/NDISRD general ordering with `TUNNEL_BOTH`/diversion was not tested. No real arbitrary selected-app TCP rewrite→reverse TCP→SOCKS/SSH proof on this HEAD, production protected fail-closed after service/SSH/driver death, DNS/UDP/QUIC/DoH/DoT/IPv6 leak-free, or Windows 10/11 native acceptance. Mode 0 restores normal DIRECT-capable networking, not kill-switch protection. Window Server 2025 VPS is research only. Keep VPS #3293462 for separately rescued real-driver experiments. PR remains draft; main unchanged, no official NDISRD redistribution, no release.
+
+---
+
 ## 2026-11-02 — Independent c60448 byte/lease/installed-client audit; new strict CI gate PENDING
 
 **Source explicitly audited as input, not the new documentation/test commit:** PR #56 code
