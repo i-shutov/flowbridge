@@ -2008,3 +2008,24 @@ The next integrated PR #56 candidate replaces the single-point Chocolatey depend
 **Independently downloaded Windows artifact #13113090988:** outer 23-entry ZIP SHA-256 `b60b351a92e033c6829b329909bd899db37adb958d2810e6a8fb3a12ce6975f7` equals GitHub digest; inner exact five-file original-Rust candidate SHA-256 `cdb072b358aaf7522fa30eeae456fe28cf0224507e1b7bab47ebe22f490fc6e2` matches independent sidecar. Nested manifest binds source and test merge, all payload hashes independently checked. Three PE32+ AMD64 SHA-256: agent `a9ea52911693022ca3d64c6148a5a16be6a4a02aa11648602effe57743d2a3aa`, CLI `fac163b40b099707c091a2bd0b2c575d80edd629d0128500de1fe03d1dc7ab54`, panel `57ee097070bce2ac51db664c26b55b72974bf044f4cc10040395d3331d2d7edd`; unsigned NSIS setup `64f44db9c414cdb6c26e3955743f630c6861b4c65a0ad79d1835242e82b5ac99`. Actual installed GUI→IPC→authenticated OpenSSH/SOCKS, two fault-injected NSIS rollback scenarios, recovery and uninstall passed. The SHA-pinned official SourceForge NSIS 3.13 ZIP `ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8` contains a root wrapper and the real `Bin/makensis.exe`; CI now strictly verifies the latter, its include/stubs resources and version, without relaxing installer QA. Neither NSIS compiler, vendor NDISRD, ProxiFyre, private keys nor legacy C++ WFP helper enter Rust candidate. Full checkpoint [issue #41](https://github.com/i-shutov/flowbridge/issues/41#issuecomment-6567876243).
 
 **NON-CLAIMS / REQUIRED NEXT GATES:** tests are GitHub-hosted **Windows Server 2025** not personal Win10/11 x64, and operate on ONE QA EXE and ONE HIGH LOOPBACK PORT. They do NOT prove general native NDISRD packet→PID+creation-epoch ownership, WFP↔NDISRD order or active driver bypass, SSH-failure/service crash systemwide protected fail-closed, arbitrary app DNS/DoH/UDP/QUIC/IPv6 leak-freedom, or release 1.0. The signed NDISRD native VPS trials in private issue #1 were on earlier pinned source SHAs; the VPS was not touched in this block and remains useful for an independently rescued driver/WFP ordering trial. The docs-only checkpoint itself makes no new native execution claim.
+
+
+### 2026-11-02 — Hosted-only AppId-wide crash-persistent IPv4/IPv6 DENY (STRICT CI PENDING)
+Original Rust `windows_wfp_appwide_lab.rs` adds a separate exact-consent,
+independently rescued, persistent BFE **AppId-only** (no port condition)
+IPv4+IPv6 ALE_AUTH_CONNECT block for **one copied temporary QA EXE only**.
+The independent hosted-only Python integration launches two distinct high-port
+real listener sockets per TCP4/UDP4/TCP6/UDP6 transport; all selected client
+connections must fail while byte-identical differently named sibling and
+unrelated Python connections continue. The guard is killed, both BFE filters
+must persist with selected denial still enforced, then exact cleanup must
+remove two filters and sublayer and restore all eight selected connections.
+An independently pre-armed 3-minute SYSTEM task remains active on cleanup failure.
+VDSina/self-hosted runners are explicitly rejected. No NDISRD mode, SSH,
+Defender, firewall global configuration or vendor binary is modified.
+
+This is a valuable restricted crash-denial *mechanism demonstration*, not
+a production protection policy, not system resolver/DoH leak-proofing,
+not native NDISRD/WFP ordering and not arbitrary packet→process identity.
+Do not claim PASS until exact-source CI, Windows report, test merge SHA and
+independently downloaded archive and binary hashes are checked.

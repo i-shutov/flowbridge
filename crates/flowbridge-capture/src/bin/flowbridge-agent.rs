@@ -103,6 +103,18 @@ fn main() {
             flowbridge_capture::windows_wfp_persistence_lab::remove(consent)
         }
         #[cfg(windows)]
+        [command, path, consent] if command == "wfp-qa-appwide-arm" => {
+            flowbridge_capture::windows_wfp_appwide_lab::arm(path, consent)
+        }
+        #[cfg(windows)]
+        [command, consent] if command == "wfp-qa-appwide-status" => {
+            flowbridge_capture::windows_wfp_appwide_lab::status(consent)
+        }
+        #[cfg(windows)]
+        [command, consent] if command == "wfp-qa-appwide-remove" => {
+            flowbridge_capture::windows_wfp_appwide_lab::remove(consent)
+        }
+        #[cfg(windows)]
         [command, config_path] if command == "service-stage" => {
             flowbridge_capture::windows_service_management::stage(config_path)
         }
