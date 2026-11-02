@@ -210,17 +210,20 @@ jobs:
       # Preserve all independent installed GUI/SSH/SCM/native-test evidence
       # before the deliberately strict, currently-failing WFP AppId research
       # gate. This test still fails this Windows job on any unmet assertion.
+      # Preserve independent real BFE safety evidence if the optional NSIS
+      # mirror or installed-product setup failed. The Windows job stays FAIL;
+      # these strict probes do not waive any upstream installer/SSH checks.
       - name: Real WFP AppId loopback and host-owned interface IPv4 matrix (strict)
-        if: matrix.os == 'windows-2025'
+        if: ${{ always() && matrix.os == 'windows-2025' }}
         run: python tests/windows_wfp_dynamic_loopback.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-dynamic-lifecycle.json
       - name: Native selected-only WFP UDP/IPv4 AppId DENY with independent client and crash cleanup
-        if: matrix.os == 'windows-2025'
+        if: ${{ always() && matrix.os == 'windows-2025' }}
         run: python tests/windows_wfp_dynamic_udp4.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-udp4-lifecycle.json
       - name: Native IPv6 TCP and UDP app-scoped WFP DENY with real sockets and guard crash
-        if: matrix.os == 'windows-2025'
+        if: ${{ always() && matrix.os == 'windows-2025' }}
         run: python tests/windows_wfp_dynamic_ipv6.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-ipv6-lifecycle.json
       - name: Hosted-only persistent selected-WFP canary crash-survival and independent SYSTEM cleanup (IPv4/IPv6 TCP/UDP)
-        if: matrix.os == 'windows-2025'
+        if: ${{ always() && matrix.os == 'windows-2025' }}
         run: python tests/windows_wfp_persistent_hosted.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-persistent-hosted.json
       - name: Verify formatting (never auto-commit or waive failure)
         if: always()
