@@ -221,6 +221,84 @@ def main() -> None:
                     result.pop('pending_step', None)
                 require(snapshot()['pid'] == initial_pid, 'SSH restarted unexpectedly')
                 result['same_supervised_ssh_across_failure_recovery'] = True
+                # This deliberately stops the REAL supervised ssh.exe rather
+                # than just toggling an upstream gate around a still-live SSH.
+                # Close the gate BEFORE reaping the child. This is an explicit
+                # operator-controlled lab lifecycle, not automatic crash
+                # fail-closed or general selected-application protection.
+                result['pending_step'] = 'close_gate_then_reap_real_ssh'
+                gate(False)
+                stopped = abi.call('fb_ssh_stop_json', supervisor)['status']
+                require(stopped['state'] == 'stopped' and stopped['pid'] is None,
+                        'Explicit real SSH stop did not reap the owned process')
+                observed_stop = snapshot()
+                require(observed_stop['state'] == 'stopped' and observed_stop['pid'] is None,
+                        'Stopped SSH supervisor unexpectedly retained/restarted a child')
+                result['controlled_real_ssh_process_stopped'] = True
+
+                def verify_lifecycle_native(report, phase, source, denied):
+                    require(report.get('passed') is True and report.get('process_exit_code') == 0,
+                            f'Native SSH lifecycle {phase} failed')
+                    require(report.get('actual_ndisrd_tunnel') is True
+                            and report.get('rollback_confirmed') is True,
+                            f'Native SSH lifecycle {phase} lacked real driver/rollback')
+                    require(report.get('selected_original_frames_sent_to_adapter') == 0
+                            and report.get('fresh_tcp_owner_candidate_denials_dropped') is True
+                            and report.get('fresh_owner_candidate_is_not_packetbound') is True,
+                            f'Native SSH lifecycle {phase} violated deny/owner boundary')
+                    require(report.get('arbitrary_app_owner_binding_accepted') is False
+                            and report.get('native_owner_binding_accepted') is False
+                            and report.get('protected_redirect_available') is False
+                            and report.get('release_accepted') is False,
+                            f'Native SSH lifecycle {phase} overstated authorization')
+                    field = {'self': 'self_owned_socket_pid_epoch_consistent',
+                             'rust-child': 'spawned_child_socket_pid_epoch_consistent',
+                             'powershell': 'powershell_child_socket_pid_epoch_consistent',
+                             'external-powershell': 'external_sibling_socket_pid_epoch_consistent'}[source]
+                    require(report.get(field) is True,
+                            f'Native SSH lifecycle {phase} lost exact controlled source witness')
+                    if source == 'external-powershell':
+                        require(report.get('external_process_exit_confirmed') is True,
+                                'Independent PowerShell must exit before adapter mode zero')
+                    if denied:
+                        require(report.get('upstream_socks_failed') is True
+                                and report.get('upstream_socks_connected') is False
+                                and report.get('application_received_http') is False,
+                                f'Native SSH lifecycle {phase} leaked traffic while SSH stopped')
+                    else:
+                        require(report.get('upstream_socks_connected') is True
+                                and report.get('application_received_http') is True
+                                and report.get('application_and_relay_byte_counts_match') is True,
+                                f'Native SSH lifecycle {phase} failed after real SSH restart')
+
+                sources = ('self', 'rust-child', 'powershell', 'external-powershell')
+                for source in sources:
+                    phase = 'ssh_stopped_' + source.replace('-', '_')
+                    result['pending_phase'] = phase
+                    result['pending_step'] = 'native_traffic_while_real_ssh_stopped'
+                    report = probe(True, source)
+                    result[phase] = report
+                    verify_lifecycle_native(report, phase, source, True)
+                    result.pop('pending_phase', None)
+                result['real_ssh_stopped_native_denials'] = len(sources)
+                result['pending_step'] = 'restart_real_supervised_ssh'
+                abi.call('fb_ssh_start_json', supervisor)
+                restarted_pid = until(client_ready, seconds=30)
+                require(restarted_pid != initial_pid,
+                        'SSH restart did not create a distinct supervised OS child')
+                gate(True)
+                for source in sources:
+                    phase = 'ssh_restarted_' + source.replace('-', '_')
+                    result['pending_phase'] = phase
+                    result['pending_step'] = 'native_traffic_after_real_ssh_restart'
+                    report = probe(False, source)
+                    result[phase] = report
+                    verify_lifecycle_native(report, phase, source, False)
+                    result.pop('pending_phase', None)
+                result['real_ssh_restarted_native_recoveries'] = len(sources)
+                result['new_supervised_ssh_pid_after_explicit_stop'] = True
+                result['ssh_lifecycle_gate_was_closed_manually'] = True
+                result['pending_step'] = 'finalize'
                 result['native_self_owned_tcp_to_real_socks_ssh_verified'] = True
                 result['native_spawned_child_tcp_to_real_socks_ssh_verified'] = True
                 result['native_system_powershell_tcp_to_real_socks_ssh_verified'] = True

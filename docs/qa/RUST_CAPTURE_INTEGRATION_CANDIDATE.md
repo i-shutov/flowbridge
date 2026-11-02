@@ -2330,3 +2330,40 @@ DNS/UDP/IPv6/QUIC, or Windows 10/11 native personal beta acceptance.
 Never claim protected native PASS, no DNS leaks, stable raw 512, or v1.0.
 Main/release unchanged. Paid VPS #3293462 remains useful for remaining
 genuinely native signed-driver integration checks.
+
+
+## 2026-11-02 — Pending native managed OpenSSH stop/restart integration extension
+
+The existing signed-NDISRD self-created TCP / spawned-Rust / Microsoft
+PowerShell child / separately launched Microsoft PowerShell fixture formerly
+proved 12 NDISRD->Rust SOCKS->real supervised OpenSSH phases on source
+\`877fe78b84e09421e8a2d131879b7d78fb2172cb\`, with four independent
+sequential 12-phase passes (48/48) recorded above. The ORIGINAL previously
+failed first attempt remains a separate negative evidence record.
+
+The next single integrated QA block extends
+\`tests/windows_ndisrd_self_redirect.py\` by **eight more native driver
+phases** involving the **real supervised SSH process lifecycle**:
+after the initial 12 phases, explicitly close the FlowBridge upstream SOCKS
+gate, stop/reap the genuine managed \`ssh.exe\` child and verify its status
+and absent PID. Exercise one strictly denied NDISRD TCP transaction in
+each of the four controlled source categories; explicitly restart managed
+SSH, require a different live supervised PID, reopen the gate, and
+require one successful HTTP transaction per controlled source. Each
+additional phase must independently prove signed-driver packet I/O,
+selected original packets **never** reinjected to DIRECT, process/epoch
+witness, bounded driver mode-zero rollback, and preserved negative
+PacketBound/protected/release claims. The independent SYSTEM rescue,
+Defender/firewall verification, VNC prerequisites and exact source/artifact
+hash gates **must not** be relaxed.
+
+**Status: new source CI / exact-artifact auditing / real native 20-phase
+experiment NOT YET VERIFIED at this source checkpoint.** Neither the 8
+additional phases nor production SSH-death safety may be reported as
+native PASS until a new GitHub Actions binary and native signed-NDISRD
+report have been inspected and SHA-matched. This specifically tests
+an **explicit orderly SSH stop** and **manually closed gate**, not an
+unexpected SSH crash, automatic fail-closed, arbitrary packet↔PID
+attribution or persistent adapter safety on agent process death.
+Adapter mode zero still restores ordinary DIRECT capability.
+All Windows 10/11, DNS/UDP/IPv6, raw 512 and release gates stay open.
