@@ -8,7 +8,9 @@ use crate::ndis_session::{LabDisposition, LabMode, PacketSession};
 use crate::relay::RelayPool;
 use crate::self_redirect::{Reflection, Request};
 use crate::windows_ndis_device::Driver;
-use crate::windows_tcp_owner::{validate_pinned_tcp_owner, OwnedProcess, OwnerQuery};
+use crate::windows_tcp_owner::{
+    validate_pinned_tcp_owner_lab_missing_retry, OwnedProcess, OwnerQuery,
+};
 use base64::Engine;
 use flowbridge_core::tcp_packet::TcpTuple;
 use flowbridge_core::Endpoint;
@@ -601,6 +603,7 @@ async fn native(request: Request) -> Result<Value, String> {
     let mut native_candidate_checked = false;
     let mut owner_candidate_checks = 0u64;
     let mut owner_candidate_denials = 0u64;
+    let mut owner_missing_snapshot_retry_attempts = 0u64;
     let mut selected_direct_sends = 0u64;
     while start.elapsed() < timeout && !worker.is_finished() {
         let outcome = session.poll_lab_redirect(128, &mut |packet| {
@@ -618,18 +621,21 @@ async fn native(request: Request) -> Result<Value, String> {
                 // This remains bounded laboratory evidence, NOT PacketBound.
                 if selected_candidate {
                     owner_candidate_checks += 1;
-                    if validate_pinned_tcp_owner(
+                    match validate_pinned_tcp_owner_lab_missing_retry(
                         &OwnerQuery {
                             local: original.source,
                             remote: original.destination,
                         },
                         &epoch,
                         &process,
-                    )
-                    .is_err()
-                    {
-                        owner_candidate_denials += 1;
-                        return false;
+                    ) {
+                        Ok(extra_attempts) => {
+                            owner_missing_snapshot_retry_attempts += u64::from(extra_attempts);
+                        }
+                        Err(_) => {
+                            owner_candidate_denials += 1;
+                            return false;
+                        }
                     }
                     native_candidate_checked = true;
                 }
@@ -735,6 +741,8 @@ async fn native(request: Request) -> Result<Value, String> {
         "selected_original_frames_sent_to_adapter":selected_direct_sends,
         "fresh_tcp_owner_candidate_checks":owner_candidate_checks,
         "fresh_tcp_owner_candidate_denials":owner_candidate_denials,
+        "fresh_tcp_owner_candidate_missing_snapshot_retry_attempts":owner_missing_snapshot_retry_attempts,
+        "fresh_tcp_owner_candidate_retries_only_missing":true,
         "outbound_candidate_revalidated_for_each_selected_packet":true,
         "fresh_owner_candidate_is_not_packetbound":true,
         "upstream_socks_connected":probe.upstream_connected,

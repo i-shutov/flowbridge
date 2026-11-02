@@ -2193,3 +2193,30 @@ Each of three bounded NDISRD sessions returned mode to ordinary network (explici
 **Current documentation HEAD CI caveat:** documentation-only `a9d2b38955476d802d67f4d2be6a684904a57a18` / PR test-merge `5fb52572284fda707bccde684ab3ca650b5c0cd4` had capture 3/3, Rust/native 5/5 and DNS 3/3 PASS, plus hosted Windows OpenSSH **managed** job 128 held / 1152 rejected / 10000 churned with zero failure / four independent child processes PASS. The separate **raw** OpenSSH characterization job FAILED at ~244 held on Windows OS resource/socket errors; do not claim all four workflows fully green or stable raw 512. This test is still not native Win10/11. Main and published releases unchanged.
 
 **Still required for product beta:** reproducible native all-phase reliability, trustworthy arbitrary-app flow authority, WFP+NDISRD **simultaneous divert** and crash/SSH-failure fail-closed, DNS/UDP/QUIC/IPv6 containment, safe production service/IPC + GUI/installer lifecycle, then Windows 10/11 native evidence. VPS #3293462 remains needed for remaining controlled signed-driver lab work. Do not declare protected native PASS, leak-free DNS, stable raw 512, Win10/11 acceptance or release.
+
+
+### 2026-11-02: strict IP Helper snapshot timing hardening (candidate, CI/native repeat pending)
+
+The first VDSina native TCP/SSH canary attempt failed because a fresh IP Helper
+owner candidate intermittently disappeared while the selected TCP packet was
+held by NDISRD; the second identical-binary attempt succeeded 12/12. This is a
+**reliability blocker**, not permission to promote IP Helper to PacketBound.
+
+The new Windows-only lab witness path retains **two fresh TCP table snapshots
+per attempted observation**, an OS-pinned process handle, process creation
+epoch and unchanged exact local/remote tuple. Only a *missing* table row may be
+sampled again, at most twice with 2 ms spacing. A conflicting PID, duplicate
+tuple, stale TCP state, failed API read or changed/terminated process is
+terminal. If the row remains missing, the packet is **dropped**, never
+re-injected DIRECT. Additional snapshot attempts are counted separately in
+sanitized native JSON. The original strict no-retry owner API remains intact.
+
+Deterministic Windows unit contracts cover recovery from a transient missing
+row, two-new-positive-snapshot requirement, immediate wrong-PID/duplicate/
+stale-state/zero-PID rejection, bounded missing-row exhaustion and epoch
+change. They do **not** prove native reliability by themselves. Next gate:
+verify this exact new SHA in hosted CI, construct/download/hash its exact
+candidate and perform repeated signed-NDISRD multi-process TCP/SSH trials on
+VDSina with original negative first-attempt evidence retained. No broad
+arbitrary app authorization, protected crash fail-closed, leak-free DNS,
+Win10/11 acceptance or release is claimed.

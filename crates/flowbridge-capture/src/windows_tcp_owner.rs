@@ -349,6 +349,95 @@ pub fn validate_pinned_tcp_owner(
     Ok(())
 }
 
+// This is a LAB-ONLY timing mitigation for the GetExtendedTcpTable race.
+// A snapshot with no matching tuple can occur briefly while TCP publishes
+// SYN_SENT/FIN state. A *conflicting* PID, duplicate tuple, stale TCP state,
+// failed table read or changed process object is terminal, NEVER retried.
+// Every accepted packet still requires two NEW matching table snapshots and
+// the same pinned process creation epoch. This is not PacketBound authority.
+const LAB_MISSING_SNAPSHOT_RETRIES: u8 = 2;
+const LAB_MISSING_SNAPSHOT_PAUSE_MS: u64 = 2;
+
+fn missing_or_exact_pid(
+    rows: &[TcpOwnerRow],
+    query: &OwnerQuery,
+    expected_pid: u32,
+) -> Result<bool, String> {
+    match match_single_pid(rows, query)? {
+        Some(pid) if pid == expected_pid => Ok(true),
+        Some(_) => Err("Conflicting TCP owner PID (no retry)".into()),
+        None => Ok(false),
+    }
+}
+
+fn verify_two_fresh_snapshots_with_missing_retry<S, C, B>(
+    query: &OwnerQuery,
+    expected_pid: u32,
+    missing_retries: u8,
+    mut sample: S,
+    mut check_pinned: C,
+    mut backoff: B,
+) -> Result<u8, String>
+where
+    S: FnMut() -> Result<Vec<TcpOwnerRow>, String>,
+    C: FnMut() -> Result<(), String>,
+    B: FnMut(),
+{
+    for attempt in 0..=missing_retries {
+        check_pinned()?;
+        // ALWAYS inspect both fresh tables, including when the first is
+        // temporarily absent, so a conflicting PID cannot be hidden by retry.
+        let first = missing_or_exact_pid(&sample()?, query, expected_pid)?;
+        let second = missing_or_exact_pid(&sample()?, query, expected_pid)?;
+        check_pinned()?;
+        if first && second {
+            return Ok(attempt);
+        }
+        if attempt == missing_retries {
+            break;
+        }
+        backoff();
+    }
+    Err("TCP tuple absent in consecutive fresh snapshots after bounded retry".into())
+}
+
+/// Used ONLY by the explicitly consented, bounded native self-created TCP
+/// canary. A missing IP Helper row may be sampled again a maximum of twice;
+/// wrong PID, duplicate/stale state, vanished process or API failure never
+/// receives a retry. The return value counts extra observation attempts.
+/// This DOES NOT enable capture for arbitrary processes or protected routing.
+pub fn validate_pinned_tcp_owner_lab_missing_retry(
+    query: &OwnerQuery,
+    expected: &ProcessEvidence,
+    pinned: &OwnedProcess,
+) -> Result<u8, String> {
+    if query.local.is_ipv4() != query.remote.is_ipv4()
+        || query.local.port() == 0
+        || query.remote.port() == 0
+        || pinned.pid != expected.pid
+    {
+        return Err("Invalid pinned TCP owner witness parameters".into());
+    }
+    let af = if query.local.is_ipv4() {
+        AF_INET
+    } else {
+        AF_INET6
+    } as u32;
+    verify_two_fresh_snapshots_with_missing_retry(
+        query,
+        expected.pid,
+        LAB_MISSING_SNAPSHOT_RETRIES,
+        || read_rows(af),
+        || {
+            if !pinned.is_active()? || &pinned.evidence()? != expected {
+                return Err("Pinned TCP process identity changed (no retry)".into());
+            }
+            Ok(())
+        },
+        || std::thread::sleep(std::time::Duration::from_millis(LAB_MISSING_SNAPSHOT_PAUSE_MS)),
+    )
+}
+
 /// A diagnostic-only read. The returned identity MUST NOT be used to authorize
 /// transparent capture: an IP Helper snapshot is not a packet ownership token.
 pub fn lookup(query: OwnerQuery) -> Result<Value, String> {
@@ -599,6 +688,126 @@ mod tests {
         .is_err());
         let truncated = decode_rows::<MIB_TCPROW_OWNER_PID>(&[500], 4, 4, ipv4_row);
         assert!(truncated.is_err());
+    }
+
+    #[test]
+    fn bounded_lab_missing_snapshot_retry_requires_two_fresh_positive_rows() {
+        use std::collections::VecDeque;
+        let query = OwnerQuery {
+            local: "127.0.0.1:12345".parse().unwrap(),
+            remote: "127.0.0.1:23456".parse().unwrap(),
+        };
+        let good = TcpOwnerRow {
+            local: query.local,
+            remote: query.remote,
+            state: 5,
+            pid: 73,
+        };
+        // First attempt is missing / present. Only the second TWO-snapshot
+        // attempt grants a lab witness. No snapshot is reused across attempts.
+        let mut rows = VecDeque::from([vec![], vec![good], vec![good], vec![good]]);
+        let mut read_count = 0;
+        let mut pause_count = 0;
+        let mut epoch_checks = 0;
+        let result = verify_two_fresh_snapshots_with_missing_retry(
+            &query,
+            73,
+            2,
+            || {
+                read_count += 1;
+                Ok(rows.pop_front().unwrap())
+            },
+            || {
+                epoch_checks += 1;
+                Ok(())
+            },
+            || pause_count += 1,
+        );
+        assert_eq!(result.unwrap(), 1);
+        assert_eq!(read_count, 4);
+        assert_eq!(epoch_checks, 4);
+        assert_eq!(pause_count, 1);
+        assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn bounded_lab_retry_fails_closed_for_conflict_ambiguity_and_timeout() {
+        use std::collections::VecDeque;
+        let query = OwnerQuery {
+            local: "127.0.0.1:12345".parse().unwrap(),
+            remote: "127.0.0.1:23456".parse().unwrap(),
+        };
+        let good = TcpOwnerRow {
+            local: query.local,
+            remote: query.remote,
+            state: 5,
+            pid: 73,
+        };
+        // A conflicting PID is a terminal result, not a missing observation.
+        for bad in [
+            vec![TcpOwnerRow { pid: 74, ..good }],
+            vec![good, good],
+            vec![TcpOwnerRow { state: 11, ..good }],
+            vec![TcpOwnerRow { pid: 0, ..good }],
+        ] {
+            let mut rows = VecDeque::from([bad, vec![good], vec![good], vec![good]]);
+            let mut reads = 0;
+            let mut pauses = 0;
+            assert!(verify_two_fresh_snapshots_with_missing_retry(
+                &query,
+                73,
+                2,
+                || {
+                    reads += 1;
+                    Ok(rows.pop_front().unwrap())
+                },
+                || Ok(()),
+                || pauses += 1,
+            )
+            .is_err());
+            assert_eq!(reads, 1);
+            assert_eq!(pauses, 0);
+        }
+
+        let mut missing_reads = 0;
+        let mut missing_pauses = 0;
+        assert!(verify_two_fresh_snapshots_with_missing_retry(
+            &query,
+            73,
+            2,
+            || {
+                missing_reads += 1;
+                Ok(vec![])
+            },
+            || Ok(()),
+            || missing_pauses += 1,
+        )
+        .is_err());
+        assert_eq!(missing_reads, 6);
+        assert_eq!(missing_pauses, 2);
+
+        let mut epoch_checks = 0;
+        let mut reads = 0;
+        assert!(verify_two_fresh_snapshots_with_missing_retry(
+            &query,
+            73,
+            2,
+            || {
+                reads += 1;
+                Ok(vec![])
+            },
+            || {
+                epoch_checks += 1;
+                if epoch_checks > 2 {
+                    return Err("Process exited between observations".into());
+                }
+                Ok(())
+            },
+            || {},
+        )
+        .is_err());
+        assert_eq!(reads, 2);
+        assert_eq!(epoch_checks, 3);
     }
 
     #[test]
