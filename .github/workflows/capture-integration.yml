@@ -228,6 +228,9 @@ jobs:
       - name: Hosted-only appwide persistent selected-AppId IPv4/IPv6 crash-denial on two ports each, with independent SYSTEM cleanup
         if: ${{ always() && matrix.os == 'windows-2025' }}
         run: python tests/windows_wfp_appwide_hosted.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-appwide-hosted.json
+      - name: Hosted original Rust persistent AppId deny + crash-revoked same-sublayer SOFT permit (strict, independent SYSTEM recovery)
+        if: ${{ always() && matrix.os == 'windows-2025' }}
+        run: python tests/windows_wfp_appwide_soft_lease_hosted.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-soft-lease-hosted.json
       - name: Verify formatting (never auto-commit or waive failure)
         if: always()
         run: cargo fmt --all -- --check
