@@ -504,3 +504,83 @@ pub fn soft_lease(path: &str, port: u16, token: &str) -> Result<Value, String> {
     Ok(json!({"ok":true,"soft_lease_expired":true,
         "protected_fail_closed":false,"release_accepted":false}))
 }
+
+
+/// One live TCP socket with a selected copied QA image. This deliberately
+/// tests an ALREADY ESTABLISHED flow after the dynamic WFP permit owner dies,
+/// rather than mistaking new-connection rejection for flow revocation.
+/// There is no NDISRD access and no product route or fail-closed claim.
+pub fn held_tcp_client(port: u16, token: &str) -> Result<Value, String> {
+    use std::io::Read;
+    use std::net::{SocketAddr, TcpStream};
+    require_soft_lease_consent(token)?;
+    if std::env::var("GITHUB_ACTIONS").ok().as_deref() != Some("true")
+        || std::env::var("RUNNER_ENVIRONMENT").ok().as_deref() != Some("github-hosted")
+        || !(49152..=65534).contains(&port)
+    {
+        return Err("Held TCP canary is only for hosted Windows and a high port".into());
+    }
+    let current = std::env::current_exe().map_err(|_| "QA image path missing")?;
+    let temp = std::fs::canonicalize(
+        std::env::var("RUNNER_TEMP").map_err(|_| "Hosted temp missing")?,
+    )
+    .map_err(|_| "Hosted temp could not be canonicalized")?;
+    if current.file_name().and_then(|n| n.to_str()) != Some("FlowBridgeWfpLabClient.exe")
+        || !std::fs::canonicalize(&current)
+            .map_err(|_| "QA image unavailable")?
+            .starts_with(&temp)
+    {
+        return Err("Held TCP canary requires exact disposable selected image".into());
+    }
+    let target = SocketAddr::from(([127, 0, 0, 1], port));
+    let mut stream = TcpStream::connect_timeout(&target, Duration::from_secs(2))
+        .map_err(|_| "Held TCP canary initial connect failed")?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(3)))
+        .map_err(|_| "Held TCP read deadline failed")?;
+    stream
+        .set_write_timeout(Some(Duration::from_secs(3)))
+        .map_err(|_| "Held TCP write deadline failed")?;
+    stream
+        .write_all(b"HELD0001")
+        .map_err(|_| "Held TCP initial request failed")?;
+    let mut reply = [0u8; 8];
+    stream
+        .read_exact(&mut reply)
+        .map_err(|_| "Held TCP initial response missing")?;
+    if &reply != b"HELD0001" {
+        return Err("Held TCP initial response invalid".into());
+    }
+    println!(
+        "{}",
+        json!({"ok":true,"kind":"hosted_held_tcp_selected_canary",
+          "connection_established_before_lease_death":true,
+          "ndisrd_modified":false,"protected_fail_closed":false,
+          "release_accepted":false})
+    );
+    std::io::stdout()
+        .flush()
+        .map_err(|_| "Held TCP readiness flush failed")?;
+    let mut input = String::new();
+    std::io::stdin()
+        .read_line(&mut input)
+        .map_err(|_| "Held TCP control input failed")?;
+    if input.trim() != "PROBE" {
+        return Err("Held TCP only accepts explicit PROBE command".into());
+    }
+    let received = stream.write_all(b"HELD0002").is_ok()
+        && stream.read_exact(&mut reply).is_ok()
+        && &reply == b"HELD0002";
+    println!(
+        "{}",
+        json!({"ok":true,"existing_flow_delivered_after_lease_death":received,
+          "ndisrd_modified":false,"protected_fail_closed":false,
+          "release_accepted":false})
+    );
+    std::io::stdout()
+        .flush()
+        .map_err(|_| "Held TCP result flush failed")?;
+    Ok(json!({"ok":true,"held_canary_finished":true,
+        "existing_flow_delivered_after_lease_death":received,
+        "protected_fail_closed":false,"release_accepted":false}))
+}

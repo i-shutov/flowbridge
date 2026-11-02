@@ -12,7 +12,9 @@ import os
 from pathlib import Path
 import queue
 import shutil
+import socket
 import subprocess
+import time
 import tempfile
 import threading
 
@@ -49,6 +51,78 @@ def launch(agent, command, args, env, label):
         raise
 
 
+
+
+class HeldEcho:
+    """One real TCP connection, two independent 8-byte deliveries, no reconnect."""
+    def __init__(self):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.bind(("127.0.0.1", 0))
+        self.port = self.sock.getsockname()[1]
+        if not 49152 <= self.port <= 65534:
+            self.sock.close()
+            raise RuntimeError("Held TCP high port unavailable")
+        self.sock.listen(1)
+        self.sock.settimeout(.2)
+        self.hits = []
+        self.done = threading.Event()
+        self.thread = threading.Thread(target=self.serve, daemon=True)
+
+    def serve(self):
+        try:
+            while not self.done.is_set():
+                try:
+                    conn, _ = self.sock.accept()
+                    break
+                except socket.timeout:
+                    continue
+            else:
+                return
+            with conn:
+                conn.settimeout(.5)
+                while not self.done.is_set():
+                    data = bytearray()
+                    try:
+                        while len(data) < 8:
+                            part = conn.recv(8 - len(data))
+                            if not part:
+                                return
+                            data.extend(part)
+                    except (socket.timeout, OSError):
+                        continue
+                    if bytes(data) not in (b"HELD0001", b"HELD0002"):
+                        return
+                    self.hits.append(bytes(data))
+                    try:
+                        conn.sendall(data)
+                    except OSError:
+                        return
+        finally:
+            self.done.set()
+
+    def __enter__(self):
+        self.thread.start()
+        return self
+
+    def __exit__(self, *_):
+        self.done.set()
+        self.sock.close()
+        self.thread.join(timeout=4)
+
+
+def held_after_revocation(proc):
+    assert proc.stdin is not None and proc.stdout is not None
+    proc.stdin.write("PROBE\n")
+    proc.stdin.flush()
+    result = queue.Queue(maxsize=1)
+    threading.Thread(target=lambda: result.put(proc.stdout.readline()),
+                     daemon=True).start()
+    value = json.loads(result.get(timeout=8))
+    assert value["ok"] is True and not value["release_accepted"]
+    assert not value["ndisrd_modified"] and not value["protected_fail_closed"]
+    return value["existing_flow_delivered_after_lease_death"]
+
+
 def main():
     if (os.name != "nt" or os.environ.get("GITHUB_ACTIONS") != "true"
             or os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted"):
@@ -68,6 +142,8 @@ def main():
     }
     guard = None
     lease = None
+    veto = None
+    held = None
     rescue_armed = False
     cleaned = False
     checks = report["checks"]
@@ -82,6 +158,7 @@ def main():
                    hashlib.sha256(sibling.read_bytes()).digest()
             allowed = stack.enter_context(Echo("tcp4"))
             denied = stack.enter_context(Echo("tcp4"))
+            held_server = stack.enter_context(HeldEcho())
             assert allowed.port != denied.port
             assert status(agent) == (False, False, False)
             assert checked_lease_state(agent) == (False, False)
@@ -126,6 +203,37 @@ def main():
             checks["python_unchanged"] = py_client(denied, "tcp4")
             assert all(checks.values()), checks
 
+            # A second, independent BFE sublayer must retain veto power.
+            veto, veto_ready = launch(
+                agent, "wfp-qa-tcp4-guard",
+                (selected, allowed.port, "DYNAMIC_WFP_QA_TCP4_APP_PORT_ONLY"),
+                dict(os.environ), "Independent WFP sublayer")
+            checks["independent_veto_readback"] = (
+                veto_ready["wfp_ale_block_installed"]
+                and veto_ready["dynamic_private_sublayer"])
+            checks["independent_sublayer_vetoes_soft_permit"] = (
+                not rust_client(selected, "tcp4", allowed.port))
+            checks["independent_veto_not_global"] = (
+                rust_client(sibling, "tcp4", allowed.port)
+                and py_client(allowed, "tcp4"))
+            assert all(checks.values()), checks
+            veto.kill()
+            veto.wait(timeout=5)
+            veto = None
+            checks["selected_recovers_after_independent_veto_death"] = (
+                rust_client(selected, "tcp4", allowed.port))
+            assert all(checks.values()), checks
+
+            # Keep an ALREADY-ESTABLISHED selected socket alive across lease
+            # process death. A new-connection denial alone proves too little.
+            held, initial = launch(
+                agent, "wfp-qa-appwide-held-tcp4-client",
+                (held_server.port, LEASE_TOKEN), dict(os.environ), "Held TCP")
+            checks["held_tcp_live_before_crash"] = (
+                initial["connection_established_before_lease_death"]
+                and held_server.hits == [b"HELD0001"])
+            assert all(checks.values()), checks
+
             # Strongest check: no explicit release path. Windows must close
             # the dynamic BFE session after killing its process.
             lease.kill()
@@ -133,6 +241,14 @@ def main():
             lease = None
             checks["lease_killed"] = True
             checks["lease_filters_removed_automatically"] = checked_lease_state(agent) == (False, False)
+            # Allow Windows ALE/BFE reauthorization to settle, then send on
+            # the SAME socket. Observe both client result and server receipt.
+            time.sleep(.5)
+            after_delivered = held_after_revocation(held)
+            held.wait(timeout=5)
+            held = None
+            checks["held_tcp_revoked_on_lease_crash"] = (
+                not after_delivered and held_server.hits == [b"HELD0001"])
             checks["persistent_after_lease_death"] = status(agent) == (True, True, True)
             checks["selected_denied_again"] = not rust_client(selected, "tcp4", allowed.port)
             checks["sibling_still_allowed"] = rust_client(sibling, "tcp4", allowed.port)
@@ -157,7 +273,7 @@ def main():
         report["error_class"] = type(exc).__name__
         raise
     finally:
-        for proc in (lease, guard):
+        for proc in (held, veto, lease, guard):
             if proc is not None:
                 proc.kill()
                 proc.wait(timeout=5)

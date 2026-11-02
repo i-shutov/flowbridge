@@ -127,6 +127,12 @@ fn main() {
                 .and_then(|p| flowbridge_capture::windows_wfp_appwide_lab::soft_lease(path, p, consent))
         }
         #[cfg(windows)]
+        [command, port, consent] if command == "wfp-qa-appwide-held-tcp4-client" => {
+            port.parse::<u16>()
+                .map_err(|_| "Invalid held TCP QA port".to_owned())
+                .and_then(|p| flowbridge_capture::windows_wfp_appwide_lab::held_tcp_client(p, consent))
+        }
+        #[cfg(windows)]
         [command, consent] if command == "wfp-qa-appwide-soft-status" => {
             flowbridge_capture::windows_wfp_appwide_lab::soft_lease_status(consent)
         }
