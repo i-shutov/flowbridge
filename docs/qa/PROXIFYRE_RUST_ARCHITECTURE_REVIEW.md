@@ -260,3 +260,12 @@ leak-freedom or constitute native Win10/11 acceptance. Do not execute it
 on paid VPS #3293462. This section is NOT a PASS until a full exact-SHA
 Windows CI execution, native JSON report, test-merge SHA and independently
 audited binary/artifact hashes confirm the strict functional matrix.
+
+
+### 2026-11-02 — Exact SHA-pinned official portable NSIS dependency for both Windows installed-product acceptance tracks (CI PENDING)
+
+At source `aeea41636c4ee6a3e8b99917bd103ef4ccd8d162`, the required Windows capture and legacy/native installer jobs FAILED before entering the new persistent WFP lab: the Chocolatey community NuGet V2 endpoint returned HTTP 503 twice. The capture gate remains **FAIL (not tested)**, and no persistent-WFP PASS, installed candidate verification, or accepted artifact can be inferred from earlier Rust-native/DNS successes. The independent OpenSSH load gate is separate; raw 512 has not been established.
+
+The next integrated PR #56 candidate replaces the single-point Chocolatey dependency **in both** `.github/workflows/capture-integration.yml` and `.github/workflows/ci.yml` with a checked-in original PowerShell helper `scripts/ci-setup-nsis.ps1` restricted to `RUNNER_ENVIRONMENT=github-hosted` Windows. It retrieves the **official standalone NSIS v3.13 portable ZIP** from SourceForge, enforces the exact vendor-published SHA-256 `ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8` and actual `makensis /VERSION=v3.13`, and emits compiler provenance into both Windows QA artifact trees. The build tool is **never packaged into the FlowBridge candidate**, never installed into the paid VPS and never enables driver mode or changes Windows security. Mismatched/unavailable ZIP, wrong compiler or unexpected host remains a **hard failure**, not a skipped installer test. Official downloadable ZIP metadata is at https://sourceforge.net/projects/nsis/files/NSIS%203/3.13/nsis-3.13.zip/download .
+
+**Pending strict gates:** real installed-product/fault recovery; persistent one-EXE/high-port WFP rule after guard crash with independent SYSTEM rollback, TCP/UDP IPv4/IPv6; exact-head 3/3 capture, 5/5 Rust/native, 3/3 DNS, separately 128/1152/10000/4 real OpenSSH, test-merge SHA and independently downloaded artifact / PE SHA-256. None of these is equivalent to arbitrary NDISRD packet→PID attestation, protected native fail-closed, DNS leak-free, Windows 10/11 acceptance, or release. No `main` modification or signed/unsigned product publication authorized.

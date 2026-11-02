@@ -66,4 +66,21 @@ if ($LASTEXITCODE -ne 0 -or $version.Trim() -ne 'v3.13') {
 $bin = $compilers[0].Directory.FullName
 $env:PATH = $bin + [IO.Path]::PathSeparator + $env:PATH
 Add-Content -LiteralPath $env:GITHUB_PATH -Value $bin -Encoding utf8
+$evidence = @{
+  kind = 'github_hosted_official_portable_nsis_toolchain'
+  version = '3.13'
+  official_zip_sha256 = $expected
+  makensis_sha256 = (Get-FileHash -LiteralPath $compiler -Algorithm SHA256).Hash.ToLowerInvariant()
+  source = 'https://sourceforge.net/projects/nsis/files/NSIS%203/3.13/'
+  archive_digest_verified = $true
+  compiler_version_verified = $true
+  globally_installed = $false
+  included_in_flowbridge_candidate = $false
+  installer_security_tests_waived = $false
+  driver_or_system_security_modified = $false
+}
+foreach ($sub in @('build/capture-candidate', 'build/verification/windows')) {
+  New-Item -ItemType Directory -Path $sub -Force | Out-Null
+  ($evidence | ConvertTo-Json -Depth 4) | Set-Content -LiteralPath (Join-Path $sub 'nsis-toolchain-provenance.json') -Encoding utf8
+}
 Write-Output 'Verified official portable NSIS v3.13: SHA-256 pinned; installed-product tests remain mandatory'
