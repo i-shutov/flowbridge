@@ -36,9 +36,9 @@ pub mod windows_tcp_owner;
 #[cfg(windows)]
 mod windows_udp_owner;
 #[cfg(windows)]
-pub mod windows_wfp_dynamic_lab;
-#[cfg(windows)]
 pub mod windows_wfp_appwide_lab;
+#[cfg(windows)]
+pub mod windows_wfp_dynamic_lab;
 #[cfg(windows)]
 pub mod windows_wfp_persistence_lab;
 #[cfg(windows)]
