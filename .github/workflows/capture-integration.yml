@@ -26,6 +26,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - name: Independent synthetic negative integrity-contract tests (no native acceptance)
+        run: python -m unittest discover -s tests -p test_capture_evidence_audit.py -v
       - name: Independent capture unit and real loopback SOCKS regressions
         run: cargo test --locked -p flowbridge-capture --all-targets
       - name: Strict Clippy
@@ -231,6 +233,19 @@ jobs:
       - name: Hosted original Rust persistent AppId deny + crash-revoked same-sublayer SOFT permit (strict, independent SYSTEM recovery)
         if: ${{ always() && matrix.os == 'windows-2025' }}
         run: python tests/windows_wfp_appwide_soft_lease_hosted.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-soft-lease-hosted.json
+      - name: Verify exact candidate bytes and WFP held TCP lease revocation against installed SSH/GUI/NSIS (strict)
+        if: ${{ always() && matrix.os == 'windows-2025' }}
+        shell: bash
+        run: |
+          merge=$(git rev-parse HEAD)
+          python tools/capture_evidence_audit.py \
+            --candidate build/capture-candidate/FlowBridge-Rust-Candidate-Windows.zip \
+            --wfp build/capture-candidate/windows-wfp-soft-lease-hosted.json \
+            --installer-report build/capture-candidate/windows-rust-installer-build.json \
+            --installed-report build/capture-candidate/windows-rust-installed-lifecycle.json \
+            --installer-binary build/capture-candidate/FlowBridge-Rust-Candidate-Windows-UNSIGNED-setup.exe \
+            --head "$PR_HEAD_SHA" --merge "$merge" \
+            --output build/capture-candidate/byte-security-gate-audit.json
       - name: Verify formatting (never auto-commit or waive failure)
         if: always()
         run: cargo fmt --all -- --check

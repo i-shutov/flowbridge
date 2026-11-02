@@ -1,3 +1,86 @@
+## 2026-11-02 — Independent c60448 byte/lease/installed-client audit; new strict CI gate PENDING
+
+**Source explicitly audited as input, not the new documentation/test commit:** PR #56 code
+`c60448c8392170e9203afa52ba573c5df0aa2a99`, unchanged main
+`5b5afc2feeda2195f302380e615ba003d4906e09`, actual GitHub PR
+test-merge `aa753a86b2381a51c9f64845049f953e5550dac0`.
+All four **exact previous source** Actions completed SUCCESS:
+[capture #41409309315](https://github.com/i-shutov/flowbridge/actions/runs/41409309315)
+(Windows Server 2025, macOS, Ubuntu: 3/3),
+[Rust/native #41409309292](https://github.com/i-shutov/flowbridge/actions/runs/41409309292)
+(5/5), [DNS #41409309296](https://github.com/i-shutov/flowbridge/actions/runs/41409309296)
+(3/3; NOT leak-free), and
+[real Windows OpenSSH #41409309298](https://github.com/i-shutov/flowbridge/actions/runs/41409309298).
+The actual hosted Windows OpenSSH managed log has **128 real held, 1,152 rejected,
+10,000 successfully byte/half-close verified with zero churn failures, and four
+distinct owned SSH processes** at 15/s; raw 512 characterization reaches only
+**246 held**, NOT a 512 stability PASS.
+
+**Critical genuine Windows WFP local-loopback evidence, not NDISRD diversion:**
+The hosted Windows job #125158451795 ran the original Rust executable and
+real TCP sockets against an AppId-wide persistent IPv4+IPv6 deny plus same-sublayer
+dynamic *soft* permit. `windows-wfp-soft-lease-hosted.json` shows **all
+33/33 separate strict checks true**: selected receives a bounded temporary
+one-port permit, another port stays denied, an independently created BFE sublayer
+still vetoes, sibling/Python remain unaffected, an ALREADY ESTABLISHED TCP
+selected flow does not deliver after lease-process death, dynamic lease filters
+disappear, persistent deny survives both lease- and guard-process death, and
+independent SYSTEM recovery restores normal networking. This distinguishes
+post-connection revocation from mere blocking of new connections.
+The experiment was on **GitHub-hosted Windows Server 2025**, used **no NDISRD**,
+and does not prove an actual driver/SSH crash-protected product.
+The controls do not disable Defender or global firewall.
+
+**Independently downloaded exact Windows Action artifact #13124852214:**
+outer ZIP SHA-256
+`15e6bae33f8dc23f8be127882b91d3ef197da966dbad5c3d296dc87709bc345f`
+matches GitHub digest; inner five-entry original-Rust allowlisted ZIP SHA-256
+`40b75fd04c07fe89401209baf129221b418e638fc0bead929011f8b796c50734`;
+source/HEAD and all manifest hashes match, manifest SHA-256
+`a4fef8c0225d09c1a36be7c4aa712b269ce5f1397bf5bd373e4f11a20f879fd2`,
+Rust x64 agent SHA-256
+`96ff2c6b0a990f4e0a963afe10117c1e6bd8068a1e25592fcbdd53c124d61ad6`.
+Unsigned user-owned Rust NSIS installer exact SHA-256
+`6aa0a09628e3d0bce48b0a45cbf2130eaa8aab0077fb4f808f6231aa49ccfbd5`;
+separate installed GUI→IPC→real authenticated OpenSSH/SOCKS, SCM and
+fault-injected install/recovery reports are present and true. Managed SSH
+artifact #13125945180 ZIP SHA-256
+`430929d4910e8a4450d93a9466e055de524976d45cf24439e861ad38edf156d4`;
+raw diagnostics artifact #13125365653 SHA-256
+`39b364dc05209c2ff7f4da8739f97a14462343427ee2745de8edae4e5913063f`.
+All are previous tested-source evidence, not new-HEAD binary provenance.
+
+**New four-file integrated evidence gate in #56, strict CI acceptance PENDING:**
+`tools/capture_evidence_audit.py` is a standalone read-only byte inspector
+for the exact candidate ZIP, x64 PE, five-member allowlist, exact source
+test-merge and PR HEAD, file SHA-256, unsigned NSIS bytes, installed real GUI/
+SSH/SOCKS and negative release/security claims. It refuses a missing or false
+held-TCP revocation, failed other-sublayer veto, false rollback, tampered
+installer, duplicate/traversal/altered ZIP, stale SHA, or bogus release flags.
+`tests/test_capture_evidence_audit.py` covers eleven *synthetic negative
+contracts only*; these unit tests are never labeled native evidence.
+`.github/workflows/capture-integration.yml` now must run those contracts on
+all three hosted OSes and run the actual on-disk Windows provenance/lease/
+installed-product auditor as a strict end-to-end step. A green prior-source
+run is NOT transferred to the newly committed CI gate. Accept this QA block
+only after fresh exact-new-HEAD GitHub run, real test-merge and independently
+audited new artifact hashes.
+
+**Native and release blockers still OPEN:** the separate paid VDSina native
+Windows Server 2025 signed-NDISRD
+[LISTEN/WFP TEST-NET canary evidence](https://github.com/i-shutov/flowbridge-vps-qa/issues/1#issuecomment-6570697616)
+is pinned to older source `0039a528a20a211b1a720c7b482ad70b497ab364`,
+not to the above hosted executable. We still lack simultaneous actual NDISRD
+TUNNEL_BOTH diversion with gated WFP soft permit and proven driver/SSH crash
+ordering, reliable arbitrary packet→PID+creation epoch authority, protected
+IPv4/IPv6/DNS/UDP/QUIC/DoH leak containment, native Win10/11 acceptance and
+owner-approved release. The signed driver mode 0 means DIRECT-capable normal
+networking, NOT protected fail-closed. The paid VPS remains needed for
+carefully pre-armed, VNC-recoverable native integration; NEVER deploy the
+hosted-only persistent WFP QA canary there unchanged. No main merge or release.
+
+---
+
 ## 2026-11-02 — Release blocker: permanent WFP deny vs NDISRD driver capture
 
 **Architecture research / safety-gated experiment, NOT production enablement.** Microsoft WFP filter arbitration first selects the highest-weight match within *one* sublayer; a default **soft permit** can stop a lower-weight persistent block there, while filters in other sublayers still have the right to block. See https://learn.microsoft.com/en-us/windows/win32/fwp/filter-arbitration . The current AppId-wide persistent canary uses high FWP_UINT8-range block weights. A dynamic-session, explicit FWP_UINT64 maximum-weight soft permit in **the same QA sublayer** may temporarily admit traffic while its owning Rust process is alive, and disappear automatically when that BFE session closes/crashes. This could resolve the fundamental conflict that a permanent AppId block otherwise prevents the selected app's packets reaching NDISRD. The mechanism is not assumed working until real Windows tests prove it.
