@@ -16,7 +16,7 @@ pub fn capabilities() -> Value {
         "native_tcp_owner_candidate_selftest":cfg!(windows),
         "native_udp_local_bind_candidate_selftest":cfg!(windows),
         "dns_leak_free":false, "release_accepted":false,
-        "modes":["status","observe_lab","observe_owner_candidates_lab","observe_protocol_profile_lab","passthrough_lab","relay_loopback_probe","observe_testnet_udp4_canary_lab","foreground_explicit_socks_control","scm_explicit_socks_candidate","owner_selftest_read_only","udp_owner_selftest_read_only","self_owned_udp_testnet_drop_lab","self_owned_ipv6_udp_testnet_drop_lab"],
+        "modes":["status","observe_lab","observe_owner_candidates_lab","observe_protocol_profile_lab","passthrough_lab","relay_loopback_probe","observe_testnet_udp4_canary_lab","observe_testnet_tcp4_syn_canary_lab","foreground_explicit_socks_control","scm_explicit_socks_candidate","owner_selftest_read_only","udp_owner_selftest_read_only","self_owned_udp_testnet_drop_lab","self_owned_ipv6_udp_testnet_drop_lab"],
         "abi":{"adapters":ndis_wire::ADAPTER_LIST_BYTES,"mode":ndis_wire::MODE_BYTES,
             "request":ndis_wire::REQUEST_BYTES,"packet_header":ndis_wire::PACKET_HEADER_BYTES,
             "packet_capacity":ndis_wire::PACKET_BUFFER_BYTES}
@@ -79,6 +79,9 @@ pub struct LabRequest {
     /// Exactly two independent high-port test canaries to fixed RFC 5737 TEST-NET.
     #[serde(default)]
     pub testnet_udp_ports: Option<[u16; 2]>,
+    /// Distinct fixed-documentation TCP SYN target ports; never process authority.
+    #[serde(default)]
+    pub testnet_tcp_ports: Option<[u16; 2]>,
 }
 
 fn validate(request: &LabRequest) -> Result<(), String> {
@@ -89,14 +92,18 @@ fn validate(request: &LabRequest) -> Result<(), String> {
     {
         return Err("Invalid bounded duration or adapter name".into());
     }
-    if request.testnet_udp_ports.is_some()
-        && (request.passthrough || request.owner_candidates || request.protocol_profile)
+    if (request.testnet_udp_ports.is_some() && request.testnet_tcp_ports.is_some())
+        || (request.testnet_udp_ports.is_some() || request.testnet_tcp_ports.is_some())
+            && (request.passthrough || request.owner_candidates || request.protocol_profile)
     {
         return Err("TEST-NET canary requires exclusive read-only observation".into());
     }
-    if let Some([a, b]) = request.testnet_udp_ports {
+    for [a, b] in [request.testnet_udp_ports, request.testnet_tcp_ports]
+        .into_iter()
+        .flatten()
+    {
         if !(49_152..=65_534).contains(&a) || !(49_152..=65_534).contains(&b) || a == b {
-            return Err("Two distinct ephemeral TEST-NET UDP canary ports required".into());
+            return Err("Two distinct ephemeral TEST-NET canary ports required".into());
         }
     }
     if request.protocol_profile && (request.owner_candidates || request.passthrough) {
@@ -105,12 +112,17 @@ fn validate(request: &LabRequest) -> Result<(), String> {
     if request.owner_candidates && request.passthrough {
         return Err("IP Helper candidate sampling is read-only and cannot divert".into());
     }
-    if (request.owner_candidates || request.protocol_profile || request.testnet_udp_ports.is_some())
+    if (request.owner_candidates
+        || request.protocol_profile
+        || request.testnet_udp_ports.is_some()
+        || request.testnet_tcp_ports.is_some())
         && request.duration_ms > 15_000
     {
         return Err("Owner snapshot observation is limited to 15 seconds".into());
     }
-    let required = if request.testnet_udp_ports.is_some() {
+    let required = if request.testnet_tcp_ports.is_some() {
+        "LISTEN_ONLY_TESTNET_TCP_SYN_CANARY"
+    } else if request.testnet_udp_ports.is_some() {
         "LISTEN_ONLY_TESTNET_UDP_CANARY"
     } else if request.protocol_profile {
         "LISTEN_ONLY_PROTOCOL_PROFILE"
@@ -180,6 +192,7 @@ fn run_native(request: LabRequest) -> Result<Value, String> {
     let mut owner_sample = crate::owner_sampling::Sampler::default();
     let mut protocol_sample = crate::protocol_profile::Profile::default();
     let mut testnet_canary = crate::testnet_canary::Canary::new(request.testnet_udp_ports);
+    let mut tcp_canary = crate::testnet_canary::TcpSynCanary::new(request.testnet_tcp_ports);
     while start.elapsed() < Duration::from_millis(request.duration_ms) {
         let result = if request.owner_candidates {
             session.poll_observe(128, &mut |direction, frame| {
@@ -209,6 +222,10 @@ fn run_native(request: LabRequest) -> Result<Value, String> {
             session.poll_observe(128, &mut |direction, frame| {
                 testnet_canary.observe(direction, frame);
             })
+        } else if request.testnet_tcp_ports.is_some() {
+            session.poll_observe(128, &mut |direction, frame| {
+                tcp_canary.observe(direction, frame);
+            })
         } else {
             session.poll(128)
         };
@@ -221,7 +238,7 @@ fn run_native(request: LabRequest) -> Result<Value, String> {
     let stats = session.stats();
     let cleanup = session.close();
     let report = json!({
-        "product":"FlowBridgeAgent", "mode":if request.owner_candidates {"observe_owner_candidates_lab"} else if request.protocol_profile {"observe_protocol_profile_lab"} else if request.testnet_udp_ports.is_some() {"observe_testnet_udp4_canary_lab"} else if request.passthrough {"passthrough_lab"} else {"observe_lab"},
+        "product":"FlowBridgeAgent", "mode":if request.owner_candidates {"observe_owner_candidates_lab"} else if request.protocol_profile {"observe_protocol_profile_lab"} else if request.testnet_udp_ports.is_some() {"observe_testnet_udp4_canary_lab"} else if request.testnet_tcp_ports.is_some() {"observe_testnet_tcp4_syn_canary_lab"} else if request.passthrough {"passthrough_lab"} else {"observe_lab"},
         "driver_version":format!("0x{version:08x}"), "elapsed_ms":start.elapsed().as_millis(),
         "observed_packets":stats.observed,"outgoing_packets":stats.outgoing,"incoming_packets":stats.incoming,
         "injected_original_packets":stats.injected,"bytes":stats.bytes,"out_of_band_vlan_packets":stats.metadata_vlan,
@@ -234,6 +251,7 @@ fn run_native(request: LabRequest) -> Result<Value, String> {
         "owner_candidate_sampling":if request.owner_candidates {owner_sample.report()} else {json!({"requested":false})},
         "protocol_profile":if request.protocol_profile {protocol_sample.report()} else {json!({"requested":false})},
         "testnet_canary":testnet_canary.report(),
+        "testnet_tcp_syn_canary":tcp_canary.report(),
         "native_packet_attribution_proved":false,"authorizes_capture":false,
         "note":"Lab operation only. Passthrough sends originals; observe never reinjects. Mode 0 is normal networking, not a kill switch."
     });
@@ -253,6 +271,7 @@ mod tests {
             owner_candidates: false,
             protocol_profile: false,
             testnet_udp_ports: None,
+            testnet_tcp_ports: None,
         };
         assert!(validate(&good).is_ok());
         let mut bad = good;
@@ -301,6 +320,22 @@ mod tests {
         bad.testnet_udp_ports = Some([60021, 60021]);
         assert!(validate(&bad).is_err());
         bad.testnet_udp_ports = Some([60021, 60022]);
+        bad.owner_candidates = true;
+        assert!(validate(&bad).is_err());
+        bad.owner_candidates = false;
+        bad.duration_ms = 15001;
+        assert!(validate(&bad).is_err());
+        bad.duration_ms = 15000;
+        bad.testnet_udp_ports = None;
+        bad.testnet_tcp_ports = Some([60031, 60032]);
+        bad.consent = "LISTEN_ONLY_TESTNET_TCP_SYN_CANARY".into();
+        assert!(validate(&bad).is_ok());
+        bad.testnet_udp_ports = Some([60021, 60022]);
+        assert!(validate(&bad).is_err());
+        bad.testnet_udp_ports = None;
+        bad.testnet_tcp_ports = Some([60031, 60031]);
+        assert!(validate(&bad).is_err());
+        bad.testnet_tcp_ports = Some([60031, 60032]);
         bad.owner_candidates = true;
         assert!(validate(&bad).is_err());
         bad.owner_candidates = false;

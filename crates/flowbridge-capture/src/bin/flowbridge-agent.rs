@@ -43,6 +43,12 @@ fn main() {
                 .and_then(|p| flowbridge_capture::testnet_canary::send_two(p, consent))
         }
         #[cfg(windows)]
+        [command, port, consent] if command == "wfp-qa-testnet-tcp4-client" => {
+            port.parse::<u16>()
+                .map_err(|_| "Invalid TEST-NET TCP SYN canary port".to_owned())
+                .and_then(|p| flowbridge_capture::testnet_canary::send_one_tcp_syn(p, consent))
+        }
+        #[cfg(windows)]
         [command, path, port, consent] if command == "wfp-qa-udp6-guard" => {
             port.parse::<u16>()
                 .map_err(|_| "Invalid WFP IPv6 UDP QA port".to_owned())
