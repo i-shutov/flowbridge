@@ -19,7 +19,7 @@ use serde_json::{json, Value};
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
 use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -135,6 +135,32 @@ try {
 } finally { $s.Dispose() }
 "#;
 
+// Fixed, payload-free stage labels distinguish real HTTP/SSH relay stalls
+// from harmless post-FIN ACK-only packets dropped after TCP closes.
+fn client_progress_label(stage: u8) -> &'static str {
+    match stage {
+        0 => "not_started",
+        1 => "tcp_connect_pending",
+        2 => "tcp_connected",
+        3 => "request_written",
+        4 => "half_closed",
+        5 => "response_read",
+        6 => "http_completed",
+        _ => "invalid_stage",
+    }
+}
+
+fn relay_progress_label(stage: u8) -> &'static str {
+    match stage {
+        0 => "not_started",
+        1 => "relay_accept_pending",
+        2 => "relay_accepted",
+        3 => "socks_connected",
+        4 => "relay_completed",
+        _ => "invalid_stage",
+    }
+}
+
 #[derive(Default)]
 struct Probe {
     valid_http_reply: bool,
@@ -143,6 +169,8 @@ struct Probe {
     bytes_match: bool,
     sent: u64,
     received: u64,
+    client_progress: &'static str,
+    relay_progress: &'static str,
 }
 
 /// A separately spawned, controllable Rust process owns the socket. Only a
@@ -240,28 +268,40 @@ async fn exercise(
 ) -> Probe {
     let connected = Arc::new(AtomicBool::new(false));
     let denied = Arc::new(AtomicBool::new(false));
+    let client_progress = Arc::new(AtomicU8::new(0));
+    let relay_progress = Arc::new(AtomicU8::new(0));
+    let client_stage = client_progress.clone();
+    let relay_stage = relay_progress.clone();
     let up = connected.clone();
     let down = denied.clone();
     let client = async move {
+        client_stage.store(1, Ordering::SeqCst);
         let mut client = socket.connect(request_target).await.map_err(|_| ())?;
+        client_stage.store(2, Ordering::SeqCst);
         client.write_all(REQUEST).await.map_err(|_| ())?;
+        client_stage.store(3, Ordering::SeqCst);
         client.shutdown().await.map_err(|_| ())?;
+        client_stage.store(4, Ordering::SeqCst);
         let mut reply = Vec::new();
         (&mut client)
             .take(8193)
             .read_to_end(&mut reply)
             .await
             .map_err(|_| ())?;
+        client_stage.store(5, Ordering::SeqCst);
         if reply.len() > 8192
             || !reply.starts_with(b"HTTP/1.")
             || !reply.windows(4).any(|w| w == b"\r\n\r\n")
         {
             return Err(());
         }
+        client_stage.store(6, Ordering::SeqCst);
         Ok::<u64, ()>(reply.len() as u64)
     };
     let forwarding = async move {
+        relay_stage.store(1, Ordering::SeqCst);
         let (native, accepted_peer) = listener.accept().await.map_err(|_| ())?;
+        relay_stage.store(2, Ordering::SeqCst);
         if accepted_peer != peer {
             return Err(());
         }
@@ -279,12 +319,17 @@ async fn exercise(
                 return Err(());
             }
         };
-        upstream.forward(native).await.map_err(|_| ())
+        relay_stage.store(3, Ordering::SeqCst);
+        let bytes = upstream.forward(native).await.map_err(|_| ())?;
+        relay_stage.store(4, Ordering::SeqCst);
+        Ok::<(u64, u64), ()>(bytes)
     };
     let results = tokio::time::timeout(deadline, async { tokio::join!(client, forwarding) }).await;
     let mut probe = Probe {
         upstream_connected: connected.load(Ordering::SeqCst),
         upstream_failed: denied.load(Ordering::SeqCst),
+        client_progress: client_progress_label(client_progress.load(Ordering::SeqCst)),
+        relay_progress: relay_progress_label(relay_progress.load(Ordering::SeqCst)),
         ..Probe::default()
     };
     if let Ok((Ok(received), Ok((sent, relayed)))) = results {
@@ -357,6 +402,16 @@ async fn exercise_child(
         upstream_connected: connected.load(Ordering::SeqCst),
         upstream_failed: denied.load(Ordering::SeqCst),
         ..Probe::default()
+    };
+    probe.client_progress = match &results {
+        Ok((Ok(_), _)) => "client_reported_complete",
+        Ok((Err(_), _)) => "client_reported_error",
+        Err(_) => "transaction_timeout",
+    };
+    probe.relay_progress = match &results {
+        Ok((_, Ok(_))) => "relay_completed",
+        Ok((_, Err(_))) => "relay_failed",
+        Err(_) => "transaction_timeout",
     };
     if let Ok((Ok(received), Ok((sent, relayed)))) = results {
         probe.valid_http_reply = true;
@@ -433,6 +488,16 @@ async fn exercise_external(
         upstream_connected: connected.load(Ordering::SeqCst),
         upstream_failed: denied.load(Ordering::SeqCst),
         ..Probe::default()
+    };
+    probe.client_progress = match &results {
+        Ok((Ok(_), _)) => "client_reported_complete",
+        Ok((Err(_), _)) => "client_reported_error",
+        Err(_) => "transaction_timeout",
+    };
+    probe.relay_progress = match &results {
+        Ok((_, Ok(_))) => "relay_completed",
+        Ok((_, Err(_))) => "relay_failed",
+        Err(_) => "transaction_timeout",
     };
     if let Ok((Ok(received), Ok((sent, relayed)))) = results {
         probe.valid_http_reply = true;
@@ -824,6 +889,8 @@ async fn native(request: Request) -> Result<Value, String> {
         "upstream_socks_failed":probe.upstream_failed,
         "application_received_http":probe.valid_http_reply,
         "application_and_relay_byte_counts_match":probe.bytes_match,
+        "client_progress":probe.client_progress,
+        "relay_progress":probe.relay_progress,
         "bytes_sent":probe.sent, "bytes_received":probe.received,
         "arbitrary_app_owner_binding_accepted":false, "native_owner_binding_accepted":false,
         "protected_redirect_available":false, "dns_leak_free":false,
