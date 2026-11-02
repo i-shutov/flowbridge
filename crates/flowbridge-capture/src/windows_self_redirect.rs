@@ -12,7 +12,8 @@ use crate::windows_tcp_owner::{
     validate_pinned_tcp_owner_lab_missing_retry, OwnedProcess, OwnerQuery,
 };
 use base64::Engine;
-use flowbridge_core::tcp_packet::TcpTuple;
+use flowbridge_core::ndis_ethernet::{inspect_l2_ip, IpVersion};
+use flowbridge_core::tcp_packet::{inspect_tcp, TcpTuple};
 use flowbridge_core::Endpoint;
 use serde_json::{json, Value};
 use std::io::Write;
@@ -27,6 +28,55 @@ use tokio::process::{Child, ChildStdout, Command};
 use tokio::sync::watch;
 
 const REQUEST: &[u8] = b"HEAD / HTTP/1.0\r\nHost: example.com\r\nConnection: close\r\n\r\n";
+
+// DIAGNOSTICS ONLY. Every emitted value is a fixed class, never the raw
+// Windows API error, process identity, endpoint or packet payload.
+// Classifying a rejected witness cannot change the fail-closed packet verdict.
+fn sanitized_owner_denial_reason(error: &str) -> &'static str {
+    if error.contains("tuple absent in consecutive fresh snapshots") {
+        "missing_tuple"
+    } else if error.contains("Conflicting TCP owner PID") {
+        "conflicting_pid"
+    } else if error.contains("Duplicate TCP tuple") {
+        "duplicate_tuple"
+    } else if error.contains("Matching TCP tuple is not in an active connection state") {
+        "inactive_tcp_state"
+    } else if error.contains("Zero PID") {
+        "zero_pid"
+    } else if error.contains("Pinned TCP process") || error.contains("Invalid pinned TCP") {
+        "pinned_process_changed"
+    } else if error.contains("IP Helper") {
+        "iphelper_failure"
+    } else {
+        "other_fail_closed"
+    }
+}
+
+fn sanitized_tcp_flag_phase(flags: u8, has_payload: bool) -> &'static str {
+    if flags & 0x04 != 0 {
+        "rst"
+    } else if flags & 0x02 != 0 {
+        "syn"
+    } else if flags & 0x01 != 0 {
+        "fin"
+    } else if has_payload {
+        "data"
+    } else {
+        "ack_only"
+    }
+}
+
+fn sanitized_selected_packet_phase(frame: &[u8]) -> &'static str {
+    let Ok(region) = inspect_l2_ip(frame) else { return "invalid_frame"; };
+    if region.version != IpVersion::V4 { return "not_ipv4"; }
+    let Some(end) = region.offset.checked_add(region.length) else { return "invalid_frame"; };
+    let Some(ip) = frame.get(region.offset..end) else { return "invalid_frame"; };
+    let Some(&first) = ip.first() else { return "invalid_tcp"; };
+    let tcp_offset = usize::from(first & 0x0f) * 4;
+    let Some(&flags) = ip.get(tcp_offset + 13) else { return "invalid_tcp"; };
+    let Ok(checked) = inspect_tcp(ip) else { return "invalid_tcp"; };
+    sanitized_tcp_flag_phase(flags, checked.data_bytes > 0)
+}
 
 /// Fixed Windows PowerShell client for cross-runtime NDISRD lab verification.
 /// This creates only TCP test traffic; all interception/routing stays in Rust.
@@ -604,6 +654,8 @@ async fn native(request: Request) -> Result<Value, String> {
     let mut owner_candidate_checks = 0u64;
     let mut owner_candidate_denials = 0u64;
     let mut owner_missing_snapshot_retry_attempts = 0u64;
+    let mut first_selected_owner_denial_reason: &'static str = "none";
+    let mut first_selected_owner_denial_tcp_phase: &'static str = "none";
     let mut selected_direct_sends = 0u64;
     while start.elapsed() < timeout && !worker.is_finished() {
         let outcome = session.poll_lab_redirect(128, &mut |packet| {
@@ -613,6 +665,11 @@ async fn native(request: Request) -> Result<Value, String> {
             let decision = reflect.decide(packet, &mut || {
                 if !matches!(process.evidence(), Ok(now) if now == epoch) {
                     owner_candidate_denials += 1;
+                    if selected_candidate && first_selected_owner_denial_reason == "none" {
+                        first_selected_owner_denial_reason = "pinned_process_changed";
+                        first_selected_owner_denial_tcp_phase =
+                            sanitized_selected_packet_phase(packet.frame);
+                    }
                     return false;
                 }
                 // Re-read the real OS TCP table for EVERY original outbound
@@ -632,8 +689,14 @@ async fn native(request: Request) -> Result<Value, String> {
                         Ok(extra_attempts) => {
                             owner_missing_snapshot_retry_attempts += u64::from(extra_attempts);
                         }
-                        Err(_) => {
+                        Err(error) => {
                             owner_candidate_denials += 1;
+                            if first_selected_owner_denial_reason == "none" {
+                                first_selected_owner_denial_reason =
+                                    sanitized_owner_denial_reason(&error);
+                                first_selected_owner_denial_tcp_phase =
+                                    sanitized_selected_packet_phase(packet.frame);
+                            }
                             return false;
                         }
                     }
@@ -759,9 +822,47 @@ async fn native(request: Request) -> Result<Value, String> {
     report["fresh_tcp_owner_candidate_missing_snapshot_retry_attempts"] =
         json!(owner_missing_snapshot_retry_attempts);
     report["fresh_tcp_owner_candidate_retries_only_missing"] = json!(true);
+    report["fresh_tcp_owner_candidate_first_denial_reason"] =
+        json!(first_selected_owner_denial_reason);
+    report["fresh_tcp_owner_candidate_first_denial_tcp_phase"] =
+        json!(first_selected_owner_denial_tcp_phase);
     report["fresh_tcp_owner_candidate_denials_dropped"] =
         json!(owner_candidate_denials <= reflect.counters.selected_dropped);
     report["ambiguous_tcp_fragments_quarantined"] =
         json!(reflect.counters.ambiguous_fragment_dropped);
     Ok(report)
+}
+
+#[cfg(test)]
+mod sanitized_owner_diagnostic_tests {
+    use super::{sanitized_owner_denial_reason, sanitized_tcp_flag_phase};
+
+    #[test]
+    fn bounded_categories_cannot_expose_native_error_details() {
+        let known = [
+            ("TCP tuple absent in consecutive fresh snapshots after bounded retry", "missing_tuple"),
+            ("Conflicting TCP owner PID (no retry)", "conflicting_pid"),
+            ("Duplicate TCP tuple, even with identical PID", "duplicate_tuple"),
+            ("Matching TCP tuple is not in an active connection state", "inactive_tcp_state"),
+            ("Zero PID in matching endpoint", "zero_pid"),
+            ("Pinned TCP process identity is no longer active", "pinned_process_changed"),
+            ("IP Helper sizing failed: 122", "iphelper_failure"),
+        ];
+        for (error, expected) in known {
+            assert_eq!(sanitized_owner_denial_reason(error), expected);
+        }
+        assert_eq!(
+            sanitized_owner_denial_reason(r"PID=1234 C:\Users\Private\secret.exe 10.0.0.17:55555"),
+            "other_fail_closed"
+        );
+    }
+
+    #[test]
+    fn packet_phase_diagnostic_is_only_a_fixed_tcp_class() {
+        assert_eq!(sanitized_tcp_flag_phase(0x02, false), "syn");
+        assert_eq!(sanitized_tcp_flag_phase(0x11, false), "fin");
+        assert_eq!(sanitized_tcp_flag_phase(0x10, true), "data");
+        assert_eq!(sanitized_tcp_flag_phase(0x10, false), "ack_only");
+        assert_eq!(sanitized_tcp_flag_phase(0x14, true), "rst");
+    }
 }
