@@ -1964,3 +1964,27 @@ hashes are required before recording PASS.
 ### 2026-11-02 — Native Windows IPv6 dual-protocol WFP lab integration (CI PENDING)
 
 New original Rust disposable `ALE_AUTH_CONNECT_V6` AppId+high-port guards and `::1` socket probes for **both TCP half-close and UDP echo**. Strict Windows CI must see selected EXE denied, identically copied different-name EXE and independent Python allowed, no selected packet/connection at real server, and full selected recovery after forced guard-process termination; no skips when IPv6 loopback unavailable. BFE filter readback validates exact V6 layer, AppId and protocol. No NDISRD, protected persistence, DNS resolver, general arbitrary packet PID ownership, real Win10/11 acceptance, or release claims. This checkpoint is **unverified until exact HEAD CI and artifacts finish**.
+
+
+### 2026-11-02 — Original Rust crash-persistent WFP single-EXE high-port QA (CI EVIDENCE PENDING)
+
+On disposable **GitHub-hosted Windows 2025 only**, a new exact-consent Rust
+BFE experiment uses an independently prearmed elevated SYSTEM Scheduled Task
+(three-minute rescue) before creating a persistent AppId+protocol+single high
+port rule for one temporary copied Rust test EXE. It tests four real socket
+paths (TCP/UDP × IPv4/IPv6): selected-only denial, byte-identical sibling
+and independent Python allow, guard-process forced death, **continued
+selected denial after guard exit**, explicit independent Rust cleanup and
+full recovery. BFE readback must confirm the persistent rule/sub-layer.
+The rules are never created if the host is self-hosted, the rescue is absent,
+the selected EXE is outside RUNNER_TEMP, or the port is not high. On failed
+cleanup the independently scheduled task must remain in place. No vendor
+driver, keys, global firewall, SSH server or Defender setting is modified.
+
+This is an experimentally persistent **one-EXE, one-port canary**, NOT
+protected production fail-closed after SSH/service/NDISRD crash. It does
+not bind arbitrary packets to PID, validate WFP/NDISRD order, prove DNS
+leak-freedom or constitute native Win10/11 acceptance. Do not execute it
+on paid VPS #3293462. This section is NOT a PASS until a full exact-SHA
+Windows CI execution, native JSON report, test-merge SHA and independently
+audited binary/artifact hashes confirm the strict functional matrix.

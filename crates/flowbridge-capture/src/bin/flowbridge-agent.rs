@@ -87,6 +87,22 @@ fn main() {
                 .and_then(|p| flowbridge_capture::windows_wfp_dynamic_lab::client_local_interface_ipv4(address, p, consent))
         }
         #[cfg(windows)]
+        [command, path, port, transport, consent] if command == "wfp-qa-persist-arm" => {
+            port.parse::<u16>()
+                .map_err(|_| "Invalid persistent WFP QA port".to_owned())
+                .and_then(|p| flowbridge_capture::windows_wfp_persistence_lab::arm(
+                    path, p, transport, consent,
+                ))
+        }
+        #[cfg(windows)]
+        [command, consent] if command == "wfp-qa-persist-status" => {
+            flowbridge_capture::windows_wfp_persistence_lab::status(consent)
+        }
+        #[cfg(windows)]
+        [command, consent] if command == "wfp-qa-persist-remove" => {
+            flowbridge_capture::windows_wfp_persistence_lab::remove(consent)
+        }
+        #[cfg(windows)]
         [command, config_path] if command == "service-stage" => {
             flowbridge_capture::windows_service_management::stage(config_path)
         }

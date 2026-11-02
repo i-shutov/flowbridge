@@ -54,7 +54,7 @@ impl Drop for Engine {
         unsafe { FwpmEngineClose0(self.0) };
     }
 }
-struct AppBlob(*mut FWP_BYTE_BLOB);
+pub(crate) struct AppBlob(pub(crate) *mut FWP_BYTE_BLOB);
 impl Drop for AppBlob {
     fn drop(&mut self) {
         if !self.0.is_null() {
@@ -68,7 +68,7 @@ impl Drop for AppBlob {
 // A deliberately read-only identity cross-check. An AppId returned from a
 // filename is NOT proof that the kernel attached it to any network packet.
 // The two BFE blobs stay private; neither path nor raw AppId is reported.
-fn lookup_app(path: &Path) -> Result<AppBlob, String> {
+pub(crate) fn lookup_app(path: &Path) -> Result<AppBlob, String> {
     let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
     let mut raw: *mut FWP_BYTE_BLOB = null_mut();
     // SAFETY: Windows null-terminated path and valid out pointer.
@@ -89,7 +89,7 @@ fn lookup_app(path: &Path) -> Result<AppBlob, String> {
 // the caller's DOS spelling. The Win32 canonical path is for the documented
 // FwpmGetAppIdFromFileName0 API; NT volume paths are read-only comparators.
 // Neither path, stable fingerprint, nor process identity enters QA reports.
-fn canonical_file_handle_paths(path: &Path) -> Result<(PathBuf, Vec<u16>), String> {
+pub(crate) fn canonical_file_handle_paths(path: &Path) -> Result<(PathBuf, Vec<u16>), String> {
     let file = std::fs::File::open(path)
         .map_err(|_| "WFP QA cannot open executable for canonical path".to_owned())?;
     let final_path = |flags: u32| -> Result<String, String> {

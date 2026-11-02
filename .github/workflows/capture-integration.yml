@@ -218,6 +218,9 @@ jobs:
       - name: Native IPv6 TCP and UDP app-scoped WFP DENY with real sockets and guard crash
         if: matrix.os == 'windows-2025'
         run: python tests/windows_wfp_dynamic_ipv6.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-ipv6-lifecycle.json
+      - name: Hosted-only persistent selected-WFP canary crash-survival and independent SYSTEM cleanup (IPv4/IPv6 TCP/UDP)
+        if: matrix.os == 'windows-2025'
+        run: python tests/windows_wfp_persistent_hosted.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-persistent-hosted.json
       - name: Verify formatting (never auto-commit or waive failure)
         if: always()
         run: cargo fmt --all -- --check
