@@ -169,6 +169,11 @@ struct Probe {
     bytes_match: bool,
     sent: u64,
     received: u64,
+    // Independent of the client result: a completed SOCKS relay can have
+    // transferred real bytes even if the OS client later reports failure.
+    // Counts only; no payload, endpoints or process identity leaves the lab.
+    relay_request_bytes: u64,
+    relay_response_bytes: u64,
     client_progress: &'static str,
     relay_progress: &'static str,
 }
@@ -332,6 +337,10 @@ async fn exercise(
         relay_progress: relay_progress_label(relay_progress.load(Ordering::SeqCst)),
         ..Probe::default()
     };
+    if let Ok((_, Ok((sent, relayed)))) = &results {
+        probe.relay_request_bytes = *sent;
+        probe.relay_response_bytes = *relayed;
+    }
     if let Ok((Ok(received), Ok((sent, relayed)))) = results {
         probe.valid_http_reply = true;
         probe.sent = sent;
@@ -413,6 +422,10 @@ async fn exercise_child(
         Ok((_, Err(_))) => "relay_failed",
         Err(_) => "transaction_timeout",
     };
+    if let Ok((_, Ok((sent, relayed)))) = &results {
+        probe.relay_request_bytes = *sent;
+        probe.relay_response_bytes = *relayed;
+    }
     if let Ok((Ok(received), Ok((sent, relayed)))) = results {
         probe.valid_http_reply = true;
         probe.sent = sent;
@@ -499,6 +512,10 @@ async fn exercise_external(
         Ok((_, Err(_))) => "relay_failed",
         Err(_) => "transaction_timeout",
     };
+    if let Ok((_, Ok((sent, relayed)))) = &results {
+        probe.relay_request_bytes = *sent;
+        probe.relay_response_bytes = *relayed;
+    }
     if let Ok((Ok(received), Ok((sent, relayed)))) = results {
         probe.valid_http_reply = true;
         probe.sent = sent;
@@ -900,6 +917,11 @@ async fn native(request: Request) -> Result<Value, String> {
     // outside the existing large JSON expression, without changing verdicts.
     report["client_progress"] = json!(probe.client_progress);
     report["relay_progress"] = json!(probe.relay_progress);
+    // These counts are retained even when the PowerShell client reports a
+    // failed HTTP transaction, enabling a native reverse-path diagnosis.
+    // They do not authorize a packet or change the original PASS verdict.
+    report["relay_request_bytes"] = json!(probe.relay_request_bytes);
+    report["relay_response_bytes"] = json!(probe.relay_response_bytes);
     // Keep this safety invariant explicit without deepening serde_json's
     // already large recursive laboratory JSON macro expansion.
     report["fresh_tcp_owner_candidate_missing_snapshot_retry_attempts"] =
