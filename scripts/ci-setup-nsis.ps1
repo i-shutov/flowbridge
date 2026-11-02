@@ -70,18 +70,33 @@ if (-not $verified) { throw 'Official NSIS CDN/mirrors supplied no verified ZIP 
 $dest = Join-Path $root 'verified-portable'
 if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
 Expand-Archive -LiteralPath $archive -DestinationPath $dest -Force
-$compilers = @(Get-ChildItem -LiteralPath $dest -Recurse -File -Filter 'makensis.exe')
+# Official portable distributions contain two different makensis.exe files:
+# a root redirector and the real compiler under Bin/. Count the real Bin
+# compiler only, not the redirector; do not relax SHA-256 or version checks.
+$compilers = @(Get-ChildItem -LiteralPath $dest -Recurse -File -Filter 'makensis.exe' |
+  Where-Object { $_.Directory.Name -ieq 'Bin' })
 if ($compilers.Count -ne 1) {
-  throw 'Official portable NSIS archive must contain exactly one makensis.exe'
+  throw ('Official portable NSIS archive must contain exactly one Bin/makensis.exe; found ' +
+    $compilers.Count)
 }
 $compiler = $compilers[0].FullName
+$bin = $compilers[0].Directory.FullName
+$nsisRoot = $compilers[0].Directory.Parent.FullName
+if (-not (Test-Path -LiteralPath (Join-Path $nsisRoot 'Include/LogicLib.nsh') -PathType Leaf) -or
+    -not (Test-Path -LiteralPath (Join-Path $nsisRoot 'Stubs') -PathType Container)) {
+  throw 'Pinned portable NSIS lacks required Include/ or Stubs/ build resources'
+}
 $version = @(& $compiler /VERSION) -join ''
 if ($LASTEXITCODE -ne 0 -or $version.Trim() -ne 'v3.13') {
   throw 'Official portable NSIS compiler version check failed (expected v3.13)'
 }
-$bin = $compilers[0].Directory.FullName
+if ([string]::IsNullOrWhiteSpace($env:GITHUB_ENV)) {
+  throw 'GitHub-hosted CI environment export path missing'
+}
+$env:NSISDIR = $nsisRoot
 $env:PATH = $bin + [IO.Path]::PathSeparator + $env:PATH
 Add-Content -LiteralPath $env:GITHUB_PATH -Value $bin -Encoding utf8
+Add-Content -LiteralPath $env:GITHUB_ENV -Value ('NSISDIR=' + $nsisRoot) -Encoding utf8
 $evidence = @{
   kind = 'github_hosted_official_portable_nsis_toolchain'
   version = '3.13'
@@ -90,6 +105,9 @@ $evidence = @{
   source = 'https://sourceforge.net/projects/nsis/files/NSIS%203/3.13/'
   archive_digest_verified = $true
   compiler_version_verified = $true
+  compiler_relative_path = 'Bin/makensis.exe'
+  resources_root_verified = $true
+  duplicate_root_redirector_not_used = $true
   globally_installed = $false
   included_in_flowbridge_candidate = $false
   installer_security_tests_waived = $false
