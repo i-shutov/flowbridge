@@ -141,7 +141,9 @@ jobs:
       - name: Build native WFP capture service
         run: cmake -S native/windows/wfp -B build/windows-capture -A x64 -DFLOWBRIDGE_FFI_LIBRARY="$env:GITHUB_WORKSPACE/target/release/flowbridge_ffi.dll.lib"
       - run: cmake --build build/windows-capture --config Release
-      - run: choco install nsis --yes --no-progress
+      - name: Use SHA-256 pinned official portable NSIS for required installed-product QA
+        shell: pwsh
+        run: ./scripts/ci-setup-nsis.ps1
       - run: python packaging/windows/build-installer.py --skip-build
       - name: Reject dependencies on a separately installed Visual C++ runtime
         shell: pwsh

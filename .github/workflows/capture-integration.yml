@@ -172,28 +172,9 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          # Chocolatey upstream can return 504 yet exit zero: absence of a
-          # verified makensis binary is ALWAYS a hard failure, never a skip.
-          # Bounded retries recover transient community-feed outages.
-          $candidates = @(
-            (Join-Path ${env:ProgramFiles(x86)} 'NSIS/makensis.exe'),
-            (Join-Path $env:ProgramFiles 'NSIS/makensis.exe')
-          )
-          $nsis = $candidates | Where-Object { Test-Path $_ -PathType Leaf } | Select-Object -First 1
-          for ($attempt = 1; $attempt -le 2 -and -not $nsis; $attempt++) {
-            choco install nsis --version=3.13.0 --yes --no-progress
-            $chocoExit = $LASTEXITCODE
-            $nsis = $candidates | Where-Object { Test-Path $_ -PathType Leaf } | Select-Object -First 1
-            if (-not $nsis -and $attempt -lt 2) {
-              Write-Warning "Verified NSIS missing after Chocolatey attempt $attempt (exit $chocoExit); bounded retry"
-              Start-Sleep -Seconds 12
-            }
-          }
-          if (-not $nsis) { throw 'Required pinned NSIS 3.13.0 installation failed; no installer QA bypass' }
-          $nsisVersion = (& $nsis /VERSION).Trim()
-          if ($LASTEXITCODE -ne 0 -or $nsisVersion -ne 'v3.13') {
-            throw "Unexpected or nonworking NSIS compiler; requested v3.13"
-          }
+          # SHA-pinned official portable NSIS; no Chocolatey community-feed dependency.
+          # Same hosted-Windows guard and hard failure as the required installer QA.
+          & ./scripts/ci-setup-nsis.ps1
           python tools/windows_rust_candidate_installer.py --candidate build/capture-candidate/FlowBridge-Rust-Candidate-Windows.zip --output build/capture-candidate/FlowBridge-Rust-Candidate-Windows-UNSIGNED-setup.exe --report build/capture-candidate/windows-rust-installer-build.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/windows_rust_candidate_installer.py --candidate build/capture-candidate/FlowBridge-Rust-Candidate-Windows.zip --installer build/capture-candidate/FlowBridge-Rust-Candidate-Windows-UNSIGNED-setup.exe --report build/capture-candidate/windows-rust-installer-build.json --output build/capture-candidate/windows-rust-installed-lifecycle.json --ssh "$env:FLOWBRIDGE_INSTALL_SSH" --sshd "$env:FLOWBRIDGE_INSTALL_SSHD" --keygen "$env:FLOWBRIDGE_INSTALL_KEYGEN"
