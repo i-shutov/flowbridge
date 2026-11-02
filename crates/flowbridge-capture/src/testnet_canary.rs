@@ -138,7 +138,6 @@ pub fn send_two(port: u16, consent: &str) -> Result<Value, String> {
     }))
 }
 
-
 /// Bounded outbound IPv4 TCP SYN observer for a *separate* WFP/NDISRD
 /// ordering canary. A matching port is not a PID, creation epoch, or ownership
 /// proof. The observer cannot divert, reinject, or authorize a flow.
@@ -193,11 +192,7 @@ impl TcpSynCanary {
         let ip = &frame[offset..];
         let ihl = usize::from(ip[0] & 0x0f) * 4;
         let total = usize::from(u16::from_be_bytes([ip[2], ip[3]]));
-        if ip[0] >> 4 != 4
-            || !(20..=60).contains(&ihl)
-            || total < ihl + 20
-            || total > ip.len()
-        {
+        if ip[0] >> 4 != 4 || !(20..=60).contains(&ihl) || total < ihl + 20 || total > ip.len() {
             self.invalid_or_unsupported = self.invalid_or_unsupported.saturating_add(1);
             return;
         }
@@ -341,7 +336,14 @@ mod tests {
         bytes.extend_from_slice(&(if tags == 0 { 0x0800u16 } else { 0x8100u16 }).to_be_bytes());
         for index in 0..tags {
             bytes.extend_from_slice(&0u16.to_be_bytes());
-            bytes.extend_from_slice(&(if index + 1 == tags { 0x0800u16 } else { 0x8100u16 }).to_be_bytes());
+            bytes.extend_from_slice(
+                &(if index + 1 == tags {
+                    0x0800u16
+                } else {
+                    0x8100u16
+                })
+                .to_be_bytes(),
+            );
         }
         let mut ip = vec![0u8; 20];
         ip[0] = 0x45;
