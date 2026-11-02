@@ -33,9 +33,10 @@ def checked_lease_state(agent):
     return value["soft_lease_ipv4_present"], value["soft_lease_ipv6_present"]
 
 
-def launch(agent, command, args, env, label):
+def launch(agent, command, args, env, label, *, interactive=False):
     proc = subprocess.Popen([str(agent), command, *map(str, args)],
                             env=env, stdout=subprocess.PIPE,
+                            stdin=subprocess.PIPE if interactive else None,
                             stderr=subprocess.DEVNULL, text=True, encoding="utf-8")
     q = queue.Queue(maxsize=1)
     threading.Thread(target=lambda: q.put(proc.stdout.readline()), daemon=True).start()
@@ -233,7 +234,8 @@ def main():
             # process death. A new-connection denial alone proves too little.
             held, initial = launch(
                 selected, "wfp-qa-appwide-held-tcp4-client",
-                (held_server.port, LEASE_TOKEN), dict(os.environ), "Held TCP")
+                (held_server.port, LEASE_TOKEN), dict(os.environ), "Held TCP",
+                interactive=True)
             checks["held_tcp_live_before_crash"] = (
                 initial["connection_established_before_lease_death"]
                 and held_server.held_hits == [b"HELD0001"])
