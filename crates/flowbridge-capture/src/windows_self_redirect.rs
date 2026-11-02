@@ -741,8 +741,6 @@ async fn native(request: Request) -> Result<Value, String> {
         "selected_original_frames_sent_to_adapter":selected_direct_sends,
         "fresh_tcp_owner_candidate_checks":owner_candidate_checks,
         "fresh_tcp_owner_candidate_denials":owner_candidate_denials,
-        "fresh_tcp_owner_candidate_missing_snapshot_retry_attempts":owner_missing_snapshot_retry_attempts,
-        "fresh_tcp_owner_candidate_retries_only_missing":true,
         "outbound_candidate_revalidated_for_each_selected_packet":true,
         "fresh_owner_candidate_is_not_packetbound":true,
         "upstream_socks_connected":probe.upstream_connected,
@@ -758,6 +756,9 @@ async fn native(request: Request) -> Result<Value, String> {
     });
     // Keep this safety invariant explicit without deepening serde_json's
     // already large recursive laboratory JSON macro expansion.
+    report["fresh_tcp_owner_candidate_missing_snapshot_retry_attempts"] =
+        json!(owner_missing_snapshot_retry_attempts);
+    report["fresh_tcp_owner_candidate_retries_only_missing"] = json!(true);
     report["fresh_tcp_owner_candidate_denials_dropped"] =
         json!(owner_candidate_denials <= reflect.counters.selected_dropped);
     report["ambiguous_tcp_fragments_quarantined"] =
