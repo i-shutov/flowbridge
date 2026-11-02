@@ -31,6 +31,7 @@ use windows_sys::Win32::{
 };
 
 const CONSENT: &str = "DYNAMIC_WFP_QA_LOOPBACK_ONLY";
+const UDP4_CONSENT: &str = "DYNAMIC_WFP_QA_UDP4_APP_PORT_ONLY";
 const DIAG: &str = "DYNAMIC_WFP_QA_APP_ONLY_DIAGNOSTIC";
 const PORT_DIAG: &str = "DYNAMIC_WFP_QA_PORT_ONLY_DIAGNOSTIC";
 const CLIENT: &str = "FlowBridgeWfpLabClient.exe";
@@ -284,6 +285,7 @@ fn verify_bfe_filter(
     port: u16,
     app_only: bool,
     port_only: bool,
+    ip_protocol: u8,
 ) -> Result<(), String> {
     let mut raw: *mut FWPM_FILTER0 = null_mut();
     // SAFETY: live BFE engine, valid output pointer, observed filter ID.
@@ -330,8 +332,8 @@ fn verify_bfe_filter(
         } else if same_guid(&condition.fieldKey, &FWPM_CONDITION_IP_PROTOCOL)
             && condition.conditionValue.r#type == FWP_UINT8
         {
-            if unsafe { condition.conditionValue.Anonymous.uint8 } != 6 {
-                return Err("WFP QA BFE stored TCP protocol mismatch".into());
+            if unsafe { condition.conditionValue.Anonymous.uint8 } != ip_protocol {
+                return Err("WFP QA BFE stored IP protocol mismatch".into());
             }
             protocol_seen = true;
         } else {
@@ -638,6 +640,25 @@ fn validate(path: &str, port: u16, consent: &str) -> Result<(), String> {
 /// An actual process crash removes this dynamic filter (NOT persistent).
 pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
     validate(path, port, consent)?;
+    guard_protocol(path, port, consent, 6)
+}
+
+/// Actual IPv4 UDP AppId+destination-port denial, strictly a disposable
+/// high-port localhost QA fixture. Never intended for DNS/53, NDISRD
+/// interception or crash-persistent policy. The selected EXE is the only
+/// one affected; independent sibling and Python UDP must remain healthy.
+pub fn guard_udp4(path: &str, port: u16, consent: &str) -> Result<Value, String> {
+    if consent != UDP4_CONSENT {
+        return Err("WFP UDP QA requires separate exact consent".into());
+    }
+    validate(path, port, CONSENT)?;
+    guard_protocol(path, port, consent, 17)
+}
+
+fn guard_protocol(path: &str, port: u16, consent: &str, ip_protocol: u8) -> Result<Value, String> {
+    if ip_protocol != 6 && ip_protocol != 17 {
+        return Err("WFP QA transport protocol unsupported".into());
+    }
     let app_only_diagnostic = consent == DIAG;
     let port_only_diagnostic = consent == PORT_DIAG;
     let (canonical_path, _native_path) = canonical_file_handle_paths(Path::new(path))?;
@@ -680,7 +701,7 @@ pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
     conditions[2].fieldKey = FWPM_CONDITION_IP_PROTOCOL;
     conditions[2].matchType = FWP_MATCH_EQUAL;
     conditions[2].conditionValue.r#type = FWP_UINT8;
-    conditions[2].conditionValue.Anonymous.uint8 = 6;
+    conditions[2].conditionValue.Anonymous.uint8 = ip_protocol;
     let mut display: Vec<u16> = "FlowBridge disposable dynamic QA guard\0"
         .encode_utf16()
         .collect();
@@ -717,6 +738,7 @@ pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
         port,
         app_only_diagnostic,
         port_only_diagnostic,
+        ip_protocol,
     )?;
     println!(
         "{}",
@@ -729,7 +751,9 @@ pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
             "app_id_scoped":!port_only_diagnostic,
             "app_id_from_canonical_file_handle":true,
             "dynamic_private_sublayer":true,
-            "tcp_port_scoped":!app_only_diagnostic,
+            "tcp_port_scoped":ip_protocol == 6 && !app_only_diagnostic,
+            "udp_ipv4_port_scoped":ip_protocol == 17,
+            "ip_protocol":ip_protocol,
             "diagnostic_app_id_only":app_only_diagnostic,
             "diagnostic_port_only":port_only_diagnostic,
             "guard_seconds_max":20,
@@ -801,6 +825,39 @@ pub fn client_local_interface_ipv4(
     probe_tcp_half_close(SocketAddrV4::new(ip, port))
 }
 
+/// Real UDP/IPv4 localhost canary with explicit bounded receive timeout.
+/// A selected-app BFE DENY may fail send_to or suppress the echo; both
+/// outcomes must also be cross-checked against independent allowed clients.
+pub fn client_udp4(port: u16, consent: &str) -> Result<Value, String> {
+    if consent != UDP4_CONSENT || !(1025..=65534).contains(&port) {
+        return Err("WFP UDP QA client consent or port invalid".into());
+    }
+    let socket = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+        .map_err(|_| "WFP UDP QA bind failed")?;
+    socket
+        .set_read_timeout(Some(Duration::from_millis(900)))
+        .map_err(|_| "WFP UDP QA receive timeout setup failed")?;
+    let endpoint = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);
+    let sent = socket
+        .send_to(b"probe", endpoint)
+        .map_err(|_| "WFP UDP QA datagram denied")?;
+    if sent != 5 {
+        return Err("WFP UDP QA datagram send incomplete".into());
+    }
+    let mut received = [0u8; 8];
+    let (n, peer) = socket
+        .recv_from(&mut received)
+        .map_err(|_| "WFP UDP QA echo not received")?;
+    if peer != endpoint.into() || received[..n] != *b"done" {
+        return Err("WFP UDP QA echo mismatch".into());
+    }
+    Ok(json!({
+        "ok":true, "real_udp_ipv4":true, "loopback_only":true,
+        "ndisrd_touched":false, "dns_leak_free":false,
+        "protected_fail_closed":false, "release_accepted":false
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -809,6 +866,9 @@ mod tests {
     fn rejects_nonlab_targets_and_missing_consent_before_mutation() {
         assert!(validate(r"C:\tmp\FlowBridgeWfpLabClient.exe", 0, CONSENT).is_err());
         assert!(validate(r"C:\tmp\FlowBridgeWfpLabClient.exe", 50001, "DENY").is_err());
+        assert!(guard_udp4(r"C:\tmp\FlowBridgeWfpLabClient.exe", 50001, "DENY").is_err());
+        assert!(client_udp4(53, UDP4_CONSENT).is_err());
+        assert!(client_udp4(50001, "NO_CONSENT").is_err());
         assert!(validate(r"C:\Windows\System32\powershell.exe", 50001, CONSENT).is_err());
         assert!(validate(r"\\server\share\FlowBridgeWfpLabClient.exe", 50001, CONSENT).is_err());
         assert!(event_identity_probe(

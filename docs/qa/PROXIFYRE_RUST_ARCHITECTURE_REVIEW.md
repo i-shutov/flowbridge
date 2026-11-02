@@ -210,3 +210,24 @@ matches GitHub; full nested PE/NSIS provenance is recorded in the
 `RUST_CAPTURE_INTEGRATION_CANDIDATE.md` checkpoint. The dynamic QA
 guard is NOT persistent crash fail-closed; general NDISRD packet→PID,
 DNS/UDP/IPv6 privacy and Win10/11 acceptance remain unproved.
+
+
+### 2026-11-02 — WFP selected-application UDP/IPv4 localhost experimental integration (AWAITING CI)
+
+The original Rust dynamic BFE AppId guard now has a distinct **high-port
+UDP/IPv4 only** laboratory consent, and a real Rust UDP canary. A Windows
+Server 2025 acceptance gate creates two byte-identical, differently named
+executables and an unrelated Python UDP client; it requires healthy unfiltered
+controls, a BFE-read-back-verified **real selected-only UDP denial** without
+delivery to the real UDP listener, simultaneous sibling/Python success,
+then immediate restoration after forced guard death. All paths, process
+identity, filter identifiers, addresses and packet contents are omitted from
+the report. TCP and existing SCM/GUI/SSH tests remain mandatory.
+
+This uses a *dynamic* ALE_AUTH_CONNECT_V4 AppId+UDP protocol+ephemeral port
+filter. It is NOT a system DNS/53 policy, not leak-free DNS, not native NDISRD
+UDP or packet-to-PID proof, and does NOT survive the guard process crash.
+The test must stay red until live Windows kernel enforcement is observed.
+No persistent WFP policy, system resolver, Defender, packet diversion,
+external route or Win10/11 release flag changes. Exact-head CI and artifact
+hashes are required before recording PASS.

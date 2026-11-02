@@ -17,6 +17,18 @@ fn main() {
                 .and_then(|p| flowbridge_capture::windows_wfp_dynamic_lab::guard(path, p, consent))
         }
         #[cfg(windows)]
+        [command, path, port, consent] if command == "wfp-qa-udp4-guard" => {
+            port.parse::<u16>()
+                .map_err(|_| "Invalid WFP UDP QA port".to_owned())
+                .and_then(|p| flowbridge_capture::windows_wfp_dynamic_lab::guard_udp4(path, p, consent))
+        }
+        #[cfg(windows)]
+        [command, port, consent] if command == "wfp-qa-udp4-client" => {
+            port.parse::<u16>()
+                .map_err(|_| "Invalid WFP UDP QA port".to_owned())
+                .and_then(|p| flowbridge_capture::windows_wfp_dynamic_lab::client_udp4(p, consent))
+        }
+        #[cfg(windows)]
         [command, path, consent] if command == "wfp-qa-identity" => {
             flowbridge_capture::windows_wfp_dynamic_lab::identity_probe(path, consent)
         }
