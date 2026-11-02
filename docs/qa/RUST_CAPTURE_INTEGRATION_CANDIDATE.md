@@ -2220,3 +2220,113 @@ candidate and perform repeated signed-NDISRD multi-process TCP/SSH trials on
 VDSina with original negative first-attempt evidence retained. No broad
 arbitrary app authorization, protected crash fail-closed, leak-free DNS,
 Win10/11 acceptance or release is claimed.
+
+
+## 2026-11-02 — Native repeated signed-NDISRD self-owned TCP/SSH candidate, exact SHA, independently audited
+
+**Immutable source for ALL native trials below:** PR #56 head
+\`877fe78b84e09421e8a2d131879b7d78fb2172cb\`,
+GitHub Actions PR test-merge
+\`caa0007f352cc6b06439226b576e53985b1c8dd8\`,
+Windows hosted [capture integration #41435888350](https://github.com/i-shutov/flowbridge/actions/runs/41435888350).
+This is Windows Server 2025 test evidence, **not Windows 10/11 acceptance**.
+The exact signed installed NDISRD is reused, not bundled in the Rust candidate.
+
+### Source / binary / integration evidence
+
+Hosted capture: **3/3 OS jobs PASS** (Ubuntu, macOS, Windows).
+Rust/native applications: **5/5 OS jobs PASS**
+([#41435888347](https://github.com/i-shutov/flowbridge/actions/runs/41435888347)).
+DNS vertical: **3/3 PASS**
+([#41435888277](https://github.com/i-shutov/flowbridge/actions/runs/41435888277)).
+Windows managed real OpenSSH: **128 held / 1152 rejected / 10000 successful churn / 4 separate processes PASS**.
+The separate raw 512 characterization **FAILED**, peak 244 held,
+\`WinError 10054\`, sshd \`Too many open files\`:
+[#41435888262](https://github.com/i-shutov/flowbridge/actions/runs/41435888262).
+NEVER convert a managed load or raw characterization into stable raw 512.
+
+The Windows capture ZIP artifact **#13135869581** (26 top-level entries)
+was downloaded independently; its complete outer SHA-256
+\`614913145c2b3c1c2ec96e6390a7bb3f03b4122d01f96838a758f12e632ed1f3\`
+matched the GitHub provider digest byte-for-byte. Inner five-file
+\`FlowBridge-Rust-Candidate-Windows.zip\` SHA-256
+\`5549f4f22a5a08b9c32e3fcffdd444d3bd3eea753b056b76a09cfc5006094676\`;
+manifest SHA-256
+\`38122ae6be1c842f8ad9931658d9a6f447708b21207d4744ec30491f648525a1\`;
+original **x64 Rust agent** SHA-256
+\`04901f36ee0e42aa3743c1ff81e2c144324003ae651722ee1e508981f4115c61\`.
+The separate native test-tools artifact **#13135858863** outer SHA-256
+\`eafe49fd5c7f00c7c884f2763aa71faf278292a7431fd5066feddfd87fef9198\`,
+manifest pin agrees with source SHA/test-merge; original Rust FFI DLL
+SHA-256 \`319b281fe1bfe43005a4ec86b66634035a0dcb4c6767b5041c0986b3170571bd\`.
+Original unsigned NSIS **not released**, SHA-256
+\`a7d8d871f366c0e8b3539e23204c37fe12104f5ef772bc29df34a38c0de9f5c4\`;
+installed GUI/SSH/SOCKS and rollback were exercised in hosted Windows only.
+Audit asserted 33 WFP true checks but **did not use the NDISRD driver** in
+the hosted WFP job.
+
+### Native four separate full 12-phase observations — 48/48 PASS, bounded canaries only
+
+The private self-hosted VDSina workflow was repinned exclusively to the
+above exact source+test-merge+build; owner had confirmed VNC and the
+watchdog prerequisites. A first new-binary signed-NDISRD run
+[#41436861388](https://github.com/i-shutov/flowbridge-vps-qa/actions/runs/41436861388)
+passed 12/12; [native private evidence #1](https://github.com/i-shutov/flowbridge-vps-qa/issues/1#issuecomment-6575994416),
+artifact **#13136747055** provider/independently verified outer SHA-256
+\`30fcdb9d217e401cffbe01ce3ca5a6f5e83d653d034e76e87bf79af7c9cf85e1\`,
+single sanitized inner JSON SHA-256
+\`369c4c6d7cd6c386c6281c9d10529102f3e6978a67ab980d9cad71f5839b40c5\`.
+
+A new private QA harness commit
+\`6c301eff6f82097a81ce9ecbb003e045e54ee277\` runs
+**three sequential, independent** 12-phase trials
+([workflow #41437279591](https://github.com/i-shutov/flowbridge-vps-qa/actions/runs/41437279591)).
+Each has an independently armed SYSTEM rescue, exact signed driver and
+SHA-pinned original Rust binary, 5-minute rescue timer, individually
+verified rollback to adapter mode zero, network/Defender/firewall health,
+and a distinct immutable JSON artifact. No parallel driver diversion;
+matrix \`max-parallel=1\`, \`fail-fast=false\`.
+
+| Trial | Native phases | Gate-closed cases | Mode-zero rollback | Original DIRECT frames | Candidate denial drops | Extra missing-row retry attempts | Outer artifact SHA-256 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 1, [private #1 report](https://github.com/i-shutov/flowbridge-vps-qa/issues/1#issuecomment-6576051530) | 12/12 | 4/4 | 12/12 | 0 | 13 | 0 | \`c9bb48219aa4b9ab96d4cd3f743f7f133a96130fe45176e82321c300f014932c\` |
+| 2, [private #1 report](https://github.com/i-shutov/flowbridge-vps-qa/issues/1#issuecomment-6576074384) | 12/12 | 4/4 | 12/12 | 0 | 11 | 0 | \`b2067c33df40b60e1bfb8cb4ee08bc028291645b2b06691e9444e8508cc9b694\` |
+| 3, [private #1 report](https://github.com/i-shutov/flowbridge-vps-qa/issues/1#issuecomment-6576099686) | 12/12 | 4/4 | 12/12 | 0 | 11 | 0 | \`6556c32f6e342af3539e4e8e6ac17f0509b9676b820d358d370883a6e67c5607\` |
+
+Trial artifact IDs in order: **#13137116186**, **#13137181647**,
+**#13137291508**. All three outer ZIPs were independently downloaded
+and their SHA-256 matched the GitHub provider; each contained exactly one
+\`native-self-redirect.json\`. Inner JSON SHA-256 respectively:
+\`e41dc2d60bccda027a58ec22d56b922d4f8833491e7cfd31c4df699ac7467525\`,
+\`63587d01d8636ae6b6978cd67abb904fbec0cffec0bc1eb8e663a3f3217fe8d3\`,
+\`cd7503ea62773290874ef3b5138222124215de77d81e622efb9ae817b7d6575c\`.
+Each independently parsed report attests driver I/O, authenticated
+supervised OpenSSH, four controlled client types (parent, Rust child,
+Microsoft PowerShell child, independently launched Microsoft PowerShell),
+open→upstream-closed→recovered cycle per type, zero selected original
+adapter sends, and the *explicit absence* of arbitrary packet/process
+binding, crash-persistent protection, DNS leak freedom, Win10/11
+acceptance and release.
+
+**Honest interpretation:** The exact candidate has **four consecutive
+12-phase native passes (48/48)** and **16/16 closed-gate denials**, with
+48/48 adapter-mode rollback observations. The prior
+\`892812bb...\` had a first-attempt **FAIL** and a subsequent unchanged
+binary **12/12 PASS**: those two negative/positive original reports remain
+preserved in private issue #1. The new bounded lab-only retry helper is
+tested in deterministic Windows unit tests, but **all four new native
+runs recorded zero additional missing-row retries**. Thus these runs do
+NOT causally prove the timing fix prevented a missing-row race or
+establish long-run flake-free operation; 46 per-packet owner-candidate
+denial drops across the four new runs stayed fail-closed and did not
+disrupt their completed HTTP transactions. IP Helper still does not
+prove PacketBound for arbitrary apps. Adapter mode 0 is ordinary direct
+networking, NOT persistent protected fail-closed.
+
+**Release gate remains CLOSED:** no general native driver I/O→true
+arbitrary PID/creation-time PacketBound, simultaneous production
+WFP+NDISRD TCP diversion fail-closed across crash/SSH loss, leak-free
+DNS/UDP/IPv6/QUIC, or Windows 10/11 native personal beta acceptance.
+Never claim protected native PASS, no DNS leaks, stable raw 512, or v1.0.
+Main/release unchanged. Paid VPS #3293462 remains useful for remaining
+genuinely native signed-driver integration checks.
