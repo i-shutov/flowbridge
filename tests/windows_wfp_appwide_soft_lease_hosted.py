@@ -53,61 +53,58 @@ def launch(agent, command, args, env, label):
 
 
 
-class HeldEcho:
-    """One real TCP connection, two independent 8-byte deliveries, no reconnect."""
+class HeldEcho(Echo):
+    """Regular 'probe' echo plus a long-lived selected TCP stream on ONE port."""
     def __init__(self):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.bind(("127.0.0.1", 0))
-        self.port = self.sock.getsockname()[1]
-        if not 49152 <= self.port <= 65534:
-            self.sock.close()
-            raise RuntimeError("Held TCP high port unavailable")
-        self.sock.listen(1)
-        self.sock.settimeout(.2)
-        self.hits = []
-        self.done = threading.Event()
-        self.thread = threading.Thread(target=self.serve, daemon=True)
+        super().__init__("tcp4")
+        self.held_hits = []
 
-    def serve(self):
-        try:
-            while not self.done.is_set():
+    def serve_one(self, conn):
+        with conn:
+            conn.settimeout(.5)
+            pending = bytearray()
+            while not self.stop.is_set():
                 try:
-                    conn, _ = self.sock.accept()
-                    break
+                    chunk = conn.recv(32)
                 except socket.timeout:
                     continue
-            else:
-                return
-            with conn:
-                conn.settimeout(.5)
-                while not self.done.is_set():
-                    data = bytearray()
+                except OSError:
+                    return
+                if not chunk:
+                    return
+                pending.extend(chunk)
+                if pending.startswith(b"probe") and len(pending) >= 5:
+                    self.hits += 1
                     try:
-                        while len(data) < 8:
-                            part = conn.recv(8 - len(data))
-                            if not part:
-                                return
-                            data.extend(part)
-                    except (socket.timeout, OSError):
-                        continue
-                    if bytes(data) not in (b"HELD0001", b"HELD0002"):
+                        conn.sendall(b"done")
+                    except OSError:
+                        pass
+                    return
+                while pending.startswith(b"HELD") and len(pending) >= 8:
+                    one = bytes(pending[:8])
+                    del pending[:8]
+                    if one not in (b"HELD0001", b"HELD0002"):
                         return
-                    self.hits.append(bytes(data))
+                    self.held_hits.append(one)
                     try:
-                        conn.sendall(data)
+                        conn.sendall(one)
                     except OSError:
                         return
-        finally:
-            self.done.set()
+                if len(pending) > 32:
+                    return
 
-    def __enter__(self):
-        self.thread.start()
-        return self
-
-    def __exit__(self, *_):
-        self.done.set()
-        self.sock.close()
-        self.thread.join(timeout=4)
+    def serve(self):
+        workers = []
+        while not self.stop.is_set():
+            try:
+                conn, _ = self.s.accept()
+            except (socket.timeout, OSError):
+                continue
+            worker = threading.Thread(target=self.serve_one, args=(conn,), daemon=True)
+            worker.start()
+            workers.append(worker)
+        for worker in workers:
+            worker.join(timeout=.4)
 
 
 def held_after_revocation(proc):
@@ -156,9 +153,9 @@ def main():
             shutil.copy2(agent, sibling)
             assert hashlib.sha256(selected.read_bytes()).digest() == \
                    hashlib.sha256(sibling.read_bytes()).digest()
-            allowed = stack.enter_context(Echo("tcp4"))
+            allowed = stack.enter_context(HeldEcho())
             denied = stack.enter_context(Echo("tcp4"))
-            held_server = stack.enter_context(HeldEcho())
+            held_server = allowed
             assert allowed.port != denied.port
             assert status(agent) == (False, False, False)
             assert checked_lease_state(agent) == (False, False)
@@ -231,7 +228,7 @@ def main():
                 (held_server.port, LEASE_TOKEN), dict(os.environ), "Held TCP")
             checks["held_tcp_live_before_crash"] = (
                 initial["connection_established_before_lease_death"]
-                and held_server.hits == [b"HELD0001"])
+                and held_server.held_hits == [b"HELD0001"])
             assert all(checks.values()), checks
 
             # Strongest check: no explicit release path. Windows must close
@@ -248,7 +245,7 @@ def main():
             held.wait(timeout=5)
             held = None
             checks["held_tcp_revoked_on_lease_crash"] = (
-                not after_delivered and held_server.hits == [b"HELD0001"])
+                not after_delivered and held_server.held_hits == [b"HELD0001"])
             checks["persistent_after_lease_death"] = status(agent) == (True, True, True)
             checks["selected_denied_again"] = not rust_client(selected, "tcp4", allowed.port)
             checks["sibling_still_allowed"] = rust_client(sibling, "tcp4", allowed.port)
