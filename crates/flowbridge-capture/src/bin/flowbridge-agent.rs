@@ -17,6 +17,12 @@ fn main() {
                 .and_then(|p| flowbridge_capture::windows_wfp_dynamic_lab::guard(path, p, consent))
         }
         #[cfg(windows)]
+        [command, path, port, consent] if command == "wfp-qa-tcp4-guard" => {
+            port.parse::<u16>()
+                .map_err(|_| "Invalid WFP IPv4 TCP QA port".to_owned())
+                .and_then(|p| flowbridge_capture::windows_wfp_dynamic_lab::guard_tcp4(path, p, consent))
+        }
+        #[cfg(windows)]
         [command, path, port, consent] if command == "wfp-qa-udp4-guard" => {
             port.parse::<u16>()
                 .map_err(|_| "Invalid WFP UDP QA port".to_owned())

@@ -31,6 +31,7 @@ use windows_sys::Win32::{
 };
 
 const CONSENT: &str = "DYNAMIC_WFP_QA_LOOPBACK_ONLY";
+const TCP4_CONSENT: &str = "DYNAMIC_WFP_QA_TCP4_APP_PORT_ONLY";
 const UDP4_CONSENT: &str = "DYNAMIC_WFP_QA_UDP4_APP_PORT_ONLY";
 const TCP6_CONSENT: &str = "DYNAMIC_WFP_QA_TCP6_APP_PORT_ONLY";
 const UDP6_CONSENT: &str = "DYNAMIC_WFP_QA_UDP6_APP_PORT_ONLY";
@@ -656,6 +657,18 @@ pub fn guard(path: &str, port: u16, consent: &str) -> Result<Value, String> {
     guard_protocol(path, port, consent, 6, false)
 }
 
+/// Fixed, bounded IPv4 TCP AppId+high destination-port deny for a
+/// separately consented WFP/NDISRD TEST-NET SYN observation. The rule is
+/// scoped to a QA copy and a port, NOT to a packet owner or an external route.
+/// No persistent filter or driver mode is activated by this entrypoint.
+pub fn guard_tcp4(path: &str, port: u16, consent: &str) -> Result<Value, String> {
+    if consent != TCP4_CONSENT {
+        return Err("WFP IPv4 TCP QA requires separate exact consent".into());
+    }
+    validate(path, port, CONSENT)?;
+    guard_protocol(path, port, consent, 6, false)
+}
+
 /// Actual IPv4 UDP AppId+destination-port denial, strictly a disposable
 /// high-port localhost QA fixture. Never intended for DNS/53, NDISRD
 /// interception or crash-persistent policy. The selected EXE is the only
@@ -957,6 +970,7 @@ mod tests {
         assert!(validate(r"C:\tmp\FlowBridgeWfpLabClient.exe", 0, CONSENT).is_err());
         assert!(validate(r"C:\tmp\FlowBridgeWfpLabClient.exe", 50001, "DENY").is_err());
         assert!(guard_udp4(r"C:\tmp\FlowBridgeWfpLabClient.exe", 50001, "DENY").is_err());
+        assert!(guard_tcp4(r"C:\tmp\FlowBridgeWfpLabClient.exe", 50001, "DENY").is_err());
         assert!(client_udp4(53, UDP4_CONSENT).is_err());
         assert!(client_udp4(50001, "NO_CONSENT").is_err());
         assert!(guard_tcp6(r"C:\tmp\FlowBridgeWfpLabClient.exe", 50001, "DENY").is_err());
