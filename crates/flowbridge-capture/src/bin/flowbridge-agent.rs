@@ -37,6 +37,12 @@ fn main() {
                 })
         }
         #[cfg(windows)]
+        [command, port, consent] if command == "wfp-qa-testnet-udp4-client" => {
+            port.parse::<u16>()
+                .map_err(|_| "Invalid TEST-NET UDP canary port".to_owned())
+                .and_then(|p| flowbridge_capture::testnet_canary::send_two(p, consent))
+        }
+        #[cfg(windows)]
         [command, path, port, consent] if command == "wfp-qa-udp6-guard" => {
             port.parse::<u16>()
                 .map_err(|_| "Invalid WFP IPv6 UDP QA port".to_owned())
