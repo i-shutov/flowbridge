@@ -1,3 +1,11 @@
+## 2026-11-02 — Release blocker: permanent WFP deny vs NDISRD driver capture
+
+**Architecture research / safety-gated experiment, NOT production enablement.** Microsoft WFP filter arbitration first selects the highest-weight match within *one* sublayer; a default **soft permit** can stop a lower-weight persistent block there, while filters in other sublayers still have the right to block. See https://learn.microsoft.com/en-us/windows/win32/fwp/filter-arbitration . The current AppId-wide persistent canary uses high FWP_UINT8-range block weights. A dynamic-session, explicit FWP_UINT64 maximum-weight soft permit in **the same QA sublayer** may temporarily admit traffic while its owning Rust process is alive, and disappear automatically when that BFE session closes/crashes. This could resolve the fundamental conflict that a permanent AppId block otherwise prevents the selected app's packets reaching NDISRD. The mechanism is not assumed working until real Windows tests prove it.
+
+The new **GitHub-hosted Windows Server 2025 ONLY** `wfp-qa-appwide-soft-lease` requires independent SYSTEM rescue, a previously installed and identity-matching IPv4+IPv6 persistent deny, a canonical copied QA executable and one 49152–65534 destination port. It never installs/changes NDISRD, never uses CLEAR_ACTION_RIGHT (hard permit), rejects any stale lease and uses a BFE dynamic session with exact keyed readback. The corresponding end-to-end QA must prove persistent deny → one-port controlled soft permit, nonleased port denied, independent sibling unaffected → kill lease process → persistent deny restored → kill guard → persistent deny remains → independent cleanup and restored sockets, all without declaring protected mode. No vendor/AGPL binary.
+
+**Unclosed release gates:** whether an existing admitted TCP connection survives lease loss, whether WFP other-sublayer blocks retain precedence, actual NDISRD divert visibility while soft permit exists, SSH/NDISRD failure-state ordering, reliable arbitrary packet→PID and Win10/11 native acceptance. Default application behavior remains unchanged. No main merge/release.
+
 ## 2026-11-02 — VERIFIED Windows native exact-filter WFP AppId source-canonicalization mismatch (strict RED)
 
 Source code `f0e119623899893ce0e46e8137aef5d38c9a1d86`, GitHub test merge

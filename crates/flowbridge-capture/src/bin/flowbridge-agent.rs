@@ -121,6 +121,16 @@ fn main() {
             flowbridge_capture::windows_wfp_persistence_lab::remove(consent)
         }
         #[cfg(windows)]
+        [command, path, port, consent] if command == "wfp-qa-appwide-soft-lease" => {
+            port.parse::<u16>()
+                .map_err(|_| "Invalid appwide soft-lease QA port".to_owned())
+                .and_then(|p| flowbridge_capture::windows_wfp_appwide_lab::soft_lease(path, p, consent))
+        }
+        #[cfg(windows)]
+        [command, consent] if command == "wfp-qa-appwide-soft-status" => {
+            flowbridge_capture::windows_wfp_appwide_lab::soft_lease_status(consent)
+        }
+        #[cfg(windows)]
         [command, path, consent] if command == "wfp-qa-appwide-arm" => {
             flowbridge_capture::windows_wfp_appwide_lab::arm(path, consent)
         }

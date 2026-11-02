@@ -19,10 +19,11 @@ use windows_sys::{
         NetworkManagement::WindowsFilteringPlatform::{
             FwpmEngineClose0, FwpmEngineOpen0, FwpmFilterAdd0, FwpmFilterDeleteByKey0,
             FwpmFilterGetByKey0, FwpmFreeMemory0, FwpmSubLayerAdd0, FwpmSubLayerDeleteByKey0,
-            FwpmSubLayerGetByKey0, FWPM_CONDITION_ALE_APP_ID, FWPM_FILTER0, FWPM_FILTER_CONDITION0,
-            FWPM_FILTER_FLAG_PERSISTENT, FWPM_LAYER_ALE_AUTH_CONNECT_V4,
-            FWPM_LAYER_ALE_AUTH_CONNECT_V6, FWPM_SUBLAYER0, FWPM_SUBLAYER_FLAG_PERSISTENT,
-            FWP_ACTION_BLOCK, FWP_BYTE_BLOB_TYPE, FWP_MATCH_EQUAL, FWP_UINT8,
+            FwpmSubLayerGetByKey0, FWPM_CONDITION_ALE_APP_ID, FWPM_CONDITION_IP_REMOTE_PORT, FWPM_FILTER0, FWPM_FILTER_CONDITION0,
+            FWPM_FILTER_FLAG_CLEAR_ACTION_RIGHT, FWPM_FILTER_FLAG_PERSISTENT, FWPM_LAYER_ALE_AUTH_CONNECT_V4,
+            FWPM_LAYER_ALE_AUTH_CONNECT_V6, FWPM_SESSION0, FWPM_SESSION_FLAG_DYNAMIC, FWPM_SUBLAYER0, FWPM_SUBLAYER_FLAG_PERSISTENT,
+            FWP_ACTION_BLOCK, FWP_ACTION_PERMIT, FWP_BYTE_BLOB_TYPE, FWP_MATCH_EQUAL, FWP_UINT16,
+            FWP_UINT64, FWP_UINT8,
         },
     },
 };
@@ -298,4 +299,200 @@ pub fn arm(path: &str, token: &str) -> Result<Value, String> {
         .map_err(|_| "QA stdout flush failed")?;
     thread::sleep(Duration::from_secs(90));
     Ok(json!({"ok":true,"cleanup_required":true,"release_accepted":false}))
+}
+
+
+// RELEASE-BLOCKER EXPERIMENT, NOT A PRODUCT EXEMPTION:
+// A *dynamic-session* SOFT permit (no CLEAR_ACTION_RIGHT flag) can precede
+// the persistent AppId block inside the SAME BFE sublayer. Other sublayers
+// must retain their ability to block the packet. Only one disposable hosted
+// QA executable and one ephemeral high destination port may be admitted.
+// The permit is auto-removed when the owning BFE session/process closes.
+// Production would additionally require verified NDISRD diversion BEFORE
+// granting a permit, SSH health monitoring, fail-closed rollback and proof
+// that existing established flows are revoked on any failure.
+const SOFT_LEASE_CONSENT: &str = "HOSTED_WFP_SOFT_LEASE_QA_WITH_INDEPENDENT_SYSTEM_RESCUE";
+const SOFT_KEYS: [GUID; 2] = [
+    GUID {
+        data1: 0xcf3d384e,
+        data2: 0x59a7,
+        data3: 0x4b09,
+        data4: [0xab, 0x13, 0x96, 0x6d, 0xf8, 0xe5, 0xc9, 0x14],
+    },
+    GUID {
+        data1: 0xade55f97,
+        data2: 0x6191,
+        data3: 0x452f,
+        data4: [0xa8, 0x63, 0xb5, 0x11, 0xba, 0xcc, 0x02, 0x79],
+    },
+];
+
+fn require_soft_lease_consent(token: &str) -> Result<(), String> {
+    if token != SOFT_LEASE_CONSENT {
+        return Err("Exact experimental soft-lease consent required".into());
+    }
+    Ok(())
+}
+
+fn soft_lease_readback(h: HANDLE) -> Result<[bool; 2], String> {
+    let mut present = [false; 2];
+    for index in 0..2 {
+        let Some(filter) = get_filter(h, &SOFT_KEYS[index])? else {
+            continue;
+        };
+        let value = unsafe { &*filter.0 };
+        if !equal_guid(&value.filterKey, &SOFT_KEYS[index])
+            || !equal_guid(&value.subLayerKey, &SUB)
+            || !equal_guid(&value.layerKey, &LAYERS[index])
+            || value.flags & (FWPM_FILTER_FLAG_PERSISTENT | FWPM_FILTER_FLAG_CLEAR_ACTION_RIGHT) != 0
+            || value.action.r#type != FWP_ACTION_PERMIT
+            || value.numFilterConditions != 2
+            || value.filterCondition.is_null()
+            || value.weight.r#type != FWP_UINT64
+        {
+            return Err("Unexpected BFE lease identity/soft-action: refuse acceptance".into());
+        }
+        let raw_weight = unsafe { value.weight.Anonymous.uint64 };
+        if raw_weight.is_null() || unsafe { *raw_weight } != u64::MAX {
+            return Err("BFE lease weight was not pinned above persistent DENY".into());
+        }
+        let conditions = unsafe { std::slice::from_raw_parts(value.filterCondition, 2) };
+        if !equal_guid(&conditions[0].fieldKey, &FWPM_CONDITION_ALE_APP_ID)
+            || conditions[0].matchType != FWP_MATCH_EQUAL
+            || conditions[0].conditionValue.r#type != FWP_BYTE_BLOB_TYPE
+            || !equal_guid(&conditions[1].fieldKey, &FWPM_CONDITION_IP_REMOTE_PORT)
+            || conditions[1].matchType != FWP_MATCH_EQUAL
+            || conditions[1].conditionValue.r#type != FWP_UINT16
+            || !(49152..=65534).contains(&unsafe { conditions[1].conditionValue.Anonymous.uint16 })
+        {
+            return Err("Unexpected BFE lease conditions".into());
+        }
+        present[index] = true;
+    }
+    Ok(present)
+}
+
+pub fn soft_lease_status(token: &str) -> Result<Value, String> {
+    require_soft_lease_consent(token)?;
+    let e = engine()?;
+    let present = soft_lease_readback(e.0)?;
+    Ok(json!({"ok":true,"soft_lease_ipv4_present":present[0],
+        "soft_lease_ipv6_present":present[1],"dynamic_session_only":true,
+        "hard_permit":false,"ndisrd_modified":false,"protected_fail_closed":false,
+        "dns_leak_free":false,"win10_11_accepted":false,"release_accepted":false}))
+}
+
+pub fn soft_lease(path: &str, port: u16, token: &str) -> Result<Value, String> {
+    require_soft_lease_consent(token)?;
+    if std::env::var("GITHUB_ACTIONS").ok().as_deref() != Some("true")
+        || std::env::var("RUNNER_ENVIRONMENT").ok().as_deref() != Some("github-hosted")
+        || std::env::var("FLOWBRIDGE_WFP_APPWIDE_SYSTEM_RESCUE_ARMED")
+            .ok().as_deref() != Some("1")
+    {
+        return Err("Hosted Windows and independent SYSTEM persistent-rule rescue required".into());
+    }
+    if !(49152..=65534).contains(&port) {
+        return Err("Experimental permit requires one ephemeral QA destination port".into());
+    }
+    let p = Path::new(path);
+    let temp = std::env::var("RUNNER_TEMP").map_err(|_| "Hosted temp unavailable")?;
+    if p.file_name().and_then(|f| f.to_str()) != Some("FlowBridgeWfpLabClient.exe")
+        || !p.is_file()
+        || !std::fs::canonicalize(p)
+            .map_err(|_| "QA image unavailable")?
+            .starts_with(std::fs::canonicalize(temp).map_err(|_| "QA temp unavailable")?)
+    {
+        return Err("One copied temporary QA image is required".into());
+    }
+    let (canonical, _) = canonical_file_handle_paths(p)?;
+    let app = lookup_app(&canonical)?;
+    let e = engine()?;
+    if verify(e.0)? != ([true; 2], true) {
+        return Err("Both persistent AppId deny filters must be installed FIRST".into());
+    }
+    if soft_lease_readback(e.0)? != [false; 2] {
+        return Err("Another soft lease already exists: refuse takeover".into());
+    }
+
+    // Compare AppId bytes to the pinned persistent rules: the caller cannot
+    // open an exception for some OTHER executable in the QA sublayer.
+    let selected_blob = app.0;
+    if selected_blob.is_null() || unsafe { (*selected_blob).data.is_null() } {
+        return Err("Missing selected AppId".into());
+    }
+    let selected = unsafe {
+        std::slice::from_raw_parts((*selected_blob).data, (*selected_blob).size as usize)
+    };
+    for key in &KEYS {
+        let persistent = get_filter(e.0, key)?
+            .ok_or_else(|| "Persistent filter disappeared during lease setup".to_owned())?;
+        let condition = unsafe { &*(*persistent.0).filterCondition };
+        let blob = unsafe { condition.conditionValue.Anonymous.byteBlob };
+        if blob.is_null()
+            || unsafe { (*blob).data.is_null() }
+            || unsafe { (*blob).size as usize } != selected.len()
+            || unsafe {
+                std::slice::from_raw_parts((*blob).data, (*blob).size as usize)
+            } != selected
+        {
+            return Err("Soft lease and persistent AppId identities differ".into());
+        }
+    }
+
+    let mut dynamic: FWPM_SESSION0 = unsafe { std::mem::zeroed() };
+    dynamic.flags = FWPM_SESSION_FLAG_DYNAMIC;
+    let mut handle: HANDLE = null_mut();
+    let opened = unsafe { FwpmEngineOpen0(null(), 10, null(), &dynamic, &mut handle) };
+    if opened != 0 || handle.is_null() {
+        return Err(format!("Dynamic BFE lease session unavailable: {opened}"));
+    }
+    let lease = Engine(handle);
+    // The explicit UINT64 weight is higher than the persistent block's
+    // BFE-generated FWP_UINT8 range (15). Default filter PERMIT is SOFT.
+    // This does NOT override other sublayers' Firewall/third-party BLOCK.
+    let mut weight = u64::MAX;
+    for index in 0..2 {
+        let mut conditions: [FWPM_FILTER_CONDITION0; 2] = [unsafe { std::mem::zeroed() }; 2];
+        conditions[0].fieldKey = FWPM_CONDITION_ALE_APP_ID;
+        conditions[0].matchType = FWP_MATCH_EQUAL;
+        conditions[0].conditionValue.r#type = FWP_BYTE_BLOB_TYPE;
+        conditions[0].conditionValue.Anonymous.byteBlob = app.0;
+        conditions[1].fieldKey = FWPM_CONDITION_IP_REMOTE_PORT;
+        conditions[1].matchType = FWP_MATCH_EQUAL;
+        conditions[1].conditionValue.r#type = FWP_UINT16;
+        conditions[1].conditionValue.Anonymous.uint16 = port;
+        let mut f: FWPM_FILTER0 = unsafe { std::mem::zeroed() };
+        f.filterKey = SOFT_KEYS[index];
+        f.layerKey = LAYERS[index];
+        f.subLayerKey = SUB;
+        f.flags = 0; // Never set CLEAR_ACTION_RIGHT (hard permit).
+        f.weight.r#type = FWP_UINT64;
+        f.weight.Anonymous.uint64 = &mut weight;
+        f.action.r#type = FWP_ACTION_PERMIT;
+        f.numFilterConditions = 2;
+        f.filterCondition = conditions.as_mut_ptr();
+        let mut title: Vec<u16> = "FlowBridge hosted dynamic SOFT permit QA\0"
+            .encode_utf16().collect();
+        f.displayData.name = title.as_mut_ptr();
+        let mut id = 0;
+        let added = unsafe { FwpmFilterAdd0(lease.0, &f, null_mut(), &mut id) };
+        if added != 0 || id == 0 {
+            return Err(format!("Dynamic soft permit add failed: {added}"));
+        }
+    }
+    if soft_lease_readback(e.0)? != [true; 2] {
+        return Err("Dynamic soft permit readback incomplete".into());
+    }
+    println!("{}", json!({"ok":true,"kind":"hosted_same_sublayer_soft_permit_lease",
+        "soft_permit_readback":true,"lease_port_restricted":true,"dynamic_session":true,
+        "persistent_deny_still_present":true,"hard_permit":false,
+        "ndisrd_modified":false,"protected_fail_closed":false,
+        "dns_leak_free":false,"release_accepted":false}));
+    std::io::stdout().flush().map_err(|_| "QA stdout flush failed")?;
+    thread::sleep(Duration::from_secs(45));
+    // Dropping lease ALWAYS closes this dynamic BFE engine, removing its
+    // permit even if the process ends normally. A crash closes it in the OS.
+    drop(lease);
+    Ok(json!({"ok":true,"soft_lease_expired":true,
+        "protected_fail_closed":false,"release_accepted":false}))
 }
