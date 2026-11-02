@@ -43,7 +43,15 @@ def launch(agent, command, args, env, label):
         data = q.get(timeout=12)
         assert data and proc.poll() is None, label + " exited before readiness"
         result = json.loads(data)
-        assert result["ok"] and not result["release_accepted"]
+        if not result.get("ok") or result.get("release_accepted") is not False:
+            # Never print arbitrary error text or paths to CI evidence.
+            known = {
+                "Held TCP canary requires exact disposable selected image": "wrong_executable_identity",
+                "Held TCP canary initial connect failed": "held_tcp_connect_failed",
+                "Held TCP initial response missing": "held_tcp_echo_missing",
+                "Held TCP initial response invalid": "held_tcp_echo_invalid",
+            }
+            raise RuntimeError(label + ": " + known.get(result.get("error"), "readiness_refused"))
         return proc, result
     except Exception:
         proc.kill()
@@ -224,7 +232,7 @@ def main():
             # Keep an ALREADY-ESTABLISHED selected socket alive across lease
             # process death. A new-connection denial alone proves too little.
             held, initial = launch(
-                agent, "wfp-qa-appwide-held-tcp4-client",
+                selected, "wfp-qa-appwide-held-tcp4-client",
                 (held_server.port, LEASE_TOKEN), dict(os.environ), "Held TCP")
             checks["held_tcp_live_before_crash"] = (
                 initial["connection_established_before_lease_death"]
