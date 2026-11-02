@@ -251,9 +251,26 @@ def main():
         require(not alternate.exists(), "Upgrade unexpectedly moved the installation")
         require(digest(profile) == profile_hash and keep.is_file(), "Upgrade removed user data")
         passed("Upgrade retains registered location, user profile and unrelated files")
+        # In silent NSIS mode, the original Uninstall.exe can return before
+        # its temporary self-deleting worker has finished. Binary removal
+        # happens BEFORE the final HKCU uninstall-key deletion. Waiting only
+        # for files can race the registry and misclassify a valid cleanup.
+        # Keep ALL previous strict assertions: just await the complete
+        # observable file + registry + shortcut transaction under the same
+        # existing 90-second deadline. An actually stale key still FAILS.
+        uninstall_started = time.monotonic()
         run([str(install / "Uninstall.exe"), "/S"])
-        wait_until(lambda: not (install / "FlowBridge.exe").exists()
-                   and not (install / "Uninstall.exe").exists(), "Uninstall did not complete")
+        wait_until(
+            lambda: not (install / "FlowBridge.exe").exists()
+            and not (install / "Uninstall.exe").exists()
+            and value(uninstall_key, "DisplayName") is None
+            and value(settings_key, "InstallDir") is None
+            and not list(shortcuts.glob("*.lnk")),
+            "Silent NSIS worker did not finish payload, registry and shortcut cleanup",
+        )
+        report["silent_uninstall_convergence_ms"] = round(
+            1000 * (time.monotonic() - uninstall_started)
+        )
         require(all(not (install / item["path"]).exists() for item in manifest["payload"]),
                 "Known payload remains after uninstall")
         require(value(uninstall_key, "DisplayName") is None, "Uninstall registration remains")

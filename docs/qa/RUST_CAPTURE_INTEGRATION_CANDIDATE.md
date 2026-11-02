@@ -2367,3 +2367,98 @@ unexpected SSH crash, automatic fail-closed, arbitrary packet↔PID
 attribution or persistent adapter safety on agent process death.
 Adapter mode zero still restores ordinary DIRECT capability.
 All Windows 10/11, DNS/UDP/IPv6, raw 512 and release gates stay open.
+
+
+## 2026-11-02 — Independently audited 20-phase real SSH STOP/RESTART on signed NDISRD, 60/60 native PASS
+
+**All native source identities belong to the already-verified code snapshot**
+PR #56 **\`42de6090f58e5025e4cde7da046513d329cfb033\`**, GitHub
+test-merge **\`fe7024ff4884a0cfd6eb70319b3221d80976f61e\`**,
+**not** to a later documentation-only or installer-test-fix HEAD.
+Hosted [Windows capture #41439631584](https://github.com/i-shutov/flowbridge/actions/runs/41439631584)
+and [DNS #41439631532](https://github.com/i-shutov/flowbridge/actions/runs/41439631532)
+PASS; neither hosted test alone activates NDISRD.
+A separate Windows-application installer job on that SHA FAILED at
+\`tests/windows_installer_native.py:259\`: **Uninstall registration remains**
+immediately after the test observed executable deletion. The NSIS uninstall
+script performs registration deletion **after** payload deletion; the test
+waited only for the earlier file disappearance. This is a potential
+asynchronous-uninstaller completion race, not a proven diagnosis of actual
+registry cleanup. The next code change retains every strict final uninstall
+assertion and requires the complete file/registry/shortcut terminal state
+within the existing 90-second deadline. The fix is NOT considered passed
+until a new exact-head Windows application CI run succeeds.
+Raw OpenSSH 512 remains unproven; do not conflate managed 128/1152/10000/4
+with raw 512.
+
+### Independently downloaded and checked hosted source artifacts
+
+- Hosted Windows capture artifact **#13137579164**, outer SHA-256
+  \`460744b1591f4f60cd2d2c5fa731b028cdfb1542088bf77b7bc9414441ac50b6\`,
+  exact **26** allowlisted files. Candidate five-file nested ZIP SHA-256
+  \`420283c114fd0a0c86740fe08b4a0fc443d01811571b200550d7efc22facafb5\`,
+  manifest SHA-256 \`e7c5dfa73c2823b646b15a48884779fe7bf0771dc440fee9f3cfffca67ed4615\`,
+  original Rust x64 agent SHA-256
+  \`38c920032577af6b03460d0afb70ae82fc453965a784462ee83cb08ea38fc7d1\`.
+  Unsigned NSIS setup SHA-256
+  \`87688d60babf6001582929ee8eb99a026bf0dbf666dfbff9c5212a1922c968d7\`;
+  **not released**.
+- Hosted Windows native tools artifact **#13138596201**, independently
+  verified outer SHA-256
+  \`fd97829378a2a4bd687e690bd0422e2264f9ed186130b6fa3f9dba50f7f2a1aa\`,
+  exactly **11** allowlisted files; Rust x64 FFI SHA-256
+  \`5c46738d9e992c478976520a5b2d932b15c7b8d2bbad6d26222021e1bfb9e2a3\`,
+  new native Python harness SHA-256
+  \`baf3ec9fae9020cbe80b5d43854c06f5cfa3e8dc4e46d2006e634a957a0dfb95\`.
+  Manifest cross-checked the source HEAD, merge SHA and every payload.
+  Independent Python compile verified the stop/restart harness; PE
+  headers verified x64 agent, CLI, panel and FFI. No vendor driver,
+  third-party binaries or credentials were bundled into the Rust candidate.
+- Hosted exact-source WFP integrity audit verified **33/33** true security
+  checks, including independently scoped sublayer veto and held-TCP soft
+  lease revocation; this hosted audit did **not** run NDISRD.
+
+### Paid VDSina Windows Server 2025 — three truly separate signed-driver trials
+
+Private pinned QA workflow commit
+\`6f242c18c51c7f72637cdaa6aae4f08d07e485c5\` ran
+[private #41440585166](https://github.com/i-shutov/flowbridge-vps-qa/actions/runs/41440585166)
+with three sequential jobs (no simultaneous driver diversion).
+The jobs used the exact independently hashed public candidate and separately
+installed **signed official NDISRD**, plus signed in-box Microsoft OpenSSH
+and Microsoft PowerShell. Each job armed an independent local **SYSTEM
+watchdog** before any diversion and confirmed its removal after
+20/20 adapter-mode-zero rollbacks, continued Defender/firewall and network
+health, and removal of its exact scoped firewall rule.
+
+| Independent trial | Phases | Explicit SSH-stopped native denials | Distinct-PID real SSH restarted native successes | Confirmed adapter mode-zero rollbacks | Original selected DIRECT sends | Downloaded ZIP SHA-256 |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| [1](https://github.com/i-shutov/flowbridge-vps-qa/issues/1#issuecomment-6576537765) | 20/20 | 4/4 | 4/4 | 20/20 | 0 | \`0fbc6a920169f270f675e1603d16b245f3f987c765d89e8317e760f07eaa1def\` |
+| [2](https://github.com/i-shutov/flowbridge-vps-qa/issues/1#issuecomment-6576562628) | 20/20 | 4/4 | 4/4 | 20/20 | 0 | \`f733f3d8e8a9c27afdb064eab89d3e8bd8c5b4a24c94cee6388d9c3217785da9\` |
+| [3](https://github.com/i-shutov/flowbridge-vps-qa/issues/1#issuecomment-6576589213) | 20/20 | 4/4 | 4/4 | 20/20 | 0 | \`ca0911d711abe972d5cacd98c3162d5a6afb8fbe7be6bb8de76bd97985e0f1cd\` |
+
+Each ZIP was independently downloaded. All three had exactly **one**
+\`native-self-redirect.json\` with verified inner SHA-256 respectively:
+\`8b571c3e7e671598e20f419214dfcb06aafa2b6c2dfa808efb638451b097deea\`,
+\`a86675c7a6aeba194f7cbb5f650ccdc40921a550bdf61832b9a9a8068f986cb4\`,
+\`7521ecb00ed2c0f981ee4efabacf893b0cfe7dd6d1dafe7c3786134ac04ccf99\`.
+Each parsed JSON independently asserts native driver I/O, all 20 real
+TCP+SOCKS+SSH phases PASS, 20/20 rollback, all selected-direct sends
+zero, four controlled client/process categories, genuine SSH subprocess
+STOP/reap, the absence of its PID, four explicit native denials, distinct
+PID on SSH restart and four successful recovered binary/HTTP TCP
+transactions. All four controlled client sources are tested; this is
+**60/60 native phases**, including **12/12** additional stopped-SSH
+denials and **12/12** additional restarted-SSH recoveries, and
+**60/60** individual mode-zero rollbacks.
+
+**Scope and blockers remain:** SSH stop was **operator controlled** with
+SOCKS gate **manually closed BEFORE** stopping. This does **NOT**
+demonstrate automatic fail-closed when SSH crashes, an agent crash, a
+protected WFP+NDISRD production diversion, or arbitrary app packet↔PID.
+The IP Helper snapshot is NOT PacketBound; returning adapter mode 0
+restores ordinary DIRECT networking. Leak-free DNS, UDP/IPv6/QUIC,
+Windows 10/11 native acceptance, stable raw 512 and release v1.0 remain
+unproven. No main merge, no release, and no change to Secure Boot,
+Memory Integrity or Defender. VPS #3293462 remains useful for subsequent
+real native failure tests.
