@@ -434,7 +434,11 @@ pub fn validate_pinned_tcp_owner_lab_missing_retry(
             }
             Ok(())
         },
-        || std::thread::sleep(std::time::Duration::from_millis(LAB_MISSING_SNAPSHOT_PAUSE_MS)),
+        || {
+            std::thread::sleep(std::time::Duration::from_millis(
+                LAB_MISSING_SNAPSHOT_PAUSE_MS,
+            ))
+        },
     )
 }
 
