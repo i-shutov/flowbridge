@@ -67,14 +67,28 @@ fn sanitized_tcp_flag_phase(flags: u8, has_payload: bool) -> &'static str {
 }
 
 fn sanitized_selected_packet_phase(frame: &[u8]) -> &'static str {
-    let Ok(region) = inspect_l2_ip(frame) else { return "invalid_frame"; };
-    if region.version != IpVersion::V4 { return "not_ipv4"; }
-    let Some(end) = region.offset.checked_add(region.length) else { return "invalid_frame"; };
-    let Some(ip) = frame.get(region.offset..end) else { return "invalid_frame"; };
-    let Some(&first) = ip.first() else { return "invalid_tcp"; };
+    let Ok(region) = inspect_l2_ip(frame) else {
+        return "invalid_frame";
+    };
+    if region.version != IpVersion::V4 {
+        return "not_ipv4";
+    }
+    let Some(end) = region.offset.checked_add(region.length) else {
+        return "invalid_frame";
+    };
+    let Some(ip) = frame.get(region.offset..end) else {
+        return "invalid_frame";
+    };
+    let Some(&first) = ip.first() else {
+        return "invalid_tcp";
+    };
     let tcp_offset = usize::from(first & 0x0f) * 4;
-    let Some(&flags) = ip.get(tcp_offset + 13) else { return "invalid_tcp"; };
-    let Ok(checked) = inspect_tcp(ip) else { return "invalid_tcp"; };
+    let Some(&flags) = ip.get(tcp_offset + 13) else {
+        return "invalid_tcp";
+    };
+    let Ok(checked) = inspect_tcp(ip) else {
+        return "invalid_tcp";
+    };
     sanitized_tcp_flag_phase(flags, checked.data_bytes > 0)
 }
 
@@ -840,12 +854,24 @@ mod sanitized_owner_diagnostic_tests {
     #[test]
     fn bounded_categories_cannot_expose_native_error_details() {
         let known = [
-            ("TCP tuple absent in consecutive fresh snapshots after bounded retry", "missing_tuple"),
+            (
+                "TCP tuple absent in consecutive fresh snapshots after bounded retry",
+                "missing_tuple",
+            ),
             ("Conflicting TCP owner PID (no retry)", "conflicting_pid"),
-            ("Duplicate TCP tuple, even with identical PID", "duplicate_tuple"),
-            ("Matching TCP tuple is not in an active connection state", "inactive_tcp_state"),
+            (
+                "Duplicate TCP tuple, even with identical PID",
+                "duplicate_tuple",
+            ),
+            (
+                "Matching TCP tuple is not in an active connection state",
+                "inactive_tcp_state",
+            ),
             ("Zero PID in matching endpoint", "zero_pid"),
-            ("Pinned TCP process identity is no longer active", "pinned_process_changed"),
+            (
+                "Pinned TCP process identity is no longer active",
+                "pinned_process_changed",
+            ),
             ("IP Helper sizing failed: 122", "iphelper_failure"),
         ];
         for (error, expected) in known {
