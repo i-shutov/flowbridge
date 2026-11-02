@@ -827,7 +827,7 @@ fn probe_tcp_half_close(endpoint: SocketAddr) -> Result<Value, String> {
     if data != b"done" {
         return Err("WFP QA response mismatch".into());
     }
-    Ok(json!({"ok":true,"real_tcp_half_close":true,"release_accepted":false}))
+    Ok(json!({"ok":true,"real_tcp_half_close":true,"ndisrd_touched":false, "release_accepted":false}))
 }
 
 pub fn client(port: u16, consent: &str) -> Result<Value, String> {
