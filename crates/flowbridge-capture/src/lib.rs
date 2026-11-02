@@ -2,8 +2,6 @@
 //! protected-policy tests are distinct from personal Windows acceptance.
 pub mod capture_agent;
 pub mod capture_pipeline;
-#[cfg(any(windows, test))]
-pub mod testnet_canary;
 pub mod control_plane;
 pub mod dns_stub;
 pub mod ndis_session;
@@ -16,6 +14,8 @@ mod protocol_profile;
 pub mod relay;
 pub mod relay_probe;
 pub mod self_redirect;
+#[cfg(any(windows, test))]
+pub mod testnet_canary;
 pub mod udp6_quarantine;
 pub mod udp_quarantine;
 #[cfg(all(windows, target_pointer_width = "64"))]

@@ -60,11 +60,7 @@ impl Canary {
         let ip = &frame[offset..];
         let ihl = usize::from(ip[0] & 0x0f) * 4;
         let total = usize::from(u16::from_be_bytes([ip[2], ip[3]]));
-        if ip[0] >> 4 != 4
-            || !(20..=60).contains(&ihl)
-            || total < ihl + 8
-            || total > ip.len()
-        {
+        if ip[0] >> 4 != 4 || !(20..=60).contains(&ihl) || total < ihl + 8 || total > ip.len() {
             self.invalid_or_unsupported = self.invalid_or_unsupported.saturating_add(1);
             return;
         }
@@ -126,7 +122,11 @@ pub fn send_two(port: u16, consent: &str) -> Result<Value, String> {
         .connect((TARGET, port))
         .map_err(|_| "TEST-NET UDP canary route unavailable")?;
     for _ in 0..2 {
-        if socket.send(b"FB-QA-UDP").map_err(|_| "TEST-NET UDP canary blocked")? != 9 {
+        if socket
+            .send(b"FB-QA-UDP")
+            .map_err(|_| "TEST-NET UDP canary blocked")?
+            != 9
+        {
             return Err("TEST-NET UDP canary partial send".into());
         }
         std::thread::sleep(Duration::from_millis(120));
