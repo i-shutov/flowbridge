@@ -73,6 +73,34 @@ def socks_connect_rejected(port: int, target_port: int):
                 "Missing failed SOCKS CONNECT under a closed SSH gate")
 
 
+def owned_ssh_listener_pid(socks_port: int, agent_pid: int) -> int:
+    """Identify ONLY the agent's real Microsoft OpenSSH -D child by its bound
+    loopback TCP listener and OS parent PID, before a test-induced kill.
+    Never enumerate/terminate an unrelated machine SSH session.
+    """
+    require(1 <= socks_port <= 65535 and agent_pid > 0, "Invalid owned SSH identity")
+    script = (
+        "$ErrorActionPreference='Stop'; "
+        f"$owners=@(Get-NetTCPConnection -State Listen -LocalPort {socks_port} "
+        "| Where-Object {$_.LocalAddress -eq '127.0.0.1'} "
+        "| Select-Object -ExpandProperty OwningProcess -Unique); "
+        "if ($owners.Count -ne 1) {exit 11}; "
+        "$candidate=Get-CimInstance Win32_Process "
+        "-Filter \"ProcessId=$($owners[0])\"; "
+        f"if ($null -eq $candidate -or $candidate.Name -ine 'ssh.exe' "
+        f"-or $candidate.ParentProcessId -ne {agent_pid}) {{exit 12}}; "
+        "Write-Output $candidate.ProcessId"
+    )
+    result = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+        capture_output=True, text=True, encoding="utf-8", timeout=15,
+        check=False,
+    )
+    require(result.returncode == 0 and result.stdout.strip().isdigit(),
+            "SOCKS listener is not uniquely owned by the supervised SSH child")
+    return int(result.stdout.strip())
+
+
 def make_config(ssh: Path, identity: Path, known: Path, user: str,
                 ssh_port: int, socks: int, ingress: int,
                 banner_cli: Path | None = None):
@@ -277,6 +305,53 @@ def run(agent: Path, ssh: Path, identity: Path, known: Path, user: str,
         except OSError:
             report["listener_closed_after_stop"] = True
 
+        # Unplanned death of the ACTUAL Microsoft OpenSSH client, without
+        # calling IPC stop or manually closing the managed upstream gate.
+        # This exercises the automatic Rust supervisor -> SOCKS gate coupling.
+        # The long retry delay applies ONLY to this disposable test profile
+        # so the closed-gate transition can be independently observed.
+        crash_profile = copy.deepcopy(good)
+        crash_profile["ssh"]["restart_initial_delay_ms"] = 8000
+        crash_profile["ssh"]["restart_max_delay_ms"] = 8000
+        proc = launch(crash_profile)
+        try:
+            def crash_client_ready():
+                if proc.poll() is not None:
+                    raise AssertionError("Rust agent exited before SSH child crash canary")
+                state = control(agent, "status", accept_failure=True)
+                if state is not None and state.get("managed_ssh_gate_ready") is True:
+                    require(state["managed_ssh"]["socks_ready_observed"] is True,
+                            "Rust supervisor incorrectly advertised a ready SSH child")
+                    return state
+                return None
+            wait_for(crash_client_ready, seconds=35)
+            round_trip(ingress, target_port)
+            ssh_pid = owned_ssh_listener_pid(socks, proc.pid)
+            killed = subprocess.run(
+                ["taskkill", "/PID", str(ssh_pid), "/F"],
+                capture_output=True, text=True, timeout=8, check=False,
+            )
+            require(killed.returncode == 0, "Exact owned SSH child kill failed")
+            def automatic_gate_closed():
+                state = control(agent, "status", accept_failure=True)
+                if state is not None and state.get("managed_ssh_gate_ready") is False:
+                    require(state["managed_ssh"]["socks_ready_observed"] is False,
+                            "Agent claimed closed gate with live-ready SSH status")
+                    return state
+                return None
+            wait_for(automatic_gate_closed, seconds=5)
+            socks_connect_rejected(ingress, target_port)
+            report["unexpected_ssh_child_death_automatically_closed_gate"] = True
+            wait_for(crash_client_ready, seconds=40)
+            recovered_pid = owned_ssh_listener_pid(socks, proc.pid)
+            require(recovered_pid != ssh_pid,
+                    "SSH restart failed to replace the killed OS process")
+            round_trip(ingress, target_port)
+            report["unexpected_ssh_child_death_recovered_real_ssh_without_direct"] = True
+        finally:
+            if proc.poll() is None:
+                stop(proc)
+
         # A real forced termination (not graceful IPC stop) must close the
         # independent OpenSSH -D child through Windows JOB_OBJECT kill-on-close.
         # This proves only user-mode listener cleanup, NOT kernel fail-closed.
@@ -319,6 +394,8 @@ def run(agent: Path, ssh: Path, identity: Path, known: Path, user: str,
         "live_socks_reload_without_carrier_change",
         "carrier_change_rejected_and_existing_connection_survived",
         "listener_closed_after_stop",
+        "unexpected_ssh_child_death_automatically_closed_gate",
+        "unexpected_ssh_child_death_recovered_real_ssh_without_direct",
         "forced_agent_crash_closed_rust_and_openssh_listeners"))
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

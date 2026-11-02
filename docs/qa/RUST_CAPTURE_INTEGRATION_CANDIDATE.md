@@ -2462,3 +2462,26 @@ Windows 10/11 native acceptance, stable raw 512 and release v1.0 remain
 unproven. No main merge, no release, and no change to Secure Boot,
 Memory Integrity or Defender. VPS #3293462 remains useful for subsequent
 real native failure tests.
+
+## 2026-11-02 — Pending: real unexpected SSH child death / AUTOMATIC foreground Rust gate closure
+
+Following the verified 60/60 **deliberate**, manually gated native NDISRD
+stop/restart phases, the Windows-hosted installed-original-Rust integration
+now additionally kills **only** the OS-verified owned `ssh.exe` SOCKS listener
+(PID and parent PID checked with Windows TCP table + CIM), **without**
+pre-closing the Rust SOCKS gate or requesting graceful controller stop.
+The same installed Rust controller must autonomously close the gate, reject
+a live SOCKS CONNECT (not DIRECT), restart a **different** Microsoft OpenSSH
+process, and restore a binary/half-close verified HTTP/SSH round-trip.
+An 8-second restart delay is used **only in this disposable test fixture**
+to make the gate transition observable. The acceptance is strict and is
+added to the already-required installed signed OpenSSH/NSIS Windows workflow.
+
+**Evidence status:** SOURCE CHANGE ONLY, not accepted pending exact-head
+Windows GitHub Actions and verifiable artifact. This is **process-level
+loopback/SSH** acceptance; it has **no NDISRD driver diversion** in that
+hosted test, no unexpected NDISRD/agent crash containment, no persistent
+kernel fail-closed, no arbitrary PacketBound, no DNS leak-free, no Win10/11
+native acceptance or release authority. The earlier private 60/60 signed
+NDISRD trials still prove only **manually** closed gate on the *older*
+`42de6090...` source, never automatic gate closure on this new head.
