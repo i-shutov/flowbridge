@@ -22,10 +22,9 @@ use windows_sys::Win32::{
         FwpmNetEventEnum0, FwpmSubLayerAdd0, FWPM_CONDITION_ALE_APP_ID, FWPM_CONDITION_IP_PROTOCOL,
         FWPM_CONDITION_IP_REMOTE_PORT, FWPM_FILTER0, FWPM_FILTER_CONDITION0,
         FWPM_LAYER_ALE_AUTH_CONNECT_V4, FWPM_LAYER_ALE_AUTH_CONNECT_V6, FWPM_NET_EVENT0,
-        FWPM_NET_EVENT_FLAG_APP_ID_SET,
-        FWPM_NET_EVENT_TYPE_CLASSIFY_DROP, FWPM_SESSION0, FWPM_SESSION_FLAG_DYNAMIC,
-        FWPM_SUBLAYER0, FWP_ACTION_BLOCK, FWP_BYTE_BLOB, FWP_BYTE_BLOB_TYPE, FWP_MATCH_EQUAL,
-        FWP_UINT16, FWP_UINT8,
+        FWPM_NET_EVENT_FLAG_APP_ID_SET, FWPM_NET_EVENT_TYPE_CLASSIFY_DROP, FWPM_SESSION0,
+        FWPM_SESSION_FLAG_DYNAMIC, FWPM_SUBLAYER0, FWP_ACTION_BLOCK, FWP_BYTE_BLOB,
+        FWP_BYTE_BLOB_TYPE, FWP_MATCH_EQUAL, FWP_UINT16, FWP_UINT8,
     },
     Storage::FileSystem::{GetFinalPathNameByHandleW, VOLUME_NAME_DOS, VOLUME_NAME_NT},
     System::Threading::{GetCurrentProcess, QueryFullProcessImageNameW, PROCESS_NAME_NATIVE},
@@ -922,11 +921,16 @@ pub fn client_udp6(port: u16, consent: &str) -> Result<Value, String> {
         .set_read_timeout(Some(Duration::from_millis(900)))
         .map_err(|_| "WFP IPv6 UDP timeout failed")?;
     let endpoint = SocketAddrV6::new(Ipv6Addr::LOCALHOST, port, 0, 0);
-    if socket.send_to(b"probe", endpoint).map_err(|_| "WFP IPv6 UDP denied")? != 5 {
+    if socket
+        .send_to(b"probe", endpoint)
+        .map_err(|_| "WFP IPv6 UDP denied")?
+        != 5
+    {
         return Err("WFP IPv6 UDP partial send".into());
     }
     let mut received = [0u8; 8];
-    let (n, peer) = socket.recv_from(&mut received)
+    let (n, peer) = socket
+        .recv_from(&mut received)
         .map_err(|_| "WFP IPv6 UDP echo not received")?;
     if peer != endpoint.into() || received[..n] != *b"done" {
         return Err("WFP IPv6 UDP echo mismatch".into());
