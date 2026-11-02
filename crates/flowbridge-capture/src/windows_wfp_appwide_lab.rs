@@ -505,7 +505,6 @@ pub fn soft_lease(path: &str, port: u16, token: &str) -> Result<Value, String> {
         "protected_fail_closed":false,"release_accepted":false}))
 }
 
-
 /// One live TCP socket with a selected copied QA image. This deliberately
 /// tests an ALREADY ESTABLISHED flow after the dynamic WFP permit owner dies,
 /// rather than mistaking new-connection rejection for flow revocation.
@@ -521,10 +520,9 @@ pub fn held_tcp_client(port: u16, token: &str) -> Result<Value, String> {
         return Err("Held TCP canary is only for hosted Windows and a high port".into());
     }
     let current = std::env::current_exe().map_err(|_| "QA image path missing")?;
-    let temp = std::fs::canonicalize(
-        std::env::var("RUNNER_TEMP").map_err(|_| "Hosted temp missing")?,
-    )
-    .map_err(|_| "Hosted temp could not be canonicalized")?;
+    let temp =
+        std::fs::canonicalize(std::env::var("RUNNER_TEMP").map_err(|_| "Hosted temp missing")?)
+            .map_err(|_| "Hosted temp could not be canonicalized")?;
     if current.file_name().and_then(|n| n.to_str()) != Some("FlowBridgeWfpLabClient.exe")
         || !std::fs::canonicalize(&current)
             .map_err(|_| "QA image unavailable")?
