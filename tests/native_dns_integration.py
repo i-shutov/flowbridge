@@ -165,8 +165,10 @@ def main():
                'chains': [], 'rules': [], 'default_action': {'type': 'block'},
                'connect_timeout_ms': 1000, 'handshake_timeout_ms': 1000,
                'idle_timeout_ms': 60000, 'max_connections': 16}
-    options = {'managed_endpoint': endpoint, 'ready': True, 'ready_lease_ms': 10000,
-               'dns': {'resolver': {'host': '127.0.0.1', 'port': resolver.server_address[1]}, 'timeout_ms': 300}}
+    options = {'managed_endpoint': endpoint, 'ready': True, 'ready_lease_ms': 30000,
+               # The old 300 ms LOCAL SOCKS fixture deadline is shorter than
+               # Windows CI scheduling jitter; no DIRECT fallback is enabled.
+               'dns': {'resolver': {'host': '127.0.0.1', 'port': resolver.server_address[1]}, 'timeout_ms': 3000}}
     ident = 0; report = {'passed': False, 'os_dns_changed': False, 'checks': []}
     try:
         invalid = copy.deepcopy(options); invalid['dns']['resolver']['host'] = 'client-dns.invalid'

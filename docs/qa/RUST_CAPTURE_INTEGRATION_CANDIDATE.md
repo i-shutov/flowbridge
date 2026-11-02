@@ -2567,3 +2567,10 @@ protected fail-closed on agent crash/SSH failure, adapter-mode-zero
 safety, DNS/UDP/IPv6/QUIC/DoH leak freedom, Windows 10/11 native
 acceptance, raw 512 and owner-authorized 1.0 release remain OPEN.
 Keep paid VDSina VPS #3293462 for bounded native verification.
+
+
+## 2026-11-02 — experimental new native unplanned SSH crash and DNS CI reliability (NOT YET PASS)
+
+This new source change extends the existing 20-phase signed-NDISRD canary with three actual-driver independent Microsoft-signed PowerShell TCP phases routed through the original Rust control-plane agent, its managed SSH process and automatic SOCKS gate. It kills only the exact SSH PID tied to the Rust agent and listener, without manually closing its gate; then requires no selected original DIRECT packets, a failed native SOCKS attempt while closed, a different restarted SSH PID and a real native recovered response. Every phase retains independent prearmed SYSTEM rescue, driver mode rollback, strict process-witness checks and explicit false flags for generalized PacketBound and persistent protected fail-closed. It is a PENDING native experiment, NOT a native PASS or Windows 10/11 acceptance. The prior 60/60 manually gated native trials remain separate evidence on their older source SHA.
+
+On exact previous HEAD 1dabe6e7b19896f2ac3b37764f8d63bbb9d1429f the Windows hosted DNS regression failed at remote DNS deadline expired with local fallback disabled (Actions run 41443942675); macOS and Linux passed. The local fixture deadline changes from 300 ms to 3000 ms, readiness lease from 10 s to 30 s, with all malformed/closed-gate/no-fallback assertions preserved. This is not DNS leak-free and needs new-head CI. Raw OpenSSH 512 still fails separately; managed 128 held / 1152 denied / 10000 verified / four processes passed on the previous head. Main unchanged, PR draft, no driver or credential redistribution, no release.

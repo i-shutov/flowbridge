@@ -22,6 +22,10 @@ import threading
 
 from ssh_real_integration import ABI, Echo, Server, free_port, require, until, round_trip
 from windows_real_ssh_hosted import secure_test_file
+from windows_rust_managed_ssh_control import (
+    control as rust_control, make_config as rust_managed_config,
+    owned_ssh_listener_pid, wait_for as wait_for_rust,
+)
 from windows_external_powershell_lab import ExternalPowerShellCanary
 
 
@@ -298,6 +302,102 @@ def main() -> None:
                 result['real_ssh_restarted_native_recoveries'] = len(sources)
                 result['new_supervised_ssh_pid_after_explicit_stop'] = True
                 result['ssh_lifecycle_gate_was_closed_manually'] = True
+
+                # A separate original Rust control-plane agent now fronts the
+                # real signed-NDISRD controlled PowerShell TCP reflection. Its
+                # SSH supervisor, not this test, owns automatic admission.
+                result['pending_step'] = 'prepare_native_rust_automatic_ssh_crash'
+                reserved = {ssh_port, socks_port, ingress, echo.server_address[1]}
+                crash_socks = free_port()
+                while crash_socks in reserved:
+                    crash_socks = free_port()
+                reserved.add(crash_socks)
+                crash_ingress = free_port()
+                while crash_ingress in reserved:
+                    crash_ingress = free_port()
+                crash_profile = rust_managed_config(
+                    args.ssh, root / 'client_key', known, user,
+                    ssh_port, crash_socks, crash_ingress)
+                # Disposable test delay only, never a production setting.
+                crash_profile['ssh']['restart_initial_delay_ms'] = 18000
+                crash_profile['ssh']['restart_max_delay_ms'] = 18000
+                crash_config = root / 'native-rust-managed.json'
+                crash_config.write_text(json.dumps(crash_profile), encoding='utf-8')
+                secure_test_file(crash_config)
+                crash_agent = subprocess.Popen(
+                    [str(args.agent.resolve()), 'control-serve', str(crash_config)],
+                    stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE, text=True, encoding='utf-8',
+                    creationflags=subprocess.CREATE_NO_WINDOW)
+                try:
+                    def rust_agent_ready():
+                        require(crash_agent.poll() is None, 'Original Rust control agent exited')
+                        state = rust_control(args.agent, 'status', accept_failure=True)
+                        if state is not None and state.get('managed_ssh_gate_ready') is True:
+                            require(state['managed_ssh']['socks_ready_observed'] is True,
+                                    'Rust gate and supervised listener disagree')
+                            return state
+                        return None
+
+                    wait_for_rust(rust_agent_ready, seconds=35)
+                    ingress = crash_ingress
+                    round_trip(ingress, echo.server_address[1])
+                    result['pending_phase'] = 'native_rust_auto_crash_connected'
+                    baseline = probe(False, 'external-powershell')
+                    result['native_rust_auto_crash_connected'] = baseline
+                    verify_lifecycle_native(baseline, 'native_rust_auto_crash_connected',
+                                            'external-powershell', False)
+                    result['pending_step'] = 'verify_exact_owned_ssh_child_and_kill'
+                    old_child = owned_ssh_listener_pid(crash_socks, crash_agent.pid)
+                    killed = subprocess.run(
+                        ['taskkill', '/PID', str(old_child), '/F'],
+                        capture_output=True, text=True, timeout=8, check=False)
+                    require(killed.returncode == 0, 'Exact owned SSH child kill failed')
+                    def rust_gate_closed():
+                        state = rust_control(args.agent, 'status', accept_failure=True)
+                        if state is not None and state.get('managed_ssh_gate_ready') is False:
+                            require(state['managed_ssh']['socks_ready_observed'] is False,
+                                    'Rust reported closed gate with live-ready SSH')
+                            return state
+                        return None
+
+                    result['pending_step'] = 'automatic_rust_gate_close_without_manual_override'
+                    wait_for_rust(rust_gate_closed, seconds=5)
+                    result['pending_phase'] = 'native_rust_auto_crash_denied'
+                    result['pending_step'] = 'actual_ndisrd_denial_after_unexpected_ssh_death'
+                    denied = probe(True, 'external-powershell')
+                    result['native_rust_auto_crash_denied'] = denied
+                    verify_lifecycle_native(denied, 'native_rust_auto_crash_denied',
+                                            'external-powershell', True)
+                    result['native_unexpected_ssh_death_automatically_closed_gate'] = True
+                    result['pending_step'] = 'automatic_ssh_restart_real_child'
+                    wait_for_rust(rust_agent_ready, seconds=45)
+                    new_child = owned_ssh_listener_pid(crash_socks, crash_agent.pid)
+                    require(new_child != old_child, 'SSH restart reused killed child PID')
+                    result['pending_phase'] = 'native_rust_auto_crash_recovered'
+                    result['pending_step'] = 'actual_ndisrd_tcp_after_automatic_ssh_recovery'
+                    recovered = probe(False, 'external-powershell')
+                    result['native_rust_auto_crash_recovered'] = recovered
+                    verify_lifecycle_native(recovered, 'native_rust_auto_crash_recovered',
+                                            'external-powershell', False)
+                    result['native_unexpected_ssh_death_automatically_recovered'] = True
+                    result['native_auto_crash_gate_was_closed_manually'] = False
+                    result['native_auto_crash_packetbound_accepted'] = False
+                    result['native_auto_crash_kernel_fail_closed_accepted'] = False
+                    result.pop('pending_phase', None)
+                finally:
+                    if crash_agent.poll() is None:
+                        try:
+                            rust_control(args.agent, 'stop')
+                        except Exception:
+                            crash_agent.kill()
+                    try:
+                        crash_agent.communicate(timeout=15)
+                    except subprocess.TimeoutExpired:
+                        crash_agent.kill()
+                        crash_agent.communicate(timeout=5)
+                    require(crash_agent.returncode == 0 or result.get('passed') is False,
+                            'Rust control-plane agent failed graceful lab cleanup')
                 result['pending_step'] = 'finalize'
                 result['native_self_owned_tcp_to_real_socks_ssh_verified'] = True
                 result['native_spawned_child_tcp_to_real_socks_ssh_verified'] = True

@@ -186,14 +186,15 @@ jobs:
         shell: bash
         run: |
           cargo build --locked --release -p flowbridge-ffi
-          python -m py_compile tests/windows_ndisrd_self_redirect.py tests/windows_external_powershell_lab.py
+          python -m py_compile tests/windows_ndisrd_self_redirect.py tests/windows_external_powershell_lab.py tests/windows_rust_managed_ssh_control.py
           python - <<'PY'
           import hashlib, json, os, pathlib, shutil, subprocess
           root = pathlib.Path('build/native-self-tools')
           root.mkdir(parents=True, exist_ok=True)
           sources = [pathlib.Path('target/release/flowbridge_ffi.dll')]
           sources += [pathlib.Path('tests') / name for name in (
-              'windows_ndisrd_self_redirect.py', 'windows_external_powershell_lab.py',
+              'windows_ndisrd_self_redirect.py', 'windows_rust_managed_ssh_control.py',
+              'windows_external_powershell_lab.py',
               'windows_powershell_lab_client.py', 'ssh_real_integration.py',
               'windows_real_ssh_hosted.py', 'windows_openssh_capacity_vm.py',
               'windows_ssh_probe_core.py', 'real_ssh_capacity.py', 'churn_pacing.py')]
