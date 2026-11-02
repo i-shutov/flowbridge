@@ -278,6 +278,12 @@ fn same_guid(a: &GUID, b: &GUID) -> bool {
     a.data1 == b.data1 && a.data2 == b.data2 && a.data3 == b.data3 && a.data4 == b.data4
 }
 
+#[derive(Clone, Copy)]
+struct QaTransport {
+    ip_protocol: u8,
+    ipv6: bool,
+}
+
 /// Read back the actual BFE-serialized filter. Success from FwpmFilterAdd0
 /// alone is not evidence that AppId or its type survived registration.
 fn verify_bfe_filter(
@@ -287,8 +293,7 @@ fn verify_bfe_filter(
     port: u16,
     app_only: bool,
     port_only: bool,
-    ip_protocol: u8,
-    ipv6: bool,
+    transport: QaTransport,
 ) -> Result<(), String> {
     let mut raw: *mut FWPM_FILTER0 = null_mut();
     // SAFETY: live BFE engine, valid output pointer, observed filter ID.
@@ -300,7 +305,7 @@ fn verify_bfe_filter(
     // SAFETY: successfully retrieved live BFE filter.
     let filter = unsafe { &*stored.0 };
     let count = if port_only || app_only { 1 } else { 3 };
-    let layer = if ipv6 {
+    let layer = if transport.ipv6 {
         &FWPM_LAYER_ALE_AUTH_CONNECT_V6
     } else {
         &FWPM_LAYER_ALE_AUTH_CONNECT_V4
@@ -340,7 +345,7 @@ fn verify_bfe_filter(
         } else if same_guid(&condition.fieldKey, &FWPM_CONDITION_IP_PROTOCOL)
             && condition.conditionValue.r#type == FWP_UINT8
         {
-            if unsafe { condition.conditionValue.Anonymous.uint8 } != ip_protocol {
+            if unsafe { condition.conditionValue.Anonymous.uint8 } != transport.ip_protocol {
                 return Err("WFP QA BFE stored IP protocol mismatch".into());
             }
             protocol_seen = true;
@@ -774,8 +779,7 @@ fn guard_protocol(
         port,
         app_only_diagnostic,
         port_only_diagnostic,
-        ip_protocol,
-        ipv6,
+        QaTransport { ip_protocol, ipv6 },
     )?;
     println!(
         "{}",
