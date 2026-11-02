@@ -18,39 +18,55 @@ if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows' -or
   throw 'Official NSIS bootstrap allowed only on disposable GitHub-hosted Windows CI'
 }
 $expected = 'ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8'
+# Official SourceForge CDN entry and named SourceForge project mirrors.
+# No third-party repacks. Only the vendor-published ZIP SHA-256 can pass.
 $urls = @(
   'https://downloads.sourceforge.net/project/nsis/NSIS%203/3.13/nsis-3.13.zip',
+  'https://netcologne.dl.sourceforge.net/project/nsis/NSIS%203/3.13/nsis-3.13.zip',
+  'https://phoenixnap.dl.sourceforge.net/project/nsis/NSIS%203/3.13/nsis-3.13.zip',
   'https://sourceforge.net/projects/nsis/files/NSIS%203/3.13/nsis-3.13.zip/download'
 )
 $root = Join-Path $env:RUNNER_TEMP 'flowbridge-pinned-nsis-3.13'
 New-Item -Path $root -ItemType Directory -Force | Out-Null
 $archive = Join-Path $root 'nsis-3.13.zip'
 $verified = $false
-foreach ($url in $urls) {
+for ($index = 0; $index -lt $urls.Count -and -not $verified; $index++) {
+  $url = $urls[$index]
   for ($attempt = 1; $attempt -le 2; $attempt++) {
     if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
     try {
-      Invoke-WebRequest -Uri $url -OutFile $archive -MaximumRedirection 10 -TimeoutSec 90
+      if ($attempt -eq 1) {
+        Invoke-WebRequest -Uri $url -OutFile $archive -MaximumRedirection 10 -TimeoutSec 40 -UserAgent 'Mozilla/5.0 (compatible; FlowBridge-CI/1.0)'
+      } else {
+        & curl.exe --proto '=https' --tlsv1.2 --location --fail --silent --show-error --max-time 40 --output $archive $url
+        if ($LASTEXITCODE -ne 0) { throw 'Official mirror curl download failed' }
+      }
     } catch {
-      Write-Warning ('Official NSIS download unavailable (source ' +
-        ([array]::IndexOf($urls, $url) + 1) + ', attempt ' + $attempt + ')')
+      Write-Warning ('Official SourceForge mirror unavailable: index=' + $index + ', attempt=' + $attempt)
       continue
     }
-    if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) {
-      throw 'Official NSIS archive was not created'
+    if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { continue }
+    $bytes = [IO.File]::ReadAllBytes($archive)
+    # A SourceForge mirror can return an HTML download landing page with HTTP
+    # 200. Never hash that page as the vendor ZIP or accept it as a toolchain.
+    if ($bytes.Length -lt 1000000 -or $bytes.Length -gt 10000000 -or
+        $bytes[0] -ne 0x50 -or $bytes[1] -ne 0x4b -or
+        $bytes[2] -notin @(0x03,0x05,0x07) -or $bytes[3] -notin @(0x04,0x06,0x08)) {
+      Write-Warning ('SourceForge returned non-archive content: mirror=' + $index +
+        ', attempt=' + $attempt + ', byte_count=' + $bytes.Length)
+      continue
     }
-    # A checksum mismatch is a security failure, never an invitation to retry
-    # from a different mirror or accept an unverified binary.
+    # A genuine ZIP with a wrong hash is a security failure, not permission to
+    # try mirrors until a convenient digest appears.
     $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actual -ne $expected) {
-      throw 'Official NSIS 3.13 archive SHA-256 mismatch (NO INSTALLER BYPASS)'
+      throw 'Official NSIS 3.13 ZIP content SHA-256 mismatch (NO INSTALLER BYPASS)'
     }
     $verified = $true
     break
   }
-  if ($verified) { break }
 }
-if (-not $verified) { throw 'No official NSIS download available (NO INSTALLER BYPASS)' }
+if (-not $verified) { throw 'Official NSIS CDN/mirrors supplied no verified ZIP (NO INSTALLER BYPASS)' }
 $dest = Join-Path $root 'verified-portable'
 if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
 Expand-Archive -LiteralPath $archive -DestinationPath $dest -Force
