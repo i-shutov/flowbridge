@@ -2485,3 +2485,85 @@ kernel fail-closed, no arbitrary PacketBound, no DNS leak-free, no Win10/11
 native acceptance or release authority. The earlier private 60/60 signed
 NDISRD trials still prove only **manually** closed gate on the *older*
 `42de6090...` source, never automatic gate closure on this new head.
+
+## 2026-11-02 — Verified unplanned owned OpenSSH death, AUTOMATIC Rust SOCKS gate shutdown/recovery (hosted real Windows)
+
+**New executable integration test:** exact source PR #56 head
+`ef1e1666f414fac9b6b1bd213b68e4e1cf36467c`, GitHub PR
+test-merge `677db06ed537dd62be7ae06fee97a7beebe82cbf`,
+unchanged `main` parent `5b5afc2feeda2195f302380e615ba003d4906e09`.
+Only the **source HEAD** is tested; this evidence checkpoint commit
+is documentation-only and does not inherit a separate new-head CI PASS.
+
+**Actual GitHub Actions on exact source SHA/merge:**
+- [Windows/Linux/macOS capture #41442878311](https://github.com/i-shutov/flowbridge/actions/runs/41442878311): **SUCCESS 3/3**,
+including strict Windows signed-OpenSSH/installed-Rust/GUI/NSIS,
+the new *unexpected* owned-child process death case, all 33 WFP
+byte/security safety checks. Hosted Windows Server 2025, **no NDISRD**.
+- [Rust/native applications #41442878197](https://github.com/i-shutov/flowbridge/actions/runs/41442878197):
+**SUCCESS 5/5**, including strict Windows install/upgrade/uninstall.
+- [DNS regression #41442878087](https://github.com/i-shutov/flowbridge/actions/runs/41442878087):
+**SUCCESS 3/3**, **not** native DNS leak-free evidence.
+- [Real OpenSSH #41442878194](https://github.com/i-shutov/flowbridge/actions/runs/41442878194):
+raw 512 **FAIL** (peak 244, Winsock 10054); managed 128/1152/10000/4
+was still running at this checkpoint and must be verified separately.
+The raw failure is NOT waived or relabeled a stable 512 PASS.
+
+**Independent provider-byte integrity verification:**
+GitHub Actions Windows capture artifact **#13139903929** had published
+outer SHA-256
+`6afa2e68c2c13a60a7b906600879b0be93450549f190717f91c9f7342e2acf0b`;
+independently downloaded ZIP had **exactly 26 files** and this same hash.
+The separately downloaded Windows native-test tools artifact
+**#13139694789**, **exactly 11 files**, SHA-256
+`522b7c210b97173a3b9a967391ad19a71bc0f2c171bde2b320c4fe9020ea1e2c`
+also matches its GitHub digest. Original **five-file** (no vendor driver
+or ProxiFyre) Rust candidate ZIP SHA-256
+`3bc9a17fbd855bfda72aad7a760a683c2fca830acece39f8c87d9d3c5ba9b844`;
+the exact installed x64 agent SHA-256
+`fe1fd6ea74ee50dbf9f1cf103355cda5cada67a9a03f11629f550141b5ee9b8e`;
+candidate manifest SHA-256
+`e983b4825b47b2d7014609c65d781b2d7ede3ffed844db17fecef6d10a9e56a5`.
+Unsigned Rust NSIS test candidate SHA-256
+`a73ac06fc9fa37ffc2f293cf10e969fa66d6753431dfa562dbdccab80f1d0389`;
+**not a release**.
+
+**New true process-level fault test:**
+`installed-managed-ssh-control.json` was independently extracted,
+SHA-256
+`2b91a4165c9b58b2bd38a5375d11f13f8fdb572249658a5bcd5b304fd2fd0f9c`,
+with `passed=true`,
+`unexpected_ssh_child_death_automatically_closed_gate=true`,
+`unexpected_ssh_child_death_recovered_real_ssh_without_direct=true`,
+`closed_gate_direct_attempts=0`.
+The harness verified the exact listened-on `127.0.0.1` SOCKS port
+belongs to **one** Microsoft `ssh.exe` child whose parent PID equals
+the running Rust controller, then killed that *exact* child by Windows
+taskkill **without manually closing the proxy gate**, observed Rust
+supervisor/engine automatic closed-gate rejection, and verified a new
+distinct SSH child and authenticated binary/half-close traffic through
+the same installed Rust+GUI candidate. The fixture's 8-second restart
+delay is disposable test-only; it does not alter product defaults.
+The same report additionally verifies forced agent termination closes
+its two owned user-mode listeners.
+
+An **independent earlier Windows Server 2025 installer** artifact
+[#13139133158](https://github.com/i-shutov/flowbridge/actions/runs/41441476242/artifacts/13139133158)
+was downloaded with outer SHA-256
+`7a540e4dfe697845b2471b8d41efaeeda5c8ef025e26c5ae0a69c4e8d0f76d8d`;
+strict native install/upgrade/uninstall `passed=true` and
+`silent_uninstall_convergence_ms=148`, with all prior registry,
+file, shortcut and user-data preservation assertions retained.
+This closes the **hosted installer harness race** only; no production
+installer rollout is authorized.
+
+**NON-PROMOTION:** This is true installed Windows OpenSSH process-death
+recovery, but **NOT** signed-NDISRD native diversion or arbitrary
+application PacketBound. The native 60/60 signed-driver phases above
+were on earlier original code SHA `42de6090...` and **manually**
+closed the SOCKS gate before deliberate SSH stop. Do not transfer the
+automatic-close claim to those earlier VPS trials. Product's kernel
+protected fail-closed on agent crash/SSH failure, adapter-mode-zero
+safety, DNS/UDP/IPv6/QUIC/DoH leak freedom, Windows 10/11 native
+acceptance, raw 512 and owner-authorized 1.0 release remain OPEN.
+Keep paid VDSina VPS #3293462 for bounded native verification.
