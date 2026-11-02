@@ -889,8 +889,6 @@ async fn native(request: Request) -> Result<Value, String> {
         "upstream_socks_failed":probe.upstream_failed,
         "application_received_http":probe.valid_http_reply,
         "application_and_relay_byte_counts_match":probe.bytes_match,
-        "client_progress":probe.client_progress,
-        "relay_progress":probe.relay_progress,
         "bytes_sent":probe.sent, "bytes_received":probe.received,
         "arbitrary_app_owner_binding_accepted":false, "native_owner_binding_accepted":false,
         "protected_redirect_available":false, "dns_leak_free":false,
@@ -898,6 +896,10 @@ async fn native(request: Request) -> Result<Value, String> {
         "payload_or_process_identity_logged":false,
         "note":"Controlled parent, Rust child, OS PowerShell child and independently launched OS PowerShell IPv4 canaries only. IP Helper is NOT PacketBound. Unrelated canary must exit before mode 0. Caller must attest independent rescue, signed driver and real SSH. Mode 0 is ordinary networking."
     });
+    // Keep the macro expansion bounded: attach sanitized G1 transport stages
+    // outside the existing large JSON expression, without changing verdicts.
+    report["client_progress"] = json!(probe.client_progress);
+    report["relay_progress"] = json!(probe.relay_progress);
     // Keep this safety invariant explicit without deepening serde_json's
     // already large recursive laboratory JSON macro expansion.
     report["fresh_tcp_owner_candidate_missing_snapshot_retry_attempts"] =
