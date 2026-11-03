@@ -19,7 +19,7 @@ use serde_json::{json, Value};
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
 use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -451,6 +451,8 @@ async fn exercise_external(
     let denied = Arc::new(AtomicBool::new(false));
     let up = connected.clone();
     let down = denied.clone();
+    let observed_bytes = Arc::new(AtomicU64::new(0));
+    let client_observed_bytes = observed_bytes.clone();
     let client = async move {
         let mut channel = TcpStream::connect(SocketAddr::from(([127, 0, 0, 1], control_port)))
             .await
@@ -464,6 +466,13 @@ async fn exercise_external(
             return Err(());
         }
         let report: Value = serde_json::from_str(&line).map_err(|_| ())?;
+        let count = report["bytes"].as_u64().ok_or(())?;
+        if count > 8192 {
+            return Err(());
+        }
+        // Preserve observed bytes even for an invalid/partial HTTP response.
+        // This never changes the fail-closed verdict or PacketBound authority.
+        client_observed_bytes.store(count, Ordering::SeqCst);
         // Acknowledge the complete bounded response BEFORE closing the
         // loopback control channel. Without this handshake the independent
         // PowerShell writer can be reset while flushing the negative reply.
@@ -473,7 +482,7 @@ async fn exercise_external(
         if report["ok"] != true {
             return Err(());
         }
-        report["bytes"].as_u64().ok_or(())
+        Ok(count)
     };
     let forwarding = async move {
         let (native, accepted_peer) = listener.accept().await.map_err(|_| ())?;
@@ -502,6 +511,7 @@ async fn exercise_external(
         upstream_failed: denied.load(Ordering::SeqCst),
         ..Probe::default()
     };
+    probe.received = observed_bytes.load(Ordering::SeqCst);
     probe.client_progress = match &results {
         Ok((Ok(_), _)) => "client_reported_complete",
         Ok((Err(_), _)) => "client_reported_error",

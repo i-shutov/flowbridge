@@ -48,6 +48,8 @@ try {
   $writer.AutoFlush = $true
   $ok = $false
   $received = [long]0
+  # Retain the true bounded partial reply length even if Receive throws.
+  $reply = [System.IO.MemoryStream]::new()
   if ($reader.ReadLine() -ceq 'go') {
     try {
       $s.Connect([System.Net.IPEndPoint]::new($target, $port))
@@ -62,7 +64,6 @@ try {
       }
       $s.Shutdown([System.Net.Sockets.SocketShutdown]::Send)
       $buffer = New-Object byte[] 4096
-      $reply = [System.IO.MemoryStream]::new()
       while ($true) {
         $n = $s.Receive($buffer)
         if ($n -eq 0) { break }
@@ -74,7 +75,7 @@ try {
       $received = [long]$reply.Length
     } catch {
       $ok = $false
-      $received = [long]0
+      $received = [long]$reply.Length
     }
   }
   $s.Dispose()
