@@ -20,6 +20,15 @@ FlowBridge source `745ffd6e99b13dab5617fd9b6decc2014a933f9d`.
 loopback-сокетах этого узла; внешний путь Windows→origin не проверен.
 Readiness artifact `13346556354` независимо скачан и проверен:
 SHA-256 `6cb055dd4349d221f9c4c8a5ffcd97d676b2adab229fb73240d31cc65ae7ae94`.
+Итоговый run завершён SUCCESS; независимо проверен финальный artifact
+[`13345723726`](https://github.com/i-shutov/wolfram-server/actions/runs/41873379455/artifacts/13345723726),
+ZIP SHA-256 `ee7a01e9b3315b102de625aa41bc05c225c22e01975a29fc34e64e7e7023ea0b`.
+В ZIP ровно три bounded JSON: stage/live/final; `final-report.json` подтверждает
+`STOPPED`, `origin_connections_observed:0`, `native_test_executed:false`,
+`windows_controls_verified:false`, `release_accepted:false`. Listener не
+перезапускался. Код завершения закрывает private receipts без удаления;
+их содержимое и текущее наличие на узле повторно не проверялись.
+
 Private config, nonce и журналы находятся только на узле в отдельном каталоге
 `/srv/wolfram-dev/evidence/flowbridge-g1/run-41873379455-1.*` с правами 0700/0600.
 
@@ -38,9 +47,9 @@ G1 остаётся OPEN: причинный эксперимент и 10/10 п�
 отдельной авторизации, новых SHA-проверок, VNC, SYSTEM rescue,
 Defender/firewall и rollback.
 
-Status: implementation locally checked; external deployment and native acceptance
-NOT performed. This is a QA fixture, not a production routing backend. It does not
-fix or prove the cause of the historical two empty upstream responses.
+Состояние: ограниченный Linux origin завершён STOPPED; Windows native acceptance
+не выполнялась. Это QA fixture, не production routing backend. Причина двух
+исторических пустых upstream responses этим запуском не установлена.
 
 ## What is different
 
