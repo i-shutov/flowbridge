@@ -28,6 +28,8 @@ jobs:
           python-version: '3.13'
       - name: Independent synthetic negative integrity-contract tests (no native acceptance)
         run: python -m unittest discover -s tests -p test_capture_evidence_audit.py -v
+      - name: Controlled HTTP origin and upstream EOF discriminator (loopback only, no driver)
+        run: python -m unittest discover -s tests -p test_g1_controlled_origin.py -v
       - name: Independent capture unit and real loopback SOCKS regressions
         run: cargo test --locked -p flowbridge-capture --all-targets
       - name: Strict Clippy
@@ -186,7 +188,7 @@ jobs:
         shell: bash
         run: |
           cargo build --locked --release -p flowbridge-ffi
-          python -m py_compile tests/windows_ndisrd_self_redirect.py tests/windows_external_powershell_lab.py tests/windows_rust_managed_ssh_control.py
+          python -m py_compile tests/windows_ndisrd_self_redirect.py tests/g1_controlled_origin.py tests/windows_external_powershell_lab.py tests/windows_rust_managed_ssh_control.py
           python - <<'PY'
           import hashlib, json, os, pathlib, shutil, subprocess
           root = pathlib.Path('build/native-self-tools')
@@ -194,7 +196,7 @@ jobs:
           sources = [pathlib.Path('target/release/flowbridge_ffi.dll')]
           sources += [pathlib.Path('tests') / name for name in (
               'windows_ndisrd_self_redirect.py', 'windows_rust_managed_ssh_control.py',
-              'windows_external_powershell_lab.py',
+              'windows_external_powershell_lab.py', 'g1_controlled_origin.py',
               'windows_powershell_lab_client.py', 'ssh_real_integration.py',
               'windows_real_ssh_hosted.py', 'windows_openssh_capacity_vm.py',
               'windows_ssh_probe_core.py', 'real_ssh_capacity.py', 'churn_pacing.py')]

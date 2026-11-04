@@ -27,6 +27,7 @@ from windows_rust_managed_ssh_control import (
     owned_ssh_listener_pid, wait_for as wait_for_rust,
 )
 from windows_external_powershell_lab import ExternalPowerShellCanary
+from g1_controlled_origin import OriginSpec, controls
 
 
 def digest(path: Path) -> str:
@@ -66,14 +67,24 @@ def main() -> None:
         'release_accepted': False,
         'packet_payload_or_identity_saved': False,
     }
-    abi = ABI(args.library.resolve())
+    abi = None
     supervisor = engine = 0
-    daemon = None
-    echo = Server(('127.0.0.1', 0), Echo)
-    echo_thread = threading.Thread(target=echo.serve_forever, daemon=True)
-    echo_thread.start()
-    temporary = tempfile.TemporaryDirectory(prefix="flowbridge-native-ssh-")
+    daemon = echo = echo_thread = temporary = None
     try:
+        # The old public example.com HTTP oracle was best-effort. Refuse an
+        # unconfigured origin before loading FFI, starting SSH or using NDISRD.
+        result['pending_step'] = 'controlled_origin_preflight'
+        origin = OriginSpec.from_native_context(context)
+        result['controlled_origin'] = origin.metadata()
+        direct = controls(origin)
+        result['origin_controls'] = {'direct_preflight': direct}
+        require(all(item['passed'] is True for item in direct),
+                'Controlled origin failed ordinary/half-close direct positive controls')
+        abi = ABI(args.library.resolve())
+        echo = Server(('127.0.0.1', 0), Echo)
+        echo_thread = threading.Thread(target=echo.serve_forever, daemon=True)
+        echo_thread.start()
+        temporary = tempfile.TemporaryDirectory(prefix="flowbridge-native-ssh-")
         with contextlib.nullcontext(temporary.name) as temporary_name:
             root = Path(temporary_name)
             for name in ('host_key', 'client_key'):
@@ -143,6 +154,12 @@ def main() -> None:
                 abi.call('fb_engine_start_json', engine)
                 round_trip(ingress, echo.server_address[1])
                 result['actual_supervised_ssh_authenticated'] = True
+                # Same literal destination as the selected original tuple.
+                # These are unselected QA controls, not a DIRECT fallback.
+                baseline = controls(origin, socks_port=ingress)
+                result['origin_controls']['socks_preflight'] = baseline
+                require(all(item['passed'] is True for item in baseline),
+                        'Controlled origin failed ordinary/half-close SOCKS positive controls')
                 def probe(expect_denied, source='self'):
                     result['pending_step'] = 'validate_canary_request'
                     require(source in ('self', 'rust-child', 'powershell', 'external-powershell'),
@@ -175,6 +192,14 @@ def main() -> None:
                     report = json.loads(proc.stdout)
                     require(isinstance(report, dict), 'No structured agent report')
                     report['process_exit_code'] = proc.returncode
+                    # Preserve the original verdict: no retry, sleep or warm-up
+                    # before a recovery phase. Only after confirmed rollback,
+                    # compare independent origin paths if that phase failed.
+                    if not expect_denied and report.get('passed') is not True:
+                        if (report.get('rollback_confirmed') is True and
+                                report.get('external_process_exit_confirmed') is True):
+                            result['origin_controls']['after_failed_native'] = (
+                                controls(origin) + controls(origin, socks_port=ingress))
                     return report
                 phases = [('connected', False, 'self'), ('gate_closed', True, 'self'),
                           ('recovered', False, 'self'), ('child_connected', False, 'rust-child'),
@@ -196,6 +221,11 @@ def main() -> None:
                     require(report.get('rollback_confirmed') is True, 'Native adapter rollback not confirmed')
                     require(report.get('passed') is True and report.get('process_exit_code') == 0,
                             f'Native {phase} canary did not satisfy all gates')
+                    if not deny:
+                        require(report.get('relay_request_bytes') == 57 and
+                                report.get('relay_response_bytes') == len(origin.expected) and
+                                report.get('bytes_received') == len(origin.expected),
+                                'Native HTTP lengths differ from the controlled origin contract')
                     require(report.get('selected_original_frames_sent_to_adapter') == 0,
                             'Selected original packet escaped to physical adapter')
                     evidence_field = {'self': 'self_owned_socket_pid_epoch_consistent',
@@ -274,6 +304,10 @@ def main() -> None:
                                 and report.get('application_received_http') is True
                                 and report.get('application_and_relay_byte_counts_match') is True,
                                 f'Native SSH lifecycle {phase} failed after real SSH restart')
+                        require(report.get('relay_request_bytes') == 57 and
+                                report.get('relay_response_bytes') == len(origin.expected) and
+                                report.get('bytes_received') == len(origin.expected),
+                                'Native recovery HTTP lengths differ from controlled origin')
 
                 sources = ('self', 'rust-child', 'powershell', 'external-powershell')
                 for source in sources:
@@ -416,10 +450,12 @@ def main() -> None:
         if daemon and daemon.poll() is None:
             subprocess.run(['taskkill', '/PID', str(daemon.pid), '/T', '/F'], capture_output=True, timeout=15, check=False)
             daemon.wait(timeout=10)
-        echo.shutdown(); echo.server_close(); echo_thread.join(timeout=3)
+        if echo is not None:
+            echo.shutdown(); echo.server_close(); echo_thread.join(timeout=3)
         args.output.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
         print(json.dumps({'native_self_redirect': result}), flush=True)
-        temporary.cleanup()
+        if temporary is not None:
+            temporary.cleanup()
 
 
 if __name__ == '__main__':
