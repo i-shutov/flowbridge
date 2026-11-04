@@ -74,8 +74,8 @@ class OriginSpec:
                      "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/3")
         if any(a in ipaddress.IPv4Network(n) for n in forbidden):
             raise OriginError("Native origin must be a real non-loopback unicast endpoint")
-        if spec.port != 80:
-            raise OriginError("The existing native Rust contract requires origin port 80")
+        if spec.port not in (80, 18080):
+            raise OriginError("Native Rust origin port must be 80 or 18080")
         if context.get("target_ipv4") != spec.address:
             raise OriginError("Original packet destination and controlled origin must be identical")
         if ipv4(context.get("local_ipv4")) == spec.address:

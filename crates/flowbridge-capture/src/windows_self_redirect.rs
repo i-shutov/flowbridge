@@ -6,7 +6,7 @@
 
 use crate::ndis_session::{LabDisposition, LabMode, PacketSession};
 use crate::relay::RelayPool;
-use crate::self_redirect::{Reflection, Request};
+use crate::self_redirect::{http_g1_target_port_allowed, Reflection, Request};
 use crate::windows_ndis_device::Driver;
 use crate::windows_tcp_owner::{
     validate_pinned_tcp_owner_lab_missing_retry, OwnedProcess, OwnerQuery,
@@ -188,7 +188,7 @@ pub(super) fn run_child(local_ipv4: Ipv4Addr, target: SocketAddrV4) -> Result<Va
         || local_ipv4.is_multicast()
         || target.ip().is_loopback()
         || target.ip().is_unspecified()
-        || target.port() != 80
+        || !http_g1_target_port_allowed(target.port())
         || target.ip() == &local_ipv4
     {
         return Err("Spawned canary requires explicit non-loopback IPv4 endpoints".into());
@@ -951,6 +951,16 @@ async fn native(request: Request) -> Result<Value, String> {
 #[cfg(test)]
 mod sanitized_owner_diagnostic_tests {
     use super::{sanitized_owner_denial_reason, sanitized_tcp_flag_phase};
+
+    #[test]
+    fn child_http_g1_keeps_exact_request_and_bounded_target_ports() {
+        assert_eq!(super::REQUEST.len(), 57);
+        assert!(super::http_g1_target_port_allowed(80));
+        assert!(super::http_g1_target_port_allowed(18080));
+        for port in [0, 79, 81, 443, 1080, 18079, 18081, u16::MAX] {
+            assert!(!super::http_g1_target_port_allowed(port));
+        }
+    }
 
     #[test]
     fn bounded_categories_cannot_expose_native_error_details() {

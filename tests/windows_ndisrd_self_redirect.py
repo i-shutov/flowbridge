@@ -34,6 +34,11 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def controlled_destination(origin: OriginSpec) -> str:
+    """Use one validated literal endpoint for the original tuple and SSH allowlist."""
+    return f"{origin.address}:{origin.port}"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('agent', 'library', 'ssh', 'sshd', 'keygen', 'context', 'output'):
@@ -75,6 +80,7 @@ def main() -> None:
         # unconfigured origin before loading FFI, starting SSH or using NDISRD.
         result['pending_step'] = 'controlled_origin_preflight'
         origin = OriginSpec.from_native_context(context)
+        destination = controlled_destination(origin)
         result['controlled_origin'] = origin.metadata()
         direct = controls(origin)
         result['origin_controls'] = {'direct_preflight': direct}
@@ -107,7 +113,7 @@ def main() -> None:
                 f'AuthorizedKeysFile "{authorized.as_posix()}"', f'AllowUsers {user}',
                 'PasswordAuthentication no', 'PubkeyAuthentication yes', 'AuthenticationMethods publickey',
                 'AllowTcpForwarding local', 'GatewayPorts no',
-                f'PermitOpen localhost:{echo.server_address[1]} 127.0.0.1:{echo.server_address[1]} {target}:80',
+                f'PermitOpen localhost:{echo.server_address[1]} 127.0.0.1:{echo.server_address[1]} {destination}',
                 'LogLevel ERROR', 'MaxStartups 10:30:20', 'MaxSessions 10', '',
             ]), encoding='ascii')
             secure_test_file(config)
@@ -169,7 +175,7 @@ def main() -> None:
                                 'powershell': 'NATIVE_POWERSHELL_CHILD_TCP_REFLECT',
                                 'external-powershell': 'NATIVE_UNRELATED_OS_POWERSHELL_TCP_REFLECT'}
                     request = {'adapter_name': context['adapter_name'], 'local_ipv4': context['local_ipv4'],
-                        'target': f'{target}:80', 'upstream': f'127.0.0.1:{ingress}',
+                        'target': destination, 'upstream': f'127.0.0.1:{ingress}',
                         'duration_ms': 12000, 'consent': consents[source],
                         'spawned_child': source == 'rust-child',
                         'powershell_child': source == 'powershell',
@@ -178,7 +184,7 @@ def main() -> None:
                         # Sibling to Rust agent: QA owns process creation/lifetime.
                         # Neither PID nor ephemeral ports are saved in reports.
                         result['pending_step'] = 'create_independent_signed_process'
-                        with ExternalPowerShellCanary(context['local_ipv4'], target) as external:
+                        with ExternalPowerShellCanary(context['local_ipv4'], target, origin.port) as external:
                             request['external_client'] = external.request()
                             result['pending_step'] = 'native_agent_execution'
                             proc = subprocess.run([str(args.agent.resolve()), 'native-self-redirect', json.dumps(request)],

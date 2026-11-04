@@ -18,6 +18,12 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 
+/// The bounded HTTPG1 canary permits only these two explicit target ports.
+/// This does not grant DIRECT routing or change packet/process authority.
+pub(crate) fn http_g1_target_port_allowed(port: u16) -> bool {
+    matches!(port, 80 | 18080)
+}
+
 /// Process launched by the QA orchestrator, not by the Rust agent. This is
 /// only a bounded external OS canary; PID/port supplied by a caller never
 /// becomes a general-purpose kernel packet ownership capability.
@@ -89,7 +95,7 @@ impl Request {
             || self.target.ip().is_multicast()
             || self.target.ip().is_broadcast()
             || self.target.ip() == &self.local_ipv4
-            || self.target.port() != 80
+            || !http_g1_target_port_allowed(self.target.port())
             || !self.upstream.ip().is_loopback()
             || self.upstream.port() == 0
         {
@@ -445,6 +451,55 @@ mod tests {
             frame: f,
         }
     }
+    #[test]
+    fn http_g1_target_ports_are_explicit_for_every_canary_client() {
+        for port in [80, 18080] {
+            assert!(http_g1_target_port_allowed(port));
+            for mode in 0..4 {
+                let mut request = Request {
+                    adapter_name: "a".into(),
+                    local_ipv4: "192.0.2.10".parse().unwrap(),
+                    target: SocketAddrV4::new("198.51.100.10".parse().unwrap(), port),
+                    upstream: "127.0.0.1:1080".parse().unwrap(),
+                    consent: "NATIVE_SELF_SOCKET_TCP_REFLECT".into(),
+                    duration_ms: 5000,
+                    expect_denied: false,
+                    spawned_child: false,
+                    powershell_child: false,
+                    external_client: None,
+                };
+                match mode {
+                    1 => {
+                        request.spawned_child = true;
+                        request.consent = "NATIVE_SPAWNED_CHILD_TCP_REFLECT".into();
+                    }
+                    2 => {
+                        request.powershell_child = true;
+                        request.consent = "NATIVE_POWERSHELL_CHILD_TCP_REFLECT".into();
+                    }
+                    3 => {
+                        request.external_client = Some(ExternalClient {
+                            pid: 4200,
+                            source_port: 49152,
+                            control_port: 49153,
+                        });
+                        request.consent = "NATIVE_UNRELATED_OS_POWERSHELL_TCP_REFLECT".into();
+                    }
+                    _ => {}
+                }
+                assert!(request.validate().is_ok(), "port={port}, client={mode}");
+                for rejected in [0, 1, 79, 81, 443, 1080, 18079, 18081, u16::MAX] {
+                    request.target.set_port(rejected);
+                    assert!(!http_g1_target_port_allowed(rejected));
+                    assert!(
+                        request.validate().is_err(),
+                        "port={rejected}, client={mode}"
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn request_cannot_enable_protected_or_remote_proxy() {
         let mut r = Request {

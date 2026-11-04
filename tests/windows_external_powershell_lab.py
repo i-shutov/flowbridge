@@ -94,7 +94,9 @@ try {
 
 class ExternalPowerShellCanary:
     """Live independently spawned OS process. The Rust agent only queries it."""
-    def __init__(self, local_ipv4: str, target_ipv4: str, target_port: int = 80) -> None:
+    def __init__(self, local_ipv4: str, target_ipv4: str, target_port: int) -> None:
+        require(type(target_port) is int and 1 <= target_port <= 65535,
+                "Independent client requires an explicit valid target port")
         self.local_ipv4, self.target_ipv4, self.target_port = local_ipv4, target_ipv4, target_port
         self.proc: subprocess.Popen | None = None
         self.source_port = 0

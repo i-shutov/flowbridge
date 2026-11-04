@@ -142,6 +142,9 @@ class ControlledOriginTests(unittest.TestCase):
 
     def test_native_config_rejects_legacy_local_override_and_noncanonical_inputs(self):
         self.assertEqual(OriginSpec.from_native_context(config()).port, 80)
+        high_port = config()
+        high_port["controlled_origin"]["port"] = 18080
+        self.assertEqual(OriginSpec.from_native_context(high_port).port, 18080)
         bad = [dict(config(), controlled_origin=None), dict(config(), target_ipv4="10.123.0.3"),
                dict(config(), local_ipv4="10.123.0.2")]
         for change in ({"owner_authorized": False}, {"owner_authorized": 1}, {"port": 8080},

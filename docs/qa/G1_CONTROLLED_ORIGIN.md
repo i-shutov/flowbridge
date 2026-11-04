@@ -1,5 +1,29 @@
 # Controlled HTTP origin: G1 rollout and evidence contract
 
+## Интеграция существующего узла, 04.11.2026
+
+Владелец разрешил использовать существующий сервер `153.80.246.207` только
+на TCP `18080`. Архив не нужен: исходники берутся непосредственно из GitHub
+с закреплением точного commit SHA. Wolfram, Docker, nginx/Caddy, порты 80/443
+и действующие службы не изменяются. Подтверждённый исходящий IPv4 Windows VPS
+пока не предоставлен: подготовка допускается, внешний listener не запускается.
+Подготовка через Linux runner не является native NDISRD workflow.
+
+Защищённая native-конфигурация и оба Rust-клиента разрешают только `80` и
+`18080`; для этого стенда порт всегда явно `18080`. Исходный TCP destination,
+SOCKS CONNECT, sshd PermitOpen и PowerShell используют один origin.port.
+Независимый PowerShell-клиент больше не имеет default 80. Все 23 фазы,
+57-байтный запрос, PID/epoch, TCP/ACK/FIN и запрет DIRECT fallback сохраняются.
+
+Для LIVE обязательны проверенный исходящий IPv4 клиента, свободный порт,
+новый nonce, отдельный private журнал и конечный срок работы. Если IPv4 или
+порт недоступны, результат — STAGED без listener. Обычный HTTP и ранний
+half-close в локальных тестах доказывают только fixture, не путь Windows→origin.
+G1 остаётся OPEN: причинный эксперимент и 10/10 полных нативных испытаний
+на одном проверенном source/binary set ещё не выполнены. Их dispatch требует
+отдельной авторизации, новых SHA-проверок, VNC, SYSTEM rescue,
+Defender/firewall и rollback.
+
 Status: implementation locally checked; external deployment and native acceptance
 NOT performed. This is a QA fixture, not a production routing backend. It does not
 fix or prove the cause of the historical two empty upstream responses.
@@ -33,7 +57,7 @@ Do not put real endpoints or process identities into GitHub comments or artifact
 
 ```text
 python tests/g1_controlled_origin.py serve --owner-authorized \
-  --bind <ORIGIN_INTERFACE_IPV4> --port 80 --allow-peer <VPS_EGRESS_IPV4> \
+  --bind <ORIGIN_INTERFACE_IPV4> --port 18080 --allow-peer <VPS_EGRESS_IPV4> \
   --run-nonce <32_LOWERCASE_HEX_DIGITS> --seconds 900 \
   --output <NEW_PROTECTED_RECEIPT_FILE>
 ```
@@ -62,7 +86,7 @@ Retain its adapter/local-IP/rescue/Defender fields and make `target_ipv4` equal 
     "schema": "flowbridge_g1_controlled_origin_v1",
     "owner_authorized": true,
     "ipv4": "<APPROVED_ORIGIN_IPV4>",
-    "port": 80,
+    "port": 18080,
     "run_nonce": "<32_LOWERCASE_HEX_DIGITS>"
   }
 }
