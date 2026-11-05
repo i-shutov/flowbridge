@@ -1,0 +1,31 @@
+name: One-shot FlowBridge GitHub-hosted full-stack feasibility
+on:
+  push:
+    branches: [qa/github-hosted-feasibility-20261105]
+    paths: ['.github/workflows/hosted-feasibility-20261105.yml']
+permissions:
+  contents: read
+concurrency:
+  group: flowbridge-hosted-feasibility-20261105
+  cancel-in-progress: false
+jobs:
+  windows-kernel-wfp-scm:
+    runs-on: windows-2025
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Signed NDISRD active read-only capture plus WFP and service coexistence
+        shell: pwsh
+        run: ./scripts/qa-hosted-flowbridge-feasibility.ps1
+      - name: Preserve independent JSON reports even on failure
+        if: always()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: FlowBridge-hosted-Windows-stack-feasibility
+          path: build/verification/github-hosted-ndisrd/*.json
+          if-no-files-found: warn
+          retention-days: 14
