@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use std::ffi::c_void;
 use std::path::PathBuf;
 use std::ptr::null_mut;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::OnceLock;
 use windows_sys::Win32::Foundation::GetLastError;
 use windows_sys::Win32::System::Services::{
@@ -20,6 +20,9 @@ use windows_sys::Win32::System::Services::{
 pub(crate) const NAME: &str = "FlowBridgeRustCandidateCI";
 static CONFIG: OnceLock<PathBuf> = OnceLock::new();
 static STOP_REQUESTED: AtomicBool = AtomicBool::new(false);
+// A successful dispatcher return does not prove that ServiceMain succeeded.
+// Preserve the actual SCM lifecycle verdict for the agent process exit code.
+static SERVICE_RESULT: AtomicU32 = AtomicU32::new(0);
 
 pub(crate) fn stop_requested() -> bool {
     STOP_REQUESTED.load(Ordering::Acquire)
@@ -63,12 +66,16 @@ unsafe extern "system" fn service_main(_argc: u32, _argv: *mut *mut u16) {
         RegisterServiceCtrlHandlerExW(wide.as_mut_ptr(), Some(control_handler), null_mut())
     };
     if (handle as usize) == 0 {
+        SERVICE_RESULT.store(unsafe { GetLastError() }.max(1), Ordering::Release);
         return;
     }
     STOP_REQUESTED.store(false, Ordering::Release);
     let _ = SERVICE_HANDLE.set(handle as usize);
     // SAFETY: A live SCM status handle is returned from registration.
-    unsafe { SetServiceStatus(handle, &status(SERVICE_START_PENDING, 0, 0, 1)) };
+    if unsafe { SetServiceStatus(handle, &status(SERVICE_START_PENDING, 0, 0, 1)) } == 0 {
+        SERVICE_RESULT.store(unsafe { GetLastError() }.max(1), Ordering::Release);
+        return;
+    }
     let path = CONFIG
         .get()
         .expect("SCM service config must be set before dispatch");
@@ -80,9 +87,15 @@ unsafe extern "system" fn service_main(_argc: u32, _argv: *mut *mut u16) {
         Ok(Ok(_)) => 0,
         _ => 1067, // ERROR_PROCESS_ABORTED; never claim clean SCM shutdown.
     };
-    // The blocking service routine above sets RUNNING on opening the engine;
-    // once it returns all managed listeners have been closed.
-    unsafe { SetServiceStatus(handle, &status(SERVICE_STOPPED, 0, error, 0)) };
+    // Report failure both to SCM and to the agent exit status. A clean
+    // dispatcher return must not hide an abort during startup or shutdown.
+    let reported = unsafe { SetServiceStatus(handle, &status(SERVICE_STOPPED, 0, error, 0)) };
+    let final_error = if reported == 0 {
+        unsafe { GetLastError() }.max(1)
+    } else {
+        error
+    };
+    SERVICE_RESULT.store(final_error, Ordering::Release);
 }
 
 pub(crate) fn mark_stopping() -> Result<(), String> {
@@ -135,6 +148,7 @@ static SERVICE_HANDLE: OnceLock<usize> = OnceLock::new();
 
 pub fn run(path: &str) -> Result<Value, String> {
     crate::windows_service_management::validate_local_file(path)?;
+    SERVICE_RESULT.store(0, Ordering::Release);
     CONFIG
         .set(PathBuf::from(path))
         .map_err(|_| "SCM config already initialized")?;
@@ -156,6 +170,10 @@ pub fn run(path: &str) -> Result<Value, String> {
         return Err(format!("SCM dispatcher unavailable: {}", unsafe {
             GetLastError()
         }));
+    }
+    let error = SERVICE_RESULT.load(Ordering::Acquire);
+    if error != 0 {
+        return Err(format!("SCM service session failed (Windows error {error})"));
     }
     Ok(json!({
         "ok":true, "scm_dispatch_completed":true,

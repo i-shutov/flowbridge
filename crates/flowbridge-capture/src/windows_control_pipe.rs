@@ -121,8 +121,12 @@ pub(super) async fn serve(mut controller: Controller) -> Result<Value, String> {
                 if controller.status()["scm_service_running"] == true
                     && crate::windows_service::stop_requested()
                 {
-                    crate::windows_service::mark_stopping()?;
-                    controller.stop_engine()?;
+                    // Even a failed SCM status transition cannot skip engine
+                    // and owned SSH cleanup. Preserve both failure channels.
+                    let status_result = crate::windows_service::mark_stopping();
+                    let cleanup_result = controller.stop_engine();
+                    status_result?;
+                    cleanup_result?;
                     return Ok(json!({
                         "ok":true, "scm_stop_completed":true,
                         "driver_capture_active":false,

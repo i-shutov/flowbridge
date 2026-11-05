@@ -13,6 +13,7 @@ from ctypes import wintypes
 import hashlib
 import json
 import pathlib
+import re
 import socket
 import subprocess
 import tempfile
@@ -61,6 +62,13 @@ def wait_scm_stopped() -> None:
             return
         time.sleep(0.2)
     raise AssertionError("SCM service did not report STOPPED")
+
+
+def require_scm_win32_exit(expected: int) -> None:
+    report = sc("query", NAME).stdout
+    match = re.search(r"^\s*WIN32_EXIT_CODE\s*:\s*(\d+)", report, re.MULTILINE)
+    if match is None or int(match.group(1)) != expected:
+        raise AssertionError("SCM Win32 exit code did not match lifecycle verdict")
 
 
 def port_blocked(port: int) -> None:
@@ -132,6 +140,7 @@ def main() -> None:
             try:
                 sc("start", NAME, ok=False)
                 wait_scm_stopped()
+                require_scm_win32_exit(1067)
                 port_blocked(port)
             finally:
                 close_control_pipe(collision)
@@ -162,6 +171,7 @@ def main() -> None:
                 raise AssertionError("SCM engine did not atomically reload policy")
             sc("stop", NAME)
             wait_scm_stopped()
+            require_scm_win32_exit(0)
             wait_status(agent, False)
             port_blocked(port)
             # Only SCM can restart this process. Test IPC stop independently
@@ -174,6 +184,7 @@ def main() -> None:
             if stopped["engine"]["running"]:
                 raise AssertionError("IPC stop failed to terminate SCM engine")
             wait_scm_stopped()
+            require_scm_win32_exit(0)
             wait_status(agent, False)
             port_blocked(port)
             result = {
