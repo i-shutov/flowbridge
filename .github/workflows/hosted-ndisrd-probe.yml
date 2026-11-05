@@ -1,0 +1,28 @@
+name: One-shot hosted Windows NDISRD driver compatibility probe
+on:
+  push:
+    branches: [qa/github-hosted-ndisrd-probe-20261105]
+    paths: ['.github/workflows/hosted-ndisrd-probe.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  signed-driver-readonly:
+    runs-on: windows-2025
+    timeout-minutes: 35
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Test Microsoft-signed NDISRD installation and original Rust read-only ABI
+        shell: pwsh
+        run: ./scripts/qa-hosted-ndisrd-driver-probe.ps1
+      - name: Preserve bounded evidence even if driver loading is blocked
+        if: always()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: FlowBridge-hosted-Windows-2025-NDISRD-driver-probe
+          path: build/verification/github-hosted-ndisrd/probe.json
+          if-no-files-found: warn
+          retention-days: 7
