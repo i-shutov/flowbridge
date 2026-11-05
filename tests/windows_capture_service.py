@@ -8,6 +8,8 @@ native NDISRD capture, DNS containment or production protected-mode acceptance.
 from __future__ import annotations
 
 import argparse
+import ctypes
+from ctypes import wintypes
 import hashlib
 import json
 import pathlib
@@ -71,6 +73,35 @@ def port_blocked(port: int) -> None:
     raise AssertionError("SOCKS listener unexpectedly survived service stop")
 
 
+def reserve_control_pipe() -> int:
+    """Hold the real control pipe name to test fail-closed SCM startup.
+
+    Only this test's local, temporary named pipe is created. No service,
+    driver, WFP filter, listener policy or firewall is modified here.
+    """
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CreateNamedPipeW.argtypes = [
+        wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD,
+        wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID,
+    ]
+    kernel.CreateNamedPipeW.restype = wintypes.HANDLE
+    handle = kernel.CreateNamedPipeW(
+        r"\\.\pipe\FlowBridgeRustControlV1", 0x00000003, 0, 1,
+        4096, 4096, 0, None,
+    )
+    if handle in (None, ctypes.c_void_p(-1).value):
+        raise AssertionError("Cannot reserve isolated control-pipe name")
+    return handle
+
+
+def close_control_pipe(handle: int) -> None:
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel.CloseHandle.restype = wintypes.BOOL
+    if not kernel.CloseHandle(handle):
+        raise AssertionError("Could not release test-only control pipe")
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--agent", required=True, type=pathlib.Path)
@@ -95,6 +126,15 @@ def main() -> None:
         binary = f'"{agent}" service-run "{config.resolve()}"'
         sc("create", NAME, "binPath=", binary, "start=", "demand", "type=", "own")
         try:
+            # A pre-held control name must prevent service RUNNING. The SCM
+            # remains stopped and the transient SOCKS engine must be cleaned.
+            collision = reserve_control_pipe()
+            try:
+                sc("start", NAME, ok=False)
+                wait_scm_stopped()
+                port_blocked(port)
+            finally:
+                close_control_pipe(collision)
             sc("start", NAME)
             data = wait_status(agent, True)
             if not (
@@ -142,6 +182,7 @@ def main() -> None:
                 "agent_sha256": hashlib.sha256(agent.read_bytes()).hexdigest(),
                 "hosted_windows_scm_real": True, "on_demand_local_service": True,
                 "service_restart_clean_generation": True,
+                "scm_pipe_collision_rejected_before_ready": True,
                 "scm_stop_closed_real_socks": True, "pipe_stop_closed_real_socks": True,
                 "policy_reload_generation_two": True,
                 "driver_installed_by_test": False,

@@ -443,7 +443,9 @@ pub(crate) fn serve_scm(path: &Path) -> Result<Value, String> {
         .enable_all()
         .build()
         .map_err(|e| e.to_string())?;
-    crate::windows_service::mark_running()?;
+    // The secured first control-pipe instance must be bound before SCM can
+    // observe RUNNING; otherwise a pipe-name collision makes the service
+    // briefly appear healthy while its SOCKS engine cannot be controlled.
     runtime.block_on(crate::windows_control_pipe::serve(controller))
 }
 

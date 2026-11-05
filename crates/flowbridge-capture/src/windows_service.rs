@@ -101,9 +101,10 @@ pub(crate) fn mark_stopping() -> Result<(), String> {
     Ok(())
 }
 
-// Executed only after Controller has opened an engine and before the control
-// pipe's accept loop. SCM STOP remains accepted during the lifetime of the
-// engine; there is no driver or protected-allow side effect.
+// Executed only after Controller has opened an engine AND the secure first
+// named-pipe instance is bound, before the control pipe's accept loop. An
+// unmanageable service must never advertise RUNNING to SCM. There is no
+// driver or protected-allow side effect.
 pub(crate) fn mark_running() -> Result<(), String> {
     // ServiceMain sets the global status handle via the SCM registration,
     // below. No caller outside SCM may report a service running.

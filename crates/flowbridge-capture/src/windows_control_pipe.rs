@@ -105,6 +105,12 @@ async fn transaction(server: NamedPipeServer, ctl: &mut Controller) -> bool {
 
 pub(super) async fn serve(mut controller: Controller) -> Result<Value, String> {
     let mut waiting = secure_server(true)?;
+    // SCM RUNNING is a postcondition of acquiring the restricted first pipe
+    // instance, not merely starting the SOCKS listener. A pre-held or hijacked
+    // pipe name must fail service startup and drop/stop the owned controller.
+    if controller.status()["scm_service_running"] == true {
+        crate::windows_service::mark_running()?;
+    }
     // An absolute periodic tick cannot be starved by status clients arriving
     // more frequently than POLL_INTERVAL during an SCM STOP request.
     let mut health_tick = tokio::time::interval(POLL_INTERVAL);
