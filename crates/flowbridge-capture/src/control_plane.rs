@@ -405,7 +405,10 @@ impl Controller {
                     // Do not report a clean control/SCM termination when any
                     // resource failed to stop. The control service will either
                     // allow a retry or fail its engine health check visibly.
-                    Err(e) => (json!({"ok":false,"error":e,"release_accepted":false}), false),
+                    Err(e) => (
+                        json!({"ok":false,"error":e,"release_accepted":false}),
+                        false,
+                    ),
                 }
             }
         }
