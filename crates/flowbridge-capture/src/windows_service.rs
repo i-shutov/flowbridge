@@ -173,7 +173,9 @@ pub fn run(path: &str) -> Result<Value, String> {
     }
     let error = SERVICE_RESULT.load(Ordering::Acquire);
     if error != 0 {
-        return Err(format!("SCM service session failed (Windows error {error})"));
+        return Err(format!(
+            "SCM service session failed (Windows error {error})"
+        ));
     }
     Ok(json!({
         "ok":true, "scm_dispatch_completed":true,
