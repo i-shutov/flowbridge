@@ -276,6 +276,10 @@ impl Controller {
     }
 
     pub(crate) fn stop_engine(&self) -> Result<(), String> {
+        // Shutdown is a best-effort sequence of INDEPENDENT cleanup operations,
+        // not a chain of short-circuiting Results. A failed gate close, engine
+        // join, or worker join must not skip terminating our managed SSH child.
+        // Preserve every cleanup failure for the caller and SCM exit status.
         let worker = self
             .gate_worker
             .lock()
@@ -288,27 +292,32 @@ impl Controller {
             true
         };
         self.gate_ready.store(false, Ordering::Release);
+        let mut failures = Vec::new();
+        if !joined {
+            failures.push("managed SSH gate worker panicked".to_owned());
+        }
         if let Some(config) = &self.ssh_config {
             let endpoint = Endpoint {
                 host: "127.0.0.1".into(),
                 port: config.local_port,
             };
-            self.engine
-                .set_upstream_gate(Some(endpoint), false, 0)
-                .map_err(|e| e.to_string())?;
+            if let Err(error) = self.engine.set_upstream_gate(Some(endpoint), false, 0) {
+                failures.push(format!("managed SSH gate close failed: {error}"));
+            }
         }
-        let engine = self.engine.stop().map(|_| ()).map_err(|e| e.to_string());
-        let ssh = self
-            .ssh
-            .as_ref()
-            .map(|supervisor| supervisor.stop().map(|_| ()).map_err(|e| e.to_string()))
-            .transpose();
-        engine?;
-        ssh?;
-        if !joined {
-            return Err("SSH gate worker panicked".into());
+        if let Err(error) = self.engine.stop() {
+            failures.push(format!("SOCKS engine stop failed: {error}"));
         }
-        Ok(())
+        if let Some(supervisor) = &self.ssh {
+            if let Err(error) = supervisor.stop() {
+                failures.push(format!("managed SSH stop failed: {error}"));
+            }
+        }
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(failures.join("; "))
+        }
     }
 
     pub(crate) fn status(&self) -> Value {
@@ -393,7 +402,10 @@ impl Controller {
                 let result = self.stop_engine();
                 match result {
                     Ok(()) => (self.status(), true),
-                    Err(e) => (json!({"ok":false,"error":e,"release_accepted":false}), true),
+                    // Do not report a clean control/SCM termination when any
+                    // resource failed to stop. The control service will either
+                    // allow a retry or fail its engine health check visibly.
+                    Err(e) => (json!({"ok":false,"error":e,"release_accepted":false}), false),
                 }
             }
         }
@@ -639,6 +651,35 @@ mod tests {
         assert!(load_explicit_profile(&file.0).is_err());
         ctl.engine.stop().unwrap();
     }
+    #[test]
+    fn gate_worker_failure_does_not_skip_engine_stop_or_claim_clean_exit() {
+        let cfg = config();
+        let file = ConfigFile::new(&cfg);
+        let mut controller = Controller::open(file.0.clone()).unwrap();
+        assert!(controller.status()["engine"]["running"].as_bool().unwrap());
+
+        // A real SOCKS listener is active. Inject only a gate-worker join
+        // failure; cleanup must still close the listener and decline the
+        // success/exit signal sent to the SCM/control transport.
+        let task = std::thread::spawn(|| panic!("intentional gate worker failure"));
+        *controller.gate_worker.lock().unwrap() = Some(GateWorker {
+            stop: Arc::new(AtomicBool::new(false)),
+            task,
+        });
+        let (report, clean_exit) = controller.execute(br#"{"command":"stop"}"#);
+        assert_eq!(report["ok"], false);
+        assert_eq!(report["release_accepted"], false);
+        assert!(!clean_exit);
+        assert_eq!(controller.status()["engine"]["running"], false);
+        assert!(std::net::TcpStream::connect_timeout(
+            &cfg.listen,
+            std::time::Duration::from_millis(100)
+        )
+        .is_err());
+        // The resources remain idempotently stoppable after the fault.
+        controller.stop_engine().unwrap();
+    }
+
     #[test]
     fn managed_ssh_envelope_refuses_direct_identity_and_mutable_carrier() {
         use flowbridge_core::{Endpoint, Proxy, ProxyKind};

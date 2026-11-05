@@ -69,6 +69,11 @@ fn secure_server(first: bool) -> Result<NamedPipeServer, String> {
 }
 
 async fn transaction(server: NamedPipeServer, ctl: &mut Controller) -> bool {
+    // Once Stop has actually stopped the engine, a disconnected client must
+    // not turn a clean shutdown into a stale, failed SCM health verdict.
+    // On a rejected/failed Stop this remains false and the service reports
+    // the failure rather than claiming a clean termination.
+    let committed_stop = std::cell::Cell::new(false);
     let exchange = async {
         let (reader, mut writer) = tokio::io::split(server);
         let mut reader = BufReader::new(reader.take((MAX_FRAME + 1) as u64));
@@ -82,6 +87,7 @@ async fn transaction(server: NamedPipeServer, ctl: &mut Controller) -> bool {
                 false,
             )
         };
+        committed_stop.set(shutdown);
         let mut output = serde_json::to_vec(&reply).map_err(std::io::Error::other)?;
         if output.len() >= MAX_FRAME {
             return Err(std::io::Error::other("control response exceeds bound"));
@@ -93,7 +99,7 @@ async fn transaction(server: NamedPipeServer, ctl: &mut Controller) -> bool {
     };
     match tokio::time::timeout(REQUEST_DEADLINE, exchange).await {
         Ok(Ok(shutdown)) => shutdown,
-        _ => false, // Hung/malformed clients cannot hold the only pipe forever.
+        _ => committed_stop.get(), // A completed Stop remains committed if its reply fails.
     }
 }
 
