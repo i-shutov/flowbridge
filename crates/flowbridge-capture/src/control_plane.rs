@@ -432,10 +432,13 @@ pub fn serve_foreground(path: &str) -> Result<Value, String> {
         .enable_all()
         .build()
         .map_err(|e| e.to_string())?;
-    // A competing or unauthorized pipe instance must prevent SOCKS startup.
-    let waiting = crate::windows_control_pipe::reserve_first()?;
-    let controller = Controller::open(PathBuf::from(path))?;
-    runtime.block_on(crate::windows_control_pipe::serve(controller, waiting))
+    runtime.block_on(async {
+        // CreateNamedPipe needs an active Tokio reactor. Reserve its first
+        // restricted instance before the engine binds a SOCKS listener.
+        let waiting = crate::windows_control_pipe::reserve_first()?;
+        let controller = Controller::open(PathBuf::from(path))?;
+        crate::windows_control_pipe::serve(controller, waiting).await
+    })
 }
 
 #[cfg(windows)]
@@ -444,11 +447,13 @@ pub(crate) fn serve_scm(path: &Path) -> Result<Value, String> {
         .enable_all()
         .build()
         .map_err(|e| e.to_string())?;
-    // Reserve the first restricted control-pipe instance before exposing even
-    // a transient SOCKS listener. No SCM RUNNING before both are ready.
-    let waiting = crate::windows_control_pipe::reserve_first()?;
-    let controller = Controller::open_with_mode(path.to_path_buf(), true)?;
-    runtime.block_on(crate::windows_control_pipe::serve(controller, waiting))
+    runtime.block_on(async {
+        // Reserve within the active reactor, before exposing a transient SOCKS
+        // listener. No SCM RUNNING until both resources are ready.
+        let waiting = crate::windows_control_pipe::reserve_first()?;
+        let controller = Controller::open_with_mode(path.to_path_buf(), true)?;
+        crate::windows_control_pipe::serve(controller, waiting).await
+    })
 }
 
 #[cfg(not(windows))]
