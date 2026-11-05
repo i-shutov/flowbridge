@@ -68,6 +68,12 @@ fn secure_server(first: bool) -> Result<NamedPipeServer, String> {
     created.map_err(|e| format!("restricted pipe creation failed: {e}"))
 }
 
+// Reserve the secured, first instance BEFORE starting any SOCKS listener.
+// A pre-held pipe name must fail without briefly exposing a running proxy.
+pub(super) fn reserve_first() -> Result<NamedPipeServer, String> {
+    secure_server(true)
+}
+
 async fn transaction(server: NamedPipeServer, ctl: &mut Controller) -> bool {
     // Once Stop has actually stopped the engine, a disconnected client must
     // not turn a clean shutdown into a stale, failed SCM health verdict.
@@ -103,11 +109,13 @@ async fn transaction(server: NamedPipeServer, ctl: &mut Controller) -> bool {
     }
 }
 
-pub(super) async fn serve(mut controller: Controller) -> Result<Value, String> {
-    let mut waiting = secure_server(true)?;
+pub(super) async fn serve(
+    mut controller: Controller,
+    mut waiting: NamedPipeServer,
+) -> Result<Value, String> {
     // SCM RUNNING is a postcondition of acquiring the restricted first pipe
-    // instance, not merely starting the SOCKS listener. A pre-held or hijacked
-    // pipe name must fail service startup and drop/stop the owned controller.
+    // instance and then successfully starting the SOCKS engine. A pre-held or
+    // hijacked pipe name is refused before any SOCKS listener is exposed.
     if controller.status()["scm_service_running"] == true {
         crate::windows_service::mark_running()?;
     }

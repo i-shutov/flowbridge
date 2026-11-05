@@ -428,25 +428,27 @@ pub fn serve_foreground(path: &str) -> Result<Value, String> {
     if path.is_empty() || path.len() > 4096 {
         return Err("control-serve requires one bounded config file path".into());
     }
-    let controller = Controller::open(PathBuf::from(path))?;
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .map_err(|e| e.to_string())?;
-    runtime.block_on(crate::windows_control_pipe::serve(controller))
+    // A competing or unauthorized pipe instance must prevent SOCKS startup.
+    let waiting = crate::windows_control_pipe::reserve_first()?;
+    let controller = Controller::open(PathBuf::from(path))?;
+    runtime.block_on(crate::windows_control_pipe::serve(controller, waiting))
 }
 
 #[cfg(windows)]
 pub(crate) fn serve_scm(path: &Path) -> Result<Value, String> {
-    let controller = Controller::open_with_mode(path.to_path_buf(), true)?;
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .map_err(|e| e.to_string())?;
-    // The secured first control-pipe instance must be bound before SCM can
-    // observe RUNNING; otherwise a pipe-name collision makes the service
-    // briefly appear healthy while its SOCKS engine cannot be controlled.
-    runtime.block_on(crate::windows_control_pipe::serve(controller))
+    // Reserve the first restricted control-pipe instance before exposing even
+    // a transient SOCKS listener. No SCM RUNNING before both are ready.
+    let waiting = crate::windows_control_pipe::reserve_first()?;
+    let controller = Controller::open_with_mode(path.to_path_buf(), true)?;
+    runtime.block_on(crate::windows_control_pipe::serve(controller, waiting))
 }
 
 #[cfg(not(windows))]
