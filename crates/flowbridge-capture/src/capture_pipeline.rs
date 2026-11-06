@@ -170,6 +170,10 @@ impl CapturePipeline {
             return Err(PipelineError::Halted);
         }
         if adapter != self.adapter {
+            // The adapter binding is part of the trusted packet provenance.
+            // Once it changes, no previously admitted selected flow can
+            // remain eligible for a later frame or fall through to DIRECT.
+            self.revoke_all();
             return Err(PipelineError::AdapterMismatch);
         }
         if !readiness.complete() {
@@ -291,6 +295,12 @@ impl CapturePipeline {
     ) -> Result<Endpoint, PipelineError> {
         self.guard(context.adapter, context.readiness)?;
         self.reap(context.now_ms)?;
+        // Public callers must not retain an active selected flow after an
+        // ambiguous owner/ticket identity, even if no SOCKS dial follows.
+        if let Err(error) = self.bound(ticket, &context.owner) {
+            self.revoke_all();
+            return Err(error);
+        }
         let flow = self.bound(ticket, &context.owner)?;
         Ok(Endpoint {
             host: flow.original.destination.ip().to_string(),
@@ -395,8 +405,15 @@ impl CapturePipeline {
             Leg::RelayToApplication => (reverse(alias), reverse(original)),
         };
         // Validate the complete frame and direction before touching its lease.
-        let inspected = inspect_ethernet_tcp(frame).map_err(PipelineError::Frame)?;
+        let inspected = match inspect_ethernet_tcp(frame) {
+            Ok(packet) => packet,
+            Err(error) => {
+                self.revoke_all();
+                return Err(PipelineError::Frame(error));
+            }
+        };
         if inspected.tcp.tuple != expected {
+            self.revoke_all();
             return Err(PipelineError::TupleMismatch);
         }
         if let Err(error) = self.ledger.check_active(ticket.lease, owner.stamp, now_ms) {
@@ -405,8 +422,21 @@ impl CapturePipeline {
             return Err(PipelineError::Lease(error));
         }
         // All validation/mutation is transactional inside the existing primitive.
-        let info = rewrite_ethernet_tcp_tuple(frame, &mut self.scratch, expected, replacement)
-            .map_err(PipelineError::Frame)?;
+        let info = match rewrite_ethernet_tcp_tuple(
+            frame,
+            &mut self.scratch,
+            expected,
+            replacement,
+        ) {
+            Ok(packet) => packet,
+            Err(error) => {
+                // The wire primitive left the original frame untouched.
+                // No new selected traffic is eligible after an uncertain
+                // mutation boundary (e.g. oversize packet/scratch failure).
+                self.revoke_all();
+                return Err(PipelineError::Frame(error));
+            }
+        };
         if let Some(flow) = self.flows.get_mut(&ticket.tuple) {
             flow.last_ms = now_ms;
         }
@@ -446,7 +476,10 @@ impl CapturePipeline {
         now_ms: u64,
     ) -> Result<(), PipelineError> {
         self.reap(now_ms)?;
-        self.bound(ticket, &owner)?;
+        if let Err(error) = self.bound(ticket, &owner) {
+            self.revoke_all();
+            return Err(error);
+        }
         let result = self
             .ledger
             .retire(ticket.lease, owner.stamp, now_ms)
@@ -714,7 +747,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn invalid_packet_does_not_refresh_idle_timeout_and_ssh_loss_revokes_all() {
+    fn invalid_packet_revokes_session_and_ssh_loss_revokes_all() {
         let original = tuple(false);
         let syn = frame(original, 2);
         let mut p = setup();
@@ -722,9 +755,18 @@ pub(crate) mod tests {
         p.activate(ticket, context(2).owner, 2, true).unwrap();
         let mut bad = syn.clone();
         *bad.last_mut().unwrap() ^= 1;
+        let prior = bad.clone();
         assert!(p
             .rewrite(ticket, context(90), Leg::ApplicationToRelay, &mut bad)
             .is_err());
+        assert_eq!(bad, prior);
+        assert_eq!(p.active_records(), 0);
+        assert_eq!(
+            p.begin(context(102), &syn, alias(original)),
+            Err(PipelineError::Halted)
+        );
+        // Only a newly constructed session may accept any further packet.
+        let mut p = setup();
         let new = p.begin(context(102), &syn, alias(original)).unwrap();
         p.activate(new, context(103).owner, 103, true).unwrap();
         let mut disconnected = context(104);
@@ -789,6 +831,96 @@ pub(crate) mod tests {
         assert!(p.finish_relay(ticket_a, context(3).owner).is_err());
         p.finish_relay(ticket_b, context(201).owner).unwrap();
         assert_eq!(p.active_records(), 0);
+    }
+
+    #[test]
+    fn uncertain_selected_packet_or_owner_revokes_session_without_direct_fallback() {
+        // Synthetic PacketBound is test-only. In production no native witness
+        // exists, so these tests verify rejection semantics, not G2 admission.
+        for ipv6 in [false, true] {
+            let original = tuple(ipv6);
+            let syn = frame(original, 0x02);
+            for case in 0..5 {
+                let mut p = setup();
+                let ticket = p.begin(context(1), &syn, alias(original)).unwrap();
+                p.activate(ticket, context(2).owner, 2, true).unwrap();
+
+                let mut packet = match case {
+                    2 => frame(reverse(alias(original)), 0x12),
+                    _ => frame(original, 0x10),
+                };
+                if case == 3 {
+                    // Nonzero trailing Ethernet padding is a malformed
+                    // selected frame, not permission to bypass the relay.
+                    packet.push(0x55);
+                }
+                let untouched = packet.clone();
+                let error = match case {
+                    0 => {
+                        let mut foreign = context(3);
+                        foreign.adapter = 9;
+                        p.rewrite(ticket, foreign, Leg::ApplicationToRelay, &mut packet)
+                    }
+                    1 => {
+                        let mut recycled = context(3);
+                        recycled.owner.stamp = OwnerStamp::new(47, 901).unwrap();
+                        p.rewrite(ticket, recycled, Leg::ApplicationToRelay, &mut packet)
+                    }
+                    2 | 3 => p.rewrite(ticket, context(3), Leg::ApplicationToRelay, &mut packet),
+                    _ => {
+                        let mut unknown = context(3);
+                        unknown.owner = OwnerEvidence::snapshot_candidate(
+                            OwnerStamp::new(47, 900).unwrap(),
+                            PATH,
+                        );
+                        p.rewrite(ticket, unknown, Leg::ApplicationToRelay, &mut packet)
+                    }
+                };
+                assert!(error.is_err(), "ipv6={ipv6} case={case}");
+                assert_eq!(packet, untouched, "rejection modified frame");
+                assert_eq!(p.active_records(), 0);
+                assert_eq!(
+                    p.begin(context(4), &syn, alias(original)),
+                    Err(PipelineError::Halted),
+                    "rejected selected packet revived a session"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn destination_and_retire_refuse_stale_owner_without_leaving_leases_live() {
+        for ipv6 in [false, true] {
+            let original = tuple(ipv6);
+            let syn = frame(original, 0x02);
+
+            let mut p = setup();
+            let ticket = p.begin(context(1), &syn, alias(original)).unwrap();
+            let mut changed = context(2);
+            changed.owner.stamp = OwnerStamp::new(47, 901).unwrap();
+            assert_eq!(
+                p.destination(ticket, changed),
+                Err(PipelineError::OwnerChanged)
+            );
+            assert_eq!(p.active_records(), 0);
+            assert_eq!(
+                p.begin(context(3), &syn, alias(original)),
+                Err(PipelineError::Halted)
+            );
+
+            let mut p = setup();
+            let ticket = p.begin(context(1), &syn, alias(original)).unwrap();
+            p.activate(ticket, context(2).owner, 2, true).unwrap();
+            assert_eq!(
+                p.retire(ticket, changed.owner, 3),
+                Err(PipelineError::OwnerChanged)
+            );
+            assert_eq!(p.active_records(), 0);
+            assert_eq!(
+                p.begin(context(4), &syn, alias(original)),
+                Err(PipelineError::Halted)
+            );
+        }
     }
 
     #[test]

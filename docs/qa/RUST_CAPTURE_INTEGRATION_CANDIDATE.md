@@ -16,6 +16,22 @@ The archived prior narrative is retained separately in
 | **G5 finished Windows product** | **OPEN.** Installer, GUI and service checks do not establish protected routing. |
 | **G6 Win10/Win11 native release** | **OPEN.** Real OS-specific, VNC-gated acceptance, soak, rollback and independent owner approval missing. |
 
+## G2 fail-closed selected-packet boundary — new functional source (2026-11-06)
+
+`capture_pipeline.rs` now **permanently shuts down** all selected-flow leases on
+wrong adapter, mismatched frame tuple, malformed selected frame, transactional
+rewrite rejection, or ambiguous owner/ticket in destination/retire. No rejected
+frame is rewritten; the old session cannot be revived by a later accepted
+snapshot, and no rejected path converts to DIRECT. New dual-stack tests
+exercise these negative states with synthetic test-only PacketBound. This
+hardens the *post-admission* fail-closed enforcement; it **does not create**
+a native PacketBound producer, independently prove packet→PID/creation-epoch,
+or establish physical no-DIRECT on a real Windows adapter.
+
+Current-source hosted CI and independent reviewer evidence are required before
+even code-level QA can be accepted. Historical G1 acceptance remains pinned to
+`dd1ab3c5644b4000e75e32385d1322c89240f03c`. G0 and G2–G6 stay OPEN.
+
 ## G2 engineering delta in this iteration
 
 The native Windows process-object liveness check had a concrete semantic hole:
