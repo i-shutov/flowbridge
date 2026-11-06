@@ -6,10 +6,9 @@
 //! an async network operation. An upstream failure cannot select DIRECT.
 
 use crate::capture_pipeline::{
-    CapturePipeline, EvidenceKind, OwnerEvidence, PacketContext, PipelineError, Ticket,
+    CapturePipeline, PacketContext, PipelineError, RetainedOwnerEvidence, Ticket,
 };
 use crate::relay::{ConnectedUpstream, RelayError, RelayPool};
-use flowbridge_core::tcp_flow_lease::OwnerStamp;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
 use tokio::net::TcpStream;
@@ -24,21 +23,7 @@ pub enum OwnedRelayError {
     AlreadyConsumed,
 }
 
-struct Identity {
-    stamp: OwnerStamp,
-    path: String,
-    kind: EvidenceKind,
-}
-
-impl Identity {
-    fn evidence(&self) -> OwnerEvidence<'_> {
-        OwnerEvidence {
-            stamp: self.stamp,
-            path: &self.path,
-            kind: self.kind,
-        }
-    }
-}
+type Identity = RetainedOwnerEvidence;
 
 fn lock_state(
     pipeline: &Mutex<CapturePipeline>,
@@ -146,11 +131,7 @@ pub async fn connect_owned(
     stop: watch::Receiver<bool>,
 ) -> Result<OwnedFlowRelay, OwnedRelayError> {
     let started = Instant::now();
-    let identity = Identity {
-        stamp: context.owner.stamp,
-        path: context.owner.path.to_owned(),
-        kind: context.owner.kind,
-    };
+    let identity = context.owner.retain();
     let destination = {
         let mut state = lock_state(&pipeline)?;
         state

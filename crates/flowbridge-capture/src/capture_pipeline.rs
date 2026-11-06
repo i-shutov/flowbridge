@@ -33,7 +33,7 @@ pub enum PipelineError {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EvidenceKind {
+enum EvidenceKind {
     SnapshotCandidate,
     PacketBound,
 }
@@ -42,9 +42,44 @@ pub enum EvidenceKind {
 /// remains unavailable in the shipped agent pending actual Win10/11 evidence.
 #[derive(Clone, Copy)]
 pub struct OwnerEvidence<'a> {
-    pub stamp: OwnerStamp,
-    pub path: &'a str,
-    pub kind: EvidenceKind,
+    stamp: OwnerStamp,
+    path: &'a str,
+    kind: EvidenceKind,
+}
+
+/* Production code can create a snapshot candidate only. PacketBound is
+   deliberately synthetic in this module's tests until a trusted Windows
+   packet-to-process attestation boundary is independently implemented. */
+pub(crate) struct RetainedOwnerEvidence {
+    stamp: OwnerStamp,
+    path: String,
+    kind: EvidenceKind,
+}
+
+impl<'a> OwnerEvidence<'a> {
+    /// Read-only IP Helper candidate, never divert authority.
+    pub fn snapshot_candidate(stamp: OwnerStamp, path: &'a str) -> Self {
+        Self { stamp, path, kind: EvidenceKind::SnapshotCandidate }
+    }
+
+    pub(crate) fn retain(self) -> RetainedOwnerEvidence {
+        RetainedOwnerEvidence {
+            stamp: self.stamp,
+            path: self.path.to_owned(),
+            kind: self.kind,
+        }
+    }
+}
+
+impl RetainedOwnerEvidence {
+    /// Reborrow the SAME witness after an async relay owns a copy of its path.
+    pub(crate) fn evidence(&self) -> OwnerEvidence<'_> {
+        OwnerEvidence {
+            stamp: self.stamp,
+            path: &self.path,
+            kind: self.kind,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -606,7 +641,9 @@ pub(crate) mod tests {
         let original = tuple(false);
         let syn = frame(original, 2);
         let mut snapshot = context(1);
-        snapshot.owner.kind = EvidenceKind::SnapshotCandidate;
+        snapshot.owner = OwnerEvidence::snapshot_candidate(OwnerStamp::new(47, 900).unwrap(), PATH);
+        let retained = snapshot.owner.retain();
+        snapshot.owner = retained.evidence();
         assert_eq!(
             p.begin(snapshot, &syn, alias(original)),
             Err(PipelineError::SnapshotNotAuthority)
