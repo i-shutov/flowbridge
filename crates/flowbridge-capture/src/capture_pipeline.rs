@@ -644,10 +644,18 @@ pub(crate) mod tests {
         let mut p = setup();
         let original = tuple(false);
         let syn = frame(original, 2);
-        let mut snapshot = context(1);
-        snapshot.owner = OwnerEvidence::snapshot_candidate(OwnerStamp::new(47, 900).unwrap(), PATH);
-        let retained = snapshot.owner.retain();
-        snapshot.owner = retained.evidence();
+        let original_context = context(1);
+        let retained = OwnerEvidence::snapshot_candidate(
+            OwnerStamp::new(47, 900).unwrap(),
+            PATH,
+        )
+        .retain();
+        let snapshot = PacketContext {
+            adapter: original_context.adapter,
+            owner: retained.evidence(),
+            readiness: original_context.readiness,
+            now_ms: original_context.now_ms,
+        };
         assert_eq!(
             p.begin(snapshot, &syn, alias(original)),
             Err(PipelineError::SnapshotNotAuthority)
