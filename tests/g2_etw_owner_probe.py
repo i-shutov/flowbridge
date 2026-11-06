@@ -47,10 +47,22 @@ def require(condition: bool, code: str) -> None:
 
 def ticks(value: str) -> int:
     """ETW SystemTime to Windows FILETIME, without floating point rounding."""
-    match = re.fullmatch(r'(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d{1,9}))?Z', value)
+    match = re.fullmatch(r'(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d{1,9}))?(Z|[+-]\d\d:?\d\d)', value)
     require(match is not None, 'invalid_event_time')
     assert match is not None
-    base = datetime.strptime(match[1], '%Y-%m-%dT%H:%M:%S').replace(tzinfo=timezone.utc)
+    # tracerpt emits XML dateTime with Z or a signed local UTC offset.
+    # Preserve the offset; never assume a naive local timestamp is UTC.
+    zone = match[3]
+    if zone != 'Z':
+        digits = zone[1:].replace(':', '')
+        require(int(digits[2:]) < 60, 'invalid_event_time')
+    try:
+        base = datetime.fromisoformat(match[1] + zone)
+    except ValueError:
+        raise ProbeFailure('invalid_event_time') from None
+    offset = base.utcoffset()
+    require(offset is not None and abs(offset.total_seconds()) <= 14 * 3600,
+            'invalid_event_time')
     delta = base - datetime(1601, 1, 1, tzinfo=timezone.utc)
     fraction = (match[2] or '').ljust(7, '0')
     require(len(fraction) <= 7 or not any(c != '0' for c in fraction[7:]),

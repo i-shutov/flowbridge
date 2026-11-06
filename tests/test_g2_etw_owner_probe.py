@@ -142,6 +142,19 @@ class KernelOwnerAuditTests(unittest.TestCase):
         for private in ('127.0.0.1', '::1', '900001', '43000', str(CREATED), 'process_path'):
             self.assertNotIn(private, serialized)
 
+    def test_xml_datetime_offsets_preserve_actual_utc_without_rounding(self):
+        for value in ('2026-11-06T20:00:00.123456700+00:00',
+                      '2026-11-06T23:00:00.1234567+03:00',
+                      '2026-11-06T15:00:00.1234567-0500'):
+            self.assertEqual(ticks(value), CREATED)
+        for value in ('2026-11-06T20:00:00.1234567',
+                      '2026-11-06T20:00:00+00:99',
+                      '2026-11-06T20:00:00+15:00'):
+            with self.assertRaises(ProbeFailure):
+                ticks(value)
+        events = [event(o, when='2026-11-06T23:00:01.123456700+03:00') for o in OWNERS]
+        self.assertTrue(audit_xml(document(events), LOSSLESS, OWNERS, STOPPED)['ok'])
+
     def test_filetime_precision_and_namespaced_xml(self):
         self.assertEqual(ticks('2026-11-06T20:00:00.123456700Z'), CREATED)
         self.assertEqual(ticks('1601-01-01T00:00:00.0000001Z'), 1)
