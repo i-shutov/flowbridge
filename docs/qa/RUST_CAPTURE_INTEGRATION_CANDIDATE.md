@@ -35,6 +35,8 @@ also revokes the entire pending lease ledger if destination preflight fails
 *before* its async cancellation guard is armed. A dual-stack real-loopback
 test checks that an untrusted snapshot cannot dial SOCKS or retain a ticket.
 
+Additional functional G2 fail-closed hardening: [`125470f0`](https://github.com/i-shutov/flowbridge/commit/125470f0aa163d88539af7ab2336bc278fb25134) stores the outbound SYN initial sequence alongside each *read-only* process candidate. A later SYN with a different ISN, or FIN/RST on either leg, permanently quarantines that tuple before another owner lookup; exhausting the 24-snapshot budget invalidates an earlier positive candidate instead of leaving stale state. Exact-sequence retransmits and unrelated sibling tuples remain observable, never authorized. Five new multi-family negative/continuity tests check IPv4/IPv6, tuple recycle with identical PID/epoch/path, FIN/RST, budget exhaustion and sibling isolation. Linux hosted capture unit tests at the initial commit passed **75/75**, while the strict format gate rejected test layout (not a runtime assertion). This is a source-format RCA, not native attribution evidence. The subsequent source commit applies the exact rustfmt diff; hosted results are separately pinned to their final SHA. No driver was activated.
+
 The first code commit [`71769517`](https://github.com/i-shutov/flowbridge/commit/71769517b8013857eabec9c7fd0f63ee19ededaa)
 exposed a **hosted compile failure**, not a native-driver failure:
 `tokio::net::TcpListener::try_accept` does not exist (E0599).

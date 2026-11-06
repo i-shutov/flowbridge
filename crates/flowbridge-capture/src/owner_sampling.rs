@@ -433,7 +433,6 @@ mod tests {
         }
     }
 
-
     fn with_sequence(mut wire: Vec<u8>, initial_sequence: u32) -> Vec<u8> {
         // Re-checksum the complete IPv4/IPv6 TCP SYN fixture after changing
         // ISN; failure must exercise tuple recycling, not a malformed frame.
@@ -512,10 +511,14 @@ mod tests {
                     destination: tuple.source,
                 };
                 let mut sampler = Sampler::default();
-                sampler.observe(Direction::ToAdapter, &frame(tuple, 0x02), |_, _| owner(47, 900));
-                sampler.observe(Direction::ToStack, &frame(opposite, terminal | 0x10), |_, _| {
-                    panic!("terminal frame queried a potentially stale owner")
+                sampler.observe(Direction::ToAdapter, &frame(tuple, 0x02), |_, _| {
+                    owner(47, 900)
                 });
+                sampler.observe(
+                    Direction::ToStack,
+                    &frame(opposite, terminal | 0x10),
+                    |_, _| panic!("terminal frame queried a potentially stale owner"),
+                );
                 sampler.observe(Direction::ToAdapter, &frame(tuple, 0x02), |_, _| {
                     panic!("same tuple restored candidate after FIN/RST")
                 });
@@ -530,11 +533,15 @@ mod tests {
     fn snapshot_budget_exhaustion_invalidates_prior_positive_without_retry() {
         let first = tuple(false);
         let mut sampler = Sampler::default();
-        sampler.observe(Direction::ToAdapter, &frame(first, 0x02), |_, _| owner(47, 900));
+        sampler.observe(Direction::ToAdapter, &frame(first, 0x02), |_, _| {
+            owner(47, 900)
+        });
         for number in 1..MAX_OWNER_SNAPSHOTS {
             let mut next = first;
             next.source.set_port(40001 + number as u16);
-            sampler.observe(Direction::ToAdapter, &frame(next, 0x02), |_, _| owner(47, 900));
+            sampler.observe(Direction::ToAdapter, &frame(next, 0x02), |_, _| {
+                owner(47, 900)
+            });
         }
         sampler.observe(Direction::ToAdapter, &frame(first, 0x02), |_, _| {
             panic!("budget exhausted but queried owner")
@@ -557,14 +564,20 @@ mod tests {
             let mut second = first;
             second.source.set_port(41021);
             let mut sampler = Sampler::default();
-            sampler.observe(Direction::ToAdapter, &frame(first, 0x02), |_, _| owner(47, 900));
-            sampler.observe(Direction::ToAdapter, &frame(second, 0x02), |_, _| owner(48, 901));
+            sampler.observe(Direction::ToAdapter, &frame(first, 0x02), |_, _| {
+                owner(47, 900)
+            });
+            sampler.observe(Direction::ToAdapter, &frame(second, 0x02), |_, _| {
+                owner(48, 901)
+            });
             sampler.observe(
                 Direction::ToAdapter,
                 &with_sequence(frame(first, 0x02), 13),
                 |_, _| panic!("recycling cannot requery stale tuple"),
             );
-            sampler.observe(Direction::ToAdapter, &frame(second, 0x10), |_, _| owner(48, 901));
+            sampler.observe(Direction::ToAdapter, &frame(second, 0x10), |_, _| {
+                owner(48, 901)
+            });
             assert_eq!(sampler.report()["two_snapshot_process_candidates"], 3);
             assert_eq!(sampler.report()["recycled_tuple_syn_quarantined"], 1);
             assert_eq!(sampler.report()["packet_owner_bound"], false);
