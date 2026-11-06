@@ -33,8 +33,17 @@ pub(crate) enum Candidate {
 }
 
 #[derive(Debug)]
+struct ObservedFlow {
+    identity: ProcessCandidate,
+    // A repeated five-tuple with a different SYN ISN is a NEW connection,
+    // even if IP Helper still reports the same PID / creation epoch / path.
+    // This is an anti-reuse diagnostic, not an NDISRD ownership witness.
+    initial_sequence: u32,
+}
+
+#[derive(Debug)]
 enum FlowHistory {
-    Observed(ProcessCandidate),
+    Observed(ObservedFlow),
     Quarantined,
 }
 
@@ -56,6 +65,9 @@ pub(crate) struct Sampler {
     quarantined_reobservations: u64,
     missing_initial_syn_quarantined: u64,
     first_syn_without_owner_quarantined: u64,
+    recycled_tuple_syn_quarantined: u64,
+    terminal_fin_or_rst_quarantined: u64,
+    exhausted_observed_tuple_quarantined: u64,
     // A read-only, bounded, in-process diagnostic. Never an authority token.
     flow_history: HashMap<(SocketAddr, SocketAddr), FlowHistory>,
 }
@@ -112,22 +124,50 @@ impl Sampler {
             self.quarantined_reobservations = self.quarantined_reobservations.saturating_add(1);
             return;
         }
+        // Even an exact PID/epoch/path match is insufficient across a
+        // completed flow or a fresh initial sequence on a recycled 5-tuple.
+        // These transitions happen BEFORE any potentially stale IP Helper
+        // query; they can never be revived by a later snapshot.
+        let ip = &frame[packet.region.offset..packet.region.offset + packet.region.length];
+        let tcp_start = if ip[0] >> 4 == 4 {
+            usize::from(ip[0] & 15) * 4
+        } else {
+            40
+        };
+        let flags = ip[tcp_start + 13];
+        let initial_outbound_syn = direction == Direction::ToAdapter && (flags & 0x1f) == 0x02;
+        let sequence = u32::from_be_bytes(
+            ip[tcp_start + 4..tcp_start + 8]
+                .try_into()
+                .expect("validated TCP sequence bytes"),
+        );
+        if let Some(FlowHistory::Observed(previous)) = self.flow_history.get(&key) {
+            if flags & 0x05 != 0 {
+                // FIN/RST terminates diagnostic continuity: TIME_WAIT and
+                // same-tuple reuse can never inherit the former candidate.
+                self.flow_history.insert(key, FlowHistory::Quarantined);
+                self.terminal_fin_or_rst_quarantined =
+                    self.terminal_fin_or_rst_quarantined.saturating_add(1);
+                return;
+            }
+            if direction == Direction::ToAdapter
+                && flags & 0x02 != 0
+                && (!initial_outbound_syn || previous.initial_sequence != sequence)
+            {
+                self.flow_history.insert(key, FlowHistory::Quarantined);
+                self.recycled_tuple_syn_quarantined =
+                    self.recycled_tuple_syn_quarantined.saturating_add(1);
+                return;
+            }
+        }
         if !self.flow_history.contains_key(&key) {
             // Bound the actual quarantine ledger as well as IP Helper calls.
             if self.flow_history.len() >= MAX_OWNER_SNAPSHOTS as usize {
                 self.snapshot_budget_skipped = self.snapshot_budget_skipped.saturating_add(1);
                 return;
             }
-            let ip = &frame[packet.region.offset..packet.region.offset + packet.region.length];
-            let tcp_start = if ip[0] >> 4 == 4 {
-                usize::from(ip[0] & 15) * 4
-            } else {
-                40
-            };
-            let flags = ip[tcp_start + 13];
             // An inbound packet, ACK/data, SYN+ACK or FIN cannot establish
             // outbound flow provenance, even as a read-only candidate.
-            let initial_outbound_syn = direction == Direction::ToAdapter && (flags & 0x1f) == 0x02;
             if !initial_outbound_syn {
                 self.flow_history.insert(key, FlowHistory::Quarantined);
                 self.missing_initial_syn_quarantined =
@@ -136,6 +176,12 @@ impl Sampler {
             }
         }
         if self.snapshot_queries >= MAX_OWNER_SNAPSHOTS {
+            // Do not leave an earlier positive candidate looking current when
+            // it can no longer be revalidated; never issue a hidden retry.
+            if self.quarantine_existing(key) {
+                self.exhausted_observed_tuple_quarantined =
+                    self.exhausted_observed_tuple_quarantined.saturating_add(1);
+            }
             self.snapshot_budget_skipped = self.snapshot_budget_skipped.saturating_add(1);
             return;
         }
@@ -144,11 +190,16 @@ impl Sampler {
             Candidate::ConsistentSnapshot(identity) if identity.valid() => {
                 match self.flow_history.get(&key) {
                     None => {
-                        self.flow_history
-                            .insert(key, FlowHistory::Observed(identity));
+                        self.flow_history.insert(
+                            key,
+                            FlowHistory::Observed(ObservedFlow {
+                                identity,
+                                initial_sequence: sequence,
+                            }),
+                        );
                         self.consistent_candidates += 1;
                     }
-                    Some(FlowHistory::Observed(previous)) if previous == &identity => {
+                    Some(FlowHistory::Observed(previous)) if previous.identity == identity => {
                         self.consistent_candidates += 1;
                     }
                     Some(FlowHistory::Observed(_)) => {
@@ -209,6 +260,9 @@ impl Sampler {
             "quarantined_reobservations": self.quarantined_reobservations,
             "missing_initial_syn_quarantined": self.missing_initial_syn_quarantined,
             "first_syn_without_owner_quarantined": self.first_syn_without_owner_quarantined,
+            "recycled_tuple_syn_quarantined": self.recycled_tuple_syn_quarantined,
+            "terminal_fin_or_rst_quarantined": self.terminal_fin_or_rst_quarantined,
+            "exhausted_observed_tuple_quarantined": self.exhausted_observed_tuple_quarantined,
             "tracked_candidate_tuples": self.flow_history.len(),
             "bounded_ephemeral_candidate_ledger": true,
             "kernel_packet_owner_witness_available": false,
@@ -376,6 +430,144 @@ mod tests {
                 1
             );
             assert_eq!(report["packet_owner_bound"], false);
+        }
+    }
+
+
+    fn with_sequence(mut wire: Vec<u8>, initial_sequence: u32) -> Vec<u8> {
+        // Re-checksum the complete IPv4/IPv6 TCP SYN fixture after changing
+        // ISN; failure must exercise tuple recycling, not a malformed frame.
+        let parsed = inspect_ethernet_tcp(&wire).unwrap();
+        let start = parsed.region.offset;
+        let ip_len = parsed.region.length;
+        let ipv4 = wire[start] >> 4 == 4;
+        let header_len = if ipv4 { 20 } else { 40 };
+        let tcp = start + header_len;
+        wire[tcp + 4..tcp + 8].copy_from_slice(&initial_sequence.to_be_bytes());
+        wire[tcp + 16..tcp + 18].fill(0);
+        let mut pseudo = Vec::new();
+        if ipv4 {
+            pseudo.extend_from_slice(&wire[start + 12..start + 20]);
+            pseudo.extend_from_slice(&[0, 6]);
+            pseudo.extend_from_slice(&((ip_len - header_len) as u16).to_be_bytes());
+        } else {
+            pseudo.extend_from_slice(&wire[start + 8..start + 40]);
+            pseudo.extend_from_slice(&((ip_len - header_len) as u32).to_be_bytes());
+            pseudo.extend_from_slice(&[0, 0, 0, 6]);
+        }
+        pseudo.extend_from_slice(&wire[tcp..start + ip_len]);
+        let mut sum = 0u32;
+        for pair in pseudo.chunks(2) {
+            sum += (u32::from(pair[0]) << 8) + u32::from(*pair.get(1).unwrap_or(&0));
+        }
+        while sum >> 16 != 0 {
+            sum = (sum & 0xffff) + (sum >> 16);
+        }
+        wire[tcp + 16..tcp + 18].copy_from_slice(&(!(sum as u16)).to_be_bytes());
+        assert!(inspect_ethernet_tcp(&wire).is_ok());
+        wire
+    }
+
+    #[test]
+    fn same_tuple_new_isn_is_quarantined_even_when_pid_epoch_path_are_unchanged() {
+        for ipv6 in [false, true] {
+            let tuple = tuple(ipv6);
+            let syn_a = with_sequence(frame(tuple, 0x02), 0x1020_3040);
+            let syn_b = with_sequence(frame(tuple, 0x02), 0x1020_3041);
+            let mut sampler = Sampler::default();
+            sampler.observe(Direction::ToAdapter, &syn_a, |_, _| owner(47, 900));
+            sampler.observe(Direction::ToAdapter, &syn_b, |_, _| {
+                panic!("recycled tuple queried stale PID despite a changed ISN")
+            });
+            sampler.observe(Direction::ToAdapter, &syn_a, |_, _| {
+                panic!("old SYN revived a recycled flow")
+            });
+            assert_eq!(sampler.report()["recycled_tuple_syn_quarantined"], 1);
+            assert_eq!(sampler.report()["quarantined_reobservations"], 1);
+            assert_eq!(sampler.report()["snapshot_queries"], 1);
+            assert_eq!(sampler.report()["packet_owner_bound"], false);
+        }
+    }
+
+    #[test]
+    fn same_sequence_syn_retransmit_remains_only_a_candidate() {
+        for ipv6 in [false, true] {
+            let syn = with_sequence(frame(tuple(ipv6), 0x02), 0x1020_3040);
+            let mut sampler = Sampler::default();
+            sampler.observe(Direction::ToAdapter, &syn, |_, _| owner(47, 900));
+            sampler.observe(Direction::ToAdapter, &syn, |_, _| owner(47, 900));
+            assert_eq!(sampler.report()["two_snapshot_process_candidates"], 2);
+            assert_eq!(sampler.report()["snapshot_queries"], 2);
+            assert_eq!(sampler.report()["authorizes_capture"], false);
+        }
+    }
+
+    #[test]
+    fn fin_or_rst_ends_tuple_continuity_before_revalidation() {
+        for ipv6 in [false, true] {
+            for terminal in [0x01, 0x04] {
+                let tuple = tuple(ipv6);
+                let opposite = flowbridge_core::tcp_packet::TcpTuple {
+                    source: tuple.destination,
+                    destination: tuple.source,
+                };
+                let mut sampler = Sampler::default();
+                sampler.observe(Direction::ToAdapter, &frame(tuple, 0x02), |_, _| owner(47, 900));
+                sampler.observe(Direction::ToStack, &frame(opposite, terminal | 0x10), |_, _| {
+                    panic!("terminal frame queried a potentially stale owner")
+                });
+                sampler.observe(Direction::ToAdapter, &frame(tuple, 0x02), |_, _| {
+                    panic!("same tuple restored candidate after FIN/RST")
+                });
+                assert_eq!(sampler.report()["terminal_fin_or_rst_quarantined"], 1);
+                assert_eq!(sampler.report()["snapshot_queries"], 1);
+                assert_eq!(sampler.report()["quarantined_reobservations"], 1);
+            }
+        }
+    }
+
+    #[test]
+    fn snapshot_budget_exhaustion_invalidates_prior_positive_without_retry() {
+        let first = tuple(false);
+        let mut sampler = Sampler::default();
+        sampler.observe(Direction::ToAdapter, &frame(first, 0x02), |_, _| owner(47, 900));
+        for number in 1..MAX_OWNER_SNAPSHOTS {
+            let mut next = first;
+            next.source.set_port(40001 + number as u16);
+            sampler.observe(Direction::ToAdapter, &frame(next, 0x02), |_, _| owner(47, 900));
+        }
+        sampler.observe(Direction::ToAdapter, &frame(first, 0x02), |_, _| {
+            panic!("budget exhausted but queried owner")
+        });
+        sampler.observe(Direction::ToAdapter, &frame(first, 0x02), |_, _| {
+            panic!("quarantined tuple queried owner")
+        });
+        let report = sampler.report();
+        assert_eq!(report["snapshot_queries"], MAX_OWNER_SNAPSHOTS);
+        assert_eq!(report["exhausted_observed_tuple_quarantined"], 1);
+        assert_eq!(report["snapshot_budget_skipped"], 1);
+        assert_eq!(report["quarantined_reobservations"], 1);
+        assert_eq!(report["authorizes_capture"], false);
+    }
+
+    #[test]
+    fn sibling_candidate_is_not_revoked_by_other_tuple_recycling() {
+        for ipv6 in [false, true] {
+            let first = tuple(ipv6);
+            let mut second = first;
+            second.source.set_port(41021);
+            let mut sampler = Sampler::default();
+            sampler.observe(Direction::ToAdapter, &frame(first, 0x02), |_, _| owner(47, 900));
+            sampler.observe(Direction::ToAdapter, &frame(second, 0x02), |_, _| owner(48, 901));
+            sampler.observe(
+                Direction::ToAdapter,
+                &with_sequence(frame(first, 0x02), 13),
+                |_, _| panic!("recycling cannot requery stale tuple"),
+            );
+            sampler.observe(Direction::ToAdapter, &frame(second, 0x10), |_, _| owner(48, 901));
+            assert_eq!(sampler.report()["two_snapshot_process_candidates"], 3);
+            assert_eq!(sampler.report()["recycled_tuple_syn_quarantined"], 1);
+            assert_eq!(sampler.report()["packet_owner_bound"], false);
         }
     }
 
