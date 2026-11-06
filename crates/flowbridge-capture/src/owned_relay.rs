@@ -361,16 +361,22 @@ mod tests {
             );
             assert!(matches!(
                 connect_owned(&pool, pipeline.clone(), ticket, unproven, stop).await,
-                Err(OwnedRelayError::Pipeline(PipelineError::SnapshotNotAuthority))
+                Err(OwnedRelayError::Pipeline(
+                    PipelineError::SnapshotNotAuthority
+                ))
             ));
             assert_eq!(pipeline.lock().unwrap().active_records(), 0);
             assert_eq!(pool.active(), 0);
-            assert!(matches!(
-                proxy.try_accept(),
-                Err(ref error) if error.kind() == std::io::ErrorKind::WouldBlock
-            ));
+            // Tokio TcpListener has no try_accept; an actual bounded accept
+            // proves preflight never attempted a TCP SOCKS connection.
+            assert!(timeout(Duration::from_millis(75), proxy.accept())
+                .await
+                .is_err());
             assert_eq!(
-                pipeline.lock().unwrap().begin(context(3), &syn, alias(original)),
+                pipeline
+                    .lock()
+                    .unwrap()
+                    .begin(context(3), &syn, alias(original)),
                 Err(PipelineError::Halted)
             );
             drop(supervisor);

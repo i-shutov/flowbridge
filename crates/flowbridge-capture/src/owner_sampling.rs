@@ -109,8 +109,7 @@ impl Sampler {
         // Once a tuple is ambiguous it must NEVER recover by observing a
         // later same-tuple packet: that could be an unrelated recycled flow.
         if matches!(self.flow_history.get(&key), Some(FlowHistory::Quarantined)) {
-            self.quarantined_reobservations =
-                self.quarantined_reobservations.saturating_add(1);
+            self.quarantined_reobservations = self.quarantined_reobservations.saturating_add(1);
             return;
         }
         if !self.flow_history.contains_key(&key) {
@@ -128,8 +127,7 @@ impl Sampler {
             let flags = ip[tcp_start + 13];
             // An inbound packet, ACK/data, SYN+ACK or FIN cannot establish
             // outbound flow provenance, even as a read-only candidate.
-            let initial_outbound_syn =
-                direction == Direction::ToAdapter && (flags & 0x1f) == 0x02;
+            let initial_outbound_syn = direction == Direction::ToAdapter && (flags & 0x1f) == 0x02;
             if !initial_outbound_syn {
                 self.flow_history.insert(key, FlowHistory::Quarantined);
                 self.missing_initial_syn_quarantined =
