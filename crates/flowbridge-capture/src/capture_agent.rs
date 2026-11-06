@@ -198,19 +198,18 @@ fn run_native(request: LabRequest) -> Result<Value, String> {
             session.poll_observe(128, &mut |direction, frame| {
                 owner_sample.observe(direction, frame, |local, remote| {
                     let query = crate::windows_tcp_owner::OwnerQuery { local, remote };
-                    match crate::windows_tcp_owner::lookup(query) {
-                        Ok(result)
-                            if result["found"] == true
-                                && result["two_snapshots_consistent"] == true
-                                && result["authorizes_capture"] == false
-                                && result["native_packet_attribution_proved"] == false =>
-                        {
-                            crate::owner_sampling::Candidate::ConsistentSnapshot
+                    match crate::windows_tcp_owner::lookup_candidate(query) {
+                        Ok(Some(owner)) => {
+                            crate::owner_sampling::Candidate::ConsistentSnapshot(
+                                crate::owner_sampling::ProcessCandidate {
+                                    pid: owner.pid,
+                                    created_100ns: owner.created_100ns,
+                                    path: owner.path,
+                                },
+                            )
                         }
-                        Ok(result) if result["found"] == false => {
-                            crate::owner_sampling::Candidate::Missing
-                        }
-                        _ => crate::owner_sampling::Candidate::Uncertain,
+                        Ok(None) => crate::owner_sampling::Candidate::Missing,
+                        Err(_) => crate::owner_sampling::Candidate::Uncertain,
                     }
                 });
             })

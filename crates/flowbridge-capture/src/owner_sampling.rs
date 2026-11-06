@@ -1,19 +1,41 @@
-//! Strictly read-only correlation of a copied NDISRD frame tuple to
-//! Windows IP Helper's *two-snapshot process candidate*. It is NOT PacketBound.
-//! No PID, executable path, IP address, port, or frame bytes are retained.
+//! Read-only NDISRD frame -> IP Helper candidate continuity observer.
+//! A PID/creation epoch/path is sampled from the live Windows process object
+//! and two fresh IP Helper tables, NOT from the frame. This is NOT PacketBound.
+//! At most 24 tuples and identities exist transiently in memory; no PID, path,
+//! tuple, payload, or endpoint is emitted or persisted in the report.
 
 use crate::ndis_wire::Direction;
 use flowbridge_core::ndis_frame_tcp::inspect_ethernet_tcp;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::net::SocketAddr;
 
 pub(crate) const MAX_OWNER_SNAPSHOTS: u64 = 24;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ProcessCandidate {
+    pub pid: u32,
+    pub created_100ns: u64,
+    pub path: String,
+}
+
+impl ProcessCandidate {
+    fn valid(&self) -> bool {
+        self.pid != 0 && self.created_100ns != 0 && !self.path.is_empty()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Candidate {
-    ConsistentSnapshot,
+    ConsistentSnapshot(ProcessCandidate),
     Missing,
     Uncertain,
+}
+
+#[derive(Debug)]
+enum FlowHistory {
+    Observed(ProcessCandidate),
+    Quarantined,
 }
 
 #[derive(Default, Debug)]
@@ -27,11 +49,27 @@ pub(crate) struct Sampler {
     consistent_candidates: u64,
     candidates_missing: u64,
     candidates_uncertain: u64,
+    changed_owner_same_tuple: u64,
+    disappeared_owner_same_tuple: u64,
+    indeterminate_owner_same_tuple: u64,
+    invalid_owner_identity: u64,
+    quarantined_reobservations: u64,
+    // A read-only, bounded, in-process diagnostic. Never an authority token.
+    flow_history: HashMap<(SocketAddr, SocketAddr), FlowHistory>,
 }
 
 impl Sampler {
-    /// Never admits a packet to the policy pipeline. Source/destination are
-    /// temporary, passed only to a query-only callback and then discarded.
+    fn quarantine_existing(&mut self, key: (SocketAddr, SocketAddr)) -> bool {
+        if matches!(self.flow_history.get(&key), Some(FlowHistory::Observed(_))) {
+            self.flow_history.insert(key, FlowHistory::Quarantined);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Never admits a packet to policy. The callback is a query-only OS probe;
+    /// it cannot produce a PacketBound witness or authorize selected traffic.
     pub(crate) fn observe(
         &mut self,
         direction: Direction,
@@ -47,15 +85,11 @@ impl Sampler {
             }
         };
         self.tcp_frames_eligible = self.tcp_frames_eligible.saturating_add(1);
-        // Incoming wire endpoints reverse relative to an application's local
-        // socket. TCP ownership lookup always asks for (local, remote).
-        let (local, remote) = match direction {
+        let key = match direction {
             Direction::ToAdapter => (packet.tcp.tuple.source, packet.tcp.tuple.destination),
             Direction::ToStack => (packet.tcp.tuple.destination, packet.tcp.tuple.source),
         };
-        // The Ethernet frame contains no IPv6 interface scope ID; never
-        // manufacture one for a link-local tuple.
-        if [local, remote].iter().any(|addr| match addr {
+        if [key.0, key.1].iter().any(|addr| match addr {
             SocketAddr::V6(v6) => v6.ip().is_unicast_link_local(),
             SocketAddr::V4(_) => false,
         }) {
@@ -67,33 +101,75 @@ impl Sampler {
             return;
         }
         self.snapshot_queries += 1;
-        match lookup(local, remote) {
-            Candidate::ConsistentSnapshot => self.consistent_candidates += 1,
-            Candidate::Missing => self.candidates_missing += 1,
-            Candidate::Uncertain => self.candidates_uncertain += 1,
+        match lookup(key.0, key.1) {
+            Candidate::ConsistentSnapshot(identity) if identity.valid() => {
+                match self.flow_history.get(&key) {
+                    None => {
+                        self.flow_history.insert(key, FlowHistory::Observed(identity));
+                        self.consistent_candidates += 1;
+                    }
+                    Some(FlowHistory::Observed(previous)) if previous == &identity => {
+                        self.consistent_candidates += 1;
+                    }
+                    Some(FlowHistory::Observed(_)) => {
+                        self.flow_history.insert(key, FlowHistory::Quarantined);
+                        self.changed_owner_same_tuple += 1;
+                    }
+                    Some(FlowHistory::Quarantined) => {
+                        self.quarantined_reobservations += 1;
+                    }
+                }
+            }
+            Candidate::ConsistentSnapshot(_) => {
+                self.invalid_owner_identity += 1;
+                self.candidates_uncertain += 1;
+                if self.quarantine_existing(key) {
+                    self.indeterminate_owner_same_tuple += 1;
+                }
+            }
+            Candidate::Missing => {
+                self.candidates_missing += 1;
+                if self.quarantine_existing(key) {
+                    self.disappeared_owner_same_tuple += 1;
+                }
+            }
+            Candidate::Uncertain => {
+                self.candidates_uncertain += 1;
+                if self.quarantine_existing(key) {
+                    self.indeterminate_owner_same_tuple += 1;
+                }
+            }
         }
     }
 
     pub(crate) fn report(&self) -> Value {
         json!({
-            "requested":true,
-            "mode":"NDISRD_LISTEN_BOTH_copy_only",
-            "max_iphelper_queries":MAX_OWNER_SNAPSHOTS,
-            "frames_seen":self.frames_seen,
-            "tcp_frames_eligible":self.tcp_frames_eligible,
-            "invalid_or_unsupported":self.invalid_or_unsupported,
-            "ipv6_scope_unknown":self.ipv6_scope_unknown,
-            "snapshot_budget_skipped":self.snapshot_budget_skipped,
-            "snapshot_queries":self.snapshot_queries,
-            "two_snapshot_process_candidates":self.consistent_candidates,
-            "candidate_not_present":self.candidates_missing,
-            "candidate_indeterminate":self.candidates_uncertain,
-            "packet_owner_bound":false,
-            "native_packet_attribution_proved":false,
-            "authorizes_capture":false,
-            "protected_redirect_available":false,
-            "identity_and_endpoints_saved":false,
-            "packet_payload_saved":false
+            "requested": true,
+            "mode": "NDISRD_LISTEN_BOTH_copy_only",
+            "max_iphelper_queries": MAX_OWNER_SNAPSHOTS,
+            "frames_seen": self.frames_seen,
+            "tcp_frames_eligible": self.tcp_frames_eligible,
+            "invalid_or_unsupported": self.invalid_or_unsupported,
+            "ipv6_scope_unknown": self.ipv6_scope_unknown,
+            "snapshot_budget_skipped": self.snapshot_budget_skipped,
+            "snapshot_queries": self.snapshot_queries,
+            "two_snapshot_process_candidates": self.consistent_candidates,
+            "candidate_not_present": self.candidates_missing,
+            "candidate_indeterminate": self.candidates_uncertain,
+            "same_tuple_pid_epoch_or_path_changed": self.changed_owner_same_tuple,
+            "same_tuple_owner_disappeared": self.disappeared_owner_same_tuple,
+            "same_tuple_owner_indeterminate": self.indeterminate_owner_same_tuple,
+            "invalid_process_candidate": self.invalid_owner_identity,
+            "quarantined_reobservations": self.quarantined_reobservations,
+            "tracked_candidate_tuples": self.flow_history.len(),
+            "bounded_ephemeral_candidate_ledger": true,
+            "kernel_packet_owner_witness_available": false,
+            "packet_owner_bound": false,
+            "native_packet_attribution_proved": false,
+            "authorizes_capture": false,
+            "protected_redirect_available": false,
+            "identity_and_endpoints_saved": false,
+            "packet_payload_saved": false
         })
     }
 }
@@ -103,14 +179,22 @@ mod tests {
     use super::*;
     use crate::capture_pipeline::tests::{frame, tuple};
 
+    fn owner(pid: u32, created_100ns: u64) -> Candidate {
+        Candidate::ConsistentSnapshot(ProcessCandidate {
+            pid,
+            created_100ns,
+            path: r"C:\Private\app.exe".into(),
+        })
+    }
+
     #[test]
-    fn outgoing_and_incoming_are_queried_in_local_remote_order_without_authority() {
+    fn outgoing_and_incoming_queries_have_local_remote_order_without_authority() {
         let t = tuple(false);
         let packet = frame(t, 0x02);
         let mut sample = Sampler::default();
         sample.observe(Direction::ToAdapter, &packet, |local, remote| {
             assert_eq!((local, remote), (t.source, t.destination));
-            Candidate::ConsistentSnapshot
+            owner(47, 900)
         });
         sample.observe(Direction::ToStack, &packet, |local, remote| {
             assert_eq!((local, remote), (t.destination, t.source));
@@ -123,11 +207,12 @@ mod tests {
         assert_eq!(result["packet_owner_bound"], false);
         assert_eq!(result["authorizes_capture"], false);
         assert_eq!(result["identity_and_endpoints_saved"], false);
-        assert!(!result.to_string().contains("127.0.0.1"));
+        assert!(!result.to_string().contains("Private"));
+        assert!(!result.to_string().contains("192.0.2.1"));
     }
 
     #[test]
-    fn malformed_frames_are_never_queried_and_budget_is_strict() {
+    fn malformed_frames_never_query_and_budget_is_strict() {
         let t = tuple(true);
         let packet = frame(t, 0x02);
         let mut sample = Sampler::default();
@@ -146,5 +231,66 @@ mod tests {
         assert_eq!(report["invalid_or_unsupported"], 1);
         assert_eq!(report["candidate_indeterminate"], MAX_OWNER_SNAPSHOTS);
         assert_eq!(report["native_packet_attribution_proved"], false);
+    }
+
+    #[test]
+    fn reused_tuple_changed_pid_or_epoch_is_quarantined_without_recovery() {
+        for changed in [owner(48, 900), owner(47, 901)] {
+            let t = tuple(false);
+            let packet = frame(t, 0x02);
+            let mut sample = Sampler::default();
+            sample.observe(Direction::ToAdapter, &packet, |_, _| owner(47, 900));
+            sample.observe(Direction::ToAdapter, &packet, |_, _| changed.clone());
+            sample.observe(Direction::ToAdapter, &packet, |_, _| owner(47, 900));
+            let report = sample.report();
+            assert_eq!(report["two_snapshot_process_candidates"], 1);
+            assert_eq!(report["same_tuple_pid_epoch_or_path_changed"], 1);
+            assert_eq!(report["quarantined_reobservations"], 1);
+            assert_eq!(report["tracked_candidate_tuples"], 1);
+            assert_eq!(report["authorizes_capture"], false);
+        }
+    }
+
+    #[test]
+    fn missing_or_ambiguous_owner_poisoned_after_positive_read() {
+        for gap in [Candidate::Missing, Candidate::Uncertain] {
+            let t = tuple(true);
+            let packet = frame(t, 0x02);
+            let mut sample = Sampler::default();
+            sample.observe(Direction::ToAdapter, &packet, |_, _| owner(47, 900));
+            sample.observe(Direction::ToAdapter, &packet, |_, _| gap.clone());
+            sample.observe(Direction::ToAdapter, &packet, |_, _| owner(47, 900));
+            let report = sample.report();
+            assert_eq!(report["quarantined_reobservations"], 1);
+            assert_eq!(
+                report["same_tuple_owner_disappeared"].as_u64().unwrap()
+                    + report["same_tuple_owner_indeterminate"].as_u64().unwrap(),
+                1
+            );
+            assert_eq!(report["packet_owner_bound"], false);
+        }
+    }
+
+    #[test]
+    fn different_connections_remain_isolated_and_invalid_identity_never_counts() {
+        let first = tuple(false);
+        let mut second = tuple(false);
+        second.source.set_port(42001);
+        let mut sample = Sampler::default();
+        sample.observe(Direction::ToAdapter, &frame(first, 0x02), |_, _| owner(47, 900));
+        sample.observe(Direction::ToAdapter, &frame(second, 0x02), |_, _| owner(48, 901));
+        sample.observe(Direction::ToAdapter, &frame(first, 0x02), |_, _| {
+            Candidate::ConsistentSnapshot(ProcessCandidate {
+                pid: 0,
+                created_100ns: 900,
+                path: String::new(),
+            })
+        });
+        let report = sample.report();
+        assert_eq!(report["two_snapshot_process_candidates"], 2);
+        assert_eq!(report["invalid_process_candidate"], 1);
+        assert_eq!(report["same_tuple_owner_indeterminate"], 1);
+        assert_eq!(report["tracked_candidate_tuples"], 2);
+        assert_eq!(report["protected_redirect_available"], false);
     }
 }

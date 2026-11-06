@@ -442,9 +442,10 @@ pub fn validate_pinned_tcp_owner_lab_missing_retry(
     )
 }
 
-/// A diagnostic-only read. The returned identity MUST NOT be used to authorize
-/// transparent capture: an IP Helper snapshot is not a packet ownership token.
-pub fn lookup(query: OwnerQuery) -> Result<Value, String> {
+/// Typed two-snapshot TCP process candidate. The query-only process handle
+/// pins the actual process object across observations to detect PID recycling.
+/// This is NOT evidence that a particular NDISRD frame belongs to this owner.
+pub(crate) fn lookup_candidate(query: OwnerQuery) -> Result<Option<ProcessEvidence>, String> {
     if query.local.is_ipv4() != query.remote.is_ipv4() {
         return Err("Mixed address families are not a single TCP tuple".into());
     }
@@ -459,14 +460,8 @@ pub fn lookup(query: OwnerQuery) -> Result<Value, String> {
     let first = read_rows(af)?;
     let pid = match match_single_pid(&first, &query)? {
         Some(pid) => pid,
-        None => {
-            return Ok(json!({
-                "found": false, "authorizes_capture": false, "source": "iphelper_tcp_snapshot"
-            }))
-        }
+        None => return Ok(None),
     };
-    // Query-only handle pins the process object across both observations,
-    // independently of later PID recycling; never a packet ownership token.
     let handle = OwnedProcess::query(pid)?;
     let before = handle.evidence()?;
     let second = read_rows(af)?;
@@ -475,16 +470,27 @@ pub fn lookup(query: OwnerQuery) -> Result<Value, String> {
     if before != after {
         return Err("Process identity changed during lookup".into());
     }
-    Ok(json!({
-        "found": true,
-        "pid": before.pid,
-        "process_creation_100ns": before.created_100ns,
-        "executable_path": before.path,
-        "source": "iphelper_tcp_snapshot",
-        "two_snapshots_consistent": true,
-        "authorizes_capture": false,
-        "native_packet_attribution_proved": false
-    }))
+    Ok(Some(before))
+}
+
+/// Compatibility output for the read-only owner self-test. No candidate
+/// returned by this interface can authorize transparent capture.
+pub fn lookup(query: OwnerQuery) -> Result<Value, String> {
+    match lookup_candidate(query)? {
+        Some(owner) => Ok(json!({
+            "found": true,
+            "pid": owner.pid,
+            "process_creation_100ns": owner.created_100ns,
+            "executable_path": owner.path,
+            "source": "iphelper_tcp_snapshot",
+            "two_snapshots_consistent": true,
+            "authorizes_capture": false,
+            "native_packet_attribution_proved": false
+        })),
+        None => Ok(json!({
+            "found": false, "authorizes_capture": false, "source": "iphelper_tcp_snapshot"
+        })),
+    }
 }
 
 /// Actual Windows TCP socket -> two IP Helper table observations -> process
