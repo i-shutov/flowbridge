@@ -199,15 +199,13 @@ fn run_native(request: LabRequest) -> Result<Value, String> {
                 owner_sample.observe(direction, frame, |local, remote| {
                     let query = crate::windows_tcp_owner::OwnerQuery { local, remote };
                     match crate::windows_tcp_owner::lookup_candidate(query) {
-                        Ok(Some(owner)) => {
-                            crate::owner_sampling::Candidate::ConsistentSnapshot(
-                                crate::owner_sampling::ProcessCandidate {
-                                    pid: owner.pid,
-                                    created_100ns: owner.created_100ns,
-                                    path: owner.path,
-                                },
-                            )
-                        }
+                        Ok(Some(owner)) => crate::owner_sampling::Candidate::ConsistentSnapshot(
+                            crate::owner_sampling::ProcessCandidate {
+                                pid: owner.pid,
+                                created_100ns: owner.created_100ns,
+                                path: owner.path,
+                            },
+                        ),
                         Ok(None) => crate::owner_sampling::Candidate::Missing,
                         Err(_) => crate::owner_sampling::Candidate::Uncertain,
                     }

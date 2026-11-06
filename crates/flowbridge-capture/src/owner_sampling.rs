@@ -105,7 +105,8 @@ impl Sampler {
             Candidate::ConsistentSnapshot(identity) if identity.valid() => {
                 match self.flow_history.get(&key) {
                     None => {
-                        self.flow_history.insert(key, FlowHistory::Observed(identity));
+                        self.flow_history
+                            .insert(key, FlowHistory::Observed(identity));
                         self.consistent_candidates += 1;
                     }
                     Some(FlowHistory::Observed(previous)) if previous == &identity => {
@@ -277,8 +278,12 @@ mod tests {
         let mut second = tuple(false);
         second.source.set_port(42001);
         let mut sample = Sampler::default();
-        sample.observe(Direction::ToAdapter, &frame(first, 0x02), |_, _| owner(47, 900));
-        sample.observe(Direction::ToAdapter, &frame(second, 0x02), |_, _| owner(48, 901));
+        sample.observe(Direction::ToAdapter, &frame(first, 0x02), |_, _| {
+            owner(47, 900)
+        });
+        sample.observe(Direction::ToAdapter, &frame(second, 0x02), |_, _| {
+            owner(48, 901)
+        });
         sample.observe(Direction::ToAdapter, &frame(first, 0x02), |_, _| {
             Candidate::ConsistentSnapshot(ProcessCandidate {
                 pid: 0,
