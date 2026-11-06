@@ -62,8 +62,8 @@ pub(crate) struct Sampler {
 
 impl Sampler {
     fn quarantine_unproven_first_syn(&mut self, key: (SocketAddr, SocketAddr)) {
-        if !self.flow_history.contains_key(&key) {
-            self.flow_history.insert(key, FlowHistory::Quarantined);
+        if let std::collections::hash_map::Entry::Vacant(slot) = self.flow_history.entry(key) {
+            slot.insert(FlowHistory::Quarantined);
             self.first_syn_without_owner_quarantined =
                 self.first_syn_without_owner_quarantined.saturating_add(1);
         }
