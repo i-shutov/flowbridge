@@ -47,9 +47,9 @@ pub struct OwnerEvidence<'a> {
     kind: EvidenceKind,
 }
 
-/* Production code can create a snapshot candidate only. PacketBound is
-   deliberately synthetic in this module's tests until a trusted Windows
-   packet-to-process attestation boundary is independently implemented. */
+/// Only snapshot candidates are constructible in production. A future
+/// packet-to-process authority must be independently implemented and reviewed;
+/// a copied IP Helper result may never mint a PacketBound witness.
 pub(crate) struct RetainedOwnerEvidence {
     stamp: OwnerStamp,
     path: String,
@@ -59,7 +59,11 @@ pub(crate) struct RetainedOwnerEvidence {
 impl<'a> OwnerEvidence<'a> {
     /// Read-only IP Helper candidate, never divert authority.
     pub fn snapshot_candidate(stamp: OwnerStamp, path: &'a str) -> Self {
-        Self { stamp, path, kind: EvidenceKind::SnapshotCandidate }
+        Self {
+            stamp,
+            path,
+            kind: EvidenceKind::SnapshotCandidate,
+        }
     }
 
     pub(crate) fn retain(self) -> RetainedOwnerEvidence {
