@@ -134,9 +134,16 @@ pub async fn connect_owned(
     let identity = context.owner.retain();
     let destination = {
         let mut state = lock_state(&pipeline)?;
-        state
-            .destination(ticket, context)
-            .map_err(OwnedRelayError::Pipeline)?
+        // This preflight runs BEFORE PendingGuard exists. A forged/stale
+        // witness, unknown ticket or adapter/readiness mismatch must not leave
+        // a live pending reservation without an owner responsible for cleanup.
+        match state.destination(ticket, context) {
+            Ok(destination) => destination,
+            Err(error) => {
+                state.revoke_all();
+                return Err(OwnedRelayError::Pipeline(error));
+            }
+        }
     };
     let mut pending = PendingGuard {
         pipeline: &pipeline,
@@ -320,6 +327,54 @@ mod tests {
         })
         .await
         .unwrap();
+    }
+
+    #[tokio::test]
+    async fn rejected_destination_preflight_retires_ticket_before_any_socks_dial() {
+        for ipv6 in [false, true] {
+            let original = tuple(ipv6);
+            let syn = frame(original, 2);
+            let pipeline = Arc::new(Mutex::new(setup_with_idle(20_000)));
+            let ticket = pipeline
+                .lock()
+                .unwrap()
+                .begin(context(1), &syn, alias(original))
+                .unwrap();
+            let proxy = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let native = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let pool = RelayPool::new(
+                proxy.local_addr().unwrap(),
+                native.local_addr().unwrap(),
+                1,
+                DEADLINE,
+                DEADLINE,
+                DEADLINE,
+            )
+            .unwrap();
+            let (supervisor, stop) = watch::channel(false);
+            let mut unproven = context(2);
+            // A caller may hand the relay a candidate captured from a stale
+            // IP Helper table; it must not retain the earlier real ticket.
+            unproven.owner = crate::capture_pipeline::OwnerEvidence::snapshot_candidate(
+                flowbridge_core::tcp_flow_lease::OwnerStamp::new(47, 900).unwrap(),
+                r"C:\Apps\Browser.exe",
+            );
+            assert!(matches!(
+                connect_owned(&pool, pipeline.clone(), ticket, unproven, stop).await,
+                Err(OwnedRelayError::Pipeline(PipelineError::SnapshotNotAuthority))
+            ));
+            assert_eq!(pipeline.lock().unwrap().active_records(), 0);
+            assert_eq!(pool.active(), 0);
+            assert!(matches!(
+                proxy.try_accept(),
+                Err(ref error) if error.kind() == std::io::ErrorKind::WouldBlock
+            ));
+            assert_eq!(
+                pipeline.lock().unwrap().begin(context(3), &syn, alias(original)),
+                Err(PipelineError::Halted)
+            );
+            drop(supervisor);
+        }
     }
 
     #[tokio::test]

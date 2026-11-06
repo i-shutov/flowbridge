@@ -18,7 +18,7 @@ use windows_sys::Win32::NetworkManagement::IpHelper::{
 };
 use windows_sys::Win32::Networking::WinSock::{AF_INET, AF_INET6};
 use windows_sys::Win32::System::Threading::{
-    GetExitCodeProcess, GetProcessTimes, OpenProcess, QueryFullProcessImageNameW,
+    GetProcessTimes, OpenProcess, QueryFullProcessImageNameW, WaitForSingleObject,
     PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
@@ -26,6 +26,10 @@ const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
 const MAX_TABLE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_TABLE_ROWS: usize = 100_000;
 const MAX_PROCESS_PATH_U16: usize = 32768;
+// Synchronize on the pinned kernel process object, not its recyclable PID.
+const PROCESS_SYNCHRONIZE_ACCESS: u32 = 0x0010_0000;
+const WAIT_OBJECT_SIGNALED: u32 = 0;
+const WAIT_STILL_RUNNING: u32 = 258;
 // A stale TIME_WAIT/CLOSED/LISTEN row is not a live TCP owner candidate.
 const FIRST_ACTIVE_TCP_STATE: u32 = 3; // SYN_SENT
 const LAST_ACTIVE_TCP_STATE: u32 = 10; // LAST_ACK
@@ -64,8 +68,15 @@ impl OwnedProcess {
         if pid == 0 {
             return Err("Zero PID is not a process owner candidate".into());
         }
-        // SAFETY: Query-only process information, non-inheritable handle.
-        let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+        // SAFETY: Non-inheritable handle; no terminate, VM access or writes.
+        // SYNCHRONIZE is required for a real zero-timeout process-object wait.
+        let handle = unsafe {
+            OpenProcess(
+                PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE_ACCESS,
+                0,
+                pid,
+            )
+        };
         if handle.is_null() {
             return Err(format!("OpenProcess query denied: {}", unsafe {
                 GetLastError()
@@ -78,16 +89,20 @@ impl OwnedProcess {
         process_evidence(self.handle, self.pid)
     }
 
-    /// Pinned process-object liveness, never a PID-only check. Used solely to
-    /// require the unrelated laboratory TCP client to exit before adapter
-    /// mode 0 can re-enable ordinary direct networking.
+    /// Check the pinned kernel process object's signaled state, not its exit
+    /// code: a terminated process can legitimately exit with code 259
+    /// (STILL_ACTIVE), making GetExitCodeProcess an unsafe liveness check.
+    /// No polling, process suspension, token escalation or mutation occurs.
     pub fn is_active(&self) -> Result<bool, String> {
-        let mut code = 0u32;
-        // SAFETY: This handle has PROCESS_QUERY_LIMITED_INFORMATION rights.
-        if unsafe { GetExitCodeProcess(self.handle, &mut code) } == 0 {
-            return Err("Pinned process exit status unavailable".into());
+        // SAFETY: OpenProcess requested SYNCHRONIZE on this exact process
+        // object. Zero timeout cannot block and never observes PID reuse.
+        match unsafe { WaitForSingleObject(self.handle, 0) } {
+            WAIT_STILL_RUNNING => Ok(true),
+            WAIT_OBJECT_SIGNALED => Ok(false),
+            _ => Err(format!("Pinned process wait failed: {}", unsafe {
+                GetLastError()
+            })),
         }
-        Ok(code == 259) // STILL_ACTIVE
     }
 }
 
@@ -463,12 +478,15 @@ pub(crate) fn lookup_candidate(query: OwnerQuery) -> Result<Option<ProcessEviden
         None => return Ok(None),
     };
     let handle = OwnedProcess::query(pid)?;
+    if !handle.is_active()? {
+        return Err("TCP candidate process already exited before second snapshot".into());
+    }
     let before = handle.evidence()?;
     let second = read_rows(af)?;
     require_stable_pid(&second, &query, pid)?;
     let after = handle.evidence()?;
-    if before != after {
-        return Err("Process identity changed during lookup".into());
+    if before != after || !handle.is_active()? {
+        return Err("TCP candidate process exited or changed during lookup".into());
     }
     Ok(Some(before))
 }
@@ -557,6 +575,27 @@ pub fn self_test() -> Result<Value, String> {
 mod tests {
     use super::*;
     use std::net::{TcpListener, TcpStream};
+
+    #[test]
+    fn terminated_process_exit_259_is_not_mistaken_for_still_active() {
+        // A real native negative: GetExitCodeProcess would report 259 for
+        // this TERMINATED subprocess, indistinguishable from STILL_ACTIVE.
+        // A kernel process-object wait must instead observe signaled state.
+        let mut child = std::process::Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "Start-Sleep -Seconds 1; exit 259",
+            ])
+            .spawn()
+            .unwrap();
+        let pinned = OwnedProcess::query(child.id()).unwrap();
+        assert!(pinned.is_active().unwrap());
+        assert_eq!(child.wait().unwrap().code(), Some(259));
+        assert!(!pinned.is_active().unwrap());
+        assert!(!pinned.is_active().unwrap());
+    }
 
     #[test]
     fn byte_order_and_tuple_matching_are_exact() {

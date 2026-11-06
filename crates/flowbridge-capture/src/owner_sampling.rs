@@ -54,11 +54,21 @@ pub(crate) struct Sampler {
     indeterminate_owner_same_tuple: u64,
     invalid_owner_identity: u64,
     quarantined_reobservations: u64,
+    missing_initial_syn_quarantined: u64,
+    first_syn_without_owner_quarantined: u64,
     // A read-only, bounded, in-process diagnostic. Never an authority token.
     flow_history: HashMap<(SocketAddr, SocketAddr), FlowHistory>,
 }
 
 impl Sampler {
+    fn quarantine_unproven_first_syn(&mut self, key: (SocketAddr, SocketAddr)) {
+        if !self.flow_history.contains_key(&key) {
+            self.flow_history.insert(key, FlowHistory::Quarantined);
+            self.first_syn_without_owner_quarantined =
+                self.first_syn_without_owner_quarantined.saturating_add(1);
+        }
+    }
+
     fn quarantine_existing(&mut self, key: (SocketAddr, SocketAddr)) -> bool {
         if matches!(self.flow_history.get(&key), Some(FlowHistory::Observed(_))) {
             self.flow_history.insert(key, FlowHistory::Quarantined);
@@ -96,6 +106,37 @@ impl Sampler {
             self.ipv6_scope_unknown = self.ipv6_scope_unknown.saturating_add(1);
             return;
         }
+        // Once a tuple is ambiguous it must NEVER recover by observing a
+        // later same-tuple packet: that could be an unrelated recycled flow.
+        if matches!(self.flow_history.get(&key), Some(FlowHistory::Quarantined)) {
+            self.quarantined_reobservations =
+                self.quarantined_reobservations.saturating_add(1);
+            return;
+        }
+        if !self.flow_history.contains_key(&key) {
+            // Bound the actual quarantine ledger as well as IP Helper calls.
+            if self.flow_history.len() >= MAX_OWNER_SNAPSHOTS as usize {
+                self.snapshot_budget_skipped = self.snapshot_budget_skipped.saturating_add(1);
+                return;
+            }
+            let ip = &frame[packet.region.offset..packet.region.offset + packet.region.length];
+            let tcp_start = if ip[0] >> 4 == 4 {
+                usize::from(ip[0] & 15) * 4
+            } else {
+                40
+            };
+            let flags = ip[tcp_start + 13];
+            // An inbound packet, ACK/data, SYN+ACK or FIN cannot establish
+            // outbound flow provenance, even as a read-only candidate.
+            let initial_outbound_syn =
+                direction == Direction::ToAdapter && (flags & 0x1f) == 0x02;
+            if !initial_outbound_syn {
+                self.flow_history.insert(key, FlowHistory::Quarantined);
+                self.missing_initial_syn_quarantined =
+                    self.missing_initial_syn_quarantined.saturating_add(1);
+                return;
+            }
+        }
         if self.snapshot_queries >= MAX_OWNER_SNAPSHOTS {
             self.snapshot_budget_skipped = self.snapshot_budget_skipped.saturating_add(1);
             return;
@@ -126,18 +167,24 @@ impl Sampler {
                 self.candidates_uncertain += 1;
                 if self.quarantine_existing(key) {
                     self.indeterminate_owner_same_tuple += 1;
+                } else {
+                    self.quarantine_unproven_first_syn(key);
                 }
             }
             Candidate::Missing => {
                 self.candidates_missing += 1;
                 if self.quarantine_existing(key) {
                     self.disappeared_owner_same_tuple += 1;
+                } else {
+                    self.quarantine_unproven_first_syn(key);
                 }
             }
             Candidate::Uncertain => {
                 self.candidates_uncertain += 1;
                 if self.quarantine_existing(key) {
                     self.indeterminate_owner_same_tuple += 1;
+                } else {
+                    self.quarantine_unproven_first_syn(key);
                 }
             }
         }
@@ -162,6 +209,8 @@ impl Sampler {
             "same_tuple_owner_indeterminate": self.indeterminate_owner_same_tuple,
             "invalid_process_candidate": self.invalid_owner_identity,
             "quarantined_reobservations": self.quarantined_reobservations,
+            "missing_initial_syn_quarantined": self.missing_initial_syn_quarantined,
+            "first_syn_without_owner_quarantined": self.first_syn_without_owner_quarantined,
             "tracked_candidate_tuples": self.flow_history.len(),
             "bounded_ephemeral_candidate_ledger": true,
             "kernel_packet_owner_witness_available": false,
@@ -197,8 +246,17 @@ mod tests {
             assert_eq!((local, remote), (t.source, t.destination));
             owner(47, 900)
         });
-        sample.observe(Direction::ToStack, &packet, |local, remote| {
-            assert_eq!((local, remote), (t.destination, t.source));
+        // The inbound SYN+ACK reverses the wire tuple, but retains the
+        // original local->remote candidate ledger key.
+        let inbound = frame(
+            flowbridge_core::tcp_packet::TcpTuple {
+                source: t.destination,
+                destination: t.source,
+            },
+            0x12,
+        );
+        sample.observe(Direction::ToStack, &inbound, |local, remote| {
+            assert_eq!((local, remote), (t.source, t.destination));
             Candidate::Missing
         });
         let result = sample.report();
@@ -214,13 +272,14 @@ mod tests {
 
     #[test]
     fn malformed_frames_never_query_and_budget_is_strict() {
-        let t = tuple(true);
-        let packet = frame(t, 0x02);
         let mut sample = Sampler::default();
         sample.observe(Direction::ToAdapter, &[0; 13], |_, _| {
             panic!("malformed frame reached IP Helper")
         });
-        for _ in 0..MAX_OWNER_SNAPSHOTS + 8 {
+        for n in 0..MAX_OWNER_SNAPSHOTS + 8 {
+            let mut t = tuple(true);
+            t.source.set_port(40001 + n as u16);
+            let packet = frame(t, 0x02);
             sample.observe(Direction::ToAdapter, &packet, |local, remote| {
                 assert_eq!((local, remote), (t.source, t.destination));
                 Candidate::Uncertain
@@ -232,6 +291,56 @@ mod tests {
         assert_eq!(report["invalid_or_unsupported"], 1);
         assert_eq!(report["candidate_indeterminate"], MAX_OWNER_SNAPSHOTS);
         assert_eq!(report["native_packet_attribution_proved"], false);
+    }
+
+    #[test]
+    fn syn_before_owner_and_unprepared_midstream_flow_never_gain_candidate() {
+        for ipv6 in [false, true] {
+            let t = tuple(ipv6);
+            let mut sample = Sampler::default();
+            // The first observable packet is an ACK, not the originating SYN.
+            sample.observe(Direction::ToAdapter, &frame(t, 0x10), |_, _| {
+                panic!("midstream packet queried IP Helper")
+            });
+            sample.observe(Direction::ToAdapter, &frame(t, 0x02), |_, _| {
+                panic!("late SYN upgraded quarantined flow")
+            });
+            let report = sample.report();
+            assert_eq!(report["missing_initial_syn_quarantined"], 1);
+            assert_eq!(report["quarantined_reobservations"], 1);
+            assert_eq!(report["snapshot_queries"], 0);
+            assert_eq!(report["two_snapshot_process_candidates"], 0);
+
+            let mut sample = Sampler::default();
+            sample.observe(Direction::ToAdapter, &frame(t, 0x02), |_, _| {
+                Candidate::Missing
+            });
+            sample.observe(Direction::ToAdapter, &frame(t, 0x10), |_, _| {
+                panic!("late owner resurrected a failed first SYN")
+            });
+            let report = sample.report();
+            assert_eq!(report["first_syn_without_owner_quarantined"], 1);
+            assert_eq!(report["quarantined_reobservations"], 1);
+            assert_eq!(report["snapshot_queries"], 1);
+            assert_eq!(report["two_snapshot_process_candidates"], 0);
+
+            let mut sample = Sampler::default();
+            let inbound = frame(
+                flowbridge_core::tcp_packet::TcpTuple {
+                    source: t.destination,
+                    destination: t.source,
+                },
+                0x12,
+            );
+            sample.observe(Direction::ToStack, &inbound, |_, _| {
+                panic!("unprepared inbound packet queried IP Helper")
+            });
+            sample.observe(Direction::ToAdapter, &frame(t, 0x02), |_, _| {
+                panic!("late outbound SYN resurrected inbound-only flow")
+            });
+            assert_eq!(sample.report()["missing_initial_syn_quarantined"], 1);
+            assert_eq!(sample.report()["packet_owner_bound"], false);
+        }
     }
 
     #[test]
