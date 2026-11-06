@@ -422,12 +422,8 @@ impl CapturePipeline {
             return Err(PipelineError::Lease(error));
         }
         // All validation/mutation is transactional inside the existing primitive.
-        let info = match rewrite_ethernet_tcp_tuple(
-            frame,
-            &mut self.scratch,
-            expected,
-            replacement,
-        ) {
+        let info = match rewrite_ethernet_tcp_tuple(frame, &mut self.scratch, expected, replacement)
+        {
             Ok(packet) => packet,
             Err(error) => {
                 // The wire primitive left the original frame untouched.
