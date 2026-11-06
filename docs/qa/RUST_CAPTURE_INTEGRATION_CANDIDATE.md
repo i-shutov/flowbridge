@@ -1,3 +1,55 @@
+## G2 independent kernel connection evidence — 2026-11-06
+
+A new bounded no-driver collector (`tests/g2_etw_owner_probe.py`) replaces
+IP Helper as the source in this independent experiment. It records built-in
+Kernel-Network, TCPIP and Networking-Correlation ETW providers while four
+unmodified System32 curl processes connect over IPv4/IPv6. Query-only process
+handles bind each observed payload PID to its live creation epoch and exact
+system executable. Header `Execution/ProcessID` is never treated as socket
+owner. Trace loss, unknown accounting, incomplete client evidence, duplicate
+payload fields and stale/recycled process epochs fail the experiment.
+
+The collector is guarded to disposable GitHub-hosted Windows, uses one private
+transient ETW session, changes no driver/filter/service/audit-policy settings,
+and removes its raw ETL/XML and all owned resources. Only a sanitized JSON
+verdict is uploaded. Fifteen synthetic verifier tests pass locally; this is
+NOT evidence that the native collection already succeeded. The existing
+capture workflow now has an explicitly named independent ETW job; no new
+trigger, branch or self-hosted dispatch is introduced.
+
+### Remaining exact trust boundary (do not waive)
+
+Successful ETW evidence would establish **kernel connection → payload PID →
+live process epoch/path**, not **specific NDISRD delivery → that connection**.
+The documented NDISRD `INTERMEDIATE_BUFFER` carries bytes, direction, flags,
+VLAN and filter index, but no TCP connection cookie, process epoch or ETW
+activity lineage. `connid` in TCPIP events identifies that connection only.
+An ETW activity transfer graph may join ETW events across layers; it does not
+by itself attach the graph identity to the separately returned NDISRD object.
+A byte hash, tuple, ISN, timing match or WFP rule presence cannot silently fill
+this gap. ETW also allows event loss. Production `PacketBound` remains sealed.
+
+References (primary sources):
+- https://www.ntkernel.com/docs/windows-packet-filter-documentation/structures/_intermediate_buffer/
+- https://learn.microsoft.com/en-us/windows/win32/etw/tcpip-sendipv4
+- https://learn.microsoft.com/en-us/windows/win32/etw/about-event-tracing
+- https://www.digitaloperatives.com/2012/10/16/process-attribution-in-network-traffic/
+- https://learn.microsoft.com/en-us/windows/win32/winsock/sio-query-wfp-connection-redirect-context
+
+A stronger transparent-routing backend would need a trusted kernel endpoint /
+connection identity delivered with redirected data and process lifetime, such
+as an ALE redirect context. Microsoft documents that this comes from a kernel
+callout, not a user-mode filter inventory. Introducing a different signed
+backend or a custom callout is an architectural change, NOT authorized by the
+current NDISRD-only scope. Until independently demonstrated, G2 is OPEN and
+protected arbitrary-EXE routing stays disabled. The safe existing explicit
+SOCKS path is not relabeled as transparent-mode acceptance.
+
+Historical G1 acceptance remains tied to `dd1ab3c` only. G0/G2–G6 OPEN;
+`release_accepted=false`. No additional native driver trial is authorized.
+
+---
+
 # FlowBridge Windows Rust capture — G0–G6 current-source matrix
 
 Updated **2026-11-06** for Draft [PR #56](https://github.com/i-shutov/flowbridge/pull/56).

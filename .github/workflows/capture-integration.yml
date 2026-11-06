@@ -281,3 +281,29 @@ jobs:
           path: build/capture-format/
           if-no-files-found: warn
           retention-days: 7
+
+  g2-kernel-connection-owner:
+    # Independent built-in ETW observation, NOT NDISRD/driver activation.
+    # No new event trigger; same existing pull_request/workflow_dispatch entry.
+    runs-on: windows-2025
+    timeout-minutes: 5
+    env:
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Reject header PID, recycled epoch, lost and ambiguous ETW evidence
+        run: python -m unittest discover -s tests -p test_g2_etw_owner_probe.py -v
+      - name: Real independent OS curl IPv4 and IPv6 kernel owner evidence (no driver)
+        run: python tests/g2_etw_owner_probe.py --consent G2_HOSTED_ETW_READ_ONLY_NO_DRIVER --output build/g2-etw/sanitized.json
+      - name: Preserve sanitized verdict only (never ETL, XML, PID, path or endpoints)
+        if: always()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: FlowBridge-G2-Kernel-Connection-Owner
+          path: build/g2-etw/sanitized.json
+          if-no-files-found: error
+          retention-days: 7
