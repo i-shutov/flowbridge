@@ -1,0 +1,59 @@
+name: Research WFP AppId path witness (read-only, hosted)
+on:
+  push:
+    branches:
+      - research/windows-wfp-ale-attribution-20261107
+    paths:
+      - '.github/workflows/research-wfp-appid-native.yml'
+permissions:
+  contents: read
+concurrency:
+  group: research-wfp-appid-native-one-shot
+  cancel-in-progress: false
+jobs:
+  appid-path-witness:
+    if: github.repository == 'i-shutov/flowbridge' && github.ref == 'refs/heads/research/windows-wfp-ale-attribution-20261107'
+    runs-on: windows-2025
+    timeout-minutes: 8
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - name: Read exact research SHA, no repository credentials persisted
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Install Python 3.13 (no Rust or driver)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Execute read-only Windows AppId and handle-path probe
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $folder = 'build/verification/wfp-appid-native-r12'
+          New-Item -ItemType Directory -Path $folder -Force | Out-Null
+          & python research/wfp-ale/handle_appid_probe.py --consent WFP_APPID_READONLY | Set-Content -Encoding utf8 -Path "$folder/native-result.json"
+          if ($LASTEXITCODE -ne 0) { throw 'Native read-only AppId experiment failed; see sanitized artifact' }
+      - name: Verify result is native-only and not kernel/release acceptance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $file = 'build/verification/wfp-appid-native-r12/native-result.json'
+          $result = Get-Content -Raw -Path $file | ConvertFrom-Json -AsHashtable
+          if ($result.ok -ne $true -or $result.evidence_level -ne 'native_readonly_appid_path_diagnostic') { throw 'Missing Windows-native AppId observation' }
+          if ($result.release_accepted -ne $false -or $result.kernel_pid_epoch_bound -ne $false -or $result.ndisrd_packetbound -ne $false -or $result.system_no_direct -ne $false) { throw 'Result illegally promoted to release or kernel proof' }
+          if ($result.temporary_files_removed -ne $true -or $result.cases.Count -lt 2) { throw 'Missing fixture cleanup or critical cases' }
+          $same = @($result.cases | Where-Object { $_.case -eq 'same_file' })
+          $different = @($result.cases | Where-Object { $_.case -eq 'same_name_different_directory' })
+          if ($same.Count -ne 1 -or $different.Count -ne 1 -or $same[0].supplied_pair_appid_equal -ne $true) { throw 'Native comparator matrix incomplete or inconsistent' }
+          if (-not $result.source_sha256 -or $result.source_sha256.Length -ne 64) { throw 'Unpinned source' }
+          Write-Output 'Windows AppId path witness measured; kernel owner/release remain NO-GO.'
+      - name: Preserve redacted observation, even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: research-wfp-appid-path-r12-${{ github.run_id }}
+          path: build/verification/wfp-appid-native-r12/native-result.json
+          if-no-files-found: warn
+          retention-days: 7
