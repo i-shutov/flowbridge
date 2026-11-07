@@ -135,6 +135,9 @@ class ResearchGate:
         return 'REGISTERED_MODEL'
 
     def stop_process(self, pid: int, generation: int) -> str:
+        # A revocation event is also an observation boundary for *all* pending flows.
+        # Do not suppress process cleanup when health is bad: latch, then revoke.
+        self._observe_health()
         owner = self.live.get(pid)
         if owner is None or owner.generation != generation:
             # Missing/out-of-order exit poisons PID; never silently trust it.

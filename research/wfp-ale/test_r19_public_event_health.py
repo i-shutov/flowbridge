@@ -89,5 +89,22 @@ class IndependentTemporalOracle(unittest.TestCase):
                     self.assertNotEqual(latched, 'MAY_CONSIDER_MODEL_ONLY')
 
 
+class RevocationEventHealthTests(unittest.TestCase):
+    def test_other_process_exit_during_loss_revokes_unrelated_pending_auth(self):
+        for family, flag in itertools.product((4, 6), ('active_filter', 'active_callout', 'ssh_ready')):
+            with self.subTest(family=family, flag=flag):
+                g, r, a = pending(family)
+                self.assertEqual(g.observe_auth(a), 'SUPPORTING_OBSERVATION_ONLY')
+                self.assertEqual(g.start_process(Owner(502, 1, 4002, APP, IMAGE, True)), 'REGISTERED_MODEL')
+                setattr(g, flag, False)
+                # Revoking another PID must NOT silently miss globally observable
+                # WFP/SSH loss while ticket r remains pending for our PID.
+                self.assertEqual(g.stop_process(502, 1), 'REVOKED_MODEL')
+                setattr(g, flag, True)
+                expected = 'REJECT_INGRESS' if flag == 'ssh_ready' else 'UNPROTECTED'
+                self.assertEqual(g.accept(r.ticket, SESSION, r.endpoint, family, True, True, True), expected)
+
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

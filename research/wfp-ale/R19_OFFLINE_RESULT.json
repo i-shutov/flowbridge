@@ -14,18 +14,20 @@
       "ssh"
     ],
     "old_result": "CONDITIONAL_MODEL_ONLY",
-    "new_result": "UNPROTECTED_OR_REJECT_INGRESS"
+    "new_result": "UNPROTECTED_OR_REJECT_INGRESS",
+    "other_process_exit_loss_returned_model_before_patch": true
   },
   "local_reduced_mirror": {
-    "before": "FAIL (10 assertions)",
-    "after": "6/6 test methods PASS"
+    "before": "FAIL (16 assertions across 3 paths)",
+    "after": "7/7 test methods PASS"
   },
   "independent_spec": {
     "health_histories": 4096,
     "passed": 4096,
     "mutants_rejected": [
       "AUTH_no_health_sample",
-      "start_no_health_sample"
+      "start_no_health_sample",
+      "unrelated_stop_no_health_sample"
     ]
   },
   "exact_source_runtime": "NOT_RUN",
