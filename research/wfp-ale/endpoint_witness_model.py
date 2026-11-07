@@ -139,14 +139,25 @@ class ResearchGate:
         return 'CAPTURED_MODEL'
 
     def observe_auth(self, event: Authorization) -> str:
-        if event.endpoint <= 0 or event.family not in (4, 6) or not event.path_identity:
+        if event.endpoint <= 0:
             return 'INVALID_AUTH'
         if event.endpoint in self.poisoned_endpoints:
             return 'AMBIGUOUS_ENDPOINT'
-        # Microsoft documents ALE reauthorization, which must not be promoted
-        # to a *fresh* connection-owner observation.
-        if event.reauthorize:
+        # An incoming observation on a pending endpoint can invalidate its
+        # previously bound initial AUTH, even if the new event is incomplete.
+        # Microsoft permits FWP_EMPTY fields on reauthorization; skipping such
+        # events would leave an older AUTH reusable after policy changes.
+        pending = (event.endpoint in self.auth
+                   or any(p.endpoint == event.endpoint for p in self.redirects.values()))
+        if event.reauthorize is True:
+            if pending:
+                self._retire_endpoint(event.endpoint)
             return 'REAUTHORIZE_NOT_NEW_PROOF'
+        if (event.reauthorize is not False or event.family not in (4, 6)
+                or not event.path_identity):
+            if pending:
+                self._retire_endpoint(event.endpoint)
+            return 'INVALID_AUTH'
         if event.endpoint in self.auth:
             self._retire_endpoint(event.endpoint)
             return 'AMBIGUOUS_ENDPOINT'
