@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "run": "R21",
+  "date": "2026-11-07",
+  "source": "offline_model_only",
+  "base_head": "f7eefc1098f4b140e66da6ae0cfeb340d69fc389",
+  "main": "5b5afc2feeda2195f302380e615ba003d4906e09",
+  "paired_worlds": 144,
+  "unittest_methods_pass": 9,
+  "independent_oracle_cases": 4096,
+  "negative_cases": 3650,
+  "positive_synthetic_cases": 446,
+  "detected_weak_predicates": 8,
+  "commit_reauth_fence_proved": false,
+  "dynamic_session_filter_survives_owner_exit": false,
+  "driver_started": false,
+  "ci_runner_used": false,
+  "native_windows": false,
+  "packetbound_g2_pass": false,
+  "no_direct_proved": false
+}
