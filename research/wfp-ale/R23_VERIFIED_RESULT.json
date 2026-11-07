@@ -1,0 +1,28 @@
+{
+  "archive_sha256": {
+    "kernel": "2e81dc9908ca69d42ee2c3a004a68f49ff5286478b1882512fbcaaa1827faed7",
+    "socket": "35aee98cfa8d982dc962b5eac27a42eb913e0d2ea2e01e33e1fb26db7d3db138",
+    "ssh": "38d930eb30d47f910c20daf4785ab48cd454d0b22f2f97b459bc0cdca9432963"
+  },
+  "broker_bytes": 311808,
+  "broker_connect_order_proved_by_binary_audit": false,
+  "broker_sha256": "c61bba5d6b6cd4c378454f1e4e39cd963d18a811a07a0b75687199befcf104ee",
+  "broker_wfp_handoff_imports_verified": true,
+  "compiled_kernel_not_loaded": true,
+  "driver_bytes": 205312,
+  "driver_sha256": "94eb29c5c6c016bb52f387c1b2b3703bc8f8a12681b83e84e8df693e5cdbcc31",
+  "embedded_driver_signature": false,
+  "full_origin_kernel_redirect_socket_ssh_chain_executed": false,
+  "g2_pass": false,
+  "independent_human_or_native_reviewer_acceptance": false,
+  "independent_pe_parser_used": true,
+  "kernel_redirect_imports_verified": true,
+  "ok": true,
+  "ordinal_imports_preserved_without_name_guessing": true,
+  "real_ssh_transport_ipv4_ipv6_halfclose": true,
+  "real_transport_test_count": 13,
+  "release_accepted": false,
+  "run_id": 42398383944,
+  "source_sha": "eb1e7561fd14ff05d1d899b7ca43e46988b883c7",
+  "windows_broker_rejected_unredirected_sockets": true
+}
