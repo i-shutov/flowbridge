@@ -5,7 +5,7 @@
 #![no_std]
 #![allow(non_snake_case)]
 use core::{cell::UnsafeCell, ffi::c_void, mem, ptr, slice, sync::atomic::{AtomicBool,Ordering}};
-#[allow(dead_code,non_snake_case,non_camel_case_types,non_upper_case_globals,improper_ctypes)]
+#[allow(dead_code,non_snake_case,non_camel_case_types,non_upper_case_globals,improper_ctypes,unused_imports)]
 mod k { include!(concat!(env!("OUT_DIR"), "/wdk.rs")); }
 mod ledger;
 use ledger::{Ledger,Owner,Witness,MAX_NAME};
@@ -40,16 +40,17 @@ impl Drop for Guard {fn drop(&mut self){unsafe{k::KeReleaseSpinLock(ptr::addr_of
 struct Active;
 impl Active {unsafe fn enter()->Option<Self>{if k::ExAcquireRundownProtection(ptr::addr_of_mut!(RUNDOWN))!=0{Some(Self)}else{None}}}
 impl Drop for Active {fn drop(&mut self){unsafe{k::ExReleaseRundownProtection(ptr::addr_of_mut!(RUNDOWN));}}}
-unsafe fn read_at<T:Copy>(base:*const c_void,offset:u32)->T{ptr::read_unaligned(base.cast::<u8>().add(offset as usize).cast())}
-unsafe fn write_at<T>(base:*mut c_void,offset:u32,v:T){ptr::write_unaligned(base.cast::<u8>().add(offset as usize).cast(),v);}
+// Only compile-time nonnegative offsets generated from WDK offsetof are accepted here.
+unsafe fn read_at<T:Copy>(base:*const c_void,offset:i32)->T{ptr::read_unaligned(base.cast::<u8>().add(offset as usize).cast())}
+unsafe fn write_at<T>(base:*mut c_void,offset:i32,v:T){ptr::write_unaligned(base.cast::<u8>().add(offset as usize).cast(),v);}
 
-unsafe extern "system" fn process_event(process:k::PEPROCESS,pid:k::HANDLE,info:*mut k::PS_CREATE_NOTIFY_INFO) {
+unsafe extern "C" fn process_event(process:k::PEPROCESS,pid:k::HANDLE,info:*mut k::PS_CREATE_NOTIFY_INFO) {
     let Some(_active)=Active::enter() else{return};
     if STOP.load(Ordering::Acquire) || process.is_null(){return;}
     let id=pid as usize as u64;
     if info.is_null(){let _lock=Guard::take();(*STATE.0.get()).died(id,process as usize);return;}
     let c=&*info;
-    if c.Size < mem::size_of::<k::PS_CREATE_NOTIFY_INFO>() || c.CreationStatus<0
+    if c.Size < mem::size_of::<k::PS_CREATE_NOTIFY_INFO>() as k::SIZE_T || c.CreationStatus<0
         || c.FileObject.is_null() || c.ImageFileName.is_null(){return;}
     // WDK MSVC x64 layout: first bit of the ULONG immediately after Size is
     // FileOpenNameAvailable. The wrapper derives the offset from SIZE_T.
@@ -73,24 +74,24 @@ unsafe extern "system" fn process_event(process:k::PEPROCESS,pid:k::HANDLE,info:
     if !accepted{k::ObfDereferenceObject(c.FileObject.cast());k::ObfDereferenceObject(process.cast());}
 }
 
-unsafe extern "system" fn classify(values:*const k::FWPS_INCOMING_VALUES0,meta:*const k::FWPS_INCOMING_METADATA_VALUES0,
+unsafe extern "C" fn classify(values:*const k::FWPS_INCOMING_VALUES0,meta:*const k::FWPS_INCOMING_METADATA_VALUES0,
     _layer:*mut c_void,_context:*const c_void,_filter:*const k::FWPS_FILTER1,_flow:u64,out:*mut k::FWPS_CLASSIFY_OUT0) {
     // Observational callout: NEVER block, permit-hard, rewrite or claim no-DIRECT.
     if !out.is_null() && (*out).rights & k::FWPS_RIGHT_ACTION_WRITE!=0{(*out).actionType=k::FWP_ACTION_CONTINUE;}
     let Some(_active)=Active::enter() else{return};
     if STOP.load(Ordering::Acquire)||values.is_null()||meta.is_null(){return;}
     let f=&*values;let m=&*meta;
-    let (family,index,proto)=if f.layerId as u32==k::FWPS_LAYER_ALE_CONNECT_REDIRECT_V4 {
+    let (family,index,proto)=if f.layerId as i32==k::FWPS_LAYER_ALE_CONNECT_REDIRECT_V4 {
         (4,k::FWPS_FIELD_ALE_CONNECT_REDIRECT_V4_ALE_APP_ID as usize,k::FWPS_FIELD_ALE_CONNECT_REDIRECT_V4_IP_PROTOCOL as usize)
-    }else if f.layerId as u32==k::FWPS_LAYER_ALE_CONNECT_REDIRECT_V6 {
+    }else if f.layerId as i32==k::FWPS_LAYER_ALE_CONNECT_REDIRECT_V6 {
         (6,k::FWPS_FIELD_ALE_CONNECT_REDIRECT_V6_ALE_APP_ID as usize,k::FWPS_FIELD_ALE_CONNECT_REDIRECT_V6_IP_PROTOCOL as usize)
     }else{return};
     let needed=k::FWPS_METADATA_FIELD_PROCESS_ID | k::FWPS_METADATA_FIELD_TRANSPORT_ENDPOINT_HANDLE;
     if m.currentMetadataValues&needed!=needed || f.incomingValue.is_null() || index>=f.valueCount as usize || proto>=f.valueCount as usize{return;}
     let p=f.incomingValue.add(proto).cast::<c_void>();
-    if read_at::<u32>(p,k::FB_VALUE_TYPE)!=k::FWP_UINT8 || read_at::<u8>(p,k::FB_VALUE_U8)!=6{return;}
+    if read_at::<i32>(p,k::FB_VALUE_TYPE)!=k::FWP_UINT8 || read_at::<u8>(p,k::FB_VALUE_U8)!=6{return;}
     let v=f.incomingValue.add(index).cast::<c_void>();
-    if read_at::<u32>(v,k::FB_VALUE_TYPE)!=k::FWP_BYTE_BLOB_TYPE{return;}
+    if read_at::<i32>(v,k::FB_VALUE_TYPE)!=k::FWP_BYTE_BLOB_TYPE{return;}
     let blob:*const k::FWP_BYTE_BLOB=read_at(v,k::FB_VALUE_BLOB);
     if blob.is_null()||(*blob).data.is_null()||(*blob).size<2||(*blob).size as usize>MAX_NAME+2||(*blob).size%2!=0{return;}
     let mut bytes=slice::from_raw_parts((*blob).data,(*blob).size as usize);
@@ -98,13 +99,13 @@ unsafe extern "system" fn classify(values:*const k::FWPS_INCOMING_VALUES0,meta:*
     let _lock=Guard::take();
     let _=(*STATE.0.get()).observe(m.processId,m.transportEndpointHandle,family,bytes);
 }
-unsafe extern "system" fn notify(_ty:k::FWPS_CALLOUT_NOTIFY_TYPE,_key:*const k::GUID,_filter:*mut k::FWPS_FILTER1)->i32{SUCCESS}
+unsafe extern "C" fn notify(_ty:k::FWPS_CALLOUT_NOTIFY_TYPE,_key:*const k::GUID,_filter:*mut k::FWPS_FILTER1)->i32{SUCCESS}
 
 unsafe fn complete(irp:*mut k::IRP,status:i32,bytes:usize)->i32 {
     write_at(irp.cast(),k::FB_IRP_STATUS,status);write_at(irp.cast(),k::FB_IRP_INFORMATION,bytes);
     k::IofCompleteRequest(irp,0);status
 }
-unsafe extern "system" fn dispatch(_dev:*mut k::DEVICE_OBJECT,irp:*mut k::IRP)->i32 {
+unsafe extern "C" fn dispatch(_dev:*mut k::DEVICE_OBJECT,irp:*mut k::IRP)->i32 {
     if irp.is_null(){return INVALID;}
     let Some(_active)=Active::enter() else{return complete(irp,NOT_READY,0)};
     if STOP.load(Ordering::Acquire){return complete(irp,NOT_READY,0);}
@@ -112,7 +113,7 @@ unsafe extern "system" fn dispatch(_dev:*mut k::DEVICE_OBJECT,irp:*mut k::IRP)->
     if stack.is_null(){return complete(irp,INVALID,0);}
     let major:u8=read_at(stack,k::FB_STACK_MAJOR);
     if major==k::IRP_MJ_CREATE as u8||major==k::IRP_MJ_CLOSE as u8{return complete(irp,SUCCESS,0);}
-    if major!=k::IRP_MJ_DEVICE_CONTROL as u8||read_at::<u32>(stack,k::FB_STACK_CODE)!=k::FB_WITNESS_IOCTL{return complete(irp,DENIED,0);}
+    if major!=k::IRP_MJ_DEVICE_CONTROL as u8||read_at::<u32>(stack,k::FB_STACK_CODE)!=k::FB_WITNESS_IOCTL as u32{return complete(irp,DENIED,0);}
     let length:u32=read_at(stack,k::FB_STACK_OUTPUT);
     let buffer:*mut c_void=read_at(irp.cast(),k::FB_IRP_BUFFER);
     if buffer.is_null() || (length as usize)<mem::size_of::<Witness>(){return complete(irp,BUFFER_SMALL,0);}
@@ -122,18 +123,18 @@ unsafe extern "system" fn dispatch(_dev:*mut k::DEVICE_OBJECT,irp:*mut k::IRP)->
 }
 unsafe fn cleanup(){
     STOP.store(true,Ordering::Release);
-    for i in 0..2 {if IDS[i]!=0{let status=k::FwpsCalloutUnregisterById0(IDS[i]);if status<0{k::KeBugCheckEx(0xE2,0x47323139,status as usize,1,0);}IDS[i]=0;}}
-    if PROCESS_NOTIFY {let status=k::PsSetCreateProcessNotifyRoutineEx(Some(process_event),1);if status<0{k::KeBugCheckEx(0xE2,0x47323139,status as usize,2,0);}PROCESS_NOTIFY=false;}
+    for i in 0..2 {if IDS[i]!=0{let status=k::FwpsCalloutUnregisterById0(IDS[i]);if status<0{k::KeBugCheckEx(0xE2,0x47323139,status as k::ULONG_PTR,1,0);}IDS[i]=0;}}
+    if PROCESS_NOTIFY {let status=k::PsSetCreateProcessNotifyRoutineEx(Some(process_event),1);if status<0{k::KeBugCheckEx(0xE2,0x47323139,status as k::ULONG_PTR,2,0);}PROCESS_NOTIFY=false;}
     k::ExWaitForRundownProtectionRelease(ptr::addr_of_mut!(RUNDOWN));
     // No caller/callback can now access ledger. Held process and image refs are released once.
     for o in &mut (*STATE.0.get()).owners {if o.file!=0{k::ObfDereferenceObject(o.file as *mut c_void);}if o.process!=0{k::ObfDereferenceObject(o.process as *mut c_void);}*o=Owner::EMPTY;}
     if LINK_CREATED{let mut n=unicode(LINK.as_ptr());k::IoDeleteSymbolicLink(&mut n);LINK_CREATED=false;}
     if !DEVICE.is_null(){k::IoDeleteDevice(DEVICE);DEVICE=ptr::null_mut();}
 }
-unsafe extern "system" fn unload(_driver:*mut k::DRIVER_OBJECT){cleanup();}
+unsafe extern "C" fn unload(_driver:*mut k::DRIVER_OBJECT){cleanup();}
 
 #[no_mangle]
-pub unsafe extern "system" fn DriverEntry(driver:*mut k::DRIVER_OBJECT,_path:*const k::UNICODE_STRING)->i32 {
+pub unsafe extern "C" fn DriverEntry(driver:*mut k::DRIVER_OBJECT,_path:*const k::UNICODE_STRING)->i32 {
     if driver.is_null(){return INVALID;}
     ptr::write(ptr::addr_of_mut!(LOCK),0);k::ExInitializeRundownProtection(ptr::addr_of_mut!(RUNDOWN));
     let clock=k::KeQueryPerformanceCounter(ptr::null_mut());
@@ -160,4 +161,4 @@ pub unsafe extern "system" fn DriverEntry(driver:*mut k::DRIVER_OBJECT,_path:*co
     SUCCESS
 }
 #[panic_handler]
-fn panic(_info:&core::panic::PanicInfo)->!{unsafe{k::KeBugCheckEx(0xE2,0x47323139,0,3,0)}loop{core::hint::spin_loop();}}
+fn panic(_info:&core::panic::PanicInfo)->!{unsafe{k::KeBugCheckEx(0xE2,0x47323139,0,3,0)}}
