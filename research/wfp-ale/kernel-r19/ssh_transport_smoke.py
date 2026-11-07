@@ -1,5 +1,6 @@
-"""Isolated unprivileged OpenSSH transport QA; never loads a kernel driver.
-Own keys/config/process group only. No sudo, service, /run/sshd or account edits.
+"""Isolated OpenSSH transport QA; never loads a kernel driver.
+sshd runs in its own private mount namespace with an ephemeral /run. The host
+service, account, firewall, /run and configuration are never modified.
 """
 from pathlib import Path
 import json, os, pwd, re, signal, socket, subprocess, sys, tempfile, time
@@ -13,8 +14,8 @@ def port():
 def cause(raw):
     text=raw.decode('utf-8','replace').lower()
     for needle, code in [('privilege separation directory','privsep_directory_missing'),
-                         ('bad configuration','bad_sshd_config'),('permission denied','permission_denied'),
-                         ('account is locked','account_locked'),('address already in use','port_busy'),
+                         ('bad configuration','bad_sshd_config'),('account is locked','account_locked'),
+                         ('bad ownership or modes','key_path_permissions'),('permission denied','permission_denied'),('address already in use','port_busy'),
                          ('host key verification failed','hostkey_rejected')]:
         if needle in text: return code
     return 'unclassified_stderr'
@@ -26,14 +27,20 @@ def command(args, stage, **kwargs):
     if result.returncode: raise FixtureError(stage+'_'+cause(result.stderr))
     return result
 
-def terminate(process):
+def terminate(process, privileged=False):
     if process is None: return
     if process.poll() is None:
-        try: os.killpg(process.pid,signal.SIGTERM)
-        except ProcessLookupError: pass
+        def stop(sig):
+            if privileged:
+                subprocess.run(['sudo','-n','/bin/kill',f'-{sig}','--',f'-{process.pid}'],
+                               stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=5)
+            else:
+                try: os.killpg(process.pid,getattr(signal,'SIG'+sig))
+                except ProcessLookupError: pass
+        stop('TERM')
         try: process.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            os.killpg(process.pid,signal.SIGKILL);process.wait(timeout=5)
+            stop('KILL');process.wait(timeout=5)
 
 def run(test_binary):
     if os.name!='posix' or os.geteuid()==0: raise FixtureError('unprivileged_linux_required')
@@ -51,12 +58,16 @@ def run(test_binary):
         config.write_text(f'Port {sshd_port}\nListenAddress 127.0.0.1\nHostKey {host}\nPidFile {root / "sshd.pid"}\n'
             f'AuthorizedKeysFile {key.with_suffix(".pub")}\nAllowUsers {user}\n'
             'PubkeyAuthentication yes\nPasswordAuthentication no\nKbdInteractiveAuthentication no\n'
-            'UsePAM no\nStrictModes yes\nAllowTcpForwarding local\nPermitTunnel no\nLogLevel ERROR\n')
-        command(['/usr/sbin/sshd','-t','-f',str(config)],'sshd_config_validation')
+            'UsePAM yes\nStrictModes yes\nAllowTcpForwarding local\nPermitTunnel no\nLogLevel VERBOSE\n')
         ssh=None;server=None
         with (root/'private.log').open('wb') as log:
             try:
-                server=subprocess.Popen(['/usr/sbin/sshd','-D','-e','-f',str(config)],stdout=log,stderr=log,start_new_session=True)
+                script = ('set -eu; mount -t tmpfs -o mode=0755,size=1m tmpfs /run; '
+                          'mkdir -m 0755 /run/sshd; readlink /proc/self/ns/mnt > "$2"; '
+                          '/usr/sbin/sshd -t -f "$1"; exec /usr/sbin/sshd -D -e -f "$1"')
+                server=subprocess.Popen(['sudo','-n','unshare','--mount','--fork','--kill-child=TERM',
+                    '--propagation','private','/bin/sh','-c',script,'r23-sshd',str(config),str(root/'namespace')],
+                    stdout=log,stderr=log,start_new_session=True)
                 # Bounded readiness only, before any test. No failed test is retried.
                 end=time.monotonic()+5
                 while True:
@@ -66,6 +77,8 @@ def run(test_binary):
                     except OSError:
                         if time.monotonic()>end:raise FixtureError('sshd_start_timeout')
                         time.sleep(.05)
+                namespace=(root/'namespace').read_text().strip()
+                if namespace==os.readlink('/proc/self/ns/mnt'):raise FixtureError('mount_namespace_not_isolated')
                 ssh=subprocess.Popen(['ssh','-F','/dev/null','-N','-D',f'127.0.0.1:{socks_port}',
                     '-p',str(sshd_port),'-i',str(key),'-o','IdentitiesOnly=yes','-o','BatchMode=yes',
                     '-o','StrictHostKeyChecking=yes','-o',f'UserKnownHostsFile={known}',
@@ -86,9 +99,10 @@ def run(test_binary):
                 if not count:raise FixtureError('rust_test_summary_absent')
                 result=dict(ok=True,source_sha=os.environ['GITHUB_SHA'],transport='actual_OpenSSH_dynamic_SOCKS',
                     rust_tests_passed=int(count[1]),ipv4_ipv6_exact_response=True,half_close=True,
+                    private_mount_namespace_verified=True,host_ssh_service_changed=False,
                     fixture_context_used=False,kernel_redirect_executed=False,g2_pass=False,release_accepted=False)
             finally:
-                terminate(ssh);terminate(server)
+                terminate(ssh);terminate(server,privileged=True)
         if any(p is not None and p.poll() is None for p in (ssh,server)):raise FixtureError('fixture_process_cleanup_failed')
     if root.exists():raise FixtureError('fixture_file_cleanup_failed')
     result['fixture_processes_and_keys_removed']=True

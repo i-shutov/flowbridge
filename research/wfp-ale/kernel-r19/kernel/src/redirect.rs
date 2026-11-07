@@ -55,8 +55,9 @@ pub unsafe fn ioctl(code:u32,input:&[u8],caller:k::PEPROCESS)->i32{
         // Claim is terminal before origin liveness checking. No public receipt minting.
         let Some(c)=(*ROUTE.0.get()).book.take(c,time) else{return super::DENIED};
         let Some((o,generation))=(*STATE.0.get()).lookup(c.number(32)) else{return super::DENIED};
+        let selected=&*ROUTE.0.get(); // explicit borrow; the existing spin lock is still held
         if !c.matches_origin(Origin{pid:o.pid,epoch:o.epoch,key:o.start_key,endpoint:c.number(56),generation})
-            || o.name[..o.name_len]!=(*ROUTE.0.get()).name[..(*ROUTE.0.get()).len]{return super::DENIED;}
+            || o.name[..o.name_len]!=selected.name[..selected.len]{return super::DENIED;}
         return super::SUCCESS;
     }
     super::INVALID
