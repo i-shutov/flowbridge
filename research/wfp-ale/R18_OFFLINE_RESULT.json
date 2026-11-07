@@ -1,0 +1,31 @@
+{
+  "scope": "research/windows-wfp-ale-attribution-20261107",
+  "parent_sha": "dd1690a8cc1b30b51a002a655abe41f37533e0b2",
+  "main_sha": "5b5afc2feeda2195f302380e615ba003d4906e09",
+  "bug": "R7 ResearchGate accepts fresh model ticket after restored WFP or SSH boolean following observed outage",
+  "patch": "monotonic observed_wfp_loss/observed_ssh_loss plus pending endpoint retirement upon snapshot loss; applied to classify and accept",
+  "independent_oracle": {
+    "passed": 2,
+    "total": 2,
+    "histories": 4096,
+    "original_stateless_mutant": "detected"
+  },
+  "local_method_mirror": {
+    "passed": 9,
+    "total": 9,
+    "label": "reduced mirror, NOT exact GitHub model"
+  },
+  "github_exact_source_runtime": {
+    "passed": 0,
+    "skipped": 7,
+    "total": 7,
+    "status": "NOT RUN (GitHub source not mounted in Linux executor)"
+  },
+  "native_windows_experiment": false,
+  "rust_compiled": false,
+  "g2_pass": false,
+  "packet_bound": false,
+  "system_no_direct_proved": false,
+  "release_accepted": false,
+  "driver_filters_services_network_runner_mutated": false
+}

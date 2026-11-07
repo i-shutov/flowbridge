@@ -61,6 +61,30 @@ class ResearchGate:
         self.active_filter = True
         self.active_callout = True
         self.ssh_ready = True
+        # Sticky observed outage for this synthetic trust session. Merely
+        # restoring a later health snapshot never reauthorizes old/new tickets.
+        self.observed_wfp_loss = False
+        self.observed_ssh_loss = False
+
+    def _observe_health(self) -> str | None:
+        # Inputs remain *assumed* health observations; they are not proof that
+        # Windows blocked unobserved DIRECT traffic or transient outages.
+        missing_wfp = not self.active_filter or not self.active_callout
+        missing_ssh = not self.ssh_ready
+        newly_lost = ((missing_wfp and not self.observed_wfp_loss)
+                      or (missing_ssh and not self.observed_ssh_loss))
+        self.observed_wfp_loss |= missing_wfp
+        self.observed_ssh_loss |= missing_ssh
+        if newly_lost:
+            # Snapshot-only failures must retire existing AUTH/ticket records,
+            # not just fail this single request then resurrect on recovery.
+            for endpoint in {req.endpoint for req in self.redirects.values()} | set(self.auth):
+                self._retire_endpoint(endpoint)
+        if self.observed_wfp_loss:
+            return 'UNPROTECTED'
+        if self.observed_ssh_loss:
+            return 'REJECT_INGRESS'
+        return None
 
     def _retire_endpoint(self, endpoint: int) -> None:
         # Without a native ALE_ENDPOINT_CLOSURE event and proven lifetime,
@@ -117,8 +141,9 @@ class ResearchGate:
         return 'REVOKED_MODEL'
 
     def classify(self, request: Redirect) -> str:
-        if not self.active_filter or not self.active_callout:
-            return 'UNPROTECTED'
+        health_verdict = self._observe_health()
+        if health_verdict is not None:
+            return health_verdict
         if request.app_id != self.selected:
             return 'OUTSIDE_SCOPE'
         if request.family not in (4, 6) or not request.destination or request.endpoint <= 0 or request.ticket <= 0 or request.session != self.session:
@@ -187,8 +212,9 @@ class ResearchGate:
     def accept(self, ticket: int, session: int, endpoint: int, family: int,
                receipt_from_accepted_socket: bool, context_matches: bool,
                outbound_records_set_before_connect: bool) -> str:
-        if not self.active_filter or not self.active_callout:
-            return 'UNPROTECTED'
+        health_verdict = self._observe_health()
+        if health_verdict is not None:
+            return health_verdict
         request = self.redirects.pop(ticket, None)
         if request is None or ticket in self.consumed or ticket in self.retired:
             return 'REJECT_INGRESS'
@@ -219,10 +245,13 @@ class ResearchGate:
     def loss(self, component: str) -> str:
         if component == 'filter':
             self.active_filter = False
+            self.observed_wfp_loss = True
         elif component == 'callout':
             self.active_callout = False
+            self.observed_wfp_loss = True
         elif component == 'ssh':
             self.ssh_ready = False
+            self.observed_ssh_loss = True
         else:
             return 'UNKNOWN_COMPONENT'
         for endpoint in {req.endpoint for req in self.redirects.values()} | set(self.auth):
