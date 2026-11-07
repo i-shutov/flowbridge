@@ -1,0 +1,44 @@
+{
+  "driver_bytes": 198144,
+  "driver_sha256": "a48d6122a158de3a2cf912e5f8bc6d6eacf6bee5dde09fada3fbdaaa22ff5acc",
+  "g2_pass": false,
+  "independent_human_review": false,
+  "kernel_artifact_id": 13577538218,
+  "kernel_driver_loaded": false,
+  "kernel_zip_sha256": "83f214791b55d34c079f3903449a1dae7f5132fd7fcf0e5a9dcaee89ebae3bb6",
+  "local_socket_ipv4_ipv6_observed": true,
+  "ok": true,
+  "pe": {
+    "dynamic_base_bit": true,
+    "embedded_certificate_present": false,
+    "entry_section": ".text",
+    "force_integrity_bit": true,
+    "nx_compatible_bit": true,
+    "required_process_and_ale_api_imports": [
+      "FwpsCalloutRegister1",
+      "FwpsCalloutUnregisterById0",
+      "ObfDereferenceObject",
+      "ObfReferenceObject",
+      "PsGetProcessCreateTimeQuadPart",
+      "PsGetProcessStartKey",
+      "PsSetCreateProcessNotifyRoutineEx"
+    ],
+    "runtime_import_libraries": [
+      "fwpkclnt.sys",
+      "hal.dll",
+      "ntoskrnl.exe"
+    ],
+    "writable_executable_sections": false,
+    "x64_native_pe": true
+  },
+  "redirect_implemented_in_kernel_candidate": false,
+  "release_accepted": false,
+  "retained_cargo_lock_sha256": "a5a740f75007652de912d934499dadc7fe6ebbf14dbeccd0ec4ba748dd3af2c0",
+  "retained_wdk_bindings_sha256": "be602c5549a5ff6ace38dda4ac28bf03df57be3156bc08fccf81171ee91480c0",
+  "run_id": 42381023741,
+  "scope": "unsigned_kernel_build_plus_local_socket_native_observations",
+  "signature_accepted": false,
+  "socket_artifact_id": 13576609950,
+  "socket_zip_sha256": "58efe756f2642eb82b3a2ca2166713bba1eb87cf050f2feb29c5c9ca1c5cdc72",
+  "source_sha": "b8fc020cf5ada3c989ef9a406021bf44012fb78f"
+}
