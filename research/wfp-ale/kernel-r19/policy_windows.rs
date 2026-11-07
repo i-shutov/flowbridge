@@ -47,8 +47,10 @@ fn conditions(r:Rule,p:&Plan,blob:&mut FWP_BYTE_BLOB)->Vec<FWPM_FILTER_CONDITION
  let mut app=FWPM_FILTER_CONDITION0::default();
  // ORIGINAL_APP_ID is the selected originating application on proxied flows.
  // Direct connections get the same ORIGINAL_APP_ID as ALE_APP_ID.
- app.fieldKey=if r.kind==Kind::AttestOriginal{FWPM_CONDITION_ALE_ORIGINAL_APP_ID}
-     else{FWPM_CONDITION_ALE_APP_ID};
+ // Select the current executable; the originating AppId is ALSO checked
+ // inside the kernel against the issued ticket. Proxy outbound sockets
+ // have their own ALE_APP_ID and must not be enrolled as selected EXEs.
+ app.fieldKey=FWPM_CONDITION_ALE_APP_ID;
  app.matchType=FWP_MATCH_EQUAL;app.conditionValue.r#type=FWP_BYTE_BLOB_TYPE;
  app.conditionValue.Anonymous.byteBlob=blob;
  let mut tcp=FWPM_FILTER_CONDITION0::default();
@@ -101,8 +103,7 @@ impl Operations for Engine{
   require(f.numFilterConditions==2&&!f.filterCondition.is_null(),"condition_count")?;
   let cs=slice::from_raw_parts(f.filterCondition,2);
   let app=cs.iter().find(|c|same(c.fieldKey,
-      if r.kind==Kind::Redirect{FWPM_CONDITION_ALE_APP_ID}
-      else{FWPM_CONDITION_ALE_ORIGINAL_APP_ID}))
+      FWPM_CONDITION_ALE_APP_ID))
       .ok_or(PolicyError("appid_condition_missing",0))?;
   require(app.matchType==FWP_MATCH_EQUAL
       &&app.conditionValue.r#type==FWP_BYTE_BLOB_TYPE,"appid_condition_type")?;
@@ -126,10 +127,9 @@ pub fn verify_plan_only(p:&Plan)->Result<(),PolicyError>{
       else{FWP_ACTION_CALLOUT_TERMINATING};
   require(f.flags==0&&f.numFilterConditions==2&&same(f.layerKey,layer(r))
       &&f.action.r#type==expected_action
-      &&same(f.action.Anonymous.calloutKey,callout_key(r)),"plan_invalid")?;
+      &&unsafe{same(f.action.Anonymous.calloutKey,callout_key(r))},"plan_invalid")?;
   require(same(c[0].fieldKey,
-      if r.kind==Kind::Redirect{FWPM_CONDITION_ALE_APP_ID}
-      else{FWPM_CONDITION_ALE_ORIGINAL_APP_ID})
+      FWPM_CONDITION_ALE_APP_ID)
       &&c[0].matchType==FWP_MATCH_EQUAL,"unscoped_filter")?;
  }
  Ok(())
@@ -139,6 +139,6 @@ pub fn verify_plan_only(p:&Plan)->Result<(),PolicyError>{
  #[test]fn actual_win32_plan_is_scoped_and_nonpermissive(){let p=Plan::new(&[97,0,0,0],[1091,1092]).unwrap();verify_plan_only(&p).unwrap();}
  #[test]fn all_filter_keys_unique(){for(i,a)in RULES.iter().enumerate(){for b in &RULES[i+1..]{assert!(!same(filter_key(*a),filter_key(*b)));}}}
  #[test]fn guid_comparison_checks_every_field(){let a=SUB;assert!(same(a,a));for i in 0..4{let mut b=a;match i{0=>b.data1^=1,1=>b.data2^=1,2=>b.data3^=1,_=>b.data4[7]^=1};assert!(!same(a,b));}}
- #[test]fn auth_filter_needs_kernel_provenance(){for family in [Family::V4,Family::V6]{let r=Rule{family,kind:Kind::AttestOriginal};let p=Plan::new(&[97,0,0,0],[1091,1092]).unwrap();let mut blob=FWP_BYTE_BLOB::default();let mut n=name();let mut c=conditions(r,&p,&mut blob);let f=filter(r,&mut c,&mut n);assert_eq!(f.action.r#type,FWP_ACTION_CALLOUT_TERMINATING);assert_eq!(f.numFilterConditions,2);assert!(same(c[0].fieldKey,FWPM_CONDITION_ALE_ORIGINAL_APP_ID));}}
+ #[test]fn auth_filter_needs_kernel_provenance(){for family in [Family::V4,Family::V6]{let r=Rule{family,kind:Kind::AttestOriginal};let p=Plan::new(&[97,0,0,0],[1091,1092]).unwrap();let mut blob=FWP_BYTE_BLOB::default();let mut n=name();let mut c=conditions(r,&p,&mut blob);let f=filter(r,&mut c,&mut n);assert_eq!(f.action.r#type,FWP_ACTION_CALLOUT_TERMINATING);assert_eq!(f.numFilterConditions,2);assert!(same(c[0].fieldKey,FWPM_CONDITION_ALE_APP_ID));}}
  #[test]fn static_kernel_callout_keys_match_r19(){assert_eq!(callout_key(Rule{kind:Kind::Redirect,family:Family::V4}).data1,0x1649f014);assert_eq!(callout_key(Rule{kind:Kind::Redirect,family:Family::V6}).data1,0x1649f016);assert_eq!(callout_key(Rule{kind:Kind::AttestOriginal,family:Family::V4}).data1,0x1649f018);assert_eq!(callout_key(Rule{kind:Kind::AttestOriginal,family:Family::V6}).data1,0x1649f019);}
 }

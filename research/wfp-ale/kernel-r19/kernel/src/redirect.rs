@@ -219,6 +219,9 @@ unsafe fn auth_check(values:*const k::FWPS_INCOMING_VALUES0,meta:*const k::FWPS_
     // exist and be well-formed, but ORIGINAL_APP_ID is our explicit selected key.
     if (*raw_app).data.is_null()||(*raw_app).size<2||(*raw_app).size>514
         || (*raw_app).size%2!=0{return false;}
+    let mut current_app=slice::from_raw_parts((*raw_app).data,(*raw_app).size as usize);
+    if current_app.ends_with(&[0,0]){current_app=&current_app[..current_app.len()-2];}
+    if current_app.is_empty(){return false;}
     let socklen=if family==4{16}else{28};
     // The trusted WFP pointer denotes SOCKADDR / SOCKADDR_IN6. Read only its
     // family-specific length, not an assumed 128-byte backing allocation.
@@ -228,7 +231,7 @@ unsafe fn auth_check(values:*const k::FWPS_INCOMING_VALUES0,meta:*const k::FWPS_
     let _guard=Guard::take();
     if !ready(now()){return false;}
     let route=&mut *ROUTE.0.get();
-    if orig!=&route.name[..route.len]
+    if orig!=&route.name[..route.len] || current_app!=&route.name[..route.len]
         || m.localRedirectTargetPID!=route.pid as u32
         || actual_port != route.ports[if family==4{0}else{1}] {return false;}
     let Some((owner,generation))=(*STATE.0.get()).lookup(m.processId)else{return false};
