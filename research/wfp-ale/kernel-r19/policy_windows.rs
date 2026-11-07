@@ -9,6 +9,7 @@ fn callout_key(f:Family)->GUID{GUID::from_u128(if f==Family::V4{0x1649f014_25b3_
 fn filter_key(r:Rule)->GUID{let n=RULES.iter().position(|x|*x==r).expect("fixed rule");GUID::from_u128(0x1649f030_25b3_4e01_9ca1_5ca803010019+((n as u128)<<96))}
 fn redirect_layer(f:Family)->GUID{if f==Family::V4{FWPM_LAYER_ALE_CONNECT_REDIRECT_V4}else{FWPM_LAYER_ALE_CONNECT_REDIRECT_V6}}
 fn layer(r:Rule)->GUID{if r.kind==Kind::Redirect{redirect_layer(r.family)}else if r.family==Family::V4{FWPM_LAYER_ALE_AUTH_CONNECT_V4}else{FWPM_LAYER_ALE_AUTH_CONNECT_V6}}
+fn same(a:GUID,b:GUID)->bool{a.data1==b.data1&&a.data2==b.data2&&a.data3==b.data3&&a.data4==b.data4}
 fn name()->Vec<u16>{"FlowBridge G2 scoped native lab R24\0".encode_utf16().collect()}
 fn check(code:u32,stage:&'static str)->Result<(),PolicyError>{if code==0{Ok(())}else{Err(PolicyError(stage,code))}}
 fn require(ok:bool,stage:&'static str)->Result<(),PolicyError>{if ok{Ok(())}else{Err(PolicyError(stage,0))}}
@@ -79,21 +80,21 @@ impl Operations for Engine{
  fn verify(&mut self,r:Rule,plan:&Plan)->Result<(),PolicyError>{unsafe{
   let mut raw=ptr::null_mut();let status=FwpmFilterGetByKey0(self.handle,&filter_key(r),&mut raw);let owned=Owned(raw);
   check(status,"readback_filter")?;require(!owned.0.is_null(),"null_filter")?;let f=&*owned.0;
-  require(f.filterKey==filter_key(r)&&f.subLayerKey==SUB&&f.layerKey==layer(r)&&f.flags==0,"filter_scope_changed")?;
+  require(same(f.filterKey,filter_key(r))&&same(f.subLayerKey,SUB)&&same(f.layerKey,layer(r))&&f.flags==0,"filter_scope_changed")?;
   require(f.action.r#type==if r.kind==Kind::Redirect{FWP_ACTION_CALLOUT_UNKNOWN}else{FWP_ACTION_BLOCK},"filter_action_changed")?;
-  if r.kind==Kind::Redirect{require(f.action.Anonymous.calloutKey==callout_key(r.family),"wrong_callout")?;}
+  if r.kind==Kind::Redirect{require(same(f.action.Anonymous.calloutKey,callout_key(r.family)),"wrong_callout")?;}
   let count=if r.kind==Kind::Redirect{2}else{3};require(f.numFilterConditions==count&&!f.filterCondition.is_null(),"condition_count")?;
   let cs=slice::from_raw_parts(f.filterCondition,count as usize);
-  let app=cs.iter().find(|c|c.fieldKey==FWPM_CONDITION_ALE_APP_ID).ok_or(PolicyError("appid_condition_missing",0))?;
+  let app=cs.iter().find(|c|same(c.fieldKey,FWPM_CONDITION_ALE_APP_ID)).ok_or(PolicyError("appid_condition_missing",0))?;
   require(app.matchType==FWP_MATCH_EQUAL&&app.conditionValue.r#type==FWP_BYTE_BLOB_TYPE,"appid_condition_type")?;
   let b=app.conditionValue.Anonymous.byteBlob;require(!b.is_null(),"null_appid")?;
   require((*b).size as usize==plan.appid.len()&&!(*b).data.is_null(),"appid_size")?;
   require(slice::from_raw_parts((*b).data,(*b).size as usize)==plan.appid,"appid_changed")?;
-  let tcp=cs.iter().find(|c|c.fieldKey==FWPM_CONDITION_IP_PROTOCOL).ok_or(PolicyError("tcp_missing",0))?;
+  let tcp=cs.iter().find(|c|same(c.fieldKey,FWPM_CONDITION_IP_PROTOCOL)).ok_or(PolicyError("tcp_missing",0))?;
   require(tcp.matchType==FWP_MATCH_EQUAL&&tcp.conditionValue.r#type==FWP_UINT8&&tcp.conditionValue.Anonymous.uint8==6,"tcp_changed")?;
   if r.kind!=Kind::Redirect{
    let key=if r.kind==Kind::BlockWrongPort{FWPM_CONDITION_IP_REMOTE_PORT}else{FWPM_CONDITION_IP_REMOTE_ADDRESS};
-   let c=cs.iter().find(|c|c.fieldKey==key).ok_or(PolicyError("auth_condition_missing",0))?;require(c.matchType==FWP_MATCH_NOT_EQUAL,"auth_match_changed")?;
+   let c=cs.iter().find(|c|same(c.fieldKey,key)).ok_or(PolicyError("auth_condition_missing",0))?;require(c.matchType==FWP_MATCH_NOT_EQUAL,"auth_match_changed")?;
    let good=if r.kind==Kind::BlockWrongPort{c.conditionValue.r#type==FWP_UINT16&&c.conditionValue.Anonymous.uint16==plan.port(r.family)}
     else if r.family==Family::V4{c.conditionValue.r#type==FWP_UINT32&&c.conditionValue.Anonymous.uint32==0x7f000001}
     else{let a=c.conditionValue.Anonymous.byteArray16;c.conditionValue.r#type==FWP_BYTE_ARRAY16_TYPE&&!a.is_null()&&(*a).byteArray16==[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1]};
@@ -104,15 +105,16 @@ impl Operations for Engine{
 /// Constructs the same FWP objects as the installer without opening a BFE session.
 pub fn verify_plan_only(p:&Plan)->Result<(),PolicyError>{
  for r in RULES{let mut blob=FWP_BYTE_BLOB::default();let mut a=FWP_BYTE_ARRAY16::default();let mut n=name();let mut c=conditions(r,p,&mut blob,&mut a);let f=filter(r,&mut c,&mut n);
-  require(f.flags==0&&f.numFilterConditions>=2&&f.layerKey==layer(r),"plan_invalid")?;
+  require(f.flags==0&&f.numFilterConditions>=2&&same(f.layerKey,layer(r)),"plan_invalid")?;
   require(f.action.r#type!=FWP_ACTION_PERMIT,"unintended_permit")?;
-  require(c[0].fieldKey==FWPM_CONDITION_ALE_APP_ID&&c[0].matchType==FWP_MATCH_EQUAL,"unscoped_filter")?;
+  require(same(c[0].fieldKey,FWPM_CONDITION_ALE_APP_ID)&&c[0].matchType==FWP_MATCH_EQUAL,"unscoped_filter")?;
   if r.kind==Kind::BlockWrongPort{unsafe{require(c[2].conditionValue.Anonymous.uint16==p.port(r.family),"port_wrong")?;}}
  }Ok(())
 }
 #[cfg(test)]mod tests{
  use super::*;
  #[test]fn actual_win32_plan_is_scoped_and_nonpermissive(){let p=Plan::new(&[97,0,0,0],[1091,1092]).unwrap();verify_plan_only(&p).unwrap();}
- #[test]fn all_filter_keys_unique(){for(i,a)in RULES.iter().enumerate(){for b in &RULES[i+1..]{assert!(filter_key(*a)!=filter_key(*b));}}}
+ #[test]fn all_filter_keys_unique(){for(i,a)in RULES.iter().enumerate(){for b in &RULES[i+1..]{assert!(!same(filter_key(*a),filter_key(*b)));}}}
+ #[test]fn guid_comparison_checks_every_field(){let a=SUB;assert!(same(a,a));for i in 0..4{let mut b=a;match i{0=>b.data1^=1,1=>b.data2^=1,2=>b.data3^=1,_=>b.data4[7]^=1};assert!(!same(a,b));}}
  #[test]fn static_kernel_callout_keys_match_r19(){assert_eq!(callout_key(Family::V4).data1,0x1649f014);assert_eq!(callout_key(Family::V6).data1,0x1649f016);}
 }
