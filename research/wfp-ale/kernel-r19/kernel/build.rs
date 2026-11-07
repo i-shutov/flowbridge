@@ -4,6 +4,7 @@ fn main() {
     assert_eq!(env::var("CARGO_CFG_TARGET_ARCH").as_deref(), Ok("x86_64"));
     let mut b = bindgen::Builder::default()
         .header("wrapper.h")
+        .raw_line("include!(concat!(env!(\"CARGO_MANIFEST_DIR\"), \"/src/msvc_runtime.rs\"));")
         .clang_args(["-target", "x86_64-pc-windows-msvc", "-fms-extensions", "-fms-compatibility",
             "-D_AMD64_", "-DAMD64", "-D_KERNEL_MODE", "-D_WIN64", "-D_WIN32_WINNT=0x0A00",
             "-DNTDDI_VERSION=0x0A00000C"])
@@ -20,6 +21,7 @@ fn main() {
     let out = PathBuf::from(env::var("OUT_DIR").unwrap());
     b.generate().expect("WDK header binding failed").write_to_file(out.join("wdk.rs")).unwrap();
     println!("cargo:rerun-if-changed=wrapper.h");
+    println!("cargo:rerun-if-changed=src/msvc_runtime.rs");
     println!("cargo:rustc-link-search=native={}", env::var("FB_WDK_LIB").unwrap());
     for lib in ["ntoskrnl", "fwpkclnt", "hal", "wdmsec", "BufferOverflowFastFailK"] { println!("cargo:rustc-link-lib={lib}"); }
     for flag in ["/DRIVER", "/SUBSYSTEM:NATIVE", "/ENTRY:DriverEntry", "/NODEFAULTLIB", "/INTEGRITYCHECK", "/DYNAMICBASE", "/NXCOMPAT", "/OPT:REF,ICF"] {
