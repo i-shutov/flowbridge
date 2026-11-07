@@ -1,0 +1,30 @@
+{
+  "actual_windows_experiment_started_this_cycle": false,
+  "archive_sha256": "95560460776b802da5ccd1a608495609715144a59a7fac5fbfaed331542faa92",
+  "evidence_kind": "audited_historical_windows_exact_filter_events",
+  "observations": {
+    "alias_matrix_measured": false,
+    "different_executable_allowed_observed": true,
+    "exact_filter_event_count": 3,
+    "exact_per_event_source_partition_verified": false,
+    "historical_windows_appid_events_observed": true,
+    "native_research_sha_executed": false,
+    "observed_event_appid_shape_valid_count": 3,
+    "observed_handle_canonical_appid_matches_aggregate": 2,
+    "observed_input_appid_matches_selected_other_aggregate": 0,
+    "observed_native_handle_path_matches_aggregate": 2,
+    "observed_python_input_appid_matches_aggregate": 1,
+    "packet_pid_bound": false,
+    "path_spelling_canonicalization_discrepancy": true,
+    "process_epoch_bound_to_event": false,
+    "release_accepted": false,
+    "same_basename_different_dirs_measured": false,
+    "selected_appid_policy_denial_observed": true,
+    "transparent_redirect_proved": false
+  },
+  "ok": true,
+  "prior_archive_and_binary_hashes_verified": true,
+  "release_accepted": false,
+  "source_pr_sha": "c339df2e4d20edf1d11d45786581a68451a71929",
+  "source_test_merge_sha": "ab6ed5273db6e9741915a96c74809433af125870"
+}
