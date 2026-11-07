@@ -1,0 +1,43 @@
+{
+  "g2_pass": false,
+  "independent_human_review": false,
+  "initial_research_sha": "f92d2e580b6c394b29e977d76466918fb6000cc7",
+  "mutation_count": 6,
+  "mutations_detected": 6,
+  "native_windows_r17_executed": false,
+  "new_actions_run": false,
+  "parent_after_concurrent_update": "77021756fd192ca17f6bf7dad89dc310da03b696",
+  "python": "3.13.5",
+  "python_compile_passed": true,
+  "release_accepted": false,
+  "rust_compiled": false,
+  "sources": {
+    "R17_SOCKET_ENDPOINT_TRUST.md": {
+      "bytes": 7750,
+      "git_blob_sha1": "5fe49ad85e3b14c93d778cf7d978c9bf10efb839",
+      "sha256": "375a195df45ad0f2c2a3da4a84be95251c2452d850e742d4d40edad6809b1d25"
+    },
+    "mutation_socket_endpoint_r17.py": {
+      "bytes": 2489,
+      "git_blob_sha1": "55cf4bb0dda163f7a544dac6b111c1bcd53f51b4",
+      "sha256": "728b4fe41957a046e6e1f1dd798a108baff2fe45f8f22f1f0feeeff736a5a583"
+    },
+    "socket_endpoint_r17.py": {
+      "bytes": 11135,
+      "git_blob_sha1": "70985768ce5f21e6f9152867819b036fd0f287f5",
+      "sha256": "5dfb35f9be3e40be854174720417166568848d8c8c18f64c9af9c13ceb676c6e"
+    },
+    "socket_endpoint_r17.rs": {
+      "bytes": 9759,
+      "git_blob_sha1": "391ab61dfaf95cab2852a540da0eded19db54d36",
+      "sha256": "9dc25e233d89ca0bb7d5566a36710ddaa481babb426ac8a0a96b26efd7ef835f"
+    },
+    "test_socket_endpoint_r17.py": {
+      "bytes": 12199,
+      "git_blob_sha1": "456fa5941b101764df1549da55543bdde6b2ddcd",
+      "sha256": "cec680eade950fc6b746fd95d0a952cdf0e1c10e5adf27a380820ddcc6d385d0"
+    }
+  },
+  "test_count": 32,
+  "tests_passed": 32
+}
