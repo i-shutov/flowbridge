@@ -1,3 +1,49 @@
+## Owner-approved limited beta — explicit SOCKS5 + supervised OpenSSH (2026-11-07)
+
+**Scope decision:** limited **SOCKS-only beta** is authorized; a transparent
+Windows WFP/ALE proof is a separately scheduled research track in
+`research/windows-wfp-ale-attribution-20261107` based on main. Research has
+no authority to alter PR #56, activate a driver/filter, or claim G2 acceptance.
+
+**Functional implementation:** Draft PR #56 includes `flowbridge serve-managed
+--config <profile.json>` in `flowbridge-cli`; initial functional commit
+`31b34a03c491d191885d75669f71968e1fa7eb5b`. This is one foreground
+user-owned Rust SOCKS5 listener with a supervised external OpenSSH `-D`
+upstream. Before binding the listener, the upstream gate is CLOSED. The gate
+opens only for a supervised ready SSH child and closes on observed loss.
+Initial connection rejection and reconnect do not substitute DIRECT.
+Shutdown independently attempts gate closure, Engine stop and SSH stop.
+
+**Enforced explicit-mode contract:**
+- Exact `RUST_MANAGED_SSH_SOCKS_CANDIDATE` consent and bounded strict JSON.
+- One local SOCKS5 hop at `127.0.0.1`; one default PROXY only, no DIRECT,
+  chains, app-specific rules, or implicit proxy authentication.
+- Explicit absolute SSH binary, key and pinned known_hosts paths; strict
+  host-key validation belongs to OpenSSH. Engine and SSH configuration must
+  independently validate. Maximum 128 concurrent SOCKS sessions.
+- Supplied SOCKS hostname targets remain hostnames through the proxy;
+  FlowBridge does not take ownership of independent application DNS.
+- Never claims OS interception, trusted originating PID, DNS/UDP/QUIC coverage,
+  protection against application bypass, system-wide physical no-DIRECT,
+  system kill-switch, or native WFP/NDISRD acceptance.
+
+**QA and release matrix:** code compilation/format/Clippy/unit tests and any
+real hosted SSH traffic are exact-source CI obligations, not automatically
+accepted on a pushed commit. Failed G2 ETW `kernel_connection_id_missing`
+and existing raw512 characterization remain separate OPEN/FAIL observations.
+G0 is OPEN until full exact-source CI and artifact provenance are reviewed;
+G1 10/10 stays historical **only on product `dd1ab3c`**; G2 is OPEN/NO-GO
+for per-NDISRD-frame PacketBound; G3–G6 require beta-scope-specific acceptance
+and remain OPEN. `release_accepted=false`,
+`native_response_digest_verified=false`, and
+`raw_backend_512_stability_proved=false`.
+
+No driver/native trial was run for the beta CLI change. Any future G2 native
+experiment still needs the original independent VNC, signed-driver, SYSTEM
+rescue, defender/firewall, exact-SHA and rollback gates.
+
+---
+
 ## G2 independent kernel connection evidence — 2026-11-06
 
 A new bounded no-driver collector (`tests/g2_etw_owner_probe.py`) replaces

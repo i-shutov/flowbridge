@@ -45,7 +45,9 @@ fn validate(profile: &ManagedProfile) -> AppResult<()> {
     .iter()
     .all(|path| path.is_some_and(|p| Path::new(p).is_absolute()))
     {
-        return Err("SSH executable, private key and pinned known_hosts must be absolute paths".into());
+        return Err(
+            "SSH executable, private key and pinned known_hosts must be absolute paths".into(),
+        );
     }
     let engine = &profile.engine;
     let ssh = &profile.ssh;
@@ -72,11 +74,7 @@ fn validate(profile: &ManagedProfile) -> AppResult<()> {
     Ok(())
 }
 
-async fn supervise(
-    engine: &Engine,
-    ssh: &Supervisor,
-    endpoint: &Endpoint,
-) -> AppResult<()> {
+async fn supervise(engine: &Engine, ssh: &Supervisor, endpoint: &Endpoint) -> AppResult<()> {
     let mut ready = false;
     let mut poll = tokio::time::interval(Duration::from_millis(50));
     loop {
