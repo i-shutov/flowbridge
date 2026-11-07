@@ -5,7 +5,15 @@ use std::{ffi::c_void,ptr,slice};
 use windows_sys::{core::GUID,Win32::{Foundation::HANDLE,NetworkManagement::WindowsFilteringPlatform::*}};
 use crate::policy_plan::{self,Family,Kind,Operations,Plan,PolicyError,Rule,RULES};
 const SUB:GUID=GUID::from_u128(0x1649f024_25b3_4e01_9ca1_5ca803010019);
-fn callout_key(f:Family)->GUID{GUID::from_u128(if f==Family::V4{0x1649f014_25b3_4e01_9ca1_5ca803010019}else{0x1649f016_25b3_4e01_9ca1_5ca803010019})}
+fn callout_key(r:Rule)->GUID{
+ let id:u128=match(r.kind,r.family){
+  (Kind::Redirect,Family::V4)=>0x1649f014_25b3_4e01_9ca1_5ca803010019,
+  (Kind::Redirect,Family::V6)=>0x1649f016_25b3_4e01_9ca1_5ca803010019,
+  (Kind::AttestOriginal,Family::V4)=>0x1649f018_25b3_4e01_9ca1_5ca803010019,
+  (Kind::AttestOriginal,Family::V6)=>0x1649f019_25b3_4e01_9ca1_5ca803010019,
+ };
+ GUID::from_u128(id)
+}
 fn filter_key(r:Rule)->GUID{let n=RULES.iter().position(|x|*x==r).expect("fixed rule");GUID::from_u128(0x1649f030_25b3_4e01_9ca1_5ca803010019+((n as u128)<<96))}
 fn redirect_layer(f:Family)->GUID{if f==Family::V4{FWPM_LAYER_ALE_CONNECT_REDIRECT_V4}else{FWPM_LAYER_ALE_CONNECT_REDIRECT_V6}}
 fn layer(r:Rule)->GUID{if r.kind==Kind::Redirect{redirect_layer(r.family)}else if r.family==Family::V4{FWPM_LAYER_ALE_AUTH_CONNECT_V4}else{FWPM_LAYER_ALE_AUTH_CONNECT_V6}}
@@ -34,27 +42,30 @@ impl Installed{
  /// The native harness must terminate selected test clients before teardown.
  pub fn close(self)->Result<(),PolicyError>{self.engine.close()}
 }
-fn conditions(r:Rule,p:&Plan,blob:&mut FWP_BYTE_BLOB,v6:&mut FWP_BYTE_ARRAY16)->Vec<FWPM_FILTER_CONDITION0>{
- blob.size=p.appid.len()as u32;blob.data=p.appid.as_ptr().cast_mut();
- let mut app=FWPM_FILTER_CONDITION0::default();app.fieldKey=FWPM_CONDITION_ALE_APP_ID;app.matchType=FWP_MATCH_EQUAL;
- app.conditionValue.r#type=FWP_BYTE_BLOB_TYPE;app.conditionValue.Anonymous.byteBlob=blob;
- let mut tcp=FWPM_FILTER_CONDITION0::default();tcp.fieldKey=FWPM_CONDITION_IP_PROTOCOL;tcp.matchType=FWP_MATCH_EQUAL;
- tcp.conditionValue.r#type=FWP_UINT8;tcp.conditionValue.Anonymous.uint8=6;let mut list=vec![app,tcp];
- if r.kind!=Kind::Redirect{
-  let mut c=FWPM_FILTER_CONDITION0::default();c.matchType=FWP_MATCH_NOT_EQUAL;
-  if r.kind==Kind::BlockWrongPort{c.fieldKey=FWPM_CONDITION_IP_REMOTE_PORT;c.conditionValue.r#type=FWP_UINT16;c.conditionValue.Anonymous.uint16=p.port(r.family);}
-  else{c.fieldKey=FWPM_CONDITION_IP_REMOTE_ADDRESS;
-   if r.family==Family::V4{c.conditionValue.r#type=FWP_UINT32;c.conditionValue.Anonymous.uint32=0x7f000001;}
-   else{v6.byteArray16=[0;16];v6.byteArray16[15]=1;c.conditionValue.r#type=FWP_BYTE_ARRAY16_TYPE;c.conditionValue.Anonymous.byteArray16=v6;}
-  }list.push(c);
- }list
+fn conditions(r:Rule,p:&Plan,blob:&mut FWP_BYTE_BLOB)->Vec<FWPM_FILTER_CONDITION0>{
+ blob.size=p.appid.len() as u32;blob.data=p.appid.as_ptr().cast_mut();
+ let mut app=FWPM_FILTER_CONDITION0::default();
+ // ORIGINAL_APP_ID is the selected originating application on proxied flows.
+ // Direct connections get the same ORIGINAL_APP_ID as ALE_APP_ID.
+ app.fieldKey=if r.kind==Kind::AttestOriginal{FWPM_CONDITION_ALE_ORIGINAL_APP_ID}
+     else{FWPM_CONDITION_ALE_APP_ID};
+ app.matchType=FWP_MATCH_EQUAL;app.conditionValue.r#type=FWP_BYTE_BLOB_TYPE;
+ app.conditionValue.Anonymous.byteBlob=blob;
+ let mut tcp=FWPM_FILTER_CONDITION0::default();
+ tcp.fieldKey=FWPM_CONDITION_IP_PROTOCOL;tcp.matchType=FWP_MATCH_EQUAL;
+ tcp.conditionValue.r#type=FWP_UINT8;tcp.conditionValue.Anonymous.uint8=6;
+ vec![app,tcp]
 }
 fn filter(r:Rule,c:&mut[FWPM_FILTER_CONDITION0],n:&mut[u16])->FWPM_FILTER0{
- let mut f=FWPM_FILTER0::default();f.filterKey=filter_key(r);f.subLayerKey=SUB;f.layerKey=layer(r);f.displayData.name=n.as_mut_ptr();f.weight.r#type=FWP_EMPTY;
- f.numFilterConditions=c.len()as u32;f.filterCondition=c.as_mut_ptr();
- // No PERMIT_IF_CALLOUT_UNREGISTERED, DISABLED, PERSISTENT, or global PERMIT.
- f.flags=0;f.action.r#type=if r.kind==Kind::Redirect{FWP_ACTION_CALLOUT_UNKNOWN}else{FWP_ACTION_BLOCK};
- if r.kind==Kind::Redirect{f.action.Anonymous.calloutKey=callout_key(r.family);}f
+ let mut f=FWPM_FILTER0::default();f.filterKey=filter_key(r);
+ f.subLayerKey=SUB;f.layerKey=layer(r);f.displayData.name=n.as_mut_ptr();
+ f.weight.r#type=FWP_EMPTY;f.numFilterConditions=c.len() as u32;
+ f.filterCondition=c.as_mut_ptr();f.flags=0;
+ // A block or permit decision is made by the actual native AUTH callback.
+ f.action.r#type=if r.kind==Kind::Redirect{FWP_ACTION_CALLOUT_UNKNOWN}
+     else{FWP_ACTION_CALLOUT_TERMINATING};
+ f.action.Anonymous.calloutKey=callout_key(r);
+ f
 }
 impl Operations for Engine{
  fn begin(&mut self)->Result<(),PolicyError>{unsafe{check(FwpmTransactionBegin0(self.handle,0),"begin")}}
@@ -62,8 +73,8 @@ impl Operations for Engine{
  fn commit(&mut self)->Result<(),PolicyError>{unsafe{check(FwpmTransactionCommit0(self.handle),"commit")}}
  fn sublayer(&mut self)->Result<(),PolicyError>{let mut s=FWPM_SUBLAYER0::default();let mut n=name();s.subLayerKey=SUB;s.displayData.name=n.as_mut_ptr();s.weight=0x7000;
   unsafe{check(FwpmSubLayerAdd0(self.handle,&s,ptr::null_mut()),"add_owned_sublayer")}}
- fn callout(&mut self,f:Family)->Result<(),PolicyError>{
-  let mut c=FWPM_CALLOUT0::default();let mut n=name();c.calloutKey=callout_key(f);c.applicableLayer=redirect_layer(f);c.displayData.name=n.as_mut_ptr();
+ fn callout(&mut self,r:Rule)->Result<(),PolicyError>{
+  let mut c=FWPM_CALLOUT0::default();let mut n=name();c.calloutKey=callout_key(r);c.applicableLayer=layer(r);c.displayData.name=n.as_mut_ptr();
   unsafe{check(FwpmCalloutAdd0(self.handle,&c,ptr::null_mut(),ptr::null_mut()),"add_owned_callout")?;
    let mut p=ptr::null_mut();let status=FwpmCalloutGetByKey0(self.handle,&c.calloutKey,&mut p);let owned=Owned(p);
    check(status,"query_runtime_registration")?;require(!owned.0.is_null(),"null_callout")?;
@@ -73,48 +84,61 @@ impl Operations for Engine{
   }
  }
  fn filter(&mut self,r:Rule,p:&Plan)->Result<(),PolicyError>{
-  let mut blob=FWP_BYTE_BLOB::default();let mut addr=FWP_BYTE_ARRAY16::default();let mut n=name();
-  let mut c=conditions(r,p,&mut blob,&mut addr);let f=filter(r,&mut c,&mut n);
+  let mut blob=FWP_BYTE_BLOB::default();let mut n=name();
+  let mut c=conditions(r,p,&mut blob);let f=filter(r,&mut c,&mut n);
   unsafe{check(FwpmFilterAdd0(self.handle,&f,ptr::null_mut(),ptr::null_mut()),"add_scoped_filter")}
  }
  fn verify(&mut self,r:Rule,plan:&Plan)->Result<(),PolicyError>{unsafe{
-  let mut raw=ptr::null_mut();let status=FwpmFilterGetByKey0(self.handle,&filter_key(r),&mut raw);let owned=Owned(raw);
-  check(status,"readback_filter")?;require(!owned.0.is_null(),"null_filter")?;let f=&*owned.0;
-  require(same(f.filterKey,filter_key(r))&&same(f.subLayerKey,SUB)&&same(f.layerKey,layer(r))&&f.flags==0,"filter_scope_changed")?;
-  require(f.action.r#type==if r.kind==Kind::Redirect{FWP_ACTION_CALLOUT_UNKNOWN}else{FWP_ACTION_BLOCK},"filter_action_changed")?;
-  if r.kind==Kind::Redirect{require(same(f.action.Anonymous.calloutKey,callout_key(r.family)),"wrong_callout")?;}
-  let count=if r.kind==Kind::Redirect{2}else{3};require(f.numFilterConditions==count&&!f.filterCondition.is_null(),"condition_count")?;
-  let cs=slice::from_raw_parts(f.filterCondition,count as usize);
-  let app=cs.iter().find(|c|same(c.fieldKey,FWPM_CONDITION_ALE_APP_ID)).ok_or(PolicyError("appid_condition_missing",0))?;
-  require(app.matchType==FWP_MATCH_EQUAL&&app.conditionValue.r#type==FWP_BYTE_BLOB_TYPE,"appid_condition_type")?;
+  let mut raw=ptr::null_mut();let status=FwpmFilterGetByKey0(self.handle,&filter_key(r),&mut raw);
+  let owned=Owned(raw);check(status,"readback_filter")?;
+  require(!owned.0.is_null(),"null_filter")?;let f=&*owned.0;
+  require(same(f.filterKey,filter_key(r))&&same(f.subLayerKey,SUB)
+      &&same(f.layerKey,layer(r))&&f.flags==0,"filter_scope_changed")?;
+  let expected_action=if r.kind==Kind::Redirect{FWP_ACTION_CALLOUT_UNKNOWN}
+      else{FWP_ACTION_CALLOUT_TERMINATING};
+  require(f.action.r#type==expected_action
+      &&same(f.action.Anonymous.calloutKey,callout_key(r)),"callout_action_changed")?;
+  require(f.numFilterConditions==2&&!f.filterCondition.is_null(),"condition_count")?;
+  let cs=slice::from_raw_parts(f.filterCondition,2);
+  let app=cs.iter().find(|c|same(c.fieldKey,
+      if r.kind==Kind::Redirect{FWPM_CONDITION_ALE_APP_ID}
+      else{FWPM_CONDITION_ALE_ORIGINAL_APP_ID}))
+      .ok_or(PolicyError("appid_condition_missing",0))?;
+  require(app.matchType==FWP_MATCH_EQUAL
+      &&app.conditionValue.r#type==FWP_BYTE_BLOB_TYPE,"appid_condition_type")?;
   let b=app.conditionValue.Anonymous.byteBlob;require(!b.is_null(),"null_appid")?;
   require((*b).size as usize==plan.appid.len()&&!(*b).data.is_null(),"appid_size")?;
   require(slice::from_raw_parts((*b).data,(*b).size as usize)==plan.appid,"appid_changed")?;
-  let tcp=cs.iter().find(|c|same(c.fieldKey,FWPM_CONDITION_IP_PROTOCOL)).ok_or(PolicyError("tcp_missing",0))?;
-  require(tcp.matchType==FWP_MATCH_EQUAL&&tcp.conditionValue.r#type==FWP_UINT8&&tcp.conditionValue.Anonymous.uint8==6,"tcp_changed")?;
-  if r.kind!=Kind::Redirect{
-   let key=if r.kind==Kind::BlockWrongPort{FWPM_CONDITION_IP_REMOTE_PORT}else{FWPM_CONDITION_IP_REMOTE_ADDRESS};
-   let c=cs.iter().find(|c|same(c.fieldKey,key)).ok_or(PolicyError("auth_condition_missing",0))?;require(c.matchType==FWP_MATCH_NOT_EQUAL,"auth_match_changed")?;
-   let good=if r.kind==Kind::BlockWrongPort{c.conditionValue.r#type==FWP_UINT16&&c.conditionValue.Anonymous.uint16==plan.port(r.family)}
-    else if r.family==Family::V4{c.conditionValue.r#type==FWP_UINT32&&c.conditionValue.Anonymous.uint32==0x7f000001}
-    else{let a=c.conditionValue.Anonymous.byteArray16;c.conditionValue.r#type==FWP_BYTE_ARRAY16_TYPE&&!a.is_null()&&(*a).byteArray16==[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1]};
-   require(good,"auth_destination_changed")?;
-  }Ok(())
+  let tcp=cs.iter().find(|c|same(c.fieldKey,FWPM_CONDITION_IP_PROTOCOL))
+      .ok_or(PolicyError("tcp_missing",0))?;
+  require(tcp.matchType==FWP_MATCH_EQUAL
+      &&tcp.conditionValue.r#type==FWP_UINT8
+      &&tcp.conditionValue.Anonymous.uint8==6,"tcp_changed")?;
+  Ok(())
  }}
 }
 /// Constructs the same FWP objects as the installer without opening a BFE session.
 pub fn verify_plan_only(p:&Plan)->Result<(),PolicyError>{
- for r in RULES{let mut blob=FWP_BYTE_BLOB::default();let mut a=FWP_BYTE_ARRAY16::default();let mut n=name();let mut c=conditions(r,p,&mut blob,&mut a);let f=filter(r,&mut c,&mut n);
-  require(f.flags==0&&f.numFilterConditions>=2&&same(f.layerKey,layer(r)),"plan_invalid")?;
-  require(f.action.r#type!=FWP_ACTION_PERMIT,"unintended_permit")?;
-  require(same(c[0].fieldKey,FWPM_CONDITION_ALE_APP_ID)&&c[0].matchType==FWP_MATCH_EQUAL,"unscoped_filter")?;
-  if r.kind==Kind::BlockWrongPort{unsafe{require(c[2].conditionValue.Anonymous.uint16==p.port(r.family),"port_wrong")?;}}
- }Ok(())
+ for r in RULES{
+  let mut blob=FWP_BYTE_BLOB::default();let mut n=name();
+  let mut c=conditions(r,p,&mut blob);let f=filter(r,&mut c,&mut n);
+  let expected_action=if r.kind==Kind::Redirect{FWP_ACTION_CALLOUT_UNKNOWN}
+      else{FWP_ACTION_CALLOUT_TERMINATING};
+  require(f.flags==0&&f.numFilterConditions==2&&same(f.layerKey,layer(r))
+      &&f.action.r#type==expected_action
+      &&same(f.action.Anonymous.calloutKey,callout_key(r)),"plan_invalid")?;
+  require(same(c[0].fieldKey,
+      if r.kind==Kind::Redirect{FWPM_CONDITION_ALE_APP_ID}
+      else{FWPM_CONDITION_ALE_ORIGINAL_APP_ID})
+      &&c[0].matchType==FWP_MATCH_EQUAL,"unscoped_filter")?;
+ }
+ Ok(())
 }
 #[cfg(test)]mod tests{
  use super::*;
  #[test]fn actual_win32_plan_is_scoped_and_nonpermissive(){let p=Plan::new(&[97,0,0,0],[1091,1092]).unwrap();verify_plan_only(&p).unwrap();}
  #[test]fn all_filter_keys_unique(){for(i,a)in RULES.iter().enumerate(){for b in &RULES[i+1..]{assert!(!same(filter_key(*a),filter_key(*b)));}}}
  #[test]fn guid_comparison_checks_every_field(){let a=SUB;assert!(same(a,a));for i in 0..4{let mut b=a;match i{0=>b.data1^=1,1=>b.data2^=1,2=>b.data3^=1,_=>b.data4[7]^=1};assert!(!same(a,b));}}
- #[test]fn static_kernel_callout_keys_match_r19(){assert_eq!(callout_key(Family::V4).data1,0x1649f014);assert_eq!(callout_key(Family::V6).data1,0x1649f016);}
+ #[test]fn auth_filter_needs_kernel_provenance(){for family in [Family::V4,Family::V6]{let r=Rule{family,kind:Kind::AttestOriginal};let p=Plan::new(&[97,0,0,0],[1091,1092]).unwrap();let mut blob=FWP_BYTE_BLOB::default();let mut n=name();let mut c=conditions(r,&p,&mut blob);let f=filter(r,&mut c,&mut n);assert_eq!(f.action.r#type,FWP_ACTION_CALLOUT_TERMINATING);assert_eq!(f.numFilterConditions,2);assert!(same(c[0].fieldKey,FWPM_CONDITION_ALE_ORIGINAL_APP_ID));}}
+ #[test]fn static_kernel_callout_keys_match_r19(){assert_eq!(callout_key(Rule{kind:Kind::Redirect,family:Family::V4}).data1,0x1649f014);assert_eq!(callout_key(Rule{kind:Kind::Redirect,family:Family::V6}).data1,0x1649f016);assert_eq!(callout_key(Rule{kind:Kind::AttestOriginal,family:Family::V4}).data1,0x1649f018);assert_eq!(callout_key(Rule{kind:Kind::AttestOriginal,family:Family::V6}).data1,0x1649f019);}
 }

@@ -21,6 +21,9 @@ enum {
  FB_CREATE_FLAGS = sizeof(SIZE_T),
  FB_VALUE_TYPE = offsetof(FWPS_INCOMING_VALUE0, value.type),
  FB_VALUE_U8 = offsetof(FWPS_INCOMING_VALUE0, value.uint8),
+ FB_VALUE_U16 = offsetof(FWPS_INCOMING_VALUE0, value.uint16),
+ FB_VALUE_U32 = offsetof(FWPS_INCOMING_VALUE0, value.uint32),
+ FB_VALUE_V6 = offsetof(FWPS_INCOMING_VALUE0, value.byteArray16),
  FB_VALUE_BLOB = offsetof(FWPS_INCOMING_VALUE0, value.byteBlob),
  FB_WITNESS_IOCTL = CTL_CODE(FILE_DEVICE_UNKNOWN, 0x900, METHOD_BUFFERED, FILE_READ_DATA)
 };

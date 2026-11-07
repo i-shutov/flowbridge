@@ -55,8 +55,8 @@ impl Context {
     }
 }
 #[derive(Clone, Copy)]
-struct Slot { context:Context, live:bool }
-impl Slot { const EMPTY:Self=Self{context:Context::EMPTY,live:false}; }
+struct Slot { context:Context, live:bool, auth_seen:bool }
+impl Slot { const EMPTY:Self=Self{context:Context::EMPTY,live:false,auth_seen:false}; }
 pub struct Book { session:[u8;16], slots:[Slot;CAP], sequence:u64, pub lost:bool }
 impl Book {
     pub const fn new()->Self {Self{session:[0;16],slots:[Slot::EMPTY;CAP],sequence:0,lost:false}}
@@ -69,6 +69,9 @@ impl Book {
             || [origin.pid,origin.epoch,origin.key,origin.endpoint,origin.generation].contains(&0) {return None;}
         // Expired records are retired, never reissued with the same sequence.
         for s in &mut self.slots {if s.live && now.saturating_sub(s.context.number(96))>TTL{s.live=false;}}
+        // A live endpoint may have only one active redirect ticket; never
+        // guess which origin a second AUTH indication belongs to.
+        if self.slots.iter().any(|s| s.live && s.context.number(56)==origin.endpoint){self.lost=true;return None;}
         let index=self.slots.iter().position(|s|!s.live)?;
         self.sequence=match self.sequence.checked_add(1){Some(n)=>n,None=>{self.lost=true;return None;}};
         let mut c=Context::EMPTY;c.0[..8].copy_from_slice(b"FBR3\x01\x00\x80\x00");
@@ -77,14 +80,32 @@ impl Book {
                        (56,origin.endpoint),(64,origin.generation),(96,now)]{c.put(at,n);}
         c.0[72]=destination.family;c.0[73]=6;c.0[74..76].copy_from_slice(&destination.port.to_be_bytes());
         c.0[80..96].copy_from_slice(&destination.ip);
-        self.slots[index]=Slot{context:c,live:true};Some(c)
+        self.slots[index]=Slot{context:c,live:true,auth_seen:false};Some(c)
+    }
+    /// Authorization must come from the *same native ALE_AUTH_CONNECT* classify,
+    /// not from a user-mode TCP table or an arbitrary supplied receipt.
+    pub fn attest(&mut self, origin:Origin, destination:Destination, now:u64)->bool {
+        if self.lost || now==0 || !destination.valid(){return false;}
+        let mut found=None;
+        for (idx,slot) in self.slots.iter().enumerate(){
+            if slot.live && slot.context.matches_origin(origin) && slot.context.destination()==destination {
+                if found.is_some(){self.lost=true;return false;}
+                found=Some(idx);
+            }
+        }
+        let Some(idx)=found else{return false;};
+        let slot=&mut self.slots[idx];
+        let when=slot.context.number(96);
+        if slot.auth_seen || now<when || now-when>TTL{return false;}
+        slot.auth_seen=true;
+        true
     }
     pub fn retire(&mut self, context:Context) {for s in &mut self.slots{if s.live && s.context==context{s.live=false;}}}
     pub fn take(&mut self, context:Context, now:u64)->Option<Context> {
         if self.lost || context.0[8..24]!=self.session {return None;}
         let s=self.slots.iter_mut().find(|s|s.live && s.context.number(24)==context.number(24))?;
-        s.live=false; // terminal even on wrong context/expired origin; never repair/retry
-        if s.context!=context || now<context.number(96) || now-context.number(96)>TTL{return None;}
+        s.live=false; // terminal even on failed, unauthenticated or replayed claim
+        if !s.auth_seen || s.context!=context || now<context.number(96) || now-context.number(96)>TTL{return None;}
         Some(context)
     }
     pub fn kill(&mut self) {self.lost=true;for s in &mut self.slots{s.live=false;}}
@@ -97,16 +118,22 @@ mod tests {
     fn book()->Book{let mut b=Book::new();assert!(b.initialize([1;16]));b}
     #[test]fn wire_roundtrip_both_families(){let mut b=book();for f in [4,6]{let mut dest=d();dest.family=f;if f==6{dest.ip=[0;16];dest.ip[15]=1;}
         let c=b.issue(o(),dest,1).unwrap();assert!(Context::parse(&c.0).is_some());assert!(c.destination()==dest);assert!(c.matches_origin(o()));}}
-    #[test]fn claim_is_single_use(){let mut b=book();let c=b.issue(o(),d(),1).unwrap();assert!(b.take(c,2).is_some());assert!(b.take(c,2).is_none());}
-    #[test]fn repaired_failed_claim_not_accepted(){let mut b=book();let c=b.issue(o(),d(),1).unwrap();let mut wrong=c;wrong.0[80]^=1;
+    #[test]fn claim_is_single_use(){let mut b=book();let c=b.issue(o(),d(),1).unwrap();assert!(b.attest(o(),d(),2));assert!(b.take(c,2).is_some());assert!(b.take(c,2).is_none());}
+    #[test]fn repaired_failed_claim_not_accepted(){let mut b=book();let c=b.issue(o(),d(),1).unwrap();let mut wrong=c;wrong.0[80]^=1;assert!(b.attest(o(),d(),2));
         assert!(b.take(wrong,2).is_none());assert!(b.take(c,2).is_none());}
     #[test]fn old_context_does_not_survive_slot_reuse(){let mut b=book();let c=b.issue(o(),d(),1).unwrap();b.retire(c);let n=b.issue(o(),d(),2).unwrap();
-        assert!(c!=n);assert!(b.take(c,3).is_none());assert!(b.take(n,3).is_some());}
+        assert!(c!=n);assert!(b.attest(o(),d(),3));assert!(b.take(c,3).is_none());assert!(b.take(n,3).is_some());}
     #[test]fn foreign_session_does_not_consume(){let mut b=book();let c=b.issue(o(),d(),1).unwrap();let mut x=c;x.0[8]^=1;
-        assert!(b.take(x,2).is_none());assert!(b.take(c,2).is_some());}
-    #[test]fn expired_and_clock_reversed_denied(){for t in [0,TTL+2]{let mut b=book();let c=b.issue(o(),d(),1).unwrap();assert!(b.take(c,t).is_none());}}
+        assert!(b.attest(o(),d(),2));assert!(b.take(x,2).is_none());assert!(b.take(c,2).is_some());}
+    #[test]fn expired_and_clock_reversed_denied(){for t in [0,TTL+2]{let mut b=book();let c=b.issue(o(),d(),1).unwrap();let _=b.attest(o(),d(),2);assert!(b.take(c,t).is_none());}}
     #[test]fn queue_bound_and_loss_never_promote(){let mut b=book();for _ in 0..CAP{assert!(b.issue(o(),d(),1).is_some());}assert!(b.issue(o(),d(),1).is_none());b.kill();assert!(b.issue(o(),d(),1).is_none());}
     #[test]fn malformed_protocol_scope_reserved_length(){let c=book().issue(o(),d(),1).unwrap();for at in [0,4,6,73,76,104]{let mut x=c;x.0[at]^=1;assert!(Context::parse(&x.0).is_none());}assert!(Context::parse(&c.0[..127]).is_none());}
     #[test]fn no_zero_identity(){let mut b=book();let mut x=o();x.epoch=0;assert!(b.issue(x,d(),1).is_none());x=o();x.key=0;assert!(b.issue(x,d(),1).is_none());}
+    #[test]fn no_auth_receipt_claim_fails_closed(){let mut b=book();let c=b.issue(o(),d(),1).unwrap();assert!(b.take(c,2).is_none());assert!(!b.attest(o(),d(),3));}
+    #[test]fn foreign_origin_endpoint_cannot_attest(){let mut b=book();let c=b.issue(o(),d(),1).unwrap();let mut other=o();other.endpoint=11;
+      assert!(!b.attest(other,d(),2));other=o();other.epoch=999;assert!(!b.attest(other,d(),2));
+      let mut other_dst=d();other_dst.port=444;assert!(!b.attest(o(),other_dst,2));assert!(b.attest(o(),d(),2));assert!(b.take(c,2).is_some());}
+    #[test]fn duplicated_endpoint_latches_loss(){let mut b=book();b.issue(o(),d(),1).unwrap();assert!(b.issue(o(),d(),2).is_none());assert!(b.lost);}
+    #[test]fn auth_replay_denied(){let mut b=book();b.issue(o(),d(),1).unwrap();assert!(b.attest(o(),d(),2));assert!(!b.attest(o(),d(),3));}
     #[test]fn no_scope_multicast_unspecified_or_mapped(){let mut dest=d();dest.ip=[0;16];assert!(!dest.valid());dest.ip[0]=224;assert!(!dest.valid());dest.family=6;dest.ip[0]=0xff;assert!(!dest.valid());dest.ip=[0;16];dest.ip[0]=0xfe;dest.ip[1]=0x80;assert!(!dest.valid());}
 }

@@ -18,7 +18,7 @@ static STOP: AtomicBool = AtomicBool::new(false);
 static mut LOCK: k::KSPIN_LOCK = 0;
 static mut RUNDOWN: k::EX_RUNDOWN_REF = unsafe { mem::zeroed() };
 static mut DEVICE: *mut k::DEVICE_OBJECT = ptr::null_mut();
-static mut IDS: [u32;2] = [0;2];
+static mut IDS: [u32;4] = [0;4];
 static mut PROCESS_NOTIFY: bool = false;
 static mut LINK_CREATED: bool = false;
 const SUCCESS:i32=0;
@@ -30,6 +30,8 @@ const EMPTY:i32=0x8000001Au32 as i32;
 const GUARD_GUID:k::GUID=k::GUID{Data1:0x1649f013,Data2:0x25b3,Data3:0x4e01,Data4:[0x9c,0xa1,0x5c,0xa8,0x03,0x01,0x00,0x19]};
 const V4_GUID:k::GUID=k::GUID{Data1:0x1649f014,Data2:0x25b3,Data3:0x4e01,Data4:[0x9c,0xa1,0x5c,0xa8,0x03,0x01,0x00,0x19]};
 const V6_GUID:k::GUID=k::GUID{Data1:0x1649f016,Data2:0x25b3,Data3:0x4e01,Data4:[0x9c,0xa1,0x5c,0xa8,0x03,0x01,0x00,0x19]};
+const AUTH_V4_GUID:k::GUID=k::GUID{Data1:0x1649f018,Data2:0x25b3,Data3:0x4e01,Data4:[0x9c,0xa1,0x5c,0xa8,0x03,0x01,0x00,0x19]};
+const AUTH_V6_GUID:k::GUID=k::GUID{Data1:0x1649f019,Data2:0x25b3,Data3:0x4e01,Data4:[0x9c,0xa1,0x5c,0xa8,0x03,0x01,0x00,0x19]};
 const fn wide<const N:usize>(s:&[u8])->[u16;N]{let mut v=[0;N];let mut i=0;while i<s.len(){v[i]=s[i] as u16;i+=1;}v}
 const DEV:[u16;31]=wide(b"\\Device\\FlowBridgeG2WitnessR19");
 const LINK:[u16;35]=wide(b"\\DosDevices\\FlowBridgeG2WitnessR19");
@@ -84,6 +86,18 @@ unsafe extern "C" fn classify(values:*const k::FWPS_INCOMING_VALUES0,meta:*const
     if STOP.load(Ordering::Acquire){if !out.is_null(){(*out).actionType=k::FWP_ACTION_BLOCK;(*out).rights&=!k::FWPS_RIGHT_ACTION_WRITE;}return;}
     redirect::classify(values,meta,_context,_filter,out);
 }
+unsafe extern "C" fn auth_callback(values:*const k::FWPS_INCOMING_VALUES0,meta:*const k::FWPS_INCOMING_METADATA_VALUES0,
+    _layer:*mut c_void,_context:*const c_void,_filter:*const k::FWPS_FILTER1,_flow:u64,out:*mut k::FWPS_CLASSIFY_OUT0) {
+    let Some(_active)=Active::enter() else {
+        if !out.is_null(){(*out).actionType=k::FWP_ACTION_BLOCK;(*out).rights&=!k::FWPS_RIGHT_ACTION_WRITE;}
+        return;
+    };
+    if STOP.load(Ordering::Acquire){
+        if !out.is_null(){(*out).actionType=k::FWP_ACTION_BLOCK;(*out).rights&=!k::FWPS_RIGHT_ACTION_WRITE;}
+        return;
+    }
+    redirect::auth_classify(values,meta,out);
+}
 unsafe extern "C" fn notify(_ty:k::FWPS_CALLOUT_NOTIFY_TYPE,_key:*const k::GUID,_filter:*mut k::FWPS_FILTER1)->i32{SUCCESS}
 
 unsafe fn complete(irp:*mut k::IRP,status:i32,bytes:usize)->i32 {
@@ -118,7 +132,7 @@ unsafe extern "C" fn dispatch(_dev:*mut k::DEVICE_OBJECT,irp:*mut k::IRP)->i32 {
 }
 unsafe fn cleanup(){
     STOP.store(true,Ordering::Release);
-    for i in 0..2 {if IDS[i]!=0{let status=k::FwpsCalloutUnregisterById0(IDS[i]);if status<0{k::KeBugCheckEx(0xE2,0x47323139,status as k::ULONG_PTR,1,0);}IDS[i]=0;}}
+    for i in 0..4 {if IDS[i]!=0{let status=k::FwpsCalloutUnregisterById0(IDS[i]);if status<0{k::KeBugCheckEx(0xE2,0x47323139,status as k::ULONG_PTR,1,0);}IDS[i]=0;}}
     if PROCESS_NOTIFY {let status=k::PsSetCreateProcessNotifyRoutineEx(Some(process_event),1);if status<0{k::KeBugCheckEx(0xE2,0x47323139,status as k::ULONG_PTR,2,0);}PROCESS_NOTIFY=false;}
     k::ExWaitForRundownProtectionRelease(ptr::addr_of_mut!(RUNDOWN));
     redirect::destroy();
@@ -148,9 +162,10 @@ pub unsafe extern "C" fn DriverEntry(driver:*mut k::DRIVER_OBJECT,_path:*const k
     if status<0{cleanup();return status;}LINK_CREATED=true;
     let status=k::PsSetCreateProcessNotifyRoutineEx(Some(process_event),0);
     if status<0{cleanup();return status;}PROCESS_NOTIFY=true;
-    for i in 0..2 {
+    for i in 0..4 {
         let mut call:k::FWPS_CALLOUT1=mem::zeroed();
-        call.calloutKey=if i==0{V4_GUID}else{V6_GUID};call.classifyFn=Some(classify);call.notifyFn=Some(notify);
+        call.calloutKey=match i {0=>V4_GUID,1=>V6_GUID,2=>AUTH_V4_GUID,_=>AUTH_V6_GUID};
+        call.classifyFn=Some(if i<2{classify}else{auth_callback});call.notifyFn=Some(notify);
         let status=k::FwpsCalloutRegister1(DEVICE.cast(),&call,&mut IDS[i]);
         if status<0{cleanup();return status;}
     }

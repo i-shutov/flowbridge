@@ -129,3 +129,111 @@ pub unsafe fn classify(values:*const k::FWPS_INCOMING_VALUES0,meta:*const k::FWP
  (*out).actionType=k::FWP_ACTION_PERMIT;(*out).rights|=incoming_write;
  drop(w);
 }
+
+
+/// The AUTH_CONNECT leg proves a candidate receipt originated from a real
+/// redirected ALE flow, not merely that its remote IP equals the local proxy.
+/// This callout is invoked by an exact selected-original-AppId TCP filter,
+/// unlike the old R24 static AUTH_CONNECT address/port blocks.
+/// ALL missing/ambiguous metadata fails closed; no tuple/PID time correlation.
+pub unsafe fn auth_classify(
+    values:*const k::FWPS_INCOMING_VALUES0,
+    meta:*const k::FWPS_INCOMING_METADATA_VALUES0,
+    out:*mut k::FWPS_CLASSIFY_OUT0,
+) {
+    if out.is_null(){return;}
+    if (*out).rights & k::FWPS_RIGHT_ACTION_WRITE == 0 {
+        // Never create an unauthorized PERMIT without an action-write right.
+        block(out);return;
+    }
+    if !auth_check(values,meta){block(out);return;}
+    (*out).actionType=k::FWP_ACTION_PERMIT;
+    (*out).rights &= !k::FWPS_RIGHT_ACTION_WRITE;
+}
+
+unsafe fn auth_check(values:*const k::FWPS_INCOMING_VALUES0,meta:*const k::FWPS_INCOMING_METADATA_VALUES0)->bool{
+    if values.is_null()||meta.is_null(){return false;}
+    let f=&*values;let m=&*meta;
+    let (family,flags,proto,app,original,remote_ip,remote_port)=
+        if f.layerId as i32==k::FWPS_LAYER_ALE_AUTH_CONNECT_V4{
+            (4u8,k::FWPS_FIELD_ALE_AUTH_CONNECT_V4_FLAGS as usize,
+                k::FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_PROTOCOL as usize,
+                k::FWPS_FIELD_ALE_AUTH_CONNECT_V4_ALE_APP_ID as usize,
+                k::FWPS_FIELD_ALE_AUTH_CONNECT_V4_ALE_ORIGINAL_APP_ID as usize,
+                k::FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_REMOTE_ADDRESS as usize,
+                k::FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_REMOTE_PORT as usize)
+        } else if f.layerId as i32==k::FWPS_LAYER_ALE_AUTH_CONNECT_V6{
+            (6u8,k::FWPS_FIELD_ALE_AUTH_CONNECT_V6_FLAGS as usize,
+                k::FWPS_FIELD_ALE_AUTH_CONNECT_V6_IP_PROTOCOL as usize,
+                k::FWPS_FIELD_ALE_AUTH_CONNECT_V6_ALE_APP_ID as usize,
+                k::FWPS_FIELD_ALE_AUTH_CONNECT_V6_ALE_ORIGINAL_APP_ID as usize,
+                k::FWPS_FIELD_ALE_AUTH_CONNECT_V6_IP_REMOTE_ADDRESS as usize,
+                k::FWPS_FIELD_ALE_AUTH_CONNECT_V6_IP_REMOTE_PORT as usize)
+        }else{return false};
+    if f.incomingValue.is_null()
+        || [flags,proto,app,original,remote_ip,remote_port].iter()
+            .any(|&i|i >= f.valueCount as usize){return false;}
+    let needed = k::FWPS_METADATA_FIELD_PROCESS_ID
+        |k::FWPS_METADATA_FIELD_TRANSPORT_ENDPOINT_HANDLE
+        |k::FWPS_METADATA_FIELD_LOCAL_REDIRECT_TARGET_PID
+        |k::FWPS_METADATA_FIELD_ORIGINAL_DESTINATION;
+    if m.currentMetadataValues & needed != needed
+        || m.transportEndpointHandle==0 || m.processId==0
+        || m.originalDestination.is_null() {return false;}
+    // From official Microsoft documentation, NOT inferred from a loopback IP:
+    // IS_CONNECTION_REDIRECTED=0x00100000,
+    // REAUTHORIZE=0x00000004, HONORING_POLICY_AUTHORIZE=0x02000000.
+    let fv=f.incomingValue.add(flags).cast::<c_void>();
+    if read_at::<i32>(fv,k::FB_VALUE_TYPE)!=k::FWP_UINT32{return false;}
+    let bits:u32=read_at(fv,k::FB_VALUE_U32);
+    if bits & 0x0010_0000==0 || bits & (0x0000_0004|0x0200_0000)!=0{return false;}
+    let pv=f.incomingValue.add(proto).cast::<c_void>();
+    if read_at::<i32>(pv,k::FB_VALUE_TYPE)!=k::FWP_UINT8
+        || read_at::<u8>(pv,k::FB_VALUE_U8)!=6{return false;}
+    let port_value=f.incomingValue.add(remote_port).cast::<c_void>();
+    if read_at::<i32>(port_value,k::FB_VALUE_TYPE)!=k::FWP_UINT16{return false;}
+    let actual_port:u16=read_at(port_value,k::FB_VALUE_U16);
+    let remote=f.incomingValue.add(remote_ip).cast::<c_void>();
+    let loopback=if family==4{
+        read_at::<i32>(remote,k::FB_VALUE_TYPE)==k::FWP_UINT32
+            && read_at::<u32>(remote,k::FB_VALUE_U32)==0x7f000001
+    }else{
+        if read_at::<i32>(remote,k::FB_VALUE_TYPE)!=k::FWP_BYTE_ARRAY16_TYPE{false}
+        else{
+            let p:*const k::FWP_BYTE_ARRAY16=read_at(remote,k::FB_VALUE_V6);
+            !p.is_null()&&(*p).byteArray16==[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1]
+        }
+    };
+    if !loopback{return false;}
+    let appval=f.incomingValue.add(app).cast::<c_void>();
+    let origval=f.incomingValue.add(original).cast::<c_void>();
+    if read_at::<i32>(appval,k::FB_VALUE_TYPE)!=k::FWP_BYTE_BLOB_TYPE
+        || read_at::<i32>(origval,k::FB_VALUE_TYPE)!=k::FWP_BYTE_BLOB_TYPE{return false;}
+    let raw_app:*const k::FWP_BYTE_BLOB=read_at(appval,k::FB_VALUE_BLOB);
+    let raw_orig:*const k::FWP_BYTE_BLOB=read_at(origval,k::FB_VALUE_BLOB);
+    if raw_app.is_null()||raw_orig.is_null()||(*raw_orig).data.is_null()
+        || (*raw_orig).size<2||(*raw_orig).size>514||(*raw_orig).size%2!=0{return false;}
+    let mut orig=slice::from_raw_parts((*raw_orig).data,(*raw_orig).size as usize);
+    if orig.ends_with(&[0,0]){orig=&orig[..orig.len()-2];}
+    // Some WFP paths provide ALE_APP_ID as broker or original. It must at least
+    // exist and be well-formed, but ORIGINAL_APP_ID is our explicit selected key.
+    if (*raw_app).data.is_null()||(*raw_app).size<2||(*raw_app).size>514
+        || (*raw_app).size%2!=0{return false;}
+    let socklen=if family==4{16}else{28};
+    // The trusted WFP pointer denotes SOCKADDR / SOCKADDR_IN6. Read only its
+    // family-specific length, not an assumed 128-byte backing allocation.
+    let mut storage=[0u8;128];
+    ptr::copy_nonoverlapping(m.originalDestination.cast::<u8>(),storage.as_mut_ptr(),socklen);
+    let Some(original_destination)=destination(&storage,family)else{return false};
+    let _guard=Guard::take();
+    if !ready(now()){return false;}
+    let route=&mut *ROUTE.0.get();
+    if orig!=&route.name[..route.len]
+        || m.localRedirectTargetPID!=route.pid as u32
+        || actual_port != route.ports[if family==4{0}else{1}] {return false;}
+    let Some((owner,generation))=(*STATE.0.get()).lookup(m.processId)else{return false};
+    if owner.name[..owner.name_len]!=route.name[..route.len]{return false;}
+    let identity=Origin{pid:owner.pid,epoch:owner.epoch,key:owner.start_key,
+        endpoint:m.transportEndpointHandle,generation};
+    route.book.attest(identity,original_destination,now())
+}
