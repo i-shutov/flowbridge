@@ -46,6 +46,8 @@ class ResearchGate:
         self.session = session
         self.live: dict[int, Owner] = {}
         self.poisoned: set[int] = set()
+        self.seen_generations: dict[int, set[int]] = {}
+        self.seen_epochs: dict[int, set[int]] = {}
         self.poisoned_endpoints: set[int] = set()
         self.redirects: dict[int, Redirect] = {}
         self.auth: dict[int, Authorization] = {}
@@ -56,17 +58,40 @@ class ResearchGate:
         self.active_callout = True
         self.ssh_ready = True
 
+    def _revoke_pid_state(self, pid: int) -> None:
+        # A classification or AUTH observation must not survive its owner.
+        # Numeric endpoint handles are lifetime-scoped; poison them on exit.
+        for ticket, request in tuple(self.redirects.items()):
+            if request.pid == pid:
+                self.retired.add(ticket)
+                self.poisoned_endpoints.add(request.endpoint)
+                self.redirects.pop(ticket)
+        for endpoint, event in tuple(self.auth.items()):
+            if event.pid == pid:
+                self.poisoned_endpoints.add(endpoint)
+                self.auth.pop(endpoint)
+
     def start_process(self, owner: Owner) -> str:
         if owner.pid <= 0 or owner.generation <= 0 or owner.epoch <= 0 or not owner.referenced or not owner.app_id or not owner.exe_identity:
             return 'INVALID_OWNER'
         if owner.pid in self.live or owner.pid in self.poisoned:
             # Overlapping/unknown generation permanently poisons this PID for this session.
             self.poisoned.add(owner.pid)
-            for ticket, request in tuple(self.redirects.items()):
-                if request.pid == owner.pid:
-                    self.retired.add(ticket)
-                    self.redirects.pop(ticket)
+            self._revoke_pid_state(owner.pid)
             return 'AMBIGUOUS_OWNER'
+        if owner.generation in self.seen_generations.get(owner.pid, set()):
+            # A reused generation number may alias a *different* creation epoch.
+            # The callback's generation is assumed, not a Windows-provided field.
+            self.poisoned.add(owner.pid)
+            self._revoke_pid_state(owner.pid)
+            return 'REUSED_GENERATION'
+        if owner.epoch in self.seen_epochs.get(owner.pid, set()):
+            # Same numeric epoch is ambiguous, even with a new generation.
+            self.poisoned.add(owner.pid)
+            self._revoke_pid_state(owner.pid)
+            return 'REUSED_EPOCH'
+        self.seen_generations.setdefault(owner.pid, set()).add(owner.generation)
+        self.seen_epochs.setdefault(owner.pid, set()).add(owner.epoch)
         self.live[owner.pid] = owner
         return 'REGISTERED_MODEL'
 
@@ -75,16 +100,10 @@ class ResearchGate:
         if owner is None or owner.generation != generation:
             # Missing/out-of-order exit poisons PID; never silently trust it.
             self.poisoned.add(pid)
-            for ticket, request in tuple(self.redirects.items()):
-                if request.pid == pid:
-                    self.retired.add(ticket)
-                    self.redirects.pop(ticket)
+            self._revoke_pid_state(pid)
             return 'STALE_EXIT'
         del self.live[pid]
-        for ticket, request in tuple(self.redirects.items()):
-            if request.pid == pid and request.generation == generation:
-                self.retired.add(ticket)
-                self.redirects.pop(ticket)
+        self._revoke_pid_state(pid)
         return 'REVOKED_MODEL'
 
     def classify(self, request: Redirect) -> str:
@@ -204,8 +223,8 @@ def tests():
     # Same PID and same apparent epoch: unique generation is mandatory.
     g,o,r,e=baseline()
     eq(g.stop_process(501,1),'REVOKED_MODEL')
-    eq(g.start_process(Owner(501,2,901,b'ntpath:A',b'file-object:A',True)),'REGISTERED_MODEL')
-    eq(g.classify(r),'UNBOUND_OWNER')
+    eq(g.start_process(Owner(501,2,901,b'ntpath:A',b'file-object:A',True)),'REUSED_EPOCH')
+    eq(g.classify(r),'AMBIGUOUS_ENDPOINT')
     # Identical tuple can be recycled; no ticket replay.
     g,o,r,e=baseline()
     eq(g.classify(r),'REPLAY')
