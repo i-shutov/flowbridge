@@ -45,7 +45,9 @@ def terminate(process, privileged=False):
 def run(test_binary):
     if os.name!='posix' or os.geteuid()==0: raise FixtureError('unprivileged_linux_required')
     if not Path('/usr/sbin/sshd').is_file(): raise FixtureError('sshd_executable_missing')
-    with tempfile.TemporaryDirectory(prefix='fb-r23-ssh-') as directory:
+    # StrictModes checks the entire authorized-key directory chain, not only the leaf.
+    # Use the existing private home, never a world-writable /tmp ancestor.
+    with tempfile.TemporaryDirectory(prefix='.fb-r23-ssh-',dir=Path.home()) as directory:
         root=Path(directory);os.chmod(root,0o700);sshd_port=port();socks_port=port()
         if sshd_port==socks_port: raise FixtureError('fixture_port_collision')
         user=pwd.getpwuid(os.getuid()).pw_name
