@@ -1,0 +1,315 @@
+[
+  {
+    "name": "inline_passive_candidate",
+    "expect": "MODEL_CANDIDATE_ONLY"
+  },
+  {
+    "name": "inline_apc_candidate",
+    "expect": "MODEL_CANDIDATE_ONLY",
+    "probe": {
+      "irql": "APC"
+    }
+  },
+  {
+    "name": "async_dispatch_candidate",
+    "expect": "MODEL_CANDIDATE_ONLY",
+    "probe": {
+      "irql": "DISPATCH",
+      "strategy": "pend_classify"
+    }
+  },
+  {
+    "name": "ipv6_async_candidate",
+    "expect": "MODEL_CANDIDATE_ONLY",
+    "probe": {
+      "irql": "DISPATCH",
+      "strategy": "pend_classify",
+      "layer": "ALE_CONNECT_REDIRECT_V6"
+    }
+  },
+  {
+    "name": "dispatch_pageable_lookup_forbidden",
+    "expect": "ILLEGAL_PAGEABLE_LOOKUP",
+    "probe": {
+      "irql": "DISPATCH"
+    }
+  },
+  {
+    "name": "dispatch_pend_operation_wrong_layer",
+    "expect": "INVALID_PEND_OPERATION_LAYER",
+    "probe": {
+      "irql": "DISPATCH",
+      "strategy": "pend_operation"
+    }
+  },
+  {
+    "name": "passive_pend_operation_wrong_layer",
+    "expect": "INVALID_PEND_OPERATION_LAYER",
+    "probe": {
+      "strategy": "pend_operation"
+    }
+  },
+  {
+    "name": "pend_classify_not_granted",
+    "expect": "PEND_CLASSIFY_NOT_GRANTED",
+    "probe": {
+      "irql": "DISPATCH",
+      "strategy": "pend_classify",
+      "pend_status": "STATUS_FWP_CANNOT_PEND"
+    }
+  },
+  {
+    "name": "pend_classify_wrong_worker_irql",
+    "expect": "ILLEGAL_WORKER_IRQL",
+    "probe": {
+      "irql": "DISPATCH",
+      "strategy": "pend_classify",
+      "worker_irql": "DISPATCH"
+    }
+  },
+  {
+    "name": "pend_classify_timeout",
+    "expect": "PEND_EXPIRED",
+    "probe": {
+      "irql": "DISPATCH",
+      "strategy": "pend_classify",
+      "timeout": true
+    }
+  },
+  {
+    "name": "wrong_layer_auth_connect",
+    "expect": "WRONG_LAYER",
+    "probe": {
+      "layer": "ALE_AUTH_CONNECT_V4"
+    }
+  },
+  {
+    "name": "wrong_layer_network",
+    "expect": "WRONG_LAYER",
+    "probe": {
+      "layer": "OUTBOUND_TRANSPORT_V6"
+    }
+  },
+  {
+    "name": "missing_process_id_metadata",
+    "expect": "MISSING_WFP_METADATA",
+    "probe": {
+      "metadata_pid": false
+    }
+  },
+  {
+    "name": "missing_process_path_metadata",
+    "expect": "MISSING_WFP_METADATA",
+    "probe": {
+      "metadata_path": false
+    }
+  },
+  {
+    "name": "same_basename_other_appid_outside_selection",
+    "expect": "OUTSIDE_SELECTED_APP",
+    "probe": {
+      "app": "app-B"
+    }
+  },
+  {
+    "name": "no_bootstrap_process",
+    "expect": "NO_VALID_PROCESS_CALLBACK",
+    "before": []
+  },
+  {
+    "name": "missed_callback",
+    "expect": "NO_VALID_PROCESS_CALLBACK",
+    "before": [
+      {
+        "action": "missed_callback"
+      }
+    ]
+  },
+  {
+    "name": "pid_reuse_before_classify_no_history",
+    "expect": "NO_VALID_PROCESS_CALLBACK",
+    "before": [
+      {
+        "action": "create"
+      },
+      {
+        "action": "create",
+        "object": "object-B",
+        "epoch": 134000000000
+      }
+    ]
+  },
+  {
+    "name": "unknown_prior_exit",
+    "expect": "NO_VALID_PROCESS_CALLBACK",
+    "before": [
+      {
+        "action": "exit"
+      }
+    ]
+  },
+  {
+    "name": "nonref_epoched_record",
+    "expect": "INCOMPLETE_PROCESS_RECORD",
+    "before": [
+      {
+        "action": "create",
+        "referenced": false
+      }
+    ]
+  },
+  {
+    "name": "partial_image_file",
+    "expect": "INCOMPLETE_PROCESS_RECORD",
+    "before": [
+      {
+        "action": "create",
+        "exact_image": false
+      }
+    ]
+  },
+  {
+    "name": "missing_creation_epoch",
+    "expect": "INCOMPLETE_PROCESS_RECORD",
+    "before": [
+      {
+        "action": "create",
+        "epoch": 0
+      }
+    ]
+  },
+  {
+    "name": "wrong_cached_appid",
+    "expect": "INCOMPLETE_PROCESS_RECORD",
+    "before": [
+      {
+        "action": "create",
+        "app": "app-B"
+      }
+    ]
+  },
+  {
+    "name": "exit_between_classify_and_worker",
+    "expect": "PROCESS_GENERATION_CHANGED",
+    "after": [
+      {
+        "action": "exit"
+      }
+    ]
+  },
+  {
+    "name": "pid_reused_between_classify_and_worker",
+    "expect": "PROCESS_GENERATION_CHANGED",
+    "after": [
+      {
+        "action": "exit"
+      },
+      {
+        "action": "create",
+        "object": "object-B",
+        "epoch": 134000000000
+      }
+    ]
+  },
+  {
+    "name": "same_pid_same_epoch_new_object",
+    "expect": "PROCESS_GENERATION_CHANGED",
+    "after": [
+      {
+        "action": "exit"
+      },
+      {
+        "action": "create",
+        "object": "object-B"
+      }
+    ]
+  },
+  {
+    "name": "late_exit_for_other_generation",
+    "expect": "PROCESS_GENERATION_CHANGED",
+    "after": [
+      {
+        "action": "exit",
+        "object": "object-B"
+      }
+    ]
+  },
+  {
+    "name": "lost_callback_after_classify",
+    "expect": "PROCESS_GENERATION_CHANGED",
+    "after": [
+      {
+        "action": "missed_callback"
+      }
+    ]
+  },
+  {
+    "name": "worker_unreferenced_object",
+    "expect": "UNREFERENCED_PROCESS_OBJECT",
+    "probe": {
+      "lookup_ref_held": false
+    }
+  },
+  {
+    "name": "worker_object_changed",
+    "expect": "LOOKUP_OBJECT_OR_EPOCH_MISMATCH",
+    "probe": {
+      "lookup_object": "object-B"
+    }
+  },
+  {
+    "name": "worker_epoch_changed",
+    "expect": "LOOKUP_OBJECT_OR_EPOCH_MISMATCH",
+    "probe": {
+      "lookup_epoch": 134000000000
+    }
+  },
+  {
+    "name": "unknown_defer_strategy",
+    "expect": "INVALID_DEFER_STRATEGY",
+    "probe": {
+      "irql": "DISPATCH",
+      "strategy": "user_etw"
+    }
+  },
+  {
+    "name": "inline_unknown_irql",
+    "expect": "INVALID_IRQL",
+    "probe": {
+      "irql": "HIGH"
+    }
+  },
+  {
+    "name": "explicit_other_app_id_with_matching_cache_outside",
+    "expect": "OUTSIDE_SELECTED_APP",
+    "probe": {
+      "app": "app-Z",
+      "selected_app": "app-A"
+    },
+    "before": [
+      {
+        "action": "create",
+        "app": "app-Z"
+      }
+    ]
+  },
+  {
+    "name": "mismatching_pid_classify_no_registry",
+    "expect": "NO_VALID_PROCESS_CALLBACK",
+    "probe": {
+      "pid": 511
+    }
+  },
+  {
+    "name": "stale_old_pid_after_exit_prior_to_classify",
+    "expect": "NO_VALID_PROCESS_CALLBACK",
+    "before": [
+      {
+        "action": "create"
+      },
+      {
+        "action": "exit"
+      }
+    ]
+  }
+]
