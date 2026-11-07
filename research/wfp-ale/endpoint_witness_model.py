@@ -106,6 +106,11 @@ class ResearchGate:
             self._retire_endpoint(endpoint)
 
     def start_process(self, owner: Owner) -> str:
+        # Every evidence-producing public event must observe current health.
+        # Otherwise a loss at AUTH/start can heal before the next classify/accept.
+        health_verdict = self._observe_health()
+        if health_verdict is not None:
+            return health_verdict
         if owner.pid <= 0 or owner.generation <= 0 or owner.epoch <= 0 or not owner.referenced or not owner.app_id or not owner.exe_identity:
             return 'INVALID_OWNER'
         if owner.pid in self.live or owner.pid in self.poisoned:
@@ -164,6 +169,11 @@ class ResearchGate:
         return 'CAPTURED_MODEL'
 
     def observe_auth(self, event: Authorization) -> str:
+        # Every evidence-producing public event must observe current health.
+        # Otherwise a loss at AUTH/start can heal before the next classify/accept.
+        health_verdict = self._observe_health()
+        if health_verdict is not None:
+            return health_verdict
         if event.endpoint <= 0:
             return 'INVALID_AUTH'
         if event.endpoint in self.poisoned_endpoints:
