@@ -1,0 +1,29 @@
+{
+  "artifact_id": 13569289892,
+  "driver_or_filter_installed_by_experiment": false,
+  "g2_packetbound_pass": false,
+  "git_blob_sha": "2132bf55cedc062739a5b8b96200a17352fa2898",
+  "github_artifact_sha256": "6565405ee70224c74611e3d186be7ee873361aeab22d3b3f2629b65f1b4aaf9a",
+  "job_id": 128373613085,
+  "native_findings": {
+    "actual_native_windows_API_execution_proved": true,
+    "case_variant_appid_equal": true,
+    "handle_resolved_appid_matches_nt_handle_device_path_in_all_cases": true,
+    "hardlink_alias_appid_equal": false,
+    "input_vs_handle_resolved_appid_equal_in_all_cases": false,
+    "kernel_connection_owner_bound": false,
+    "native_appid_cases_measured": 5,
+    "packetbound_or_no_direct_proved": false,
+    "process_epoch_bound": false,
+    "same_basename_different_directory_appid_equal": false,
+    "same_path_appid_equal": true,
+    "symlink_directory_appid_equal": true
+  },
+  "ok": true,
+  "release_accepted": false,
+  "run_id": 42362494488,
+  "source_commit_sha": "c6a1884a4300121f91dbb14c9f9eb9c64de944c3",
+  "status": "PINNED_NATIVE_APPID_MEASUREMENT_ACCEPTED_ONLY",
+  "windows_checkout_line_endings": "CRLF",
+  "windows_checkout_sha256": "15b3b9335b5cc289ff0c440a59221495486c97b8514e85c1369cafb988700469"
+}
