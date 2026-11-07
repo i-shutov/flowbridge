@@ -49,7 +49,8 @@ events, and user-mode snapshots cannot establish OS-enforced no-DIRECT.
 - Before patch, a reduced R18 method mirror reproduced
   `SUPPORTING_OBSERVATION_ONLY -> CONDITIONAL_MODEL_ONLY` in all 6
   IPv4/IPv6×health-failure cases. Local R19 test suite failed with
-  10 assertions across the AUTH/start tests.
+  10 assertions across the AUTH/start tests, plus 6 assertions in the
+  unrelated-PID-exit tests (16 failures total before the respective fixes).
 - With the public-event patch applied to the same mirror, 7/7 unittest
   methods PASS; independent 4096/4096 four-observation histories PASS.
   Three stateless mutant families (AUTH, start and unrelated PID exit) were explicitly rejected.
