@@ -116,7 +116,7 @@ mod tests {
     fn o()->Origin{Origin{pid:7,epoch:8,key:9,endpoint:10,generation:1}}
     fn d()->Destination{let mut ip=[0;16];ip[..4].copy_from_slice(&[192,0,2,1]);Destination{family:4,port:443,ip}}
     fn book()->Book{let mut b=Book::new();assert!(b.initialize([1;16]));b}
-    #[test]fn wire_roundtrip_both_families(){let mut b=book();for f in [4,6]{let mut dest=d();dest.family=f;if f==6{dest.ip=[0;16];dest.ip[15]=1;}
+    #[test]fn wire_roundtrip_both_families(){for f in [4,6]{let mut b=book();let mut dest=d();dest.family=f;if f==6{dest.ip=[0;16];dest.ip[15]=1;}
         let c=b.issue(o(),dest,1).unwrap();assert!(Context::parse(&c.0).is_some());assert!(c.destination()==dest);assert!(c.matches_origin(o()));}}
     #[test]fn claim_is_single_use(){let mut b=book();let c=b.issue(o(),d(),1).unwrap();assert!(b.attest(o(),d(),2));assert!(b.take(c,2).is_some());assert!(b.take(c,2).is_none());}
     #[test]fn repaired_failed_claim_not_accepted(){let mut b=book();let c=b.issue(o(),d(),1).unwrap();let mut wrong=c;wrong.0[80]^=1;assert!(b.attest(o(),d(),2));
@@ -126,7 +126,7 @@ mod tests {
     #[test]fn foreign_session_does_not_consume(){let mut b=book();let c=b.issue(o(),d(),1).unwrap();let mut x=c;x.0[8]^=1;
         assert!(b.attest(o(),d(),2));assert!(b.take(x,2).is_none());assert!(b.take(c,2).is_some());}
     #[test]fn expired_and_clock_reversed_denied(){for t in [0,TTL+2]{let mut b=book();let c=b.issue(o(),d(),1).unwrap();let _=b.attest(o(),d(),2);assert!(b.take(c,t).is_none());}}
-    #[test]fn queue_bound_and_loss_never_promote(){let mut b=book();for _ in 0..CAP{assert!(b.issue(o(),d(),1).is_some());}assert!(b.issue(o(),d(),1).is_none());b.kill();assert!(b.issue(o(),d(),1).is_none());}
+    #[test]fn queue_bound_and_loss_never_promote(){let mut b=book();for i in 0..CAP{let mut origin=o();origin.endpoint=10+i as u64;assert!(b.issue(origin,d(),1).is_some());}assert!(b.issue(o(),d(),1).is_none());b.kill();assert!(b.issue(o(),d(),1).is_none());}
     #[test]fn malformed_protocol_scope_reserved_length(){let c=book().issue(o(),d(),1).unwrap();for at in [0,4,6,73,76,104]{let mut x=c;x.0[at]^=1;assert!(Context::parse(&x.0).is_none());}assert!(Context::parse(&c.0[..127]).is_none());}
     #[test]fn no_zero_identity(){let mut b=book();let mut x=o();x.epoch=0;assert!(b.issue(x,d(),1).is_none());x=o();x.key=0;assert!(b.issue(x,d(),1).is_none());}
     #[test]fn no_auth_receipt_claim_fails_closed(){let mut b=book();let c=b.issue(o(),d(),1).unwrap();assert!(b.take(c,2).is_none());assert!(!b.attest(o(),d(),3));}
