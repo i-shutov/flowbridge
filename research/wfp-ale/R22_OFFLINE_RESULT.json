@@ -1,0 +1,27 @@
+{
+  "g2_pass": false,
+  "independent_worlds_checked": 32,
+  "indistinguishable_pairs_checked": 16,
+  "no_direct_proved": false,
+  "ok": true,
+  "oracle_implementation": "independent_plain_dict_projection",
+  "real_wfp_observations": 0,
+  "source_function_compared": "indistinguishable_worlds and local_filter_signal",
+  "wrong_strategy_counterexample_counts": {
+    "all_removed": 16,
+    "all_survive": 16,
+    "commit_certifies_no_direct": 32,
+    "filter_present_certifies_no_direct": 32,
+    "first_session_is_creator": 16,
+    "last_session_is_creator": 16,
+    "permit_flag_ignored": 16,
+    "provider_is_creator": 16
+  },
+  "unit_tests_passed": 14,
+  "unit_tests_failed": 0,
+  "compilation_of_rust_tests": "NOT_RUN_rustc_unavailable",
+  "driver_loaded": false,
+  "wfp_filter_mutated": false,
+  "main_mutated": false,
+  "scope": "synthetic_offline_only"
+}
