@@ -7,6 +7,7 @@ on:
       - 'crates/flowbridge-tunnel/**'
       - 'crates/flowbridge-runtime/**'
       - 'crates/flowbridge-ffi/**'
+      - 'crates/flowbridge-capture/**'
       - '.github/workflows/windows-real-ssh.yml'
   push:
     branches: [main]
@@ -16,6 +17,7 @@ on:
       - 'crates/flowbridge-tunnel/**'
       - 'crates/flowbridge-runtime/**'
       - 'crates/flowbridge-ffi/**'
+      - 'crates/flowbridge-capture/**'
       - '.github/workflows/windows-real-ssh.yml'
   workflow_dispatch:
 permissions:
@@ -26,8 +28,14 @@ concurrency:
 env:
   PYTHONUTF8: '1'
   FLOWBRIDGE_HOSTED_WINDOWS_SSH: '1'
+  FLOWBRIDGE_CAPTURE_AGENT: target/debug/flowbridge-agent.exe
 jobs:
   windows-openssh:
+    name: Windows OpenSSH (${{ matrix.scenario }})
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [managed, raw]
     runs-on: windows-2025
     timeout-minutes: 25
     steps:
@@ -38,7 +46,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Reject false-positive capacity probes
         run: python -m unittest discover -s tests -p test_windows_ssh_probe.py -v
-      - run: cargo build --locked -p flowbridge-ffi
+      - run: cargo build --locked -p flowbridge-ffi -p flowbridge-capture -p flowbridge-cli
       - name: Fetch pinned official sshd without installing a system service
         shell: pwsh
         run: |
@@ -61,17 +69,17 @@ jobs:
           "FLOWBRIDGE_TEST_SSHD=$server" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "FLOWBRIDGE_TEST_SSH=$client" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "FLOWBRIDGE_TEST_KEYGEN=$keygen" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-          New-Item -ItemType Directory -Force build/verification/windows-real-ssh | Out-Null
-          @{fixture_server_release='10.4.0.0p1-Preview'; server_zip_sha256=$expected; microsoft_signatures_valid=$true; system_ssh_client=$true; system_service_installed=$false} | ConvertTo-Json | Set-Content build/verification/windows-real-ssh/provenance.json
-      - name: Actual Windows SSH 128 held flows, 10k churn, four-worker lifecycle and backend ceiling
+          New-Item -ItemType Directory -Force "build/verification/windows-real-ssh/${{ matrix.scenario }}" | Out-Null
+          @{fixture_server_release='10.4.0.0p1-Preview'; server_zip_sha256=$expected; microsoft_signatures_valid=$true; system_ssh_client=$true; system_service_installed=$false} | ConvertTo-Json | Set-Content "build/verification/windows-real-ssh/${{ matrix.scenario }}/provenance.json"
+      - name: Actual Windows OpenSSH ${{ matrix.scenario }} scenario
         shell: pwsh
         run: |
-          python tests/windows_real_ssh_hosted.py --ssh "$env:FLOWBRIDGE_TEST_SSH" --sshd "$env:FLOWBRIDGE_TEST_SSHD" --keygen "$env:FLOWBRIDGE_TEST_KEYGEN" --library target/debug/flowbridge_ffi.dll --output build/verification/windows-real-ssh --churn 10000
+          python tests/windows_real_ssh_hosted.py --scenario "${{ matrix.scenario }}" --ssh "$env:FLOWBRIDGE_TEST_SSH" --sshd "$env:FLOWBRIDGE_TEST_SSHD" --keygen "$env:FLOWBRIDGE_TEST_KEYGEN" --library target/debug/flowbridge_ffi.dll --output "build/verification/windows-real-ssh/${{ matrix.scenario }}" --churn 10000
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v7.0.0
         if: always()
         with:
-          name: FlowBridge-real-Windows-OpenSSH
-          path: build/verification/windows-real-ssh/*.json
+          name: FlowBridge-real-Windows-OpenSSH-${{ matrix.scenario }}
+          path: build/verification/windows-real-ssh/${{ matrix.scenario }}/*.json
           if-no-files-found: warn
           retention-days: 14

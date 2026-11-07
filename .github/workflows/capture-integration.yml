@@ -1,0 +1,309 @@
+name: Rust capture integration candidate
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: capture-integration-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  integration:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Independent synthetic negative integrity-contract tests (no native acceptance)
+        run: python -m unittest discover -s tests -p test_capture_evidence_audit.py -v
+      - name: Controlled HTTP origin and upstream EOF discriminator (loopback only, no driver)
+        run: python -m unittest discover -s tests -p test_g1_controlled_origin.py -v
+      - name: Independent capture unit and real loopback SOCKS regressions
+        run: cargo test --locked -p flowbridge-capture --all-targets
+      - name: Strict Clippy
+        run: cargo clippy --locked -p flowbridge-capture --all-targets -- -D warnings
+      - name: Build original Rust agent and proxy CLI
+        run: cargo build --locked --release -p flowbridge-capture -p flowbridge-cli
+      - name: Verify CLI denial and independent ABI without activating driver
+        shell: bash
+        run: |
+          suffix=""; if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=".exe"; fi
+          python tools/capture_candidate.py verify --agent "target/release/flowbridge-agent${suffix}" --output build/capture-candidate/verification.json
+          panel=()
+          if [[ "$RUNNER_OS" == "Windows" ]]; then panel=(--panel "target/release/flowbridge-panel.exe"); fi
+          python tools/capture_candidate.py package --agent "target/release/flowbridge-agent${suffix}" --cli "target/release/flowbridge${suffix}" "${panel[@]}" --output "build/capture-candidate/FlowBridge-Rust-Candidate-${RUNNER_OS}.zip"
+      - name: Real independent UDP DNS ingress to Rust SOCKS5 to TCP resolver, denial and recovery
+        shell: bash
+        run: |
+          suffix=""; if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=".exe"; fi
+          python tests/dns_udp_via_socks.py --agent "target/release/flowbridge-agent${suffix}" --output build/capture-candidate/dns-udp-socks-lifecycle.json
+      - name: Non-privileged UDP quarantine input denial on all OSes
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, pathlib, subprocess, sys
+          suffix = '.exe' if sys.platform == 'win32' else ''
+          agent = pathlib.Path('target/release/flowbridge-agent' + suffix).resolve()
+          probes = [
+              {'consent':'NATIVE_SELF_UDP_TESTNET_DROP_LAB','adapter_name':'x','local_ipv4':'127.0.0.1','duration_ms':3000,'max_queries':3,'rescue_attested':True},
+              {'consent':'NATIVE_SELF_UDP_TESTNET_DROP_LAB','adapter_name':'x','local_ipv4':'192.0.2.10','duration_ms':3000,'max_queries':99,'rescue_attested':True},
+              {'consent':'NATIVE_SELF_UDP_TESTNET_DROP_LAB','adapter_name':'x','local_ipv4':'192.0.2.10','duration_ms':3000,'max_queries':3,'protected':True,'rescue_attested':True},
+              {'consent':'','adapter_name':'x','local_ipv4':'192.0.2.10','duration_ms':3000,'max_queries':3,'rescue_attested':True},
+          ]
+          probes.append({'consent':'NATIVE_SELF_UDP_TESTNET_DROP_LAB','adapter_name':'x','local_ipv4':'192.0.2.10','duration_ms':3000,'max_queries':3,'rescue_attested':False})
+          for req in probes:
+              proc = subprocess.run([str(agent), 'udp-testnet-drop-lab', json.dumps(req)],
+                                    capture_output=True, text=True, timeout=5)
+              report = json.loads(proc.stdout)
+              assert proc.returncode != 0 and report['ok'] is False, (req, report)
+              assert report['release_accepted'] is False
+          print('UDP_TESTNET_DROP_INPUT_DENY_PASS')
+          PY
+      - name: Separate IPv6 quarantine negative consent, link-local and bounds on all OSes
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, pathlib, subprocess, sys
+          suffix = '.exe' if sys.platform == 'win32' else ''
+          agent = pathlib.Path('target/release/flowbridge-agent' + suffix).resolve()
+          baseline = {'consent':'NATIVE_SELF_IPV6_UDP_TESTNET_DROP_LAB',
+                      'adapter_name':'x','local_ipv6':'fd00::42',
+                      'duration_ms':3000,'max_queries':3,'rescue_attested':True}
+          variants = [
+              dict(baseline, consent=''),
+              dict(baseline, local_ipv6='::1'),
+              dict(baseline, local_ipv6='fe80::1'),
+              dict(baseline, local_ipv6='::ffff:192.0.2.3'),
+              dict(baseline, max_queries=99),
+              dict(baseline, duration_ms=99999),
+              dict(baseline, rescue_attested=False),
+              dict(baseline, protected=True),
+          ]
+          for req in variants:
+              p = subprocess.run([str(agent), 'udp6-testnet-drop-lab', json.dumps(req)],
+                                 capture_output=True, text=True, timeout=5)
+              report = json.loads(p.stdout)
+              assert p.returncode != 0 and report['ok'] is False, (req, report)
+              assert report['release_accepted'] is False
+          print('NATIVE_IPV6_UDP_TESTNET_DROP_INPUT_DENY_PASS_NO_DRIVER_ACTIVATION')
+          PY
+      - name: Windows real IPv4 and available IPv6 UDP loopback plus IP Helper local owner snapshots
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, pathlib, subprocess
+          result = subprocess.run(['target/release/flowbridge-agent.exe', 'udp-owner-selftest'],
+                                  capture_output=True, text=True, timeout=30)
+          report = json.loads(result.stdout)
+          assert result.returncode == 0 and report['ok'] is True, report
+          assert report['actual_ipv4_loopback_udp_bytes'] == 4
+          assert report['ipv4_sender_and_receiver_two_snapshots_consistent'] is True
+          assert report['ipv6_loopback_udp_and_two_snapshots_consistent'] is report['ipv6_loopback_available']
+          for denied in ('native_ndisrd_packet_bound', 'selected_app_accepted',
+                         'authorizes_capture', 'protected_redirect_available',
+                         'dns_leak_free', 'win10_11_acceptance', 'release_accepted'):
+              assert report[denied] is False, denied
+          assert report['process_identity_and_addresses_redacted'] is True
+          assert not any(key in report for key in ('pid','path','local','remote','source_ip'))
+          pathlib.Path('build/capture-candidate/udp-owner-lifecycle.json').write_text(
+              json.dumps(report, sort_keys=True, indent=2) + '\n', encoding='utf-8')
+          print('WINDOWS_REAL_UDP_IPHELPER_LOCAL_BIND_PASS: IPv6_available=' + str(report['ipv6_loopback_available']))
+          PY
+      - name: Original Rust actual Windows BFE read-only filter snapshot during real live TCP
+        if: runner.os == 'Windows'
+        run: python tests/windows_wfp_readonly_preflight.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-readonly.json
+      - name: Windows restricted named-pipe and live explicit SOCKS lifecycle
+        if: runner.os == 'Windows'
+        run: python tests/windows_capture_control.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/control-lifecycle.json
+      - name: Windows real on-demand SCM service and named-pipe lifecycle
+        if: runner.os == 'Windows'
+        run: python tests/windows_capture_service.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/scm-lifecycle.json
+      - name: Windows original Rust reversible on-demand SCM stage/upgrade/remove
+        if: runner.os == 'Windows'
+        run: python tests/windows_capture_install.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/scm-install-lifecycle.json
+      - name: Build distinct debug Rust agent for stopped-only binary replacement
+        if: runner.os == 'Windows'
+        run: cargo build --locked -p flowbridge-capture --bin flowbridge-agent
+      - name: Windows exact-hash binary upgrade, live SOCKS restart and rollback
+        if: runner.os == 'Windows'
+        run: python tests/windows_capture_binary_upgrade.py --agent target/release/flowbridge-agent.exe --next-agent target/debug/flowbridge-agent.exe --output build/capture-candidate/scm-binary-upgrade-lifecycle.json
+      - name: Windows genuine signed PowerShell client pre-GO rejection and HTTP half-close
+        if: runner.os == 'Windows'
+        run: python tests/windows_powershell_lab_client.py --source crates/flowbridge-capture/src/windows_self_redirect.rs --output build/capture-candidate/powershell-client-lifecycle.json
+      - name: Windows unrelated signed OS PowerShell process with loopback GO denial and HTTP
+        if: runner.os == 'Windows'
+        run: python tests/windows_external_powershell_lab.py --output build/capture-candidate/unrelated-powershell-lifecycle.json
+      - name: Independently pin and verify signed isolated Windows OpenSSH server for installed-binary acceptance
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_ENVIRONMENT -ne 'github-hosted') { throw 'Refuse OpenSSH fixture outside hosted Windows' }
+          $root = Join-Path $env:RUNNER_TEMP 'flowbridge-installed-rust-ssh-fixture'
+          New-Item -ItemType Directory -Force $root | Out-Null
+          $archive = Join-Path $root 'OpenSSH-Win64.zip'
+          Invoke-WebRequest 'https://github.com/PowerShell/Win32-OpenSSH/releases/download/10.4.0.0p1-Preview/OpenSSH-Win64.zip' -OutFile $archive
+          $expected = 'b67ff8becd203502190ec42ac7787c24c2cd3325ed7700485fe7a1c83d2a7957'
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'Pinned official sshd ZIP SHA mismatch' }
+          Expand-Archive $archive -DestinationPath $root
+          $server = Join-Path $root 'OpenSSH-Win64/sshd.exe'
+          $client = Join-Path $env:WINDIR 'System32/OpenSSH/ssh.exe'
+          $keygen = Join-Path $env:WINDIR 'System32/OpenSSH/ssh-keygen.exe'
+          foreach ($exe in @($server, $client, $keygen)) {
+            if (-not (Test-Path $exe -PathType Leaf)) { throw 'Pinned Windows SSH executable missing' }
+            $sig = Get-AuthenticodeSignature $exe
+            if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'Microsoft') { throw 'Microsoft SSH signature invalid' }
+          }
+          "FLOWBRIDGE_INSTALL_SSHD=$server" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "FLOWBRIDGE_INSTALL_SSH=$client" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "FLOWBRIDGE_INSTALL_KEYGEN=$keygen" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          'FLOWBRIDGE_HOSTED_WINDOWS_SSH=1' | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Rust-only NSIS fault rollback, recovered install, installed authenticated SSH/SOCKS and safe uninstall
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # SHA-pinned official portable NSIS; no Chocolatey community-feed dependency.
+          # Same hosted-Windows guard and hard failure as the required installer QA.
+          & ./scripts/ci-setup-nsis.ps1
+          python tools/windows_rust_candidate_installer.py --candidate build/capture-candidate/FlowBridge-Rust-Candidate-Windows.zip --output build/capture-candidate/FlowBridge-Rust-Candidate-Windows-UNSIGNED-setup.exe --report build/capture-candidate/windows-rust-installer-build.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/windows_rust_candidate_installer.py --candidate build/capture-candidate/FlowBridge-Rust-Candidate-Windows.zip --installer build/capture-candidate/FlowBridge-Rust-Candidate-Windows-UNSIGNED-setup.exe --report build/capture-candidate/windows-rust-installer-build.json --output build/capture-candidate/windows-rust-installed-lifecycle.json --ssh "$env:FLOWBRIDGE_INSTALL_SSH" --sshd "$env:FLOWBRIDGE_INSTALL_SSHD" --keygen "$env:FLOWBRIDGE_INSTALL_KEYGEN"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build separately allowlisted native-test FFI and original harness (not product payload)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          cargo build --locked --release -p flowbridge-ffi
+          python -m py_compile tests/windows_ndisrd_self_redirect.py tests/g1_controlled_origin.py tests/windows_external_powershell_lab.py tests/windows_rust_managed_ssh_control.py
+          python - <<'PY'
+          import hashlib, json, os, pathlib, shutil, subprocess
+          root = pathlib.Path('build/native-self-tools')
+          root.mkdir(parents=True, exist_ok=True)
+          sources = [pathlib.Path('target/release/flowbridge_ffi.dll')]
+          sources += [pathlib.Path('tests') / name for name in (
+              'windows_ndisrd_self_redirect.py', 'windows_rust_managed_ssh_control.py',
+              'windows_external_powershell_lab.py', 'g1_controlled_origin.py',
+              'windows_powershell_lab_client.py', 'ssh_real_integration.py',
+              'windows_real_ssh_hosted.py', 'windows_openssh_capacity_vm.py',
+              'windows_ssh_probe_core.py', 'real_ssh_capacity.py', 'churn_pacing.py')]
+          hashes = {}
+          for source in sources:
+              dest = root / source.name
+              shutil.copyfile(source, dest)
+              hashes[dest.name] = hashlib.sha256(dest.read_bytes()).hexdigest()
+          report = {'kind':'original_rust_ffi_and_audited_native_test_sources_not_product',
+                    'source_commit': subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
+                    'pr_head_sha':os.environ['PR_HEAD_SHA'],'payload_sha256':hashes,
+                    'vendor_binary_included':False,'private_credentials_included':False,
+                    'native_test_executed':False,'release_accepted':False}
+          (root / 'manifest.json').write_text(json.dumps(report, indent=2)+'\n',encoding='utf-8')
+          PY
+      # Preserve all independent installed GUI/SSH/SCM/native-test evidence
+      # before the deliberately strict, currently-failing WFP AppId research
+      # gate. This test still fails this Windows job on any unmet assertion.
+      # Preserve independent real BFE safety evidence if the optional NSIS
+      # mirror or installed-product setup failed. The Windows job stays FAIL;
+      # these strict probes do not waive any upstream installer/SSH checks.
+      - name: Real WFP AppId loopback and host-owned interface IPv4 matrix (strict)
+        if: ${{ always() && matrix.os == 'windows-2025' }}
+        run: python tests/windows_wfp_dynamic_loopback.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-dynamic-lifecycle.json
+      - name: Native selected-only WFP UDP/IPv4 AppId DENY with independent client and crash cleanup
+        if: ${{ always() && matrix.os == 'windows-2025' }}
+        run: python tests/windows_wfp_dynamic_udp4.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-udp4-lifecycle.json
+      - name: Native IPv6 TCP and UDP app-scoped WFP DENY with real sockets and guard crash
+        if: ${{ always() && matrix.os == 'windows-2025' }}
+        run: python tests/windows_wfp_dynamic_ipv6.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-ipv6-lifecycle.json
+      - name: Hosted-only persistent selected-WFP canary crash-survival and independent SYSTEM cleanup (IPv4/IPv6 TCP/UDP)
+        if: ${{ always() && matrix.os == 'windows-2025' }}
+        run: python tests/windows_wfp_persistent_hosted.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-persistent-hosted.json
+      - name: Hosted-only appwide persistent selected-AppId IPv4/IPv6 crash-denial on two ports each, with independent SYSTEM cleanup
+        if: ${{ always() && matrix.os == 'windows-2025' }}
+        run: python tests/windows_wfp_appwide_hosted.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-appwide-hosted.json
+      - name: Hosted original Rust persistent AppId deny + crash-revoked same-sublayer SOFT permit (strict, independent SYSTEM recovery)
+        if: ${{ always() && matrix.os == 'windows-2025' }}
+        run: python tests/windows_wfp_appwide_soft_lease_hosted.py --agent target/release/flowbridge-agent.exe --output build/capture-candidate/windows-wfp-soft-lease-hosted.json
+      - name: Verify exact candidate bytes and WFP held TCP lease revocation against installed SSH/GUI/NSIS (strict)
+        if: ${{ always() && matrix.os == 'windows-2025' }}
+        shell: bash
+        run: |
+          merge=$(git rev-parse HEAD)
+          python tools/capture_evidence_audit.py \
+            --candidate build/capture-candidate/FlowBridge-Rust-Candidate-Windows.zip \
+            --wfp build/capture-candidate/windows-wfp-soft-lease-hosted.json \
+            --installer-report build/capture-candidate/windows-rust-installer-build.json \
+            --installed-report build/capture-candidate/windows-rust-installed-lifecycle.json \
+            --installer-binary build/capture-candidate/FlowBridge-Rust-Candidate-Windows-UNSIGNED-setup.exe \
+            --head "$PR_HEAD_SHA" --merge "$merge" \
+            --output build/capture-candidate/byte-security-gate-audit.json
+      - name: Verify formatting (never auto-commit or waive failure)
+        if: always()
+        run: cargo fmt --all -- --check
+      - uses: actions/upload-artifact@v7.0.0
+        if: success() && runner.os == 'Windows'
+        with:
+          name: FlowBridge-Native-Self-Tools-Windows
+          path: build/native-self-tools/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Preserve formatting diagnostic, not acceptance evidence
+        if: failure()
+        shell: bash
+        run: |
+          mkdir -p build/capture-format
+          cargo fmt --all
+          git diff --binary > build/capture-format/format.patch
+          git rev-parse HEAD > build/capture-format/source-sha.txt
+      - uses: actions/upload-artifact@v7.0.0
+        if: always()
+        with:
+          name: FlowBridge-Rust-Capture-${{ matrix.os }}
+          path: build/capture-candidate/
+          if-no-files-found: warn
+          retention-days: 14
+      - uses: actions/upload-artifact@v7.0.0
+        if: failure()
+        with:
+          name: FlowBridge-Capture-Format-${{ matrix.os }}
+          path: build/capture-format/
+          if-no-files-found: warn
+          retention-days: 7
+
+  g2-kernel-connection-owner:
+    # Independent built-in ETW observation, NOT NDISRD/driver activation.
+    # No new event trigger; same existing pull_request/workflow_dispatch entry.
+    runs-on: windows-2025
+    timeout-minutes: 5
+    env:
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Reject header PID, recycled epoch, lost and ambiguous ETW evidence
+        run: python -m unittest discover -s tests -p test_g2_etw_owner_probe.py -v
+      - name: Real independent OS curl IPv4 and IPv6 kernel owner evidence (no driver)
+        run: python tests/g2_etw_owner_probe.py --consent G2_HOSTED_ETW_READ_ONLY_NO_DRIVER --output build/g2-etw/sanitized.json
+      - name: Preserve sanitized verdict only (never ETL, XML, PID, path or endpoints)
+        if: always()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: FlowBridge-G2-Kernel-Connection-Owner
+          path: build/g2-etw/sanitized.json
+          if-no-files-found: error
+          retention-days: 7

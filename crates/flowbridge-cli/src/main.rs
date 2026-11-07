@@ -8,6 +8,8 @@ use std::{error::Error, net::IpAddr, path::Path, path::PathBuf, time::Duration};
 use tokio::io::AsyncReadExt;
 use tracing::info;
 
+mod managed;
+
 type AppResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 const MAX_CONFIG_BYTES: u64 = 1024 * 1024;
 
@@ -49,6 +51,11 @@ enum Command {
         #[arg(long)]
         json_logs: bool,
     },
+    /// Explicit SOCKS5 + supervised OpenSSH; direct routes and app ownership claims are forbidden.
+    ServeManaged {
+        #[arg(short, long)]
+        config: PathBuf,
+    },
     /// Open and close one connection using the selected route (no application payload).
     Check {
         #[arg(short, long)]
@@ -57,6 +64,24 @@ enum Command {
         host: String,
         #[arg(long)]
         port: u16,
+    },
+    /// Explicit, non-authenticating, direct SSH identification-order A/B diagnostic.
+    SshDiagnose {
+        #[arg(long)]
+        endpoint: std::net::SocketAddr,
+        #[arg(long, default_value_t = 2000)]
+        timeout_ms: u64,
+        #[arg(long)]
+        consent: String,
+    },
+    /// Experimental raw SSH server-banner-first ProxyCommand transport.
+    SshBannerGate {
+        #[arg(long)]
+        endpoint: std::net::SocketAddr,
+        #[arg(long, default_value_t = 3000)]
+        timeout_ms: u64,
+        #[arg(long)]
+        consent: String,
     },
     /// Report actual available features. Does not claim OS interception is active.
     Capabilities,
@@ -124,6 +149,9 @@ async fn run() -> AppResult<()> {
             require_explicit_compatible(&profile)?;
             serve(profile).await?;
         }
+        Command::ServeManaged { config } => {
+            managed::serve(&config).await?;
+        }
         Command::Check { config, host, port } => {
             let profile = load_config(&config).await?;
             require_explicit_compatible(&profile)?;
@@ -155,6 +183,37 @@ async fn run() -> AppResult<()> {
                     "proxy_hops": route.len(), "payload_sent": false
                 }))?
             );
+        }
+        Command::SshDiagnose {
+            endpoint,
+            timeout_ms,
+            consent,
+        } => {
+            if consent != "DIRECT_SSH_DIAGNOSTIC" {
+                return Err("ssh-diagnose requires --consent DIRECT_SSH_DIAGNOSTIC".into());
+            }
+            if !(100..=10000).contains(&timeout_ms) || endpoint.port() == 0 {
+                return Err("SSH probe timeout must be 100..=10000 ms with a nonzero port".into());
+            }
+            let report = flowbridge_tunnel::handshake_diagnostic::compare_direct(
+                endpoint,
+                Duration::from_millis(timeout_ms),
+            );
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        }
+        Command::SshBannerGate {
+            endpoint,
+            timeout_ms,
+            consent,
+        } => {
+            if consent != "BANNER_FIRST_EXPERIMENTAL" {
+                return Err("ssh-banner-gate requires exact experimental consent".into());
+            }
+            if !(100..=10000).contains(&timeout_ms) || endpoint.port() == 0 {
+                return Err("SSH banner gate timeout/port outside explicit bounds".into());
+            }
+            // Stdout MUST remain an unmodified binary SSH transport.
+            flowbridge_tunnel::banner_gate::run(endpoint, Duration::from_millis(timeout_ms))?;
         }
         Command::Capabilities => {
             println!(

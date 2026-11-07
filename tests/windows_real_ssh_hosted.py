@@ -59,6 +59,8 @@ def main():
     parser.add_argument('--library', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--churn', type=int, default=10000)
+    parser.add_argument('--scenario', required=True, choices=('managed', 'raw'),
+                        help='Independent strict managed acceptance or bare OpenSSH characterization')
     args = parser.parse_args()
     require(sys.platform == 'win32' and os.environ.get('GITHUB_ACTIONS') == 'true'
             and os.environ.get('FLOWBRIDGE_HOSTED_WINDOWS_SSH') == '1',
@@ -74,6 +76,8 @@ def main():
               'windows_10_11_user_machine_tested': False, 'wfp_driver_loaded': False,
               'native_dns_leaks_verified': False, 'system_configuration_modified': False,
               'network_test_destinations_loopback_only': True,
+              'scenario': args.scenario, 'managed_acceptance_proved': False,
+              'raw_backend_512_stability_proved': False,
               'ssh_sha256': sha256(args.ssh), 'sshd_sha256': sha256(args.sshd),
               'ffi_sha256': sha256(args.library)}
     supervisor = engine = 0
@@ -129,54 +133,100 @@ def main():
                         except OSError:
                             return False
                     until(ready, seconds=20)
-                    settings = {'host':'127.0.0.1','port':ssh_port,'user':user,
-                                'local_port':socks_port,'ssh_executable':str(args.ssh),
-                                'identity_file':str(root/'client_key'), 'known_hosts_file':str(known),
-                                'health_check_interval_ms':250,'health_check_timeout_ms':1000,
-                                'startup_timeout_ms':15000,'restart_initial_delay_ms':250,
-                                'restart_max_delay_ms':1000,'max_restarts':3,'verbose_diagnostics':True}
-                    supervisor = abi.call('fb_ssh_create_json',settings)['ssh_id']
-                    abi.call('fb_ssh_start_json',supervisor)
-                    def snapshot():
-                        return abi.call('fb_ssh_snapshot_json',supervisor)['status']
-                    def client_ready():
-                        status = snapshot()
-                        if status['state'] == 'failed':
-                            raise RuntimeError('Windows SSH supervisor failed before readiness')
-                        return status['state'] == 'ready' and status['pid']
-                    until(client_ready, seconds=30)
-                    endpoint = {'host':'127.0.0.1','port':socks_port}
-                    profile = {'version':1,'listen':f'127.0.0.1:{ingress}',
-                               'proxies':[{'id':'ssh','kind':'socks5','endpoint':endpoint}],
-                               'chains':[],'rules':[], 'default_action':{'type':'proxy','id':'ssh'},
-                               'max_connections':256,'connect_timeout_ms':10000,
-                               'handshake_timeout_ms':10000,'idle_timeout_ms':300000}
-                    engine = abi.call('fb_engine_create_json',profile)['engine_id']
-                    abi.call('fb_engine_set_upstream_gate_json',engine, {
-                        'endpoint':endpoint,'ready':True,'grace_ms':15000,
-                        'limits':{'max_flows':128,'max_opening':16,'max_queued':64,'wait_timeout_ms':500}})
-                    abi.call('fb_engine_start_json',engine)
-                    round_trip(ingress,echo.server_address[1])
-                    from real_ssh_capacity import run as capacity
-                    result = capacity(abi,engine,ingress,echo.server_address[1],snapshot,
-                                      output=args.output/'managed-capacity.json',churn=args.churn,
-                                      resource_sampler=windows_resources)
-                    report['managed_capacity'] = {'passed':result['passed'],'held':128,
-                        'churn':result['churn_attempts'], 'rejected':result['attempted_after_capacity']}
-                    from real_owned_pool_lifecycle import run as pool_lifecycle
-                    result = pool_lifecycle(abi,echo.server_address[1],settings,
-                                            args.output/'owned-four-worker-lifecycle.json')
-                    report['owned_pool'] = {'passed':result['passed'],'independent_children':4}
-                    abi.lib.fb_engine_destroy(engine); engine = 0
-                    abi.lib.fb_ssh_destroy(supervisor); supervisor = 0
-                    command = [sys.executable, str(Path(__file__).with_name('windows_openssh_capacity_vm.py')),
-                               '--ssh',str(args.ssh),'--identity',str(root/'client_key'),
-                               '--known-hosts',str(known),'--user',user,'--ssh-port',str(ssh_port),
-                               '--held','512','--min-held','128',
-                               '--output',str(args.output/'bare-backend-capacity.json')]
-                    env = dict(os.environ, FLOWBRIDGE_SSH_VM='1')
-                    subprocess.run(command, env=env, check=True, timeout=180)
-                    report['bare_backend_probe_passed'] = True
+                    if args.scenario == 'managed':
+                        from ssh_banner_gate import real_authenticated_ssh
+                        report['banner_first_real_ssh'] = real_authenticated_ssh(
+                            Path('target/debug/flowbridge.exe'), args.ssh, root / 'client_key',
+                            known, user, ssh_port, echo.server_address[1], free_port())
+                        from ssh_banner_gate import real_supervised_banner_gate
+                        report['supervised_banner_first_real_ssh'] = real_supervised_banner_gate(
+                            abi, Path('target/debug/flowbridge.exe'),
+                            {'host':'127.0.0.1', 'port':ssh_port, 'user':user,
+                             'ssh_executable':str(args.ssh),
+                             'identity_file':str(root / 'client_key'),
+                             'known_hosts_file':str(known)},
+                            echo.server_address[1], free_port())
+                        settings = {'host':'127.0.0.1','port':ssh_port,'user':user,
+                                    'local_port':socks_port,'ssh_executable':str(args.ssh),
+                                    'identity_file':str(root/'client_key'), 'known_hosts_file':str(known),
+                                    'health_check_interval_ms':250,'health_check_timeout_ms':1000,
+                                    'startup_timeout_ms':15000,'restart_initial_delay_ms':250,
+                                    'restart_max_delay_ms':1000,'max_restarts':3,'verbose_diagnostics':True}
+                        supervisor = abi.call('fb_ssh_create_json',settings)['ssh_id']
+                        abi.call('fb_ssh_start_json',supervisor)
+                        def snapshot():
+                            return abi.call('fb_ssh_snapshot_json',supervisor)['status']
+                        def client_ready():
+                            status = snapshot()
+                            if status['state'] == 'failed':
+                                raise RuntimeError('Windows SSH supervisor failed before readiness')
+                            return status['state'] == 'ready' and status['pid']
+                        until(client_ready, seconds=30)
+                        endpoint = {'host':'127.0.0.1','port':socks_port}
+                        profile = {'version':1,'listen':f'127.0.0.1:{ingress}',
+                                   'proxies':[{'id':'ssh','kind':'socks5','endpoint':endpoint}],
+                                   'chains':[],'rules':[], 'default_action':{'type':'proxy','id':'ssh'},
+                                   'max_connections':256,'connect_timeout_ms':10000,
+                                   'handshake_timeout_ms':10000,'idle_timeout_ms':300000}
+                        engine = abi.call('fb_engine_create_json',profile)['engine_id']
+                        abi.call('fb_engine_set_upstream_gate_json',engine, {
+                            'endpoint':endpoint,'ready':True,'grace_ms':15000,
+                            'limits':{'max_flows':128,'max_opening':16,'max_queued':64,'wait_timeout_ms':500}})
+                        abi.call('fb_engine_start_json',engine)
+                        round_trip(ingress,echo.server_address[1])
+                        if os.environ.get('FLOWBRIDGE_CAPTURE_AGENT'):
+                            from windows_rust_managed_ssh_control import run as rust_managed_control
+                            report['rust_owned_ssh_control'] = rust_managed_control(
+                                Path(os.environ['FLOWBRIDGE_CAPTURE_AGENT']),
+                                args.ssh, root / 'client_key', known, user,
+                                ssh_port, echo.server_address[1],
+                                args.output / 'rust-owned-ssh-control.json')
+                        if os.environ.get('FLOWBRIDGE_CAPTURE_AGENT'):
+                            from capture_real_ssh import run as capture_relay
+
+                            def capture_gate(ready):
+                                # Explicit denial, not a queued reconnect-grace request.
+                                abi.call('fb_engine_set_upstream_gate_json', engine, {
+                                    'endpoint': endpoint, 'ready': ready,
+                                    'grace_ms': 15000 if ready else 0,
+                                    'limits': {'max_flows': 128, 'max_opening': 16,
+                                               'max_queued': 64, 'wait_timeout_ms': 500}})
+
+                            report['capture_relay'] = capture_relay(
+                                Path(os.environ['FLOWBRIDGE_CAPTURE_AGENT']), ingress, capture_gate,
+                                snapshot()['pid'], args.output / 'capture-relay-real-ssh.json')
+                            from dns_udp_via_real_ssh import run as dns_ssh_lab
+                            report['dns_udp_via_real_ssh'] = dns_ssh_lab(
+                                Path(os.environ['FLOWBRIDGE_CAPTURE_AGENT']), ingress,
+                                capture_gate, snapshot()['pid'],
+                                args.output / 'dns-udp-via-real-ssh.json')
+                        from real_ssh_capacity import run as capacity
+                        result = capacity(abi,engine,ingress,echo.server_address[1],snapshot,
+                                          output=args.output/'managed-capacity.json',churn=args.churn,
+                                          resource_sampler=windows_resources)
+                        report['managed_capacity'] = {'passed':result['passed'],'held':128,
+                            'churn':result['churn_attempts'], 'rejected':result['attempted_after_capacity']}
+                        from real_owned_pool_lifecycle import run as pool_lifecycle
+                        result = pool_lifecycle(abi,echo.server_address[1],settings,
+                                                args.output/'owned-four-worker-lifecycle.json')
+                        report['owned_pool'] = {'passed':result['passed'],'independent_children':4}
+                        abi.lib.fb_engine_destroy(engine); engine = 0
+                        abi.lib.fb_ssh_destroy(supervisor); supervisor = 0
+                        report['managed_acceptance_proved'] = True
+                    else:
+                        command = [sys.executable, str(Path(__file__).with_name('windows_openssh_capacity_vm.py')),
+                                   '--ssh',str(args.ssh),'--identity',str(root/'client_key'),
+                                   '--known-hosts',str(known),'--user',user,'--ssh-port',str(ssh_port),
+                                   '--held','512','--min-held','128',
+                                   '--output',str(args.output/'bare-backend-capacity.json')]
+                        env = dict(os.environ, FLOWBRIDGE_SSH_VM='1')
+                        subprocess.run(command, env=env, check=True, timeout=180)
+                        report['bare_backend_probe_passed'] = True
+                        raw_evidence = json.loads((args.output/'bare-backend-capacity.json').read_text(encoding='utf-8'))
+                        require(raw_evidence.get('passed') is True, 'Bare backend evidence did not pass')
+                        report['raw_backend_peak_held'] = raw_evidence.get('peak_held')
+                        report['raw_backend_512_stability_proved'] = (raw_evidence.get('peak_held') == 512 and
+                            raw_evidence.get('recovery_successes', 0) >= 1)
                     report['passed'] = True
                 except Exception:
                     def redact(value):

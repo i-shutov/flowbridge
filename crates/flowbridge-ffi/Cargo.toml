@@ -9,6 +9,7 @@ rust-version.workspace = true
 crate-type = ["rlib", "staticlib", "cdylib"]
 
 [dependencies]
+flowbridge-capture = { path = "../flowbridge-capture" }
 flowbridge-core.workspace = true
 flowbridge-net.workspace = true
 flowbridge-runtime.workspace = true
@@ -19,4 +20,4 @@ serde_json.workspace = true
 
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Networking_WinSock", "Win32_System_IO"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_NetworkManagement_IpHelper", "Win32_Networking_WinSock", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Threading"] }
