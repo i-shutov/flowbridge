@@ -1,4 +1,4 @@
-name: G2 R23 redirect backend, broker and SSH transport (no driver load)
+name: G2 R24 scoped activation, socket-owned broker and SSH (no driver load)
 on:
   push:
     branches: [research/windows-wfp-ale-attribution-20261107]
@@ -29,20 +29,21 @@ jobs:
           arch: x64
       - name: Install pinned offline PE parser only
         run: python -m pip install pefile==2024.8.26
-      - name: Build original Rust WDM .sys against official WDK; NEVER load
+      - name: Compile kernel, activation controller and owned-socket broker; no load or policy install
         shell: pwsh
         run: ./research/wfp-ale/kernel-r19/build-kernel.ps1
-      - name: Preserve exact build evidence, lockfile and unsigned candidate
+      - name: Preserve exact sources, candidates and evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: FlowBridge-R19-kernel-build-${{ github.run_id }}
+          name: FlowBridge-R24-kernel-broker-${{ github.run_id }}
           path: |
             build/g2-kernel-r19/*.sys
             build/g2-kernel-r19/*.exe
             build/g2-kernel-r19/*.json
-            build/g2-kernel-r19/Cargo.lock
+            build/g2-kernel-r19/*.lock
             build/g2-kernel-r19/generated-wdk.rs
+            build/g2-kernel-r19/sources-r24.zip
           if-no-files-found: warn
           retention-days: 14
   socket-witness-no-driver:
@@ -81,11 +82,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: FlowBridge-R19-socket-${{ github.run_id }}
+          name: FlowBridge-R24-socket-${{ github.run_id }}
           path: build/g2-r17/*.json
           if-no-files-found: warn
           retention-days: 14
-
   redirect-ssh-transport-only:
     runs-on: ubuntu-24.04
     timeout-minutes: 8
@@ -94,7 +94,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
-      - name: Compile actual broker transport and wire tests
+      - name: Compile actual broker transport, wire and policy transaction tests
         shell: bash
         run: |
           set -euo pipefail
@@ -105,7 +105,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: FlowBridge-R23-SSH-transport-${{ github.run_id }}
+          name: FlowBridge-R24-SSH-transport-${{ github.run_id }}
           path: build/g2-r23/*.json
           if-no-files-found: warn
           retention-days: 14

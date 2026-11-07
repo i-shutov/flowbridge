@@ -2,6 +2,8 @@ $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $out = Join-Path $env:GITHUB_WORKSPACE 'build/g2-kernel-r19'
 New-Item -ItemType Directory -Force $out | Out-Null
+& python "$root/package_r24.py" $out
+if ($LASTEXITCODE -ne 0) { throw 'Exact source snapshot failed' }
 $nuget = (Get-Command nuget.exe -ErrorAction Stop).Source
 & $nuget install Microsoft.Windows.WDK.x64 -Version 10.0.26100.6584 -OutputDirectory "$out/wdk" -NonInteractive -Source https://api.nuget.org/v3/index.json -DirectDownload
 if ($LASTEXITCODE -ne 0) { throw 'Pinned official WDK acquisition failed' }
@@ -30,11 +32,7 @@ try {
   & cargo build --locked --release
   if ($LASTEXITCODE -ne 0) { throw 'Kernel build failed; STOP, no load attempted' }
   Copy-Item target/release/flowbridge_g2_witness.dll "$out/flowbridge_g2_witness.sys"
-  Copy-Item Cargo.lock "$out/Cargo.lock"
-  $bindings = Get-ChildItem target/release/build -Recurse -Filter wdk.rs | Select-Object -First 1
-  Copy-Item $bindings.FullName "$out/generated-wdk.rs"
 } finally {
-  # Preserve generated ABI even on a Rust compile/link failure; never a PASS flag.
   $bindings = Get-ChildItem target/release/build -Recurse -Filter wdk.rs -ErrorAction SilentlyContinue | Select-Object -First 1
   if ($bindings) { Copy-Item $bindings.FullName "$out/generated-wdk.rs" }
   Pop-Location
@@ -47,10 +45,30 @@ if ($LASTEXITCODE -ne 0) { throw 'Exact kernel ledger regression failed' }
 if ($LASTEXITCODE -ne 0) { throw 'Handoff tests compile failed' }
 & "$out/handoff-tests.exe"
 if ($LASTEXITCODE -ne 0) { throw 'Handoff tests failed' }
-& rustc --edition=2021 "$root/broker.rs" -o "$out/flowbridge-redirect-broker.exe"
-if ($LASTEXITCODE -ne 0) { throw 'Broker build failed' }
+Push-Location (Join-Path $root 'broker-package')
+try {
+  & cargo generate-lockfile
+  if ($LASTEXITCODE -ne 0) { throw 'Broker dependency resolution failed' }
+  Copy-Item Cargo.lock "$out/broker.Cargo.lock"
+  & cargo build --locked --release
+  if ($LASTEXITCODE -ne 0) { throw 'Broker and scoped policy compilation failed' }
+  Copy-Item target/release/flowbridge-redirect-broker.exe "$out/flowbridge-redirect-broker.exe"
+  $testOutput = & cargo test --locked --release -- --nocapture 2>&1
+  $testExit = $LASTEXITCODE
+  $testOutput | ForEach-Object { Write-Output $_ }
+  if ($testExit -ne 0) { throw 'Actual broker/policy/native-negative tests failed' }
+  $summary = [regex]::Match(($testOutput -join "`n"), 'test result: ok\. (\d+) passed; 0 failed')
+  if (-not $summary.Success) { throw 'Missing exact broker test count' }
+  $tests = [int]$summary.Groups[1].Value
+} finally { Pop-Location }
 & "$out/flowbridge-redirect-broker.exe" --reject-unredirected | Set-Content -Encoding utf8 "$out/broker-negative.json"
 if ($LASTEXITCODE -ne 0) { throw 'Unredirected socket was not rejected' }
+& "$out/flowbridge-redirect-broker.exe" --verify-policy-plan | Set-Content -Encoding utf8 "$out/policy-plan-native.json"
+if ($LASTEXITCODE -ne 0) { throw 'Native policy structure construction failed' }
+& python "$root/ownership_check_r24.py" | Set-Content -Encoding utf8 "$out/ownership-contract.json"
+if ($LASTEXITCODE -ne 0) { throw 'Accepted-socket compile-time ownership check failed' }
+[ordered]@{ ok=$true; source_sha=$env:GITHUB_SHA; actual_broker_tests_passed=$tests; scoped_policy_code_compiled=$true; accepted_socket_ownership_compile_tests=$true; actual_policy_installed=$false; kernel_driver_loaded=$false; full_redirect_chain_executed=$false; g2_pass=$false; release_accepted=$false } | ConvertTo-Json | Set-Content -Encoding utf8 "$out/r24-build-scope.json"
 & python "$root/verify-build.py" "$out/flowbridge_g2_witness.sys" "$out/build-result.json"
 if ($LASTEXITCODE -ne 0) { throw 'Kernel PE audit failed' }
-# Intentionally no installation, test signing, certificate import, service, filter or driver load.
+# NEVER invoke --serve-admitted-lab here: no signed-driver/VNC/rescue admission.
+# No kernel load, filter installation, signature bypass, service or host-policy change.
