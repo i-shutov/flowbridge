@@ -1,0 +1,86 @@
+name: G2 R19 authorized Rust kernel build and socket witness
+on:
+  push:
+    branches: [research/windows-wfp-ale-attribution-20261107]
+    paths:
+      - research/wfp-ale/kernel-r19/**
+      - .github/workflows/research-g2-kernel-r19.yml
+permissions:
+  contents: read
+concurrency:
+  group: research-g2-kernel-r19
+  cancel-in-progress: false
+jobs:
+  kernel-build-no-load:
+    runs-on: windows-2025
+    timeout-minutes: 25
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Install pinned offline PE parser only
+        run: python -m pip install pefile==2024.8.26
+      - name: Build original Rust WDM .sys against official WDK; NEVER load
+        shell: pwsh
+        run: ./research/wfp-ale/kernel-r19/build-kernel.ps1
+      - name: Preserve exact build evidence, lockfile and unsigned candidate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-R19-kernel-build-${{ github.run_id }}
+          path: |
+            build/g2-kernel-r19/*.sys
+            build/g2-kernel-r19/*.json
+            build/g2-kernel-r19/Cargo.lock
+            build/g2-kernel-r19/generated-wdk.rs
+          if-no-files-found: warn
+          retention-days: 14
+  socket-witness-no-driver:
+    runs-on: windows-2025
+    timeout-minutes: 12
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Compile actual R17 Rust and exact core tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force build/g2-r17 | Out-Null
+          rustc --edition=2021 --crate-type lib research/wfp-ale/socket_endpoint_r17.rs --out-dir build/g2-r17
+          if ($LASTEXITCODE -ne 0) { throw 'R17 Rust compile failed' }
+          rustc --edition=2021 --test research/wfp-ale/socket_endpoint_r17.rs -o build/g2-r17/tests.exe
+          if ($LASTEXITCODE -ne 0) { throw 'R17 tests compile failed' }
+          ./build/g2-r17/tests.exe
+          if ($LASTEXITCODE -ne 0) { throw 'R17 tests failed' }
+      - name: Execute read-only local socket query once per IP family; no redirect
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          foreach ($family in @('ipv4','ipv6')) {
+            python research/wfp-ale/socket_endpoint_r17.py --consent G2_SOCKET_ENDPOINT_READONLY --family $family | Set-Content -Encoding utf8 "build/g2-r17/$family.json"
+            if ($LASTEXITCODE -ne 0) { throw "R17 $family query failed; STOP" }
+          }
+      - name: Preserve redacted observation even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-R19-socket-${{ github.run_id }}
+          path: build/g2-r17/*.json
+          if-no-files-found: warn
+          retention-days: 14
