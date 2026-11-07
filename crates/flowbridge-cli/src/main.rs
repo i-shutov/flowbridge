@@ -8,6 +8,8 @@ use std::{error::Error, net::IpAddr, path::Path, path::PathBuf, time::Duration};
 use tokio::io::AsyncReadExt;
 use tracing::info;
 
+mod managed;
+
 type AppResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 const MAX_CONFIG_BYTES: u64 = 1024 * 1024;
 
@@ -48,6 +50,11 @@ enum Command {
         config: PathBuf,
         #[arg(long)]
         json_logs: bool,
+    },
+    /// Explicit SOCKS5 + supervised OpenSSH; direct routes and app ownership claims are forbidden.
+    ServeManaged {
+        #[arg(short, long)]
+        config: PathBuf,
     },
     /// Open and close one connection using the selected route (no application payload).
     Check {
@@ -141,6 +148,9 @@ async fn run() -> AppResult<()> {
             let profile = load_config(&config).await?;
             require_explicit_compatible(&profile)?;
             serve(profile).await?;
+        }
+        Command::ServeManaged { config } => {
+            managed::serve(&config).await?;
         }
         Command::Check { config, host, port } => {
             let profile = load_config(&config).await?;
