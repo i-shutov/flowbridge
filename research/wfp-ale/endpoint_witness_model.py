@@ -46,6 +46,7 @@ class ResearchGate:
         self.session = session
         self.live: dict[int, Owner] = {}
         self.poisoned: set[int] = set()
+        self.poisoned_endpoints: set[int] = set()
         self.redirects: dict[int, Redirect] = {}
         self.auth: dict[int, Authorization] = {}
         self.issued: set[int] = set()
@@ -93,6 +94,8 @@ class ResearchGate:
             return 'OUTSIDE_SCOPE'
         if request.family not in (4, 6) or not request.destination or request.endpoint <= 0 or request.ticket <= 0 or request.session != self.session:
             return 'INVALID_CLASSIFY'
+        if request.endpoint in self.poisoned_endpoints:
+            return 'AMBIGUOUS_ENDPOINT'
         owner = self.live.get(request.pid)
         if request.pid in self.poisoned or owner is None or owner.generation != request.generation or owner.app_id != request.app_id:
             return 'UNBOUND_OWNER'
@@ -107,9 +110,16 @@ class ResearchGate:
             return 'INVALID_AUTH'
         # A colliding same endpoint key may be reused after termination;
         # do not silently replace an active observation with a different owner.
+        if event.endpoint in self.poisoned_endpoints:
+            return 'AMBIGUOUS_ENDPOINT'
         previous = self.auth.get(event.endpoint)
         if previous is not None and previous != event:
+            self.poisoned_endpoints.add(event.endpoint)
             self.auth.pop(event.endpoint)
+            for ticket, request in tuple(self.redirects.items()):
+                if request.endpoint == event.endpoint:
+                    self.retired.add(ticket)
+                    self.redirects.pop(ticket)
             return 'AMBIGUOUS_ENDPOINT'
         self.auth[event.endpoint] = event
         return 'SUPPORTING_OBSERVATION_ONLY'
@@ -128,6 +138,7 @@ class ResearchGate:
         supporting = self.auth.get(endpoint)
         if (session != self.session or request.session != session
                 or endpoint != request.endpoint or family != request.family
+                or endpoint in self.poisoned_endpoints
                 or request.pid in self.poisoned or owner is None or owner.generation != request.generation
                 or owner.app_id != request.app_id or not owner.referenced
                 or supporting is None or supporting.pid != owner.pid
@@ -202,6 +213,8 @@ def tests():
     # Auth path mismatch cannot borrow endpoint coincidence to authorize.
     g,o,r,e=baseline()
     eq(g.observe_auth(Authorization(700,501,2,b'file-object:B',4)),'AMBIGUOUS_ENDPOINT')
+    eq(g.observe_auth(e),'AMBIGUOUS_ENDPOINT')
+    eq(g.classify(Redirect(10,77,700,501,1,b'ntpath:A',4,'192.0.2.10:443')),'AMBIGUOUS_ENDPOINT')
     eq(g.accept(9,77,700,4,True,True,True),'REJECT_INGRESS')
     # Missing redirect data; copied record from foreign socket is untrusted.
     for flags in ((False,True,True),(True,False,True),(True,True,False)):
