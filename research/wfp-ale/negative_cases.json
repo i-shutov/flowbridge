@@ -1,0 +1,251 @@
+[
+  {
+    "case": "tcp4_valid",
+    "mutate": {},
+    "expected": "MODEL_ROUTE"
+  },
+  {
+    "case": "tcp6_valid",
+    "mutate": {
+      "family": 6,
+      "ip": "2001:db8::1",
+      "accepted.family": 6,
+      "accepted.ip": "2001:db8::1"
+    },
+    "expected": "MODEL_ROUTE"
+  },
+  {
+    "case": "untrusted_etw",
+    "mutate": {
+      "source": "etw",
+      "accepted.source": "etw"
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "untrusted_iphelper",
+    "mutate": {
+      "source": "iphelper",
+      "accepted.source": "iphelper"
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "untrusted_tuple",
+    "mutate": {
+      "source": "tuple",
+      "accepted.source": "tuple"
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "untrusted_user",
+    "mutate": {
+      "source": "user",
+      "accepted.source": "user"
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "missing_record",
+    "mutate": {
+      "record": false
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "missing_context",
+    "mutate": {
+      "context": false
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "missing_own_redirect_handle",
+    "mutate": {
+      "own_redirect_handle": false
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "missing_socket_binding",
+    "mutate": {
+      "socket_binding": false
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "missing_records_set_before_connect",
+    "mutate": {
+      "records_set_before_connect": false
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "swapped_epoch",
+    "mutate": {
+      "accepted.epoch": 134000000000
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "swapped_pid",
+    "mutate": {
+      "accepted.pid": 610
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "swapped_app",
+    "mutate": {
+      "accepted.app": "opaque_B"
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "swapped_ticket",
+    "mutate": {
+      "accepted.ticket": 124
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "swapped_ip",
+    "mutate": {
+      "accepted.ip": "192.0.2.20"
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "swapped_port",
+    "mutate": {
+      "accepted.port": 80
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "swapped_session",
+    "mutate": {
+      "accepted.session": 42
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "swapped_family",
+    "mutate": {
+      "accepted.family": 6
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "missing_epoch",
+    "mutate": {
+      "epoch": 0
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "missing_pid",
+    "mutate": {
+      "pid": 0
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "missing_ticket",
+    "mutate": {
+      "ticket": 0
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "old_session",
+    "mutate": {
+      "session": 40
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "previously_self",
+    "mutate": {
+      "redirect_state": "previously_self"
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "other_provider",
+    "mutate": {
+      "redirect_state": "redirected_by_other"
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "different_same_basename_exe_appid",
+    "mutate": {
+      "app": "opaque_B",
+      "accepted.app": "opaque_B"
+    },
+    "expected": "OUTSIDE_SCOPE"
+  },
+  {
+    "case": "unsupported_udp",
+    "mutate": {
+      "transport": "udp",
+      "accepted.transport": "udp"
+    },
+    "expected": "UNCOVERED"
+  },
+  {
+    "case": "unsupported_icmp",
+    "mutate": {
+      "transport": "icmp",
+      "accepted.transport": "icmp"
+    },
+    "expected": "UNCOVERED"
+  },
+  {
+    "case": "unsupported_other",
+    "mutate": {
+      "transport": "other",
+      "accepted.transport": "other"
+    },
+    "expected": "UNCOVERED"
+  },
+  {
+    "case": "lost_filter",
+    "mutate": {
+      "filter": false
+    },
+    "expected": "UNPROTECTED"
+  },
+  {
+    "case": "lost_callout",
+    "mutate": {
+      "callout": false
+    },
+    "expected": "UNPROTECTED"
+  },
+  {
+    "case": "lost_ssh",
+    "mutate": {
+      "ssh": false
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "empty_ip",
+    "mutate": {
+      "ip": "0.0.0.0",
+      "accepted.ip": "0.0.0.0"
+    },
+    "expected": "REJECT_INGRESS"
+  },
+  {
+    "case": "missing_port",
+    "mutate": {
+      "port": 0,
+      "accepted.port": 0
+    },
+    "expected": "REJECT_INGRESS"
+  }
+]
