@@ -1,5 +1,10 @@
 // Headers/constants ONLY. No C or C++ runtime object is linked into the driver.
 #include <ntddk.h>
+// WFP networking headers require the NDIS6 surface (official WDK types).
+#ifndef NDIS630
+#define NDIS630 1
+#endif
+#include <ndis.h>
 #include <fwpsk.h>
 #include <wdmsec.h>
 #include <stddef.h>

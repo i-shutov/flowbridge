@@ -26,13 +26,19 @@ Push-Location (Join-Path $root 'kernel')
 try {
   & cargo generate-lockfile
   if ($LASTEXITCODE -ne 0) { throw 'Cargo dependency resolution failed' }
+  Copy-Item Cargo.lock "$out/Cargo.lock"
   & cargo build --locked --release
   if ($LASTEXITCODE -ne 0) { throw 'Kernel build failed; STOP, no load attempted' }
   Copy-Item target/release/flowbridge_g2_witness.dll "$out/flowbridge_g2_witness.sys"
   Copy-Item Cargo.lock "$out/Cargo.lock"
   $bindings = Get-ChildItem target/release/build -Recurse -Filter wdk.rs | Select-Object -First 1
   Copy-Item $bindings.FullName "$out/generated-wdk.rs"
-} finally { Pop-Location }
+} finally {
+  # Preserve generated ABI even on a Rust compile/link failure; never a PASS flag.
+  $bindings = Get-ChildItem target/release/build -Recurse -Filter wdk.rs -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($bindings) { Copy-Item $bindings.FullName "$out/generated-wdk.rs" }
+  Pop-Location
+}
 & rustc --edition=2021 --test "$root/kernel/src/ledger.rs" -o "$out/ledger-tests.exe"
 if ($LASTEXITCODE -ne 0) { throw 'Exact kernel ledger tests did not compile' }
 & "$out/ledger-tests.exe"
