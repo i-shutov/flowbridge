@@ -34,6 +34,8 @@ class Authorization:
     generation: int
     path_identity: bytes
     family: int
+    # A repeated ALE_AUTH_CONNECT may be reauthorization, not new flow proof.
+    reauthorize: bool = False
 
 class ResearchGate:
     """Conservative synthetic gate; outputs only MODEL_CANDIDATE, never PROVED.
@@ -51,6 +53,8 @@ class ResearchGate:
         self.poisoned_endpoints: set[int] = set()
         self.redirects: dict[int, Redirect] = {}
         self.auth: dict[int, Authorization] = {}
+        # An AUTH observation is not portable to another pending ticket.
+        self.auth_ticket: dict[int, int] = {}
         self.issued: set[int] = set()
         self.consumed: set[int] = set()
         self.retired: set[int] = set()
@@ -58,18 +62,24 @@ class ResearchGate:
         self.active_callout = True
         self.ssh_ready = True
 
+    def _retire_endpoint(self, endpoint: int) -> None:
+        # Without a native ALE_ENDPOINT_CLOSURE event and proven lifetime,
+        # endpoint reuse is ambiguous for the remainder of this model session.
+        self.poisoned_endpoints.add(endpoint)
+        self.auth.pop(endpoint, None)
+        self.auth_ticket.pop(endpoint, None)
+        for ticket, request in tuple(self.redirects.items()):
+            if request.endpoint == endpoint:
+                self.retired.add(ticket)
+                self.redirects.pop(ticket)
+
     def _revoke_pid_state(self, pid: int) -> None:
         # A classification or AUTH observation must not survive its owner.
         # Numeric endpoint handles are lifetime-scoped; poison them on exit.
-        for ticket, request in tuple(self.redirects.items()):
-            if request.pid == pid:
-                self.retired.add(ticket)
-                self.poisoned_endpoints.add(request.endpoint)
-                self.redirects.pop(ticket)
-        for endpoint, event in tuple(self.auth.items()):
-            if event.pid == pid:
-                self.poisoned_endpoints.add(endpoint)
-                self.auth.pop(endpoint)
+        endpoints = {request.endpoint for request in self.redirects.values() if request.pid == pid}
+        endpoints.update(endpoint for endpoint, event in self.auth.items() if event.pid == pid)
+        for endpoint in endpoints:
+            self._retire_endpoint(endpoint)
 
     def start_process(self, owner: Owner) -> str:
         if owner.pid <= 0 or owner.generation <= 0 or owner.epoch <= 0 or not owner.referenced or not owner.app_id or not owner.exe_identity:
@@ -120,6 +130,10 @@ class ResearchGate:
             return 'UNBOUND_OWNER'
         if request.ticket in self.issued or request.ticket in self.retired:
             return 'REPLAY'
+        # A reused endpoint number cannot serve multiple concurrent tickets.
+        if request.endpoint in self.auth or any(p.endpoint == request.endpoint for p in self.redirects.values()):
+            self._retire_endpoint(request.endpoint)
+            return 'AMBIGUOUS_ENDPOINT'
         self.issued.add(request.ticket)
         self.redirects[request.ticket] = request
         return 'CAPTURED_MODEL'
@@ -127,20 +141,36 @@ class ResearchGate:
     def observe_auth(self, event: Authorization) -> str:
         if event.endpoint <= 0 or event.family not in (4, 6) or not event.path_identity:
             return 'INVALID_AUTH'
-        # A colliding same endpoint key may be reused after termination;
-        # do not silently replace an active observation with a different owner.
         if event.endpoint in self.poisoned_endpoints:
             return 'AMBIGUOUS_ENDPOINT'
-        previous = self.auth.get(event.endpoint)
-        if previous is not None and previous != event:
-            self.poisoned_endpoints.add(event.endpoint)
-            self.auth.pop(event.endpoint)
-            for ticket, request in tuple(self.redirects.items()):
-                if request.endpoint == event.endpoint:
-                    self.retired.add(ticket)
-                    self.redirects.pop(ticket)
+        # Microsoft documents ALE reauthorization, which must not be promoted
+        # to a *fresh* connection-owner observation.
+        if event.reauthorize:
+            return 'REAUTHORIZE_NOT_NEW_PROOF'
+        if event.endpoint in self.auth:
+            self._retire_endpoint(event.endpoint)
+            return 'AMBIGUOUS_ENDPOINT'
+        # Bind an AUTH observation to exactly one pending classify in this
+        # synthetic model, not merely to a numeric endpoint key.
+        pending = [(ticket, request) for ticket, request in self.redirects.items()
+                   if request.endpoint == event.endpoint]
+        if len(pending) != 1:
+            if len(pending) > 1:
+                self._retire_endpoint(event.endpoint)
+                return 'AMBIGUOUS_ENDPOINT'
+            return 'UNBOUND_AUTH'
+        ticket, request = pending[0]
+        owner = self.live.get(request.pid)
+        if (request.pid in self.poisoned or owner is None or not owner.referenced
+                or owner.generation != request.generation
+                or owner.app_id != request.app_id
+                or event.pid != request.pid or event.generation != request.generation
+                or event.path_identity != owner.exe_identity
+                or event.family != request.family):
+            self._retire_endpoint(event.endpoint)
             return 'AMBIGUOUS_ENDPOINT'
         self.auth[event.endpoint] = event
+        self.auth_ticket[event.endpoint] = ticket
         return 'SUPPORTING_OBSERVATION_ONLY'
 
     def accept(self, ticket: int, session: int, endpoint: int, family: int,
@@ -154,13 +184,17 @@ class ResearchGate:
         self.consumed.add(ticket)
         self.retired.add(ticket)
         owner = self.live.get(request.pid)
-        supporting = self.auth.get(endpoint)
+        # Read only the classified endpoint; never trust a caller-supplied
+        # alternate endpoint to choose a different stored AUTH observation.
+        supporting = self.auth.get(request.endpoint)
+        supporting_ticket = self.auth_ticket.get(request.endpoint)
+        self._retire_endpoint(request.endpoint)
         if (session != self.session or request.session != session
                 or endpoint != request.endpoint or family != request.family
-                or endpoint in self.poisoned_endpoints
                 or request.pid in self.poisoned or owner is None or owner.generation != request.generation
                 or owner.app_id != request.app_id or not owner.referenced
-                or supporting is None or supporting.pid != owner.pid
+                or supporting is None or supporting_ticket != ticket
+                or supporting.pid != owner.pid
                 or supporting.generation != owner.generation
                 or supporting.path_identity != owner.exe_identity
                 or supporting.family != request.family
@@ -180,9 +214,8 @@ class ResearchGate:
             self.ssh_ready = False
         else:
             return 'UNKNOWN_COMPONENT'
-        for ticket in self.redirects:
-            self.retired.add(ticket)
-        self.redirects.clear()
+        for endpoint in {req.endpoint for req in self.redirects.values()} | set(self.auth):
+            self._retire_endpoint(endpoint)
         return 'UNPROTECTED' if component in ('filter', 'callout') else 'OWNED_INGRESS_CLOSED_ONLY'
 
     @staticmethod

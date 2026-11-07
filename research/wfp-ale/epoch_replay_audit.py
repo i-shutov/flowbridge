@@ -112,9 +112,11 @@ def main():
     # An observation with no retained classify also has a finite lifetime.
     g = ResearchGate(APP, 77)
     require(g.start_process(Owner(501, 1, 901, APP, IMAGE, True)) == 'REGISTERED_MODEL', 'auth-only owner')
-    require(g.observe_auth(Authorization(700, 501, 1, IMAGE, 4)) == 'SUPPORTING_OBSERVATION_ONLY', 'auth-only event')
+    require(g.observe_auth(Authorization(700, 501, 1, IMAGE, 4)) == 'UNBOUND_AUTH',
+            'AUTH without pending classify must not create evidence')
+    require(700 not in g.auth and 700 not in g.auth_ticket, 'orphan AUTH observation persisted')
     require(g.stop_process(501, 1) == 'REVOKED_MODEL', 'auth-only exit')
-    require(700 in g.poisoned_endpoints and 700 not in g.auth, 'auth-only endpoint survived process exit')
+    require(700 not in g.auth and 700 not in g.auth_ticket, 'orphan AUTH survived exit')
 
     print(json.dumps({
         'ok': True,
