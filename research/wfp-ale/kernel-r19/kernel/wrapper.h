@@ -9,6 +9,7 @@
 #include <wdmsec.h>
 #include <stddef.h>
 enum {
+ FB_NON_PAGED = POOL_FLAG_NON_PAGED,
  FB_IRP_BUFFER = offsetof(IRP, AssociatedIrp.SystemBuffer),
  FB_IRP_STACK = offsetof(IRP, Tail.Overlay.CurrentStackLocation),
  FB_IRP_STATUS = offsetof(IRP, IoStatus.Status),

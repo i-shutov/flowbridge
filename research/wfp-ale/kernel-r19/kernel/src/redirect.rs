@@ -3,7 +3,7 @@
 //! Driver stays unarmed until an observed broker process configures its listeners.
 use super::{k,Cell,Guard,STATE,read_at};
 use super::handoff::{self as h,Book,Context,Destination,Origin};
-use core::{ffi::c_void,ptr,slice,mem};
+use core::{ffi::c_void,ptr,slice};
 struct Policy { configured:bool,armed:bool,pid:u64,process:usize,ports:[u16;2],last:u64,len:usize,name:[u8;512],book:Book }
 static ROUTE:Cell<Policy>=Cell(core::cell::UnsafeCell::new(Policy{configured:false,armed:false,pid:0,process:0,ports:[0;2],last:0,len:0,name:[0;512],book:Book::new()}));
 static mut HANDLE:k::HANDLE=ptr::null_mut();
@@ -70,7 +70,7 @@ impl Drop for Writable {fn drop(&mut self){unsafe{
 }}}
 unsafe fn writable(context:*const c_void,filter:*const k::FWPS_FILTER1,out:*mut k::FWPS_CLASSIFY_OUT0)->Option<Writable>{
     if context.is_null()||filter.is_null(){return None;}
-    let mut handle=0;if k::FwpsAcquireClassifyHandle0(context,0,&mut handle)<0{return None;}
+    let mut handle=0;if k::FwpsAcquireClassifyHandle0(context.cast_mut(),0,&mut handle)<0{return None;}
     let mut w=Writable{handle,request:ptr::null_mut()};let mut raw=ptr::null_mut();
     if k::FwpsAcquireWritableLayerDataPointer0(handle,(*filter).filterId,0,&mut raw,out)<0{return None;}
     w.request=raw.cast();if w.request.is_null(){return None;}Some(w)
@@ -136,7 +136,7 @@ pub unsafe fn classify(values:*const k::FWPS_INCOMING_VALUES0,meta:*const k::FWP
         }
     };
     let Some((context,broker,port))=issue else{block(out);return;};
-    let memory=k::ExAllocatePool2(k::POOL_FLAG_NON_PAGED as u64,h::LEN as k::SIZE_T,TAG);
+    let memory=k::ExAllocatePool2(k::FB_NON_PAGED as u64,h::LEN as k::SIZE_T,TAG);
     if memory.is_null(){let _lock=Guard::take();(*ROUTE.0.get()).book.retire(context);block(out);return;}
     ptr::copy_nonoverlapping(context.0.as_ptr(),memory.cast::<u8>(),h::LEN);
     let mut target=[0u8;128];target[..2].copy_from_slice(&(if family==4{2u16}else{23u16}).to_le_bytes());
