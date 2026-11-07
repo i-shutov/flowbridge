@@ -11,8 +11,8 @@ fn main() {
         .use_core().ctypes_prefix("core::ffi").layout_tests(false)
         .derive_debug(false).generate_comments(false).prepend_enum_name(false)
         .allowlist_type("(DRIVER_OBJECT|DEVICE_OBJECT|IRP|UNICODE_STRING|PS_CREATE_NOTIFY_INFO|FWPS_.*|GUID|KSPIN_LOCK|NTSTATUS|BOOLEAN|KIRQL|LARGE_INTEGER|EX_RUNDOWN_REF)")
-        .allowlist_function("(IoCreateDevice|WdmlibIoCreateDeviceSecure|IoDeleteDevice|IoCreateSymbolicLink|IoDeleteSymbolicLink|IofCompleteRequest|RtlInitUnicodeString|RtlDowncaseUnicodeString|PsSetCreateProcessNotifyRoutineEx|PsGetProcessId|PsGetProcessCreateTimeQuadPart|PsGetProcessStartKey|ObfReferenceObject|ObfDereferenceObject|KeAcquireSpinLockRaiseToDpc|KeReleaseSpinLock|KeInitializeSpinLock|KeQueryPerformanceCounter|KeBugCheckEx|ExInitializeRundownProtection|ExAcquireRundownProtection|ExReleaseRundownProtection|ExWaitForRundownProtectionRelease|FwpsCalloutRegister1|FwpsCalloutUnregisterById0)")
-        .allowlist_var("(FB_.*|FWPS_.*|FWP_ACTION_CONTINUE|FWP_BYTE_BLOB_TYPE|FWP_UINT8|IRP_MJ_.*|DO_DEVICE_INITIALIZING|FILE_DEVICE_UNKNOWN|FILE_DEVICE_SECURE_OPEN)");
+        .allowlist_function("(IoCreateDevice|WdmlibIoCreateDeviceSecure|IoDeleteDevice|IoCreateSymbolicLink|IoDeleteSymbolicLink|IofCompleteRequest|RtlInitUnicodeString|RtlDowncaseUnicodeString|PsSetCreateProcessNotifyRoutineEx|PsGetProcessId|PsGetProcessCreateTimeQuadPart|PsGetProcessStartKey|ObfReferenceObject|ObfDereferenceObject|KeAcquireSpinLockRaiseToDpc|KeReleaseSpinLock|KeInitializeSpinLock|KeQueryPerformanceCounter|KeBugCheckEx|ExInitializeRundownProtection|ExAcquireRundownProtection|ExReleaseRundownProtection|ExWaitForRundownProtectionRelease|FwpsCalloutRegister1|FwpsCalloutUnregisterById0|FwpsRedirectHandleCreate0|FwpsRedirectHandleDestroy0|FwpsQueryConnectionRedirectState0|FwpsAcquireClassifyHandle0|FwpsReleaseClassifyHandle0|FwpsAcquireWritableLayerDataPointer0|FwpsApplyModifiedLayerData0|ExAllocatePool2|KeQueryInterruptTimePrecise|IoGetRequestorProcess)")
+        .allowlist_var("(FB_.*|FWPS_.*|FWP_ACTION_.*|POOL_FLAG_NON_PAGED|FWP_BYTE_BLOB_TYPE|FWP_UINT8|IRP_MJ_.*|DO_DEVICE_INITIALIZING|FILE_DEVICE_UNKNOWN|FILE_DEVICE_SECURE_OPEN)");
     for key in ["FB_WDK_KM", "FB_WDK_CRT", "FB_SDK_SHARED", "FB_SDK_UCRT"] {
         let p = env::var(key).expect(key);
         b = b.clang_arg(format!("-I{p}"));
@@ -23,7 +23,7 @@ fn main() {
     println!("cargo:rerun-if-changed=wrapper.h");
     println!("cargo:rerun-if-changed=src/msvc_runtime.rs");
     println!("cargo:rustc-link-search=native={}", env::var("FB_WDK_LIB").unwrap());
-    for lib in ["ntoskrnl", "fwpkclnt", "hal", "wdmsec", "BufferOverflowFastFailK"] { println!("cargo:rustc-link-lib={lib}"); }
+    for lib in ["ntoskrnl", "fwpkclnt", "hal", "wdmsec", "BufferOverflowFastFailK", "cng"] { println!("cargo:rustc-link-lib={lib}"); }
     for flag in ["/DRIVER", "/SUBSYSTEM:NATIVE", "/ENTRY:DriverEntry", "/NODEFAULTLIB", "/INTEGRITYCHECK", "/DYNAMICBASE", "/NXCOMPAT", "/OPT:REF,ICF"] {
         println!("cargo:rustc-link-arg={flag}");
     }

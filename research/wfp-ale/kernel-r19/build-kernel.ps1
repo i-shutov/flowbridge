@@ -43,6 +43,14 @@ try {
 if ($LASTEXITCODE -ne 0) { throw 'Exact kernel ledger tests did not compile' }
 & "$out/ledger-tests.exe"
 if ($LASTEXITCODE -ne 0) { throw 'Exact kernel ledger regression failed' }
+& rustc --edition=2021 --test "$root/kernel/src/handoff.rs" -o "$out/handoff-tests.exe"
+if ($LASTEXITCODE -ne 0) { throw 'Handoff tests compile failed' }
+& "$out/handoff-tests.exe"
+if ($LASTEXITCODE -ne 0) { throw 'Handoff tests failed' }
+& rustc --edition=2021 "$root/broker.rs" -o "$out/flowbridge-redirect-broker.exe"
+if ($LASTEXITCODE -ne 0) { throw 'Broker build failed' }
+& "$out/flowbridge-redirect-broker.exe" --reject-unredirected | Set-Content -Encoding utf8 "$out/broker-negative.json"
+if ($LASTEXITCODE -ne 0) { throw 'Unredirected socket was not rejected' }
 & python "$root/verify-build.py" "$out/flowbridge_g2_witness.sys" "$out/build-result.json"
 if ($LASTEXITCODE -ne 0) { throw 'Kernel PE audit failed' }
 # Intentionally no installation, test signing, certificate import, service, filter or driver load.

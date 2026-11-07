@@ -14,6 +14,7 @@ enum {
  FB_IRP_STATUS = offsetof(IRP, IoStatus.Status),
  FB_IRP_INFORMATION = offsetof(IRP, IoStatus.Information),
  FB_STACK_CODE = offsetof(IO_STACK_LOCATION, Parameters.DeviceIoControl.IoControlCode),
+ FB_STACK_INPUT = offsetof(IO_STACK_LOCATION, Parameters.DeviceIoControl.InputBufferLength),
  FB_STACK_OUTPUT = offsetof(IO_STACK_LOCATION, Parameters.DeviceIoControl.OutputBufferLength),
  FB_STACK_MAJOR = offsetof(IO_STACK_LOCATION, MajorFunction),
  FB_CREATE_FLAGS = sizeof(SIZE_T),

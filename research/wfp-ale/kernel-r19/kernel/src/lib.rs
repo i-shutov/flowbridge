@@ -1,5 +1,5 @@
-//! Original Rust WDM observer backend. BUILD-ONLY / NOT NATIVE-ACCEPTED.
-//! Registers kernel callbacks but installs NO BFE filters and performs NO redirect.
+//! Original Rust WDM redirect backend. BUILD-ONLY / NOT NATIVE-ACCEPTED.
+//! Registers kernel callbacks; redirect remains unarmed until broker configuration. No filter installer.
 //! An approved external lab policy is necessary to invoke the ALE callouts.
 //! Process/EXE refs originate at process creation, not a late numeric-PID lookup.
 #![no_std]
@@ -8,6 +8,8 @@ use core::{cell::UnsafeCell, ffi::c_void, mem, ptr, slice, sync::atomic::{Atomic
 #[allow(dead_code,non_snake_case,non_camel_case_types,non_upper_case_globals,improper_ctypes,unused_imports)]
 mod k { include!(concat!(env!("OUT_DIR"), "/wdk.rs")); }
 mod ledger;
+mod handoff;
+mod redirect;
 use ledger::{Ledger,Owner,Witness,MAX_NAME};
 
 struct Cell<T>(UnsafeCell<T>); unsafe impl<T> Sync for Cell<T> {}
@@ -31,7 +33,7 @@ const V6_GUID:k::GUID=k::GUID{Data1:0x1649f016,Data2:0x25b3,Data3:0x4e01,Data4:[
 const fn wide<const N:usize>(s:&[u8])->[u16;N]{let mut v=[0;N];let mut i=0;while i<s.len(){v[i]=s[i] as u16;i+=1;}v}
 const DEV:[u16;31]=wide(b"\\Device\\FlowBridgeG2WitnessR19");
 const LINK:[u16;35]=wide(b"\\DosDevices\\FlowBridgeG2WitnessR19");
-const SDDL:[u16;31]=wide(b"D:P(A;;GR;;;SY)(A;;GR;;;BA)");
+const SDDL:[u16;35]=wide(b"D:P(A;;GRGW;;;SY)(A;;GRGW;;;BA)");
 
 unsafe fn unicode(s:*const u16)->k::UNICODE_STRING {let mut u=mem::zeroed();k::RtlInitUnicodeString(&mut u,s);u}
 struct Guard(u8);
@@ -48,7 +50,7 @@ unsafe extern "C" fn process_event(process:k::PEPROCESS,pid:k::HANDLE,info:*mut 
     let Some(_active)=Active::enter() else{return};
     if STOP.load(Ordering::Acquire) || process.is_null(){return;}
     let id=pid as usize as u64;
-    if info.is_null(){let _lock=Guard::take();(*STATE.0.get()).died(id,process as usize);return;}
+    if info.is_null(){let _lock=Guard::take();(*STATE.0.get()).died(id,process as usize);redirect::process_exit(id);return;}
     let c=&*info;
     if c.Size < mem::size_of::<k::PS_CREATE_NOTIFY_INFO>() as k::SIZE_T || c.CreationStatus<0
         || c.FileObject.is_null() || c.ImageFileName.is_null(){return;}
@@ -76,28 +78,11 @@ unsafe extern "C" fn process_event(process:k::PEPROCESS,pid:k::HANDLE,info:*mut 
 
 unsafe extern "C" fn classify(values:*const k::FWPS_INCOMING_VALUES0,meta:*const k::FWPS_INCOMING_METADATA_VALUES0,
     _layer:*mut c_void,_context:*const c_void,_filter:*const k::FWPS_FILTER1,_flow:u64,out:*mut k::FWPS_CLASSIFY_OUT0) {
-    // Observational callout: NEVER block, permit-hard, rewrite or claim no-DIRECT.
+    // Unarmed callbacks continue; selected armed traffic is decided by redirect.rs.
     if !out.is_null() && (*out).rights & k::FWPS_RIGHT_ACTION_WRITE!=0{(*out).actionType=k::FWP_ACTION_CONTINUE;}
-    let Some(_active)=Active::enter() else{return};
-    if STOP.load(Ordering::Acquire)||values.is_null()||meta.is_null(){return;}
-    let f=&*values;let m=&*meta;
-    let (family,index,proto)=if f.layerId as i32==k::FWPS_LAYER_ALE_CONNECT_REDIRECT_V4 {
-        (4,k::FWPS_FIELD_ALE_CONNECT_REDIRECT_V4_ALE_APP_ID as usize,k::FWPS_FIELD_ALE_CONNECT_REDIRECT_V4_IP_PROTOCOL as usize)
-    }else if f.layerId as i32==k::FWPS_LAYER_ALE_CONNECT_REDIRECT_V6 {
-        (6,k::FWPS_FIELD_ALE_CONNECT_REDIRECT_V6_ALE_APP_ID as usize,k::FWPS_FIELD_ALE_CONNECT_REDIRECT_V6_IP_PROTOCOL as usize)
-    }else{return};
-    let needed=k::FWPS_METADATA_FIELD_PROCESS_ID | k::FWPS_METADATA_FIELD_TRANSPORT_ENDPOINT_HANDLE;
-    if m.currentMetadataValues&needed!=needed || f.incomingValue.is_null() || index>=f.valueCount as usize || proto>=f.valueCount as usize{return;}
-    let p=f.incomingValue.add(proto).cast::<c_void>();
-    if read_at::<i32>(p,k::FB_VALUE_TYPE)!=k::FWP_UINT8 || read_at::<u8>(p,k::FB_VALUE_U8)!=6{return;}
-    let v=f.incomingValue.add(index).cast::<c_void>();
-    if read_at::<i32>(v,k::FB_VALUE_TYPE)!=k::FWP_BYTE_BLOB_TYPE{return;}
-    let blob:*const k::FWP_BYTE_BLOB=read_at(v,k::FB_VALUE_BLOB);
-    if blob.is_null()||(*blob).data.is_null()||(*blob).size<2||(*blob).size as usize>MAX_NAME+2||(*blob).size%2!=0{return;}
-    let mut bytes=slice::from_raw_parts((*blob).data,(*blob).size as usize);
-    if bytes.ends_with(&[0,0]){bytes=&bytes[..bytes.len()-2];}
-    let _lock=Guard::take();
-    let _=(*STATE.0.get()).observe(m.processId,m.transportEndpointHandle,family,bytes);
+    let Some(_active)=Active::enter() else{if !out.is_null(){(*out).actionType=k::FWP_ACTION_BLOCK;(*out).rights&=!k::FWPS_RIGHT_ACTION_WRITE;}return};
+    if STOP.load(Ordering::Acquire){if !out.is_null(){(*out).actionType=k::FWP_ACTION_BLOCK;(*out).rights&=!k::FWPS_RIGHT_ACTION_WRITE;}return;}
+    redirect::classify(values,meta,_context,_filter,out);
 }
 unsafe extern "C" fn notify(_ty:k::FWPS_CALLOUT_NOTIFY_TYPE,_key:*const k::GUID,_filter:*mut k::FWPS_FILTER1)->i32{SUCCESS}
 
@@ -113,7 +98,17 @@ unsafe extern "C" fn dispatch(_dev:*mut k::DEVICE_OBJECT,irp:*mut k::IRP)->i32 {
     if stack.is_null(){return complete(irp,INVALID,0);}
     let major:u8=read_at(stack,k::FB_STACK_MAJOR);
     if major==k::IRP_MJ_CREATE as u8||major==k::IRP_MJ_CLOSE as u8{return complete(irp,SUCCESS,0);}
-    if major!=k::IRP_MJ_DEVICE_CONTROL as u8||read_at::<u32>(stack,k::FB_STACK_CODE)!=k::FB_WITNESS_IOCTL as u32{return complete(irp,DENIED,0);}
+    if major!=k::IRP_MJ_DEVICE_CONTROL as u8{return complete(irp,DENIED,0);}
+    let code=read_at::<u32>(stack,k::FB_STACK_CODE);
+    if matches!(code,handoff::ARM|handoff::CLAIM|handoff::PING|handoff::STOP){
+        let length=read_at::<u32>(stack,k::FB_STACK_INPUT) as usize;
+        let buffer:*const u8=read_at(irp.cast(),k::FB_IRP_BUFFER);
+        if length>handoff::ARM_LEN || (length>0 && buffer.is_null()){return complete(irp,INVALID,0);}
+        let input=if length==0{&[]}else{slice::from_raw_parts(buffer,length)};
+        let status=redirect::ioctl(code,input,k::IoGetRequestorProcess(irp));
+        return complete(irp,status,0);
+    }
+    if code!=k::FB_WITNESS_IOCTL as u32{return complete(irp,DENIED,0);}
     let length:u32=read_at(stack,k::FB_STACK_OUTPUT);
     let buffer:*mut c_void=read_at(irp.cast(),k::FB_IRP_BUFFER);
     if buffer.is_null() || (length as usize)<mem::size_of::<Witness>(){return complete(irp,BUFFER_SMALL,0);}
@@ -126,6 +121,7 @@ unsafe fn cleanup(){
     for i in 0..2 {if IDS[i]!=0{let status=k::FwpsCalloutUnregisterById0(IDS[i]);if status<0{k::KeBugCheckEx(0xE2,0x47323139,status as k::ULONG_PTR,1,0);}IDS[i]=0;}}
     if PROCESS_NOTIFY {let status=k::PsSetCreateProcessNotifyRoutineEx(Some(process_event),1);if status<0{k::KeBugCheckEx(0xE2,0x47323139,status as k::ULONG_PTR,2,0);}PROCESS_NOTIFY=false;}
     k::ExWaitForRundownProtectionRelease(ptr::addr_of_mut!(RUNDOWN));
+    redirect::destroy();
     // No caller/callback can now access ledger. Held process and image refs are released once.
     for o in &mut (*STATE.0.get()).owners {if o.file!=0{k::ObfDereferenceObject(o.file as *mut c_void);}if o.process!=0{k::ObfDereferenceObject(o.process as *mut c_void);}*o=Owner::EMPTY;}
     if LINK_CREATED{let mut n=unicode(LINK.as_ptr());k::IoDeleteSymbolicLink(&mut n);LINK_CREATED=false;}
@@ -141,9 +137,10 @@ pub unsafe extern "C" fn DriverEntry(driver:*mut k::DRIVER_OBJECT,_path:*const k
     // LARGE_INTEGER's first eight bytes are QuadPart by WDK definition.
     let session=ptr::read_unaligned((&clock as *const k::LARGE_INTEGER).cast::<u64>());
     (*STATE.0.get()).session=if session==0{1}else{session};
+    let status=redirect::initialize();if status<0{return status;}
     let mut name=unicode(DEV.as_ptr());let mut sddl=unicode(SDDL.as_ptr());
     let status=k::WdmlibIoCreateDeviceSecure(driver,0,&mut name,k::FILE_DEVICE_UNKNOWN,k::FILE_DEVICE_SECURE_OPEN,0,&mut sddl,&GUARD_GUID,ptr::addr_of_mut!(DEVICE));
-    if status<0{return status;}
+    if status<0{redirect::destroy();return status;}
     for i in 0..(*driver).MajorFunction.len(){(*driver).MajorFunction[i]=Some(dispatch);}
     (*driver).DriverUnload=Some(unload);
     let mut link=unicode(LINK.as_ptr());

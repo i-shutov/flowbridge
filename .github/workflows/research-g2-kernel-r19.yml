@@ -1,4 +1,4 @@
-name: G2 R19 authorized Rust kernel build and socket witness
+name: G2 R23 redirect backend, broker and SSH transport (no driver load)
 on:
   push:
     branches: [research/windows-wfp-ale-attribution-20261107]
@@ -39,6 +39,7 @@ jobs:
           name: FlowBridge-R19-kernel-build-${{ github.run_id }}
           path: |
             build/g2-kernel-r19/*.sys
+            build/g2-kernel-r19/*.exe
             build/g2-kernel-r19/*.json
             build/g2-kernel-r19/Cargo.lock
             build/g2-kernel-r19/generated-wdk.rs
@@ -82,5 +83,29 @@ jobs:
         with:
           name: FlowBridge-R19-socket-${{ github.run_id }}
           path: build/g2-r17/*.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  redirect-ssh-transport-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Compile actual broker transport and wire tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/g2-r23
+          rustc --edition=2021 --test --cfg ssh_integration research/wfp-ale/kernel-r19/broker.rs -o build/g2-r23/transport-tests
+      - name: Run isolated real OpenSSH TCP and half-close test; no service changes
+        run: python3 research/wfp-ale/kernel-r19/ssh_transport_smoke.py build/g2-r23/transport-tests build/g2-r23/transport-result.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: FlowBridge-R23-SSH-transport-${{ github.run_id }}
+          path: build/g2-r23/*.json
           if-no-files-found: warn
           retention-days: 14

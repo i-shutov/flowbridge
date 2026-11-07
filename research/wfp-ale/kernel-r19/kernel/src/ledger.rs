@@ -94,6 +94,11 @@ impl Ledger {
         w.flags=0x0f;w.protocol=6;w.appid_len=appid.len() as u32;w.appid[..appid.len()].copy_from_slice(appid);
         self.queue[(self.read+self.count)%MAX_RECORDS]=w;self.count+=1;Ok(())
     }
+    pub fn lookup(&self,pid:u64)->Option<(Owner,u64)> {
+        if self.lost {return None;}
+        self.owners[..self.used].iter().enumerate().find(|(_,o)|o.pid==pid&&o.live)
+            .map(|(index,o)|(*o,(index+1) as u64))
+    }
     pub fn pop(&mut self)->Result<Option<Witness>,Denied> {
         if self.lost {return Err(Denied::Lost);}
         if self.count==0 {return Ok(None);}
