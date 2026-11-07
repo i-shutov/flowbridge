@@ -1,0 +1,78 @@
+{
+  "diagnostic_sha256": "ad1341b53b8cac676394877a1b5f28cf6e42ebd527ba9fdb89d39e460ce17039",
+  "driver_or_filter_changed": false,
+  "evidence_kind": "offline_analysis_of_SHA_pinned_historical_Windows_marginals",
+  "exact_filter_is_not_process_epoch": true,
+  "historical_artifact_sha256": "95560460776b802da5ccd1a608495609715144a59a7fac5fbfaed331542faa92",
+  "historical_source_merge": "ab6ed5273db6e9741915a96c74809433af125870",
+  "ipv6_and_udp_dns_guard_proved": false,
+  "joint_proof_from_marginals": false,
+  "kernel_origin_connection_identity_proved": false,
+  "kernel_process_epoch_proved": false,
+  "loopback": {
+    "accepted_socket_redirect_receipt_proved": false,
+    "exact_filter_classify_drop_events": 3,
+    "kernel_pid_creation_epoch_proved": false,
+    "marginal_pairs": {
+      "other": {
+        "handle_appid_marginal": 1,
+        "native_path_marginal": 1,
+        "same_event_joint_lower": 0,
+        "same_event_joint_observed": false,
+        "same_event_joint_upper": 1
+      },
+      "selected": {
+        "handle_appid_marginal": 1,
+        "native_path_marginal": 1,
+        "same_event_joint_lower": 0,
+        "same_event_joint_observed": false,
+        "same_event_joint_upper": 1
+      }
+    },
+    "ndisrd_packetbound_proved": false,
+    "original_other_input_appid_event_matches": 0,
+    "original_selected_input_appid_event_matches": 0,
+    "python_original_appid_event_matches": 1,
+    "release_accepted": false,
+    "same_event_joint_pairs_possible_upper": 2,
+    "same_event_joint_pairs_proved": 0,
+    "system_no_direct_proved": false,
+    "unattributed_to_original_comparators": 2
+  },
+  "ndisrd_packetbound_proved": false,
+  "new_native_windows_execution": false,
+  "ok": true,
+  "redirect_socket_receipt_chain_proved": false,
+  "release_accepted": false,
+  "same_host_ipv4": {
+    "accepted_socket_redirect_receipt_proved": false,
+    "exact_filter_classify_drop_events": 3,
+    "kernel_pid_creation_epoch_proved": false,
+    "marginal_pairs": {
+      "other": {
+        "handle_appid_marginal": 1,
+        "native_path_marginal": 1,
+        "same_event_joint_lower": 0,
+        "same_event_joint_observed": false,
+        "same_event_joint_upper": 1
+      },
+      "selected": {
+        "handle_appid_marginal": 1,
+        "native_path_marginal": 1,
+        "same_event_joint_lower": 0,
+        "same_event_joint_observed": false,
+        "same_event_joint_upper": 1
+      }
+    },
+    "ndisrd_packetbound_proved": false,
+    "original_other_input_appid_event_matches": 0,
+    "original_selected_input_appid_event_matches": 0,
+    "python_original_appid_event_matches": 1,
+    "release_accepted": false,
+    "same_event_joint_pairs_possible_upper": 2,
+    "same_event_joint_pairs_proved": 0,
+    "system_no_direct_proved": false,
+    "unattributed_to_original_comparators": 2
+  },
+  "ssh_wfp_loss_no_direct_proved": false
+}
