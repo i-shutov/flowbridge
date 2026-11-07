@@ -1,0 +1,68 @@
+name: Research R15 Rust and Win32 WFP AppId cross-check (read-only)
+on:
+  push:
+    branches:
+      - research/windows-wfp-ale-attribution-20261107
+    paths:
+      - .github/workflows/research-wfp-appid-rust-r15.yml
+permissions:
+  contents: read
+concurrency:
+  group: research-wfp-appid-rust-r15-one-shot
+  cancel-in-progress: false
+jobs:
+  rust-appid-on-windows:
+    if: github.repository == 'i-shutov/flowbridge' && github.ref == 'refs/heads/research/windows-wfp-ale-attribution-20261107'
+    runs-on: windows-2025
+    timeout-minutes: 12
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - name: Checkout exact research source with no credential persistence
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Stable Rust compiler from standard toolchain action
+        uses: dtolnay/rust-toolchain@stable
+      - name: Python 3.13 for independent Windows FFI
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Independent offline input and trust-boundary tests
+        shell: pwsh
+        run: |
+          python -m unittest discover -s research/wfp-ale -p test_appid_native_matrix.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'R15 baseline tests failed' }
+          python -m unittest discover -s research/wfp-ale -p test_appid_measurement_levels.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'R15 trust-boundary tests failed' }
+      - name: Compile Rust and execute real read-only WFP AppId cross-check
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Path build/verification/wfp-appid-r15 -Force | Out-Null
+          python research/wfp-ale/appid_native_matrix.py | Set-Content -Encoding utf8 -Path build/verification/wfp-appid-r15/native-result.json
+          if ($LASTEXITCODE -ne 0) { throw 'Rust or Win32 native experiment failed' }
+      - name: Verify Rust and independent Win32 agreed; do not claim G2
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $r = Get-Content -Raw build/verification/wfp-appid-r15/native-result.json | ConvertFrom-Json -AsHashtable
+          if ($r.ok -ne $true -or $r.evidence_level -ne 'native_api_plus_rust_pairwise') { throw 'Missing full Rust evidence' }
+          if ($r.rust_probe_built_and_executed -ne $true -or $r.rust_pairwise_crosscheck_complete -ne $true -or $r.native_measurement_complete -ne $true) { throw 'Rust native path not proved' }
+          if ($r.rust_crosscheck_kind -ne 'equality_and_lengths_only' -or $r.native_api_reads -lt 4) { throw 'Incorrect cross-check scope' }
+          if ($r.comparisons.Count -lt 2 -or ($r.comparisons | Where-Object { $_.rust_and_ctypes_agree -ne $true }).Count -ne 0) { throw 'Rust and Win32 readers disagree' }
+          $same = @($r.comparisons | Where-Object { $_.case -eq 'same_file' })
+          $different = @($r.comparisons | Where-Object { $_.case -eq 'same_name_different_directory' })
+          if ($same.Count -ne 1 -or $different.Count -ne 1 -or $same[0].appid_equal -ne $true) { throw 'Mandatory AppId controls failed' }
+          if ($r.kernel_process_epoch_proved -ne $false -or $r.transparent_packet_owner_proved -ne $false -or $r.no_direct_proved -ne $false -or $r.release_accepted -ne $false -or $r.independent_native_acceptance -ne $false -or $r.driver_or_filter_changed -ne $false) { throw 'Unproven kernel/release status promoted' }
+          if ($r.temporary_files_removed -ne $true) { throw 'Temporary fixtures not removed' }
+          Write-Output 'Rust and ctypes WFP user-mode evidence agreed, without driver or release proof.'
+      - name: Preserve redacted result even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-R15-AppId-Rust-${{ github.run_id }}
+          path: build/verification/wfp-appid-r15/native-result.json
+          if-no-files-found: warn
+          retention-days: 7
