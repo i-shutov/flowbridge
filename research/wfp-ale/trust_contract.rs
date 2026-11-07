@@ -140,10 +140,21 @@ impl TrustGate {
         if classify.identity.app_id != self.selected_app_id {
             return Verdict::OutsideSelectedApp;
         }
+        // A final in-scope admission attempt owns its ticket exactly once.
+        // A malformed/missing accepted-socket receipt is terminal, not a
+        // retryable preflight. Probe buffer sizes BEFORE calling decide().
+        // Reserve before checking any caller-represented proof booleans, or
+        // a rejected receipt could be replaced with a later positive claim.
+        if classify.session == 0 || classify.session != self.session || classify.ticket == 0 {
+            return Verdict::RejectOwnedIngress;
+        }
+        if self.consumed.len() >= MAX_TICKETS_PER_SESSION {
+            return Verdict::RejectOwnedIngress;
+        }
+        if !self.consumed.insert(classify.ticket) {
+            return Verdict::RejectOwnedIngress;
+        }
         if classify.source != Source::OwnedKernelRedirect
-            || classify.session == 0
-            || classify.session != self.session
-            || classify.ticket == 0
             || classify.redirect_state != RedirectState::NotRedirected
             || classify.identity.pid == 0
             || classify.identity.creation_time_100ns == 0
@@ -157,12 +168,6 @@ impl TrustGate {
             || !accepted.accepted_socket_binding_confirmed
             || !accepted.outbound_records_set_before_connect
         {
-            return Verdict::RejectOwnedIngress;
-        }
-        if self.consumed.len() >= MAX_TICKETS_PER_SESSION {
-            return Verdict::RejectOwnedIngress;
-        }
-        if !self.consumed.insert(classify.ticket) {
             return Verdict::RejectOwnedIngress;
         }
         Verdict::RouteOnOwnedProxySocket
@@ -398,6 +403,59 @@ mod tests {
         assert_eq!(g.decide(&c, &accepted(&c), healthy()), Verdict::UnprotectedByWfp);
     }
 
+    #[test]
+    fn r20_rejected_receipt_is_terminal_not_upgradable_for_v4_v6() {
+        for ipv6 in [false, true] {
+            let c = capture(ipv6, if ipv6 { 212 } else { 211 });
+            let mut g = gate();
+            let mut bad = accepted(&c);
+            bad.context_from_accepted_socket = false;
+            assert_eq!(g.decide(&c, &bad, healthy()), Verdict::RejectOwnedIngress);
+            assert_eq!(g.decide(&c, &accepted(&c), healthy()), Verdict::RejectOwnedIngress);
+            let mut fresh = c.clone();
+            fresh.ticket += 10;
+            assert_eq!(g.decide(&fresh, &accepted(&fresh), healthy()), Verdict::RouteOnOwnedProxySocket);
+        }
+    }
+    #[test]
+    fn r20_wrong_epoch_or_original_endpoint_must_retire_same_ticket() {
+        for ipv6 in [false, true] {
+            for delta in [0, 1] {
+                let c = capture(ipv6, 220 + (ipv6 as u128)*10 + delta);
+                let mut g = gate();
+                let mut bad = accepted(&c);
+                if delta == 0 {
+                    bad.captured.identity.creation_time_100ns += 1;
+                } else {
+                    bad.captured.original.set_port(8443);
+                }
+                assert_eq!(g.decide(&c, &bad, healthy()), Verdict::RejectOwnedIngress);
+                assert_eq!(g.decide(&c, &accepted(&c), healthy()), Verdict::RejectOwnedIngress);
+            }
+        }
+    }
+    #[test]
+    fn r20_untrusted_source_attempt_is_terminal_but_outside_scope_is_not() {
+        let c = capture(false, 240);
+        let mut g = gate();
+        let mut untrusted = c.clone();
+        untrusted.source = Source::UntrustedClient;
+        assert_eq!(g.decide(&untrusted, &accepted(&untrusted), healthy()), Verdict::RejectOwnedIngress);
+        assert_eq!(g.decide(&c, &accepted(&c), healthy()), Verdict::RejectOwnedIngress);
+        let mut sibling = c.clone();
+        sibling.ticket = 241;
+        sibling.identity.app_id = SIBLING.to_vec();
+        assert_eq!(g.decide(&sibling, &accepted(&sibling), healthy()), Verdict::OutsideSelectedApp);
+        let mut selected = c.clone();
+        selected.ticket = 241;
+        assert_eq!(g.decide(&selected, &accepted(&selected), healthy()), Verdict::RouteOnOwnedProxySocket);
+        let mut wrong_session = c.clone();
+        wrong_session.ticket = 242;
+        wrong_session.session += 1;
+        assert_eq!(g.decide(&wrong_session, &accepted(&wrong_session), healthy()), Verdict::RejectOwnedIngress);
+        selected.ticket = 242;
+        assert_eq!(g.decide(&selected, &accepted(&selected), healthy()), Verdict::RouteOnOwnedProxySocket);
+    }
     #[test]
     fn capacity_is_bounded_without_replay_permitting_eviction() {
         let mut g = gate();

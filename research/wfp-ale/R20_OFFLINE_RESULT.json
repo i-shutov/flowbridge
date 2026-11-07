@@ -1,0 +1,40 @@
+{
+  "run": "R20",
+  "date": "2026-11-07",
+  "scope": "research/windows-wfp-ale-attribution-20261107",
+  "original_head": "d22e87ff0c3549e8ccb519cc0a50e64e6dcf1a6d",
+  "read_only_main": "5b5afc2feeda2195f302380e615ba003d4906e09",
+  "finding": "terminal-in-scope-ticket-reuse-after-rejected-accepted-socket-evidence",
+  "old_contract_counterexamples": {
+    "families": [
+      4,
+      6
+    ],
+    "dimensions": [
+      "kernel_origin",
+      "epoch_matches",
+      "app_matches",
+      "endpoint_matches",
+      "records_on_accept",
+      "context_on_accept",
+      "proxy_record_set_before_connect"
+    ],
+    "count": 14,
+    "rejected_then_upgraded": "MODEL_ROUTE"
+  },
+  "fixed_oracle": {
+    "count": 14,
+    "rejected_then_upgraded": "REJECT",
+    "out_of_scope_never_burns_in_scope_ticket": true
+  },
+  "verification": {
+    "independent_python_tests_pass": 3,
+    "independent_python_tests_skip": 1,
+    "source_order_checked_against_exact_git_blob": true,
+    "compiled_rust_tests": false,
+    "native_windows": false,
+    "ci_runner_used": false,
+    "driver_installed": false,
+    "g2_pass": false
+  }
+}
