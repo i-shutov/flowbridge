@@ -60,8 +60,14 @@ def verdict(ledger: Ledger, probe: dict, after_ops: list[dict]) -> str:
     layer = probe.get("layer", "ALE_CONNECT_REDIRECT_V4")
     if layer not in ("ALE_CONNECT_REDIRECT_V4", "ALE_CONNECT_REDIRECT_V6"):
         return "WRONG_LAYER"
-    if not probe.get("metadata_pid", True) or not probe.get("metadata_path", True):
+    if not probe.get("metadata_pid", True):
         return "MISSING_WFP_METADATA"
+    # ALE_CONNECT_REDIRECT does not provide PROCESS_PATH metadata.
+    if probe.get("metadata_path", False):
+        return "UNSUPPORTED_PROCESS_PATH_METADATA"
+    # AppId is in the fixed ALE fields, not PROCESS_PATH metadata.
+    if not probe.get("fixed_app_id", True):
+        return "MISSING_ALE_APP_ID"
     if probe.get("app", "app-A") != probe.get("selected_app", "app-A"):
         return "OUTSIDE_SELECTED_APP"
     snapshot = ledger.live.get(pid)

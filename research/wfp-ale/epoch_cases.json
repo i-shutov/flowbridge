@@ -98,10 +98,10 @@
     }
   },
   {
-    "name": "missing_process_path_metadata",
-    "expect": "MISSING_WFP_METADATA",
+    "name": "missing_fixed_app_id_field",
+    "expect": "MISSING_ALE_APP_ID",
     "probe": {
-      "metadata_path": false
+      "fixed_app_id": false
     }
   },
   {
@@ -311,5 +311,21 @@
         "action": "exit"
       }
     ]
+  },
+  {
+    "name": "forged_process_path_metadata",
+    "expect": "UNSUPPORTED_PROCESS_PATH_METADATA",
+    "probe": {
+      "metadata_path": true
+    }
+  },
+  {
+    "name": "forged_process_path_metadata_with_valid_pid",
+    "expect": "UNSUPPORTED_PROCESS_PATH_METADATA",
+    "probe": {
+      "metadata_pid": true,
+      "metadata_path": true,
+      "fixed_app_id": true
+    }
   }
 ]
