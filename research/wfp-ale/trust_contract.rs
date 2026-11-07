@@ -101,6 +101,10 @@ pub struct TrustGate {
     session: u128,
     selected_app_id: Vec<u8>,
     consumed: HashSet<u128>,
+    // Monotonic for this synthetic session: transient failures revoke
+    // admission even after a subsequent healthy status snapshot.
+    observed_wfp_loss: bool,
+    observed_ssh_loss: bool,
 }
 
 /// No eviction: an evicted used ticket could be replayed. A full gate rejects
@@ -109,12 +113,26 @@ const MAX_TICKETS_PER_SESSION: usize = 4096;
 
 impl TrustGate {
     pub fn new(session: u128, selected_app_id: Vec<u8>) -> Self {
-        Self { session, selected_app_id, consumed: HashSet::new() }
+        Self {
+            session,
+            selected_app_id,
+            consumed: HashSet::new(),
+            observed_wfp_loss: false,
+            observed_ssh_loss: false,
+        }
     }
 
     pub fn decide(&mut self, classify: &Capture, accepted: &Accepted, health: Health) -> Verdict {
-        if !health.owned_filter_enforced || !health.callout_available {
+        // Latch *observed* failure before examining an individual ticket.
+        // A later healthy boolean cannot establish a new trusted epoch.
+        // This remains a synthetic health input, not kernel enforcement proof.
+        self.observed_wfp_loss |= !health.owned_filter_enforced || !health.callout_available;
+        self.observed_ssh_loss |= !health.tunnel_ready;
+        if self.observed_wfp_loss {
             return Verdict::UnprotectedByWfp;
+        }
+        if self.observed_ssh_loss {
+            return Verdict::RejectOwnedIngress;
         }
         if classify.transport != Transport::Tcp {
             return Verdict::TransportNotCovered;
@@ -139,9 +157,6 @@ impl TrustGate {
             || !accepted.accepted_socket_binding_confirmed
             || !accepted.outbound_records_set_before_connect
         {
-            return Verdict::RejectOwnedIngress;
-        }
-        if !health.tunnel_ready {
             return Verdict::RejectOwnedIngress;
         }
         if self.consumed.len() >= MAX_TICKETS_PER_SESSION {
@@ -344,6 +359,45 @@ mod tests {
             assert_eq!(check(&c, &accepted(&c)), Verdict::RejectOwnedIngress);
         }
     }
+
+    #[test]
+    fn ssh_loss_is_latched_across_healthy_recovery_for_old_and_fresh_tickets() {
+        let mut g = gate();
+        let c = capture(false, 100);
+        let mut h = healthy();
+        h.tunnel_ready = false;
+        assert_eq!(g.decide(&c, &accepted(&c), h), Verdict::RejectOwnedIngress);
+        assert_eq!(g.decide(&c, &accepted(&c), healthy()), Verdict::RejectOwnedIngress);
+        let next = capture(false, 101);
+        assert_eq!(g.decide(&next, &accepted(&next), healthy()), Verdict::RejectOwnedIngress);
+    }
+    #[test]
+    fn missing_wfp_filter_or_callout_is_latched_after_recovery() {
+        for (filter, callout) in [(false, true), (true, false), (false, false)] {
+            let mut g = gate();
+            let c = capture(true, 102);
+            let mut h = healthy();
+            h.owned_filter_enforced = filter;
+            h.callout_available = callout;
+            assert_eq!(g.decide(&c, &accepted(&c), h), Verdict::UnprotectedByWfp);
+            assert_eq!(g.decide(&c, &accepted(&c), healthy()), Verdict::UnprotectedByWfp);
+            let next = capture(false, 103);
+            assert_eq!(g.decide(&next, &accepted(&next), healthy()), Verdict::UnprotectedByWfp);
+        }
+    }
+    #[test]
+    fn wfp_loss_escalates_an_existing_ssh_only_revocation() {
+        let mut g = gate();
+        let c = capture(false, 104);
+        let mut h = healthy();
+        h.tunnel_ready = false;
+        assert_eq!(g.decide(&c, &accepted(&c), h), Verdict::RejectOwnedIngress);
+        h = healthy();
+        h.callout_available = false;
+        assert_eq!(g.decide(&c, &accepted(&c), h), Verdict::UnprotectedByWfp);
+        assert_eq!(g.decide(&c, &accepted(&c), healthy()), Verdict::UnprotectedByWfp);
+    }
+
     #[test]
     fn capacity_is_bounded_without_replay_permitting_eviction() {
         let mut g = gate();
