@@ -1,0 +1,64 @@
+name: Research WFP AppId namespace R14 (read-only Windows)
+on:
+  push:
+    branches:
+      - research/windows-wfp-ale-attribution-20261107
+    paths:
+      - .github/workflows/research-wfp-appid-namespace-r14.yml
+permissions:
+  contents: read
+concurrency:
+  group: research-wfp-appid-namespace-r14-once
+  cancel-in-progress: false
+jobs:
+  native-namespace-probe:
+    if: github.repository == 'i-shutov/flowbridge' && github.ref == 'refs/heads/research/windows-wfp-ale-attribution-20261107'
+    runs-on: windows-2025
+    timeout-minutes: 10
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - name: Checkout exact research commit without persistent credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Python 3.13 user-mode only
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify R14 offline negative contracts
+        shell: pwsh
+        run: |
+          python -m unittest discover -s research/wfp-ale -p test_appid_namespace_r14.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'R14 regression failed' }
+      - name: Execute read-only AppId namespace and file identity matrix
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force 'build/verification/appid-namespace-r14' | Out-Null
+          python research/wfp-ale/appid_namespace_r14.py --consent WFP_APPID_NAMESPACE_READONLY | Set-Content -Encoding utf8 'build/verification/appid-namespace-r14/native-result.json'
+          if ($LASTEXITCODE -ne 0) { throw 'R14 read-only native measurement returned nonzero' }
+      - name: Enforce strict native result scope and no security promotions
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $p = 'build/verification/appid-namespace-r14/native-result.json'
+          $r = Get-Content -Raw $p | ConvertFrom-Json -AsHashtable
+          if ($r.ok -ne $true -or $r.evidence_level -ne 'native_readonly_namespace_and_fileid_observation') { throw 'No native Windows evidence' }
+          if ($r.kernel_owner_proved -ne $false -or $r.ndisrd_packetbound_proved -ne $false -or $r.system_no_direct_proved -ne $false -or $r.release_accepted -ne $false -or $r.wfp_driver_or_filter_modified -ne $false) { throw 'Forbidden acceptance promotion' }
+          if ($r.fixture_cleanup_complete -ne $true -or $r.cases.Count -lt 2) { throw 'Missing file cleanup or critical cases' }
+          $same = @($r.cases | Where-Object { $_.case -eq 'same_file' })
+          $different = @($r.cases | Where-Object { $_.case -eq 'same_name_different_directory' })
+          if ($same.Count -ne 1 -or $different.Count -ne 1) { throw 'Critical witness cases missing' }
+          if ($same[0].same_physical_file_by_volume_file_index -ne $true -or $same[0].same_supplied_appid -ne $true) { throw 'Invalid same-file control' }
+          if ($r.source_sha256 -notmatch '^[a-f0-9]{64}$') { throw 'Missing source hash' }
+          Write-Output 'Read-only AppId namespace observation complete; no kernel owner or release proof.'
+      - name: Preserve sanitized observation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-R14-AppId-namespace-${{ github.run_id }}
+          path: build/verification/appid-namespace-r14/native-result.json
+          if-no-files-found: warn
+          retention-days: 7
