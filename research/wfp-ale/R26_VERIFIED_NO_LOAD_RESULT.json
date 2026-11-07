@@ -1,0 +1,34 @@
+{
+  "ok": true,
+  "scope": "compiled_kernel_auth_ticket_source_no_driver_load",
+  "source_sha": "aa2d45ca552a8f51cd069e1f19e0ff7f41a93092",
+  "run_id": 42411101062,
+  "all_jobs_success": true,
+  "artifacts": {
+    "kernel": {
+      "id": 13589062678,
+      "sha256": "d4e3178b3b8fd13cda539d6ba552d1a7d5ffe4458c54a59b5d5020a54941264b"
+    },
+    "ssh": {
+      "id": 13589467773,
+      "sha256": "58ff4ea18820719d45f24a280dffdcf97079ff884f50901310e25626a63d627a"
+    },
+    "socket": {
+      "id": 13589920613,
+      "sha256": "4b5ab6e0312135edf0ea262e932ee3e685528b7e29501789bcfffb5f5ec26293"
+    }
+  },
+  "driver_sha256": "f2873b8fb12f12ba0168227aaad99de76eb2a2167d4b0c7d46bbed6e4b3fbf48",
+  "broker_sha256": "9713a6466e8028fa4f95776040d92845b39707bcbbc0637e05cc5babbe60c81f",
+  "source_files_sha_verified": 19,
+  "broker_tests_passed": 33,
+  "ssh_tests_passed": 26,
+  "native_readonly_endpoint_ipv4_ipv6": true,
+  "signed_driver_available": false,
+  "kernel_loaded": false,
+  "bfe_filters_installed": false,
+  "original_exe_kernel_chain_executed": false,
+  "physical_no_direct_proved": false,
+  "g2_pass": false,
+  "release_accepted": false
+}
