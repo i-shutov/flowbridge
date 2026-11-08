@@ -1,0 +1,46 @@
+name: R39 extract verified Windows Cargo locks (no kernel load)
+on:
+  push:
+    branches: [research/windows-wfp-ale-attribution-20261107]
+    paths:
+      - .github/workflows/research-g2-lock-export-r39.yml
+permissions:
+  contents: read
+  actions: read
+jobs:
+  exact-source-lock-export:
+    runs-on: windows-2025
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read exact prior Windows R39 source locks
+        uses: actions/download-artifact@v4
+        with:
+          name: FlowBridge-R24-kernel-broker-42463556304
+          run-id: 42463556304
+          github-token: ${{ github.token }}
+          path: build/r39-verified-locks
+      - name: Independently verify artifact members and print public lock inputs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $known=@(
+            @{Name='Cargo.lock'; Sha='a5a740f75007652de912d934499dadc7fe6ebbf14dbeccd0ec4ba748dd3af2c0'},
+            @{Name='broker.Cargo.lock'; Sha='5b0d34550f2a1449447552b74470960e3d9d18f31b5499dc2c1450446f53d2e6'}
+          )
+          foreach($entry in $known){
+            $p=Join-Path 'build/r39-verified-locks' $entry.Name
+            if(-not (Test-Path -LiteralPath $p -PathType Leaf)){throw 'missing_pinned_cargo_lock'}
+            $sha=(Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($sha -ne $entry.Sha){throw 'cargo_lock_not_from_pinned_r39_build'}
+            $b64=[Convert]::ToBase64String([IO.File]::ReadAllBytes((Resolve-Path $p)))
+            Write-Output ("FLOWBRIDGE_R39_LOCK_BEGIN=" + $entry.Name)
+            for($i=0;$i -lt $b64.Length;$i+=3000){
+              $n=[Math]::Min(3000,$b64.Length-$i)
+              Write-Output ('FLOWBRIDGE_R39_LOCK_CHUNK=' + $b64.Substring($i,$n))
+            }
+            Write-Output ("FLOWBRIDGE_R39_LOCK_END=" + $entry.Name)
+          }
+          Write-Output 'FLOWBRIDGE_R39_LOCK_EXPORT_ONLY_NO_DRIVER=true'
