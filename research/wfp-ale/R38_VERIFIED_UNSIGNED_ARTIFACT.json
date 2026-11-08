@@ -1,0 +1,29 @@
+{
+  "schema": "flowbridge-r38-unsigned-submission-v1",
+  "research_source_commit": "ecc66afe63ab0c1e65274da7dd95f7026140d782",
+  "github_actions_run_id": 42454895627,
+  "github_actions_conclusion": "success",
+  "jobs_successful": 3,
+  "independent_artifact_id": 13606839479,
+  "independent_artifact_sha256": "2ab92364a4f580dc3284d5d98a83d2fffe5f0785e12e051101e8c589a4950046",
+  "verified_source_files": 29,
+  "signing_scope_regressions_passed": 7,
+  "unsigned_driver_bytes": 207872,
+  "unsigned_driver_sha256": "74626c2e6d07d51a15b0886f81e9aa1460731875eeb1f293d0d378077486861c",
+  "broker_sha256": "c0d584be879e55dc88a541e6e5644d970ac9819588e7b220e96fab2f6d200247",
+  "unsigned_cab_sha256": "047b8158c9d8a1a61734ff5101f3b50a3cb4d4336a9376a0c8bd694a92cc0687",
+  "inf_sha256": "29b62d0272436d62098d2514a6586db171261faaa58c9ac31a271518f3c5fbdd",
+  "cab_verified_files": [
+    "FlowBridgeG2R38/flowbridge_g2_witness.sys",
+    "FlowBridgeG2R38/flowbridge_g2_r38.inf"
+  ],
+  "microsoft_partner_center_submission_performed": false,
+  "kernel_signature_accepted": false,
+  "infverif_independent_completed": false,
+  "target_vnc_rescue_rollback_verified": false,
+  "driver_installed_or_loaded": false,
+  "wfp_filters_installed": false,
+  "full_end_to_end_redirect_test": false,
+  "g2_pass": false,
+  "release_accepted": false
+}
