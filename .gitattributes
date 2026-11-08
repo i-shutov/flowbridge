@@ -1,0 +1,5 @@
+# R39 signed-candidate dependency provenance: exact LF bytes on all hosts.
+# Git on Windows must not expand these two original Linux-format Cargo locks
+# into CRLF (that changes SHA256 and breaks independent source attestation).
+research/wfp-ale/kernel-r19/kernel/Cargo.lock text eol=lf
+research/wfp-ale/kernel-r19/broker-package/Cargo.lock text eol=lf
