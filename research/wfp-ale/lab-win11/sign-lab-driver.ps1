@@ -17,14 +17,27 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 function Sha256([string]$p){(Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLowerInvariant()}
 function FindKitTool([string]$tool){
+ # Inf2Cat is often distributed only as the x86 WDK tool. It is a host
+ # executable and can generate the x64 Win11 catalog; selecting x64-only
+ # caused CI to fail even though Microsoft x86 WDK 10.0.26100.6584 worked.
+ if($tool -eq 'inf2cat' -and $env:FB_INF2CAT_EXE){
+   if(-not(Test-Path -LiteralPath $env:FB_INF2CAT_EXE -PathType Leaf) -or
+      (Split-Path $env:FB_INF2CAT_EXE -Leaf) -ine 'Inf2Cat.exe'){
+      throw 'Configured WDK Inf2Cat path is not a valid executable'
+   }
+   return (Resolve-Path -LiteralPath $env:FB_INF2CAT_EXE).Path
+ }
  $cmd=Get-Command ($tool+'.exe') -ErrorAction SilentlyContinue
  if($cmd){return $cmd.Source}
  $kitRoot=Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
- if(-not (Test-Path -LiteralPath $kitRoot)){throw "SDK/WDK not installed: $tool"}
+ if(-not (Test-Path -LiteralPath $kitRoot)){throw "SDK/WDK bin unavailable: $tool"}
  $found=@(Get-ChildItem -Path $kitRoot -Filter ($tool+'.exe') -Recurse -File -ErrorAction SilentlyContinue|
-   Where-Object { $_.FullName -match '[\\/]x64[\\/]' }|
-   Sort-Object FullName -Descending)
- if($found.Count -ne 1 -and $found.Count -eq 0){throw "SDK/WDK tool unavailable: $tool"}
+    Where-Object { $_.FullName -match '[\\/](x64|amd64|x86)[\\/]' }|
+    Sort-Object FullName -Descending)
+ if($found.Count -eq 0){throw "SDK/WDK tool unavailable: $tool"}
+ $preferred=if($tool -eq 'inf2cat'){'x86'}else{'x64'}
+ $best=@($found|Where-Object {$_.FullName -match ('[\\/]'+$preferred+'[\\/]')})
+ if($best.Count){return $best[0].FullName}
  return $found[0].FullName
 }
 $report=[ordered]@{

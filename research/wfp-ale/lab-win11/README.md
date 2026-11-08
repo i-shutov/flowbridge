@@ -1,7 +1,9 @@
 # R39-DEV — disposable Windows 11 Hyper-V laboratory
 
-Status: SOURCE TOOLING ONLY. VM not deployed, test signature not produced,
-driver not loaded, R39 native E2E not verified, G2 NO-GO. This isolated branch
+Status: VM not deployed in this environment. Ephemeral Windows CI has
+successfully TEST-SIGNED the exact driver and catalog as a non-installed
+rehearsal (no persistent signed package is delivered); kernel driver not
+loaded, R39 native E2E not verified, G2 NO-GO. This isolated branch
 does not modify main, beta PR #56 or the independent WFP/ALE research branch.
 
 ## Hardware and safety requirements
@@ -133,3 +135,35 @@ No unit-model or test-signed binary can substitute for G3 evidence.
 Truth: lab_vm_created=false; test_signature_produced=false;
 driver_loaded=false; native_ale_e2e=false; g2_pass=false;
 release_accepted=false until independently executed and verified.
+
+## Off-host CI signing result and WDK tooling RCA (2026-11-08)
+
+The x64 unsigned candidate from Actions 42465140005 has been signed as a
+**temporary, throwaway proof** with a non-exportable self-signed test key
+held in an ephemeral GitHub-hosted Windows 2025 runner. The user's Windows
+Server and workstation were NOT accessed or changed.
+
+- First signing runner 42477407204 failed before signing because the
+  preinstalled Windows SDK has SignTool but not Inf2Cat; no driver load.
+- Official WDK x86 NuGet `Microsoft.Windows.WDK.x86` version
+  `10.0.26100.6584` contains `Inf2Cat.exe`, usable to create an x64
+  Windows 11 25H2 catalog using `/os:10_25H2_X64`. This package can be
+  obtained into a job workspace; there is no need to install a WDK service.
+- [Actions 42477532717](https://github.com/i-shutov/flowbridge/actions/runs/42477532717)
+  SUCCESS: original hashes matched, self-signed SYS and CAT created,
+  their signer matched the temporary certificate, and the PE section bytes
+  still match the verified unsigned SYS. **No certificate trust root was
+  installed, no BCD/testsigning change, no driver load.**
+- Subsequent independent cleanup/mutation QA is separate and must PASS
+  before stronger conclusions about cleanup or negative controls.
+
+The guest-only `sign-lab-driver.ps1` now searches *both* SDK x64 and WDK
+x86 tool directories for Inf2Cat. A caller may supply the exact verified
+`FB_INF2CAT_EXE` environment path if official WDK was downloaded into a
+private workspace. No fallback to custom/private Inf2Cat implementations.
+
+This test-signed throwaway artifact is **not** a Microsoft/HLK/attestation
+signature, does not demonstrate any kernel code integrity decision, and
+cannot be reused on a future Win11 VM without a new deliberate guest-only
+certificate trust step. For native x64 ALE proof, a real isolated x64
+Windows VM is still required. `g2_pass=false`.
