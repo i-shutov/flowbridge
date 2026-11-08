@@ -27,8 +27,8 @@ $env:RUSTFLAGS = '-C target-feature=+crt-static'
 $env:FB_PDB_OUTPUT = Join-Path $out 'flowbridge_g2_witness.pdb'
 Push-Location (Join-Path $root 'kernel')
 try {
-  & cargo generate-lockfile
-  if ($LASTEXITCODE -ne 0) { throw 'Cargo dependency resolution failed' }
+  # The exact Cargo.lock ships IN the repository and is checked before
+  # source snapshot; no network-driven lockfile regeneration is permitted.
   Copy-Item Cargo.lock "$out/Cargo.lock"
   & cargo build --locked --release
   if ($LASTEXITCODE -ne 0) { throw 'Kernel build failed; STOP, no load attempted' }
@@ -59,8 +59,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Handoff tests compile failed' }
 if ($LASTEXITCODE -ne 0) { throw 'Handoff tests failed' }
 Push-Location (Join-Path $root 'broker-package')
 try {
-  & cargo generate-lockfile
-  if ($LASTEXITCODE -ne 0) { throw 'Broker dependency resolution failed' }
+  # Pinned original 185-package broker graph; refuse a new resolution.
   Copy-Item Cargo.lock "$out/broker.Cargo.lock"
   & cargo build --locked --release
   if ($LASTEXITCODE -ne 0) { throw 'Broker and scoped policy compilation failed' }
