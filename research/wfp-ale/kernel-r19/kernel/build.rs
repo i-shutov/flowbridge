@@ -23,6 +23,12 @@ fn main() {
     println!("cargo:rerun-if-changed=wrapper.h");
     println!("cargo:rerun-if-changed=src/msvc_runtime.rs");
     println!("cargo:rustc-link-search=native={}", env::var("FB_WDK_LIB").unwrap());
+    // Bind MSVC debug information to the exact archived release image rather
+    // than guessing Cargo's linker working directory and name.
+    let pdb=env::var("FB_PDB_OUTPUT").expect("Pinned absolute PDB output required");
+    assert!(PathBuf::from(&pdb).is_absolute());
+    println!("cargo:rerun-if-env-changed=FB_PDB_OUTPUT");
+    println!("cargo:rustc-link-arg=/PDB:{pdb}");
     for lib in ["ntoskrnl", "fwpkclnt", "hal", "wdmsec", "BufferOverflowFastFailK", "cng"] { println!("cargo:rustc-link-lib={lib}"); }
     for flag in ["/DEBUG:FULL", "/DRIVER", "/SUBSYSTEM:NATIVE", "/ENTRY:DriverEntry", "/NODEFAULTLIB", "/INTEGRITYCHECK", "/DYNAMICBASE", "/NXCOMPAT", "/OPT:REF,ICF"] {
         println!("cargo:rustc-link-arg={flag}");

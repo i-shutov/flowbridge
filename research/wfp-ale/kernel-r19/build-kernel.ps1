@@ -24,6 +24,7 @@ $llvm = Join-Path $env:ProgramFiles 'LLVM/bin'
 if (-not (Test-Path (Join-Path $llvm 'libclang.dll'))) { throw 'libclang.dll missing' }
 $env:LIBCLANG_PATH = $llvm
 $env:RUSTFLAGS = '-C target-feature=+crt-static'
+$env:FB_PDB_OUTPUT = Join-Path $out 'flowbridge_g2_witness.pdb'
 Push-Location (Join-Path $root 'kernel')
 try {
   & cargo generate-lockfile
@@ -32,11 +33,13 @@ try {
   & cargo build --locked --release
   if ($LASTEXITCODE -ne 0) { throw 'Kernel build failed; STOP, no load attempted' }
   Copy-Item target/release/flowbridge_g2_witness.dll "$out/flowbridge_g2_witness.sys"
-  # Submission requires actual MSVC PDB from the same linker invocation.
-  # A synthetic/empty .pdb, a user-mode test PDB or an ambiguous set is NO-GO.
-  $pdbs = @(Get-ChildItem -Path target/release -Filter flowbridge_g2_witness.pdb -File -Recurse)
-  if ($pdbs.Count -ne 1 -or $pdbs[0].Length -lt 1024) { throw 'Missing or ambiguous kernel debug PDB' }
-  Copy-Item -LiteralPath $pdbs[0].FullName -Destination "$out/flowbridge_g2_witness.pdb"
+  # The exact release link command receives /PDB:FB_PDB_OUTPUT.
+  # Never accept a random PDB discovered elsewhere in Cargo output.
+  $symbol = Join-Path $out 'flowbridge_g2_witness.pdb'
+  if (-not (Test-Path -LiteralPath $symbol -PathType Leaf) -or
+      (Get-Item -LiteralPath $symbol).Length -lt 1024) {
+    throw 'Kernel release linker did not emit the exact pinned PDB'
+  }
 } finally {
   $bindings = Get-ChildItem target/release/build -Recurse -Filter wdk.rs -ErrorAction SilentlyContinue | Select-Object -First 1
   if ($bindings) { Copy-Item $bindings.FullName "$out/generated-wdk.rs" }
