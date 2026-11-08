@@ -58,3 +58,16 @@ system-wide kill-switch claim from user-mode cancellation.
 
 `g2_pass=false`, `native_r39_e2e_observed=false`,
 `release_accepted=false` until independently evidenced.
+
+## Executed exact-source CI and independent artifact readback (2026-11-08)
+
+- Commit: `2086cbaa860671cb3fa13524751fddf3f301e926`.
+- [GitHub Actions run 42463556304](https://github.com/i-shutov/flowbridge/actions/runs/42463556304): **3/3 jobs SUCCESS** (Windows no-load kernel/broker, Windows local socket, Linux real isolated SSH).
+- Windows actual broker unit tests **44/44 PASS**, including all five new lifecycle tests; kernel ledger 11/11, AUTH 7/7, handoff 19/19. Driver never loaded.
+- Original Actions ZIP artifact ID **13610587594**; independently downloaded, ZIP CRC checked; SHA256 `ab18b9b4bc5fe889ecefaf063cfec9cafed394a81aefc250fab7092d7a3397db` (matches Actions artifact digest).
+- `sources-r24.zip`: **30/30** exact SHA256/size and normalized Git blob checks; changed broker source blobs also matched the GitHub repository.
+- PE CodeView RSDS and PDB MSF7 GUID/age independently matched. Current unsigned driver SHA256 `e4814cc069e424a246bb187e8540c3bbff3ec6f38d99f49dd9b17c65b91eb8d4`; PDB SHA256 `a1ed616daba270cba289f8f4ef233ff1dccbbbc8f09fbe49b5e7abfb55802c59`; broker SHA256 `8f6708635cf1e55328065c5535cd646a56bdac8835254b5fd6d6e976cde766ca`.
+- Current unsigned CAB SHA256 `27e014f259ba9b8a16ae8a2887682a4557e2d84067122120f3d598ec58936147`. Independently decoded **41 MSZIP blocks** and matched all three internal SYS, INF and PDB bytes against staged sources by SHA256. INF SHA256 `29b62d0272436d62098d2514a6586db171261faaa58c9ac31a271518f3c5fbdd` is unchanged from the previously WDK-InfVerif-PASS artifact; **no fresh InfVerif was run for this commit**.
+- Machine-readable independent receipt: `R39_VERIFIED_BROKER_CI_RECEIPT.json`.
+
+**Do not use old R38C SYS/PDB/CAB hashes for this new source commit.** The unsigned build, reproducible tests and matched symbols do not satisfy the Microsoft signing/Windows-host safety gate. `g2_pass=false`, `native_r39_e2e_observed=false`.
