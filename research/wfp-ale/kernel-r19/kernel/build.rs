@@ -24,7 +24,7 @@ fn main() {
     println!("cargo:rerun-if-changed=src/msvc_runtime.rs");
     println!("cargo:rustc-link-search=native={}", env::var("FB_WDK_LIB").unwrap());
     for lib in ["ntoskrnl", "fwpkclnt", "hal", "wdmsec", "BufferOverflowFastFailK", "cng"] { println!("cargo:rustc-link-lib={lib}"); }
-    for flag in ["/DRIVER", "/SUBSYSTEM:NATIVE", "/ENTRY:DriverEntry", "/NODEFAULTLIB", "/INTEGRITYCHECK", "/DYNAMICBASE", "/NXCOMPAT", "/OPT:REF,ICF"] {
+    for flag in ["/DEBUG:FULL", "/DRIVER", "/SUBSYSTEM:NATIVE", "/ENTRY:DriverEntry", "/NODEFAULTLIB", "/INTEGRITYCHECK", "/DYNAMICBASE", "/NXCOMPAT", "/OPT:REF,ICF"] {
         println!("cargo:rustc-link-arg={flag}");
     }
 }

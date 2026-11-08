@@ -1,4 +1,5 @@
 """R38 signing-source negative tests; no signing, driver load or service action."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -78,6 +79,29 @@ class SigningScope(unittest.TestCase):
                       'bfe_filters_installed','g2_pass','release_accepted'):
             self.assertIs(v[field],False)
         self.assertEqual(v['source_sha'],os.environ['GITHUB_SHA'])
+        self.assertEqual(len(v['included_files']),3)
+        self.assertIn('FlowBridgeG2R38/flowbridge_g2_witness.pdb',v['included_files'])
+        pdb=BUILD/'flowbridge_g2_witness.pdb'
+        self.assertTrue(pdb.is_file())
+        self.assertGreater(pdb.stat().st_size,1024)
+        self.assertEqual(v['kernel_symbols_pdb_bytes'],pdb.stat().st_size)
+        self.assertEqual(v['kernel_symbols_pdb_sha256'],
+                         hashlib.sha256(pdb.read_bytes()).hexdigest())
+
+    def test_release_build_requires_full_ms_pdb(self):
+        cargo=(ROOT.parent/'kernel/Cargo.toml').read_text(encoding='utf-8')
+        linker=(ROOT.parent/'kernel/build.rs').read_text(encoding='utf-8')
+        script=(ROOT.parent/'build-kernel.ps1').read_text(encoding='utf-8')
+        self.assertIn('debug = "full"',cargo)
+        self.assertIn('/DEBUG:FULL',linker)
+        self.assertIn('flowbridge_g2_witness.pdb',script)
+
+    def test_pdb_provenance_missing_must_be_fatal(self):
+        script=(ROOT/'prepare_submission_r38.ps1').read_text(encoding='utf-8')
+        self.assertIn('$pdb = Join-Path $build',script)
+        self.assertIn('$shaPdb',script)
+        self.assertIn("throw 'Kernel PDB unexpectedly empty'",script)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

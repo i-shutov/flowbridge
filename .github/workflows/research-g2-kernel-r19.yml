@@ -39,6 +39,7 @@ jobs:
           name: FlowBridge-R24-kernel-broker-${{ github.run_id }}
           path: |
             build/g2-kernel-r19/*.sys
+            build/g2-kernel-r19/*.pdb
             build/g2-kernel-r19/*.exe
             build/g2-kernel-r19/*.json
             build/g2-kernel-r19/*.lock

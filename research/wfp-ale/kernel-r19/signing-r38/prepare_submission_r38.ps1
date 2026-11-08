@@ -11,10 +11,11 @@ $build = (Resolve-Path -LiteralPath $BuildDirectory).Path
 $output = [IO.Path]::GetFullPath($OutputDirectory)
 $source = Join-Path $build 'flowbridge_g2_witness.sys'
 $broker = Join-Path $build 'flowbridge-redirect-broker.exe'
+$pdb = Join-Path $build 'flowbridge_g2_witness.pdb'
 $record = Join-Path $build 'build-result.json'
 $scopeFile = Join-Path $build 'r24-build-scope.json'
 $infOriginal = Join-Path $PSScriptRoot 'flowbridge_g2_r38.inf'
-foreach ($file in @($source,$broker,$record,$scopeFile,$infOriginal)) {
+foreach ($file in @($source,$broker,$pdb,$record,$scopeFile,$infOriginal)) {
   if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing source file: $file" }
 }
 $report = Get-Content -LiteralPath $record -Raw | ConvertFrom-Json -AsHashtable
@@ -30,6 +31,8 @@ foreach ($flag in @('actual_policy_installed','kernel_driver_loaded','g2_pass','
 }
 $shaDriver = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()
 $shaBroker = (Get-FileHash -LiteralPath $broker -Algorithm SHA256).Hash.ToLowerInvariant()
+$shaPdb = (Get-FileHash -LiteralPath $pdb -Algorithm SHA256).Hash.ToLowerInvariant()
+if ((Get-Item -LiteralPath $pdb).Length -lt 1024) { throw 'Kernel PDB unexpectedly empty' }
 if ($report.driver_sha256 -ne $shaDriver) { throw 'Driver hash does not match independent build report' }
 $sig = Get-AuthenticodeSignature -LiteralPath $source
 if ($sig.Status -ne [System.Management.Automation.SignatureStatus]::NotSigned) {
@@ -39,8 +42,10 @@ $package = Join-Path $output 'FlowBridgeG2R38'
 New-Item -ItemType Directory -Path $package -Force | Out-Null
 $driverCopy = Join-Path $package 'flowbridge_g2_witness.sys'
 $infCopy = Join-Path $package 'flowbridge_g2_r38.inf'
+$pdbCopy = Join-Path $package 'flowbridge_g2_witness.pdb'
 Copy-Item -LiteralPath $source -Destination $driverCopy
 Copy-Item -LiteralPath $infOriginal -Destination $infCopy
+Copy-Item -LiteralPath $pdb -Destination $pdbCopy
 $ddf = Join-Path $output 'submission-r38.ddf'
 $cab = Join-Path $output 'FlowBridgeG2R38.cab'
 $ddfLines = @(
@@ -52,7 +57,8 @@ $ddfLines = @(
   ('.Set DiskDirectory1="' + $output + '"'),
   '.Set DestinationDir=FlowBridgeG2R38',
   ('"' + $driverCopy + '"'),
-  ('"' + $infCopy + '"')
+  ('"' + $infCopy + '"'),
+  ('"' + $pdbCopy + '"')
 )
 Set-Content -LiteralPath $ddf -Value $ddfLines -Encoding ASCII
 & makecab.exe /F $ddf | Out-Null
@@ -65,7 +71,8 @@ New-Item -ItemType Directory -Path $expanded -Force | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Windows Expand failed' }
 foreach ($item in @(
     @{Name='flowbridge_g2_witness.sys';Expected=$shaDriver},
-    @{Name='flowbridge_g2_r38.inf';Expected=(Get-FileHash -LiteralPath $infCopy -Algorithm SHA256).Hash.ToLowerInvariant()}
+    @{Name='flowbridge_g2_r38.inf';Expected=(Get-FileHash -LiteralPath $infCopy -Algorithm SHA256).Hash.ToLowerInvariant()},
+    @{Name='flowbridge_g2_witness.pdb';Expected=$shaPdb}
   )) {
   $candidates = @(Get-ChildItem -LiteralPath $expanded -File -Recurse | Where-Object Name -eq $item.Name)
   if ($candidates.Count -ne 1) { throw "Missing/ambiguous CAB member: $($item.Name)" }
@@ -81,9 +88,11 @@ $manifest = [ordered]@{
   unsigned_driver_sha256 = $shaDriver
   broker_sha256 = $shaBroker
   inf_sha256 = $infSha
+  kernel_symbols_pdb_sha256 = $shaPdb
+  kernel_symbols_pdb_bytes = (Get-Item -LiteralPath $pdb).Length
   unsigned_cab_sha256 = $cabSha
   unsigned_driver_bytes = (Get-Item -LiteralPath $source).Length
-  included_files = @('FlowBridgeG2R38/flowbridge_g2_witness.sys','FlowBridgeG2R38/flowbridge_g2_r38.inf')
+  included_files = @('FlowBridgeG2R38/flowbridge_g2_witness.sys','FlowBridgeG2R38/flowbridge_g2_r38.inf','FlowBridgeG2R38/flowbridge_g2_witness.pdb')
   infverif_complete = $false
   partner_center_submission_complete = $false
   microsoft_kernel_signature_verified = $false

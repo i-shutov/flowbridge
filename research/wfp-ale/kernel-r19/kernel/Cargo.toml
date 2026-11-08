@@ -13,6 +13,8 @@ bindgen = "=0.71.1"
 panic = "abort"
 [profile.release]
 panic = "abort"
+# Produce matching MSVC PDB for Microsoft automated kernel crash analysis.
+debug = "full"
 opt-level = 2
 lto = false
 codegen-units = 1
