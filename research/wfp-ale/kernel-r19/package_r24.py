@@ -4,7 +4,7 @@ from pathlib import Path
 root=Path(__file__).resolve().parent
 out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
 files=[]
-for parent,patterns in [(root,['*.rs','*.py','*.ps1']), (root/'kernel',['Cargo.toml','build.rs','wrapper.h']), (root/'kernel/src',['*.rs']), (root/'broker-package',['Cargo.toml'])]:
+for parent,patterns in [(root,['*.rs','*.py','*.ps1']), (root/'kernel',['Cargo.toml','build.rs','wrapper.h']), (root/'kernel/src',['*.rs']), (root/'broker-package',['Cargo.toml']), (root/'trusted-ssh-r37',['Cargo.toml','ssh_r37_smoke.py']), (root/'trusted-ssh-r37/src',['*.rs'])]:
  for pattern in patterns:files.extend(parent.glob(pattern))
 files=sorted(set(files))
 manifest={}
