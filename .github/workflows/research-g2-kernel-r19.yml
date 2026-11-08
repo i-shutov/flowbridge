@@ -4,6 +4,7 @@ on:
     branches: [research/windows-wfp-ale-attribution-20261107]
     paths:
       - research/wfp-ale/kernel-r19/**
+      - .gitattributes
       - .github/workflows/research-g2-kernel-r19.yml
 permissions:
   contents: read
