@@ -1,0 +1,111 @@
+name: G2 R38 independent WDK InfVerif on pinned unsigned CAB
+on:
+  push:
+    branches:
+      - research/windows-wfp-ale-attribution-20261107
+    paths:
+      - .github/workflows/research-g2-infverif-r38.yml
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: research-g2-infverif-r38
+  cancel-in-progress: false
+jobs:
+  infverif-pinned-artifact:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Download exact unsigned R38 build from prior run
+        uses: actions/download-artifact@v4
+        with:
+          name: FlowBridge-R24-kernel-broker-42454895627
+          run-id: 42454895627
+          github-token: ${{ github.token }}
+          path: build/pinned-r38
+      - name: Validate exact original bytes using Microsoft WDK InfVerif
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $root='build/pinned-r38'
+          $inf=Join-Path $root 'signing-r38/FlowBridgeG2R38/flowbridge_g2_r38.inf'
+          $driver=Join-Path $root 'flowbridge_g2_witness.sys'
+          $cab=Join-Path $root 'signing-r38/FlowBridgeG2R38.cab'
+          $prior=Get-Content research/wfp-ale/R38_VERIFIED_UNSIGNED_ARTIFACT.json -Raw | ConvertFrom-Json -AsHashtable
+          $output='build/r38-infverif'
+          New-Item -ItemType Directory -Path $output -Force | Out-Null
+          $result=[ordered]@{
+            evidence='pinned_r38_infverif_real_wdk'
+            source_sha=$prior.research_source_commit
+            original_workflow_run=42454895627
+            original_artifact_id=$prior.independent_artifact_id
+            exact_file_digest_checked=$false
+            infverif_executed=$false
+            infverif_w_pass=$false
+            infverif_u_pass=$false
+            driver_signed=$false
+            driver_loaded=$false
+            wfp_filters_modified=$false
+            g2_pass=$false
+            release_accepted=$false
+            error_class='not_checked'
+          }
+          try {
+            foreach($pair in @(
+              @{path=$inf; expected=$prior.inf_sha256},
+              @{path=$driver; expected=$prior.unsigned_driver_sha256},
+              @{path=$cab; expected=$prior.unsigned_cab_sha256}
+            )){
+              if(-not (Test-Path -LiteralPath $pair.path -PathType Leaf)){throw 'missing_pinned_artifact_member'}
+              $actual=(Get-FileHash -LiteralPath $pair.path -Algorithm SHA256).Hash.ToLowerInvariant()
+              if($actual -ne $pair.expected){throw 'pinned_artifact_hash_mismatch'}
+            }
+            $result.exact_file_digest_checked=$true
+            $tool=Get-Command infverif.exe -ErrorAction SilentlyContinue
+            if($tool){$exe=$tool.Source}
+            else {
+              $kits=Join-Path ((Get-Item 'Env:ProgramFiles(x86)').Value) 'Windows Kits/10/Tools'
+              $find=@(Get-ChildItem -Path $kits -Filter infverif.exe -Recurse -File -ErrorAction SilentlyContinue |
+                 Where-Object {$_.FullName -match '(x64|amd64)'})
+              if($find.Count){$exe=$find | Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName}
+            }
+            if(-not $exe){
+              $nuget=(Get-Command nuget.exe -ErrorAction Stop).Source
+              & $nuget install Microsoft.Windows.WDK.x64 -Version 10.0.26100.6584 -OutputDirectory build/r38-infverif/wdk -NonInteractive -Source https://api.nuget.org/v3/index.json -DirectDownload | Out-Null
+              if($LASTEXITCODE -ne 0){throw 'official_wdk_nuget_failed'}
+              $find=@(Get-ChildItem -Path build/r38-infverif/wdk -Filter infverif.exe -Recurse -File -ErrorAction SilentlyContinue)
+              if($find.Count){$exe=$find[0].FullName}
+            }
+            if(-not $exe){throw 'official_infverif_binary_not_available'}
+            $result.infverif_executed=$true
+            foreach($mode in @('/w','/u')){
+              $lines=@(& $exe $mode $inf 2>&1 | Out-String)
+              $code=$LASTEXITCODE
+              $name=if($mode -eq '/w'){'infverif-w.txt'}else{'infverif-u.txt'}
+              $lines | Set-Content -LiteralPath (Join-Path $output $name) -Encoding utf8
+              if($mode -eq '/w'){$result.infverif_w_pass=($code -eq 0)}
+              else{$result.infverif_u_pass=($code -eq 0)}
+            }
+            if(-not $result.infverif_w_pass -or -not $result.infverif_u_pass){
+              throw 'infverif_rules_failed'
+            }
+            $result.error_class='none'
+          }catch {
+            $result.error_class=[string]$_.Exception.Message
+          }finally {
+            $result | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $output 'result.json') -Encoding utf8
+            Write-Output ($result | ConvertTo-Json -Compress)
+          }
+          if($result.error_class -ne 'none'){throw 'R38 INF cannot be submitted without correction'}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: FlowBridge-R38-WDK-INF-validation-${{ github.run_id }}
+          path: |
+            build/r38-infverif/*.json
+            build/r38-infverif/*.txt
+          if-no-files-found: warn
+          retention-days: 14
