@@ -100,10 +100,21 @@ jobs:
           $badReport=Get-Content 'build/r39-win11/mutated-audit.json' -Raw|ConvertFrom-Json -AsHashtable
           if($badReport.status -ne 'BLOCKED' -or $badReport.driver_signed -or $badReport.original_source_hashes_verified){throw 'Mutation was incorrectly admitted'}
           [ordered]@{exact_source_sha256_verified=$true;mutated_source_blocked=$true;driver_signed=$false;native_redirect_executed=$false;g2_pass=$false}|ConvertTo-Json|Set-Content 'build/r39-win11/candidate-qa.json' -Encoding utf8
+      - name: Package exact reviewed R39 Win11 lab scripts, no executables or keys
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $archive='build/r39-win11/FlowBridge-R39-Win11Lab-Toolkit.zip'
+          Compress-Archive -Path 'research/wfp-ale/lab-win11/*' -DestinationPath $archive -Force
+          $hash=(Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          [ordered]@{source_sha=$env:GITHUB_SHA;toolkit_zip_sha256=$hash;contains_private_keys=$false;contains_kernel_binaries=$false;contains_vm_image=$false;vm_created=$false;g2_pass=$false}|ConvertTo-Json|Set-Content -LiteralPath 'build/r39-win11/toolkit-manifest.json' -Encoding utf8
+          Write-Output "R39 lab toolkit ZIP SHA256: $hash (scripts only)"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: FlowBridge-R39-Win11Lab-ReadOnly-${{ github.run_id }}
-          path: build/r39-win11/*.json
+          path: |
+            build/r39-win11/*.json
+            build/r39-win11/FlowBridge-R39-Win11Lab-Toolkit.zip
           retention-days: 14
           if-no-files-found: warn
