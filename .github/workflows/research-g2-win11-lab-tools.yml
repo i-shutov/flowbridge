@@ -1,0 +1,72 @@
+name: R39 Windows 11 lab scripts static & audit-only tests (NO VM/driver)
+on:
+  push:
+    branches:
+      - feat/r39-win11-dev-lab-20261108
+    paths:
+      - research/wfp-ale/lab-win11/**
+      - .github/workflows/research-g2-win11-lab-tools.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-readonly-lab-qa:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Parse every PowerShell script and run only read-only audit commands
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $base='research/wfp-ale/lab-win11'
+          $files=@(Get-ChildItem -LiteralPath $base -Filter '*.ps1' -File)
+          if($files.Count -lt 5){throw 'Expected at least five R39 lab scripts'}
+          $checked=@()
+          foreach($file in $files){
+            $tokens=$null
+            $errors=$null
+            $ast=[System.Management.Automation.Language.Parser]::ParseFile($file.FullName,[ref]$tokens,[ref]$errors)
+            if($errors.Count -ne 0){
+              foreach($e in $errors){Write-Output ("PARSER: "+$file.Name+" "+$e.Message)}
+              throw ('PowerShell parser failed: '+$file.Name)
+            }
+            $checked+=$file.Name
+          }
+          New-Item -ItemType Directory -Force build/r39-win11 | Out-Null
+          & "$base/host-preflight.ps1" -OutputPath 'build/r39-win11/host-preflight.json' | Out-Null
+          if($LASTEXITCODE -ne 0){throw 'Host audit should be non-destructive even without Hyper-V'}
+          $audit=Get-Content 'build/r39-win11/host-preflight.json' -Raw|ConvertFrom-Json -AsHashtable
+          if($audit.any_host_changed -ne $false -or $audit.driver_installed -ne $false -or $audit.ready_to_create -ne $false){throw 'Hosted Windows must NOT be eligible for VM creation'}
+          & "$base/new-labvm.ps1" -OutputPath 'build/r39-win11/plan-only.json' | Out-Null
+          if($LASTEXITCODE -ne 0){throw 'Provisioner audit-only failed'}
+          $plan=Get-Content 'build/r39-win11/plan-only.json' -Raw|ConvertFrom-Json -AsHashtable
+          if($plan.mode -ne 'AUDIT_ONLY' -or $plan.vm_created -ne $false -or $plan.host_bcd_modified -ne $false){throw 'Provisioner violated audit-only boundary'}
+          & "$base/guest-testmode.ps1" -OutputPath 'build/r39-win11/guest-readonly.json' | Out-Null
+          if($LASTEXITCODE -ne 0){throw 'Guest audit-only failed'}
+          $guest=Get-Content 'build/r39-win11/guest-readonly.json' -Raw|ConvertFrom-Json -AsHashtable
+          if($guest.host_modified -ne $false -or $guest.bcd_test_mode_requested -ne $false){throw 'Guest audit changed BCD'}
+          # Reject accidental privileged driver/VM writes in read-only preflight.
+          $source=Get-Content "$base/host-preflight.ps1" -Raw
+          foreach($needle in @('New-VM -','Set-VMFirmware -','bcdedit.exe /set','New-SelfSignedCertificate -','sc.exe create','pnputil.exe /add-driver')){
+            if($source.Contains($needle)){throw ('Preflight contains mutation: '+$needle)}
+          }
+          [ordered]@{
+            schema='r39-win11-lab-no-load-ci-v1'
+            scripts_parsed=$checked
+            real_win11_vm_created=$false
+            real_driver_test_signed=$false
+            host_change_performed=$false
+            native_ale_redirect_observed=$false
+            g2_pass=$false
+            result='PASS_STATIC_AND_AUDIT_ONLY'
+          }|ConvertTo-Json -Depth 5 | Set-Content -LiteralPath 'build/r39-win11/ci-result.json' -Encoding utf8
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: FlowBridge-R39-Win11Lab-ReadOnly-${{ github.run_id }}
+          path: build/r39-win11/*.json
+          retention-days: 14
+          if-no-files-found: warn
