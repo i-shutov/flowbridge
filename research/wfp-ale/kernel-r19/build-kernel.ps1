@@ -2,6 +2,9 @@ $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $out = Join-Path $env:GITHUB_WORKSPACE 'build/g2-kernel-r19'
 New-Item -ItemType Directory -Force $out | Out-Null
+# Negative mutations must fail before any WDK resolution or CAB creation.
+& python -m unittest discover -s "$root" -p 'test_locks_r39.py' -v
+if ($LASTEXITCODE -ne 0) { throw 'Pinned Cargo lock regression tests failed' }
 & python "$root/package_r24.py" $out
 if ($LASTEXITCODE -ne 0) { throw 'Exact source snapshot failed' }
 $nuget = (Get-Command nuget.exe -ErrorAction Stop).Source
