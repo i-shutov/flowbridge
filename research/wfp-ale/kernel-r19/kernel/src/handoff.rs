@@ -10,6 +10,8 @@ pub const STOP: u32 = 0x22e410;
 pub const LEASE: u64 = 30_000_000; // 3 seconds, Windows interrupt-time 100ns units
 pub const TTL: u64 = 100_000_000; // 10 seconds to consume one context
 pub const CAP: usize = 32;
+/// Fail-closed per-driver endpoint memory. Never evict/recycle a numeric handle.
+pub const MAX_ENDPOINT_TOMBSTONES: usize = 4096;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Destination { pub family: u8, pub port: u16, pub ip: [u8; 16] }
 impl Destination {
@@ -57,9 +59,11 @@ impl Context {
 #[derive(Clone, Copy)]
 struct Slot { context:Context, live:bool, auth_seen:bool }
 impl Slot { const EMPTY:Self=Self{context:Context::EMPTY,live:false,auth_seen:false}; }
-pub struct Book { session:[u8;16], slots:[Slot;CAP], sequence:u64, pub lost:bool }
+pub struct Book { session:[u8;16], slots:[Slot;CAP], sequence:u64, pub lost:bool,
+    seen_endpoints:[u64;MAX_ENDPOINT_TOMBSTONES], seen_count:usize }
 impl Book {
-    pub const fn new()->Self {Self{session:[0;16],slots:[Slot::EMPTY;CAP],sequence:0,lost:false}}
+    pub const fn new()->Self {Self{session:[0;16],slots:[Slot::EMPTY;CAP],sequence:0,lost:false,
+        seen_endpoints:[0;MAX_ENDPOINT_TOMBSTONES],seen_count:0}}
     pub fn initialize(&mut self, session:[u8;16])->bool {
         if self.session!=[0;16] || session==[0;16] {self.lost=true;return false;}
         self.session=session;true
@@ -69,10 +73,12 @@ impl Book {
             || [origin.pid,origin.epoch,origin.key,origin.endpoint,origin.generation].contains(&0) {return None;}
         // Expired records are retired, never reissued with the same sequence.
         for s in &mut self.slots {if s.live && now.saturating_sub(s.context.number(96))>TTL{s.live=false;}}
-        // A live endpoint may have only one active redirect ticket; never
-        // guess which origin a second AUTH indication belongs to.
-        if self.slots.iter().any(|s| s.live && s.context.number(56)==origin.endpoint){self.lost=true;return None;}
-        let index=self.slots.iter().position(|s|!s.live)?;
+        // A delayed AUTH indication has no issuance ID. Remember every issued
+        // endpoint, including ones retired after expiry, claim or failure.
+        // Reusing an endpoint permanently poisons the bounded lab session.
+        if self.seen_endpoints[..self.seen_count].contains(&origin.endpoint){self.lost=true;return None;}
+        if self.seen_count==MAX_ENDPOINT_TOMBSTONES{self.lost=true;return None;}
+        let Some(index)=self.slots.iter().position(|s|!s.live) else{return None;};
         self.sequence=match self.sequence.checked_add(1){Some(n)=>n,None=>{self.lost=true;return None;}};
         let mut c=Context::EMPTY;c.0[..8].copy_from_slice(b"FBR3\x01\x00\x80\x00");
         c.0[8..24].copy_from_slice(&self.session);
@@ -80,6 +86,9 @@ impl Book {
                        (56,origin.endpoint),(64,origin.generation),(96,now)]{c.put(at,n);}
         c.0[72]=destination.family;c.0[73]=6;c.0[74..76].copy_from_slice(&destination.port.to_be_bytes());
         c.0[80..96].copy_from_slice(&destination.ip);
+        // Both operations run under the same kernel lock; no ticket can be
+        // observed before its endpoint becomes an immutable tombstone.
+        self.seen_endpoints[self.seen_count]=origin.endpoint;self.seen_count+=1;
         self.slots[index]=Slot{context:c,live:true,auth_seen:false};Some(c)
     }
     /// Authorization must come from the *same native ALE_AUTH_CONNECT* classify,
@@ -121,8 +130,10 @@ mod tests {
     #[test]fn claim_is_single_use(){let mut b=book();let c=b.issue(o(),d(),1).unwrap();assert!(b.attest(o(),d(),2));assert!(b.take(c,2).is_some());assert!(b.take(c,2).is_none());}
     #[test]fn repaired_failed_claim_not_accepted(){let mut b=book();let c=b.issue(o(),d(),1).unwrap();let mut wrong=c;wrong.0[80]^=1;assert!(b.attest(o(),d(),2));
         assert!(b.take(wrong,2).is_none());assert!(b.take(c,2).is_none());}
-    #[test]fn old_context_does_not_survive_slot_reuse(){let mut b=book();let c=b.issue(o(),d(),1).unwrap();b.retire(c);let n=b.issue(o(),d(),2).unwrap();
-        assert!(c!=n);assert!(b.attest(o(),d(),3));assert!(b.take(c,3).is_none());assert!(b.take(n,3).is_some());}
+    #[test]fn retired_endpoint_cannot_renew(){let mut b=book();let c=b.issue(o(),d(),1).unwrap();b.retire(c);
+        assert!(b.issue(o(),d(),2).is_none());assert!(b.lost);assert!(!b.attest(o(),d(),3));}
+    #[test]fn different_endpoint_after_retire_works(){let mut b=book();let c=b.issue(o(),d(),1).unwrap();b.retire(c);let mut next=o();next.endpoint=42;
+        let n=b.issue(next,d(),2).unwrap();assert!(n!=c);assert!(b.attest(next,d(),3));assert!(b.take(n,4).is_some());}
     #[test]fn foreign_session_does_not_consume(){let mut b=book();let c=b.issue(o(),d(),1).unwrap();let mut x=c;x.0[8]^=1;
         assert!(b.attest(o(),d(),2));assert!(b.take(x,2).is_none());assert!(b.take(c,2).is_some());}
     #[test]fn expired_and_clock_reversed_denied(){for t in [0,TTL+2]{let mut b=book();let c=b.issue(o(),d(),1).unwrap();let _=b.attest(o(),d(),2);assert!(b.take(c,t).is_none());}}
@@ -135,5 +146,11 @@ mod tests {
       let mut other_dst=d();other_dst.port=444;assert!(!b.attest(o(),other_dst,2));assert!(b.attest(o(),d(),2));assert!(b.take(c,2).is_some());}
     #[test]fn duplicated_endpoint_latches_loss(){let mut b=book();b.issue(o(),d(),1).unwrap();assert!(b.issue(o(),d(),2).is_none());assert!(b.lost);}
     #[test]fn auth_replay_denied(){let mut b=book();b.issue(o(),d(),1).unwrap();assert!(b.attest(o(),d(),2));assert!(!b.attest(o(),d(),3));}
+    #[test]fn expired_endpoint_cannot_renew(){let mut b=book();b.issue(o(),d(),1).unwrap();assert!(b.issue(o(),d(),TTL+2).is_none());assert!(b.lost);}
+    #[test]fn consumed_endpoint_cannot_renew(){let mut b=book();let c=b.issue(o(),d(),1).unwrap();assert!(b.attest(o(),d(),2));assert!(b.take(c,3).is_some());assert!(b.issue(o(),d(),4).is_none());assert!(b.lost);}
+    #[test]fn session_cannot_roll_over(){let mut b=book();b.issue(o(),d(),1).unwrap();assert!(!b.initialize([2;16]));assert!(b.lost);}
+    #[test]fn tombstone_budget_fails_closed(){let mut b=book();for id in 1..=MAX_ENDPOINT_TOMBSTONES{let mut identity=o();identity.endpoint=id as u64;
+        let c=b.issue(identity,d(),id as u64).expect("unique slot");b.retire(c);}
+        let mut extra=o();extra.endpoint=(MAX_ENDPOINT_TOMBSTONES+1) as u64;assert!(b.issue(extra,d(),123).is_none());assert!(b.lost);}
     #[test]fn no_scope_multicast_unspecified_or_mapped(){let mut dest=d();dest.ip=[0;16];assert!(!dest.valid());dest.ip[0]=224;assert!(!dest.valid());dest.family=6;dest.ip[0]=0xff;assert!(!dest.valid());dest.ip=[0;16];dest.ip[0]=0xfe;dest.ip[1]=0x80;assert!(!dest.valid());}
 }
