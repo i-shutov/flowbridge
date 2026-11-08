@@ -92,7 +92,11 @@ jobs:
           $bytes[4096]=$bytes[4096] -bxor 1
           [IO.File]::WriteAllBytes((Resolve-Path $bad),$bytes)
           & pwsh -NoProfile -File "$base/sign-lab-driver.ps1" -UnsignedSys $bad -UnsignedInf $inf -OutputPath 'build/r39-win11/mutated-audit.json' | Out-Null
-          if($LASTEXITCODE -ne 2){throw 'Mutated .sys did not fail closed'}
+          $negativeExitCode=$LASTEXITCODE
+          # GitHub pwsh wrapper exits with the most recent native exit code.
+          # A negative-test expected exit=2 is a PASS here; reset it after asserting.
+          $global:LASTEXITCODE=0
+          if($negativeExitCode -ne 2){throw 'Mutated .sys did not fail closed'}
           $badReport=Get-Content 'build/r39-win11/mutated-audit.json' -Raw|ConvertFrom-Json -AsHashtable
           if($badReport.status -ne 'BLOCKED' -or $badReport.driver_signed -or $badReport.original_source_hashes_verified){throw 'Mutation was incorrectly admitted'}
           [ordered]@{exact_source_sha256_verified=$true;mutated_source_blocked=$true;driver_signed=$false;native_redirect_executed=$false;g2_pass=$false}|ConvertTo-Json|Set-Content 'build/r39-win11/candidate-qa.json' -Encoding utf8
