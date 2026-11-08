@@ -15,6 +15,10 @@ $originalInfSha='29b62d0272436d62098d2514a6586db171261faaa58c9ac31a271518f3c5fbd
 $originalBrokerSha='295bc4b74c42e95f3f94d7576bfba7a4e1aeee4e2ba52dc2c84f007d703ac2bb'
 function Hash([string]$file){return (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()}
 function FindSdkTool([string]$name){
+  if($name -eq 'inf2cat' -and $env:FB_INF2CAT_EXE -and
+    (Test-Path -LiteralPath $env:FB_INF2CAT_EXE -PathType Leaf)){
+    return [IO.Path]::GetFullPath($env:FB_INF2CAT_EXE)
+  }
   $kits=Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10'
   $candidates=@()
   if(Test-Path -LiteralPath $kits){

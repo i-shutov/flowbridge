@@ -25,16 +25,20 @@ jobs:
           run-id: 42465140005
           github-token: ${{ github.token }}
           path: build/r39-ephemeral-input
-      - name: Discover Windows SDK WDK signing tools without host changes
+      - name: Acquire pinned Microsoft WDK x86 tool package into job workspace only
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          $root=Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10'
-          foreach($file in @('signtool.exe','inf2cat.exe')){
-            $found=@(Get-ChildItem -Path $root -Filter $file -Recurse -File -ErrorAction SilentlyContinue)
-            Write-Output "$file found $($found.Count)"
-            if($found.Count -eq 0){throw "Missing official WDK tool $file"}
-          }
+          $nuget=(Get-Command nuget.exe -ErrorAction Stop).Source
+          $dest='build/r39-ephemeral-tools/wdk'
+          & $nuget install Microsoft.Windows.WDK.x86 -Version 10.0.26100.6584 -OutputDirectory $dest -Source https://api.nuget.org/v3/index.json -DirectDownload -NonInteractive | Out-Null
+          if($LASTEXITCODE -ne 0){throw 'Official WDK x86 package download failed'}
+          $inf=@(Get-ChildItem -LiteralPath $dest -Filter inf2cat.exe -Recurse -File -ErrorAction SilentlyContinue)
+          if($inf.Count -lt 1){throw 'Official WDK x86 package did not include Inf2Cat'}
+          $resolved=$inf|Sort-Object FullName -Descending|Select-Object -First 1 -ExpandProperty FullName
+          "FB_INF2CAT_EXE=$resolved" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Output "Pinned official WDK Inf2Cat found; no host installation performed"
+
       - name: Sign only pinned staged copy with temporary CurrentUser cert, then delete cert
         shell: pwsh
         run: |
