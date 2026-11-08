@@ -54,7 +54,9 @@ $report=[ordered]@{
  kernel_driver_loaded=$false
  wfp_filters_installed=$false
  native_redirect_executed=$false
- host_admitted=false
+ host_admitted=$false
+ current_user_certificate_removed=$false
+ kernel_signature_policy_verified=$false
  g2_pass=$false
  release_accepted=$false
  error=''
@@ -131,6 +133,8 @@ try{
     try{
       $p='Cert:\CurrentUser\My\'+$thumb
       if(Test-Path -LiteralPath $p){Remove-Item -LiteralPath $p -Force -ErrorAction Stop}
+      if(Test-Path -LiteralPath $p){throw 'Ephemeral signer remains in CurrentUser/My'}
+      $report.current_user_certificate_removed=$true
     }catch{
       $report.status='EPHEMERAL_CERT_CLEANUP_FAILED'
       $report.error+='; ephemeral_test_certificate_cleanup_failed'

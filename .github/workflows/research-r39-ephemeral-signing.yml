@@ -44,10 +44,53 @@ jobs:
         run: |
           & research/wfp-ale/lab-win11/ci-sign-rehearsal-r39.ps1 -CandidateDir build/r39-ephemeral-input -OutputDir build/r39-ephemeral-result
           if($LASTEXITCODE -ne 0){throw 'Test-signing rehearsal failed, inspect JSON; NO LOAD'}
+      - name: Independently check cleanup, trust stores and exact fail-closed mutation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $path='build/r39-ephemeral-result/signing-rehearsal-report.json'
+          $proof=Get-Content -LiteralPath $path -Raw|ConvertFrom-Json -AsHashtable
+          if($proof.status -ne 'SIGNING_REHEARSAL_PASS_NOT_TRUSTED_NOT_LOADABLE_EVIDENCE'
+             -or $proof.current_user_certificate_removed -ne $true
+             -or $proof.host_admitted -ne $false
+             -or $proof.signed_pe_sections_identical -ne $true
+             -or $proof.signed_sys_test_signature_present -ne $true
+             -or $proof.signed_cat_test_signature_present -ne $true
+             -or $proof.kernel_driver_loaded -ne $false){throw 'Unexpected signing/cleanup evidence'}
+          foreach($store in @('Cert:\CurrentUser\My','Cert:\CurrentUser\Root','Cert:\CurrentUser\TrustedPublisher',
+                               'Cert:\LocalMachine\Root','Cert:\LocalMachine\TrustedPublisher')){
+            if(@(Get-ChildItem -Path $store -ErrorAction Stop|
+              Where-Object Thumbprint -eq $proof.ephemeral_signer_thumbprint).Count -ne 0){
+              throw "Ephemeral test signer unexpectedly remains in $store"
+            }
+          }
+          $input='build/r39-ephemeral-input'
+          $tampered='build/r39-ephemeral-tampered'
+          New-Item -ItemType Directory -Path (Join-Path $tampered 'signing-r38/FlowBridgeG2R38') -Force|Out-Null
+          Copy-Item (Join-Path $input 'flowbridge_g2_witness.sys') (Join-Path $tampered 'flowbridge_g2_witness.sys')
+          Copy-Item (Join-Path $input 'flowbridge-redirect-broker.exe') (Join-Path $tampered 'flowbridge-redirect-broker.exe')
+          Copy-Item (Join-Path $input 'signing-r38/FlowBridgeG2R38/flowbridge_g2_r38.inf') (Join-Path $tampered 'signing-r38/FlowBridgeG2R38/flowbridge_g2_r38.inf')
+          $file=(Resolve-Path (Join-Path $tampered 'flowbridge_g2_witness.sys')).Path
+          $data=[IO.File]::ReadAllBytes($file);$data[2048]=$data[2048] -bxor 1
+          [IO.File]::WriteAllBytes($file,$data)
+          & pwsh -NoProfile -File research/wfp-ale/lab-win11/ci-sign-rehearsal-r39.ps1 -CandidateDir $tampered -OutputDir build/r39-ephemeral-negative | Out-Null
+          $expectedFailureCode=$LASTEXITCODE
+          $global:LASTEXITCODE=0
+          if($expectedFailureCode -ne 2){throw 'Tampered SYS was not denied'}
+          $bad=Get-Content 'build/r39-ephemeral-negative/signing-rehearsal-report.json' -Raw|ConvertFrom-Json -AsHashtable
+          if($bad.status -ne 'SIGNING_REHEARSAL_FAILED' -or $bad.signed_sys_test_signature_present -or $bad.inf2cat_generated_catalog){
+            throw 'Mutated source got signing permission'
+          }
+          [ordered]@{source_artifact_verified=$true;temporary_certificate_removed=$true;
+             system_trust_unchanged=$true;tampered_driver_blocked=$true;
+             driver_loaded=$false;g2_pass=$false}|
+             ConvertTo-Json|Set-Content -LiteralPath 'build/r39-ephemeral-result/independent-qa.json' -Encoding utf8
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: FlowBridge-R39-test-signing-rehearsal-readonly-${{ github.run_id }}
-          path: build/r39-ephemeral-result/signing-rehearsal-report.json
+          path: |
+            build/r39-ephemeral-result/signing-rehearsal-report.json
+            build/r39-ephemeral-result/independent-qa.json
           if-no-files-found: warn
           retention-days: 14
