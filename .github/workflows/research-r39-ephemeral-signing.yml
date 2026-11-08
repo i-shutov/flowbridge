@@ -1,0 +1,49 @@
+name: R39 exact driver test-signing rehearsal (ephemeral Windows, no kernel load)
+on:
+  push:
+    branches: [feat/r39-win11-dev-lab-20261108]
+    paths:
+      - .github/workflows/research-r39-ephemeral-signing.yml
+      - research/wfp-ale/lab-win11/ci-sign-rehearsal-r39.ps1
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: r39-ephemeral-signing-no-driver-load
+  cancel-in-progress: false
+jobs:
+  lab-test-signing-no-install:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: FlowBridge-R24-kernel-broker-42465140005
+          run-id: 42465140005
+          github-token: ${{ github.token }}
+          path: build/r39-ephemeral-input
+      - name: Discover Windows SDK WDK signing tools without host changes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $root=Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10'
+          foreach($file in @('signtool.exe','inf2cat.exe')){
+            $found=@(Get-ChildItem -Path $root -Filter $file -Recurse -File -ErrorAction SilentlyContinue)
+            Write-Output "$file found $($found.Count)"
+            if($found.Count -eq 0){throw "Missing official WDK tool $file"}
+          }
+      - name: Sign only pinned staged copy with temporary CurrentUser cert, then delete cert
+        shell: pwsh
+        run: |
+          & research/wfp-ale/lab-win11/ci-sign-rehearsal-r39.ps1 -CandidateDir build/r39-ephemeral-input -OutputDir build/r39-ephemeral-result
+          if($LASTEXITCODE -ne 0){throw 'Test-signing rehearsal failed, inspect JSON; NO LOAD'}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: FlowBridge-R39-test-signing-rehearsal-readonly-${{ github.run_id }}
+          path: build/r39-ephemeral-result/signing-rehearsal-report.json
+          if-no-files-found: warn
+          retention-days: 14
