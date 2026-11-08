@@ -50,13 +50,16 @@ jobs:
           $ErrorActionPreference='Stop'
           $path='build/r39-ephemeral-result/signing-rehearsal-report.json'
           $proof=Get-Content -LiteralPath $path -Raw|ConvertFrom-Json -AsHashtable
-          if($proof.status -ne 'SIGNING_REHEARSAL_PASS_NOT_TRUSTED_NOT_LOADABLE_EVIDENCE'
-             -or $proof.current_user_certificate_removed -ne $true
-             -or $proof.host_admitted -ne $false
-             -or $proof.signed_pe_sections_identical -ne $true
-             -or $proof.signed_sys_test_signature_present -ne $true
-             -or $proof.signed_cat_test_signature_present -ne $true
-             -or $proof.kernel_driver_loaded -ne $false){throw 'Unexpected signing/cleanup evidence'}
+          $cleanProof=(
+            $proof.status -eq 'SIGNING_REHEARSAL_PASS_NOT_TRUSTED_NOT_LOADABLE_EVIDENCE' -and
+            $proof.current_user_certificate_removed -eq $true -and
+            $proof.host_admitted -eq $false -and
+            $proof.signed_pe_sections_identical -eq $true -and
+            $proof.signed_sys_test_signature_present -eq $true -and
+            $proof.signed_cat_test_signature_present -eq $true -and
+            $proof.kernel_driver_loaded -eq $false
+          )
+          if(-not $cleanProof){throw 'Unexpected signing/cleanup evidence'}
           foreach($store in @('Cert:\CurrentUser\My','Cert:\CurrentUser\Root','Cert:\CurrentUser\TrustedPublisher',
                                'Cert:\LocalMachine\Root','Cert:\LocalMachine\TrustedPublisher')){
             if(@(Get-ChildItem -Path $store -ErrorAction Stop|
