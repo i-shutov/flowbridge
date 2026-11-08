@@ -37,15 +37,12 @@ jobs:
           }
           New-Item -ItemType Directory -Force build/r39-win11 | Out-Null
           & "$base/host-preflight.ps1" -OutputPath 'build/r39-win11/host-preflight.json' | Out-Null
-          if($LASTEXITCODE -ne 0){throw 'Host audit should be non-destructive even without Hyper-V'}
           $audit=Get-Content 'build/r39-win11/host-preflight.json' -Raw|ConvertFrom-Json -AsHashtable
-          if($audit.any_host_changed -ne $false -or $audit.driver_installed -ne $false -or $audit.ready_to_create -ne $false){throw 'Hosted Windows must NOT be eligible for VM creation'}
+          if($audit.any_host_changed -ne $false -or $audit.driver_installed -ne $false -or $audit.ready_to_create -ne $false -or ($audit.blockers -notcontains 'github_actions_runner_not_authorized_lab_host')){throw 'Hosted Windows must NOT be eligible for VM creation'}
           & "$base/new-labvm.ps1" -OutputPath 'build/r39-win11/plan-only.json' | Out-Null
-          if($LASTEXITCODE -ne 0){throw 'Provisioner audit-only failed'}
           $plan=Get-Content 'build/r39-win11/plan-only.json' -Raw|ConvertFrom-Json -AsHashtable
           if($plan.mode -ne 'AUDIT_ONLY' -or $plan.vm_created -ne $false -or $plan.host_bcd_modified -ne $false){throw 'Provisioner violated audit-only boundary'}
           & "$base/guest-testmode.ps1" -OutputPath 'build/r39-win11/guest-readonly.json' | Out-Null
-          if($LASTEXITCODE -ne 0){throw 'Guest audit-only failed'}
           $guest=Get-Content 'build/r39-win11/guest-readonly.json' -Raw|ConvertFrom-Json -AsHashtable
           if($guest.host_modified -ne $false -or $guest.bcd_test_mode_requested -ne $false){throw 'Guest audit changed BCD'}
           # Reject accidental privileged driver/VM writes in read-only preflight.

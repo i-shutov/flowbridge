@@ -41,6 +41,7 @@ $reported=[ordered]@{
 $issues=[System.Collections.Generic.List[string]]::new()
 try {
   if (-not $IsWindows) { throw 'Windows host required' }
+  if ($env:GITHUB_ACTIONS -eq 'true') { $issues.Add('github_actions_runner_not_authorized_lab_host') }
   $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
   $reported.is_administrator=([Security.Principal.WindowsPrincipal]::new($identity)).IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -102,7 +103,7 @@ try {
     $reported.host_storage_free_gb -ge ($GuestDiskGB+24))
   $reported.ready_to_create=(
     $reported.is_administrator -and $reported.host_resources_sufficient -and
-    $reported.hyperv_host_operational -and $reported.iso_exists)
+    $reported.hyperv_host_operational -and $reported.iso_exists -and $env:GITHUB_ACTIONS -ne 'true')
 } catch {
   $issues.Add('preflight_error: '+[string]$_.Exception.Message)
 }
@@ -113,6 +114,6 @@ if ($OutputPath) {
   $dest=[IO.Path]::GetFullPath($OutputPath)
   $dir=Split-Path -Parent $dest
   if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force|Out-Null }
-  [IO.File]::WriteAllText($dest,$result+"\n",[Text.UTF8Encoding]::new($false))
+  [IO.File]::WriteAllText($dest,$result+[Environment]::NewLine,[Text.UTF8Encoding]::new($false))
 }
 Write-Output $result
