@@ -76,7 +76,9 @@ def case(binary, ssh_port, user, key, pinned, family, expected_good):
                     payload=client.recv(4096)
                     if not payload:break
                     response+=payload
-            except socket.timeout:
+            except (socket.timeout, ConnectionResetError):
+                # A false host pin must kill the channel before any payload.
+                # TCP RST is an admissible negative outcome, not a positive one.
                 if expected_good:raise Fail('r37_response_timeout')
         try: out,err=process.communicate(timeout=20)
         except subprocess.TimeoutExpired:raise Fail('r37_process_timeout')
