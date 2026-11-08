@@ -10,6 +10,7 @@
 
 use russh::{client, keys::{self, PublicKeyOrCertificate}};
 use std::{io, net::{IpAddr, TcpStream}, sync::Arc, time::Duration};
+use tokio::{io::{AsyncRead, AsyncWrite}, sync::watch};
 
 fn reject(stage: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::PermissionDenied, stage)
@@ -65,6 +66,42 @@ impl ChannelAuthority {
     }
 }
 
+/// Revocation is a terminal capability, not a one-time admission check.
+/// A changed flag or lost sender wakes this future; there is no path to
+/// convert a closed/failed kernel lease into an implicit permit.
+async fn revoked(mut signal: watch::Receiver<bool>) {
+    if *signal.borrow() { return; }
+    loop {
+        if signal.changed().await.is_err() { return; }
+        if *signal.borrow_and_update() { return; }
+    }
+}
+
+/// A source-level/user-mode fail-closed barrier. tokio select is biased toward
+/// revocation and drops the in-progress bidirectional copy on a STOP message.
+/// This is NOT a kernel/system-wide no-DIRECT guarantee: already queued bytes
+/// and OS scheduling require separate physical observation.
+pub async fn copy_with_revocation<A, B>(
+    left: &mut A, right: &mut B, signal: watch::Receiver<bool>
+) -> io::Result<(u64, u64)>
+where
+    A: AsyncRead + AsyncWrite + Unpin,
+    B: AsyncRead + AsyncWrite + Unpin,
+{
+    if *signal.borrow() { return Err(reject("ssh_revoked_before_copy")); }
+    let stop = revoked(signal.clone());
+    tokio::pin!(stop);
+    let copied = tokio::select! {
+        biased;
+        _ = &mut stop => return Err(reject("ssh_copy_revoked")),
+        result = tokio::time::timeout(
+            Duration::from_secs(60), tokio::io::copy_bidirectional(left, right)
+        ) => result.map_err(|_| reject("ssh_relay_timeout"))?
+            .map_err(|_| reject("ssh_relay_error"))?,
+    };
+    if *signal.borrow() { Err(reject("ssh_copy_revoked")) } else { Ok(copied) }
+}
+
 /// Both accepted application socket and actual SSH transport socket must be
 /// passed by OWNERSHIP. No SSH socket creation or local SOCKS listener here.
 /// No application bytes are released until host key, user authentication and
@@ -75,33 +112,48 @@ pub async fn relay_over_pinned_ssh(
     destination: IpAddr,
     destination_port: u16,
     auth: ChannelAuthority,
+    signal: watch::Receiver<bool>,
 ) -> io::Result<(u64, u64)> {
     if destination_port == 0 { return Err(reject("invalid_target_port")); }
+    if *signal.borrow() { return Err(reject("ssh_revoked_before_connect")); }
+    let stop = revoked(signal.clone());
+    tokio::pin!(stop);
     accepted.set_nonblocking(true)?;
     actual_ssh_transport.set_nonblocking(true)?;
     let incoming = tokio::net::TcpStream::from_std(accepted)?;
     let ssh = tokio::net::TcpStream::from_std(actual_ssh_transport)?;
     let cfg = Arc::new(client::Config::default());
-    let mut session = tokio::time::timeout(
-        Duration::from_secs(12), client::connect_stream(cfg, ssh, auth.host.clone())
-    ).await.map_err(|_| reject("ssh_host_timeout"))?
-        .map_err(|_| reject("ssh_host_rejected"))?;
+    let mut session = tokio::select! {
+        biased;
+        _ = &mut stop => return Err(reject("ssh_host_revoked")),
+        result = tokio::time::timeout(
+            Duration::from_secs(12), client::connect_stream(cfg, ssh, auth.host.clone())
+        ) => result.map_err(|_| reject("ssh_host_timeout"))?
+            .map_err(|_| reject("ssh_host_rejected"))?,
+    };
     let key = keys::key::PrivateKeyWithHashAlg::new(auth.user_key, None);
-    let outcome = tokio::time::timeout(
-        Duration::from_secs(12), session.authenticate_publickey(auth.username, key)
-    ).await.map_err(|_| reject("ssh_auth_timeout"))?
-        .map_err(|_| reject("ssh_auth_failed"))?;
+    let outcome = tokio::select! {
+        biased;
+        _ = &mut stop => return Err(reject("ssh_auth_revoked")),
+        result = tokio::time::timeout(
+            Duration::from_secs(12), session.authenticate_publickey(auth.username, key)
+        ) => result.map_err(|_| reject("ssh_auth_timeout"))?
+            .map_err(|_| reject("ssh_auth_failed"))?,
+    };
     if !outcome.success() { return Err(reject("ssh_auth_denied")); }
-    let channel = tokio::time::timeout(Duration::from_secs(12),
-        session.channel_open_direct_tcpip(destination.to_string(), u32::from(destination_port),
-                                          "127.0.0.1", 0)
-    ).await.map_err(|_| reject("ssh_channel_timeout"))?
-        .map_err(|_| reject("ssh_channel_denied"))?;
+    let channel = tokio::select! {
+        biased;
+        _ = &mut stop => return Err(reject("ssh_channel_revoked")),
+        result = tokio::time::timeout(Duration::from_secs(12),
+            session.channel_open_direct_tcpip(
+                destination.to_string(), u32::from(destination_port), "127.0.0.1", 0
+            )
+        ) => result.map_err(|_| reject("ssh_channel_timeout"))?
+            .map_err(|_| reject("ssh_channel_denied"))?,
+    };
     let mut io = channel.into_stream();
     let mut client_socket = incoming;
-    tokio::time::timeout(Duration::from_secs(60),tokio::io::copy_bidirectional(&mut client_socket,&mut io))
-        .await.map_err(|_| reject("ssh_relay_timeout"))?
-        .map_err(|_| reject("ssh_relay_error"))
+    copy_with_revocation(&mut client_socket, &mut io, signal).await
 }
 
 #[cfg(test)]
@@ -119,4 +171,35 @@ mod tests {
             std::path::Path::new("missing-key"),"user".into());
         assert!(result.is_err());
     }
+    #[tokio::test]
+    async fn stop_before_copy_fails_closed() {
+        let (sender, signal) = watch::channel(false);
+        sender.send_replace(true);
+        let (mut a, _a_peer) = tokio::io::duplex(64);
+        let (mut b, _b_peer) = tokio::io::duplex(64);
+        assert!(copy_with_revocation(&mut a, &mut b, signal).await.is_err());
+    }
+    #[tokio::test]
+    async fn revocation_interrupts_live_blocked_copy() {
+        let (sender, signal) = watch::channel(false);
+        let (mut a, _a_peer) = tokio::io::duplex(64);
+        let (mut b, _b_peer) = tokio::io::duplex(64);
+        let future = copy_with_revocation(&mut a, &mut b, signal);
+        tokio::pin!(future);
+        let first = tokio::time::timeout(Duration::from_millis(30), future.as_mut()).await;
+        assert!(first.is_err(), "copy should remain pending while healthy");
+        sender.send_replace(true);
+        assert!(tokio::time::timeout(Duration::from_millis(200), future.as_mut())
+            .await.expect("revocation must wake a running relay").is_err());
+    }
+    #[tokio::test]
+    async fn lost_revocation_sender_is_terminal() {
+        let (sender, signal) = watch::channel(false);
+        drop(sender);
+        let (mut a, _a_peer) = tokio::io::duplex(64);
+        let (mut b, _b_peer) = tokio::io::duplex(64);
+        assert!(tokio::time::timeout(Duration::from_millis(200),
+            copy_with_revocation(&mut a, &mut b, signal)).await.unwrap().is_err());
+    }
+
 }

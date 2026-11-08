@@ -8,4 +8,4 @@ publish = false
 
 [dependencies]
 russh = { version = "=0.65.1", default-features = false, features = ["ring", "flate2", "rsa"] }
-tokio = { version = "=1.48.0", features = ["rt-multi-thread", "macros", "io-util", "net", "time"] }
+tokio = { version = "=1.48.0", features = ["rt-multi-thread", "macros", "io-util", "net", "time", "sync"] }

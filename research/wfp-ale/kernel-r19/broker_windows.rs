@@ -163,7 +163,8 @@ impl Received {
 impl TrustedSshRelay {
     /// Rust SSH owns the physical WFP-record-tagged TCP socket from this point.
     /// No local SOCKS listener exists in the trusted path.
-    pub fn relay(self, authority:flowbridge_trusted_ssh_r37::ChannelAuthority)
+    pub fn relay(self, authority:flowbridge_trusted_ssh_r37::ChannelAuthority,
+        revocation:tokio::sync::watch::Receiver<bool>)
         -> io::Result<(u64,u64)> {
         let destination=if self.destination.family==4{
             std::net::IpAddr::V4(std::net::Ipv4Addr::new(
@@ -176,7 +177,7 @@ impl TrustedSshRelay {
             .enable_all().build()?;
         runtime.block_on(flowbridge_trusted_ssh_r37::relay_over_pinned_ssh(
             self.accepted,self.physical_ssh,destination,
-            self.destination.port,authority))
+            self.destination.port,authority,revocation))
     }
 }
 

@@ -21,6 +21,13 @@ enum Upstream {
     },
 }
 #[cfg(windows)]
+fn revoke(stop:&std::sync::Arc<std::sync::atomic::AtomicBool>,
+    notify:&tokio::sync::watch::Sender<bool>) {
+    stop.store(true,std::sync::atomic::Ordering::Release);
+    notify.send_replace(true);
+}
+
+#[cfg(windows)]
 fn serve(image:&std::path::Path,upstream:Upstream,seconds:u64,activate_policy:bool)->std::io::Result<()> {
  use std::{net::TcpListener,sync::{Arc,atomic::{AtomicBool,AtomicUsize,Ordering}},time::{Duration,Instant},thread,io::Write};
  use broker_windows::{Device,SelectedImage};
@@ -36,28 +43,34 @@ fn serve(image:&std::path::Path,upstream:Upstream,seconds:u64,activate_policy:bo
  v4.set_nonblocking(true)?;v6.set_nonblocking(true)?;
  let device=Arc::new(Device::open()?);device.arm(&selection,ports[0],ports[1])?;
  let stop=Arc::new(AtomicBool::new(false));let completed=Arc::new(AtomicUsize::new(0));
- let heartbeat={let d=device.clone();let s=stop.clone();thread::spawn(move||{
+ // Own, sticky revocation shared with each running verified SSH worker.
+ // A new worker after STOP immediately observes true.
+ let (revocation_tx,revocation_rx)=tokio::sync::watch::channel(false);
+ let heartbeat={let d=device.clone();let s=stop.clone();let notify=revocation_tx.clone();thread::spawn(move||{
   let mut healthy=true;
-  while !s.load(Ordering::Acquire){if d.command(handoff::PING,&[]).is_err(){healthy=false;s.store(true,Ordering::Release);break;}thread::sleep(Duration::from_millis(250));}
-  let stopped=d.command(handoff::STOP,&[]);if healthy{stopped}else{Err(std::io::Error::other("kernel_lease_lost"))}
+  while !s.load(Ordering::Acquire){if d.command(handoff::PING,&[]).is_err(){healthy=false;revoke(&s,&notify);break;}thread::sleep(Duration::from_millis(250));}
+  let stopped=d.command(handoff::STOP,&[]);
+  if stopped.is_err(){revoke(&s,&notify);}
+  if healthy{stopped}else{Err(std::io::Error::other("kernel_lease_lost"))}
  })};
  let policy=if activate_policy{
   // The external native harness must validate signature, exact binary, current
   // VNC, SYSTEM rescue, host protections and rollback BEFORE invoking this mode.
   match unsafe{policy_windows::Installed::activate_admitted(&plan)}{
-   Ok(p)=>Some(p),Err(_)=>{stop.store(true,Ordering::Release);let _=heartbeat.join();return Err(std::io::Error::other("policy_activation_failed"));}
+   Ok(p)=>Some(p),Err(_)=>{revoke(&stop,&revocation_tx);let _=heartbeat.join();return Err(std::io::Error::other("policy_activation_failed"));}
   }
  }else{None};
  // Write failure must still stop the kernel lease and join workers/heartbeat.
  let mut output=std::io::stdout();
  let mut error=writeln!(output,"{{\"broker_ready\":true,\"scoped_lab_policy_active\":{},\"native_admission_verified_by_broker\":false,\"g2_pass\":false}}",activate_policy).and_then(|_|output.flush()).err();
- if error.is_some(){stop.store(true,Ordering::Release);}
+ if error.is_some(){revoke(&stop,&revocation_tx);}
  let started=Instant::now();let mut workers=Vec::new();
  while !stop.load(Ordering::Acquire)&&started.elapsed()<Duration::from_secs(seconds){
   for listener in [&v4,&v6]{match listener.accept(){
    Ok((client,_))=>{
-    if workers.len()>=32{error=Some(std::io::Error::other("connection_cap"));stop.store(true,Ordering::Release);break;}
+    if workers.len()>=32{error=Some(std::io::Error::other("connection_cap"));revoke(&stop,&revocation_tx);break;}
     let d=device.clone();let s=stop.clone();let done=completed.clone();
+    let notify=revocation_tx.clone();let worker_revocation=revocation_rx.clone();
     let upstream=upstream.clone();workers.push(thread::spawn(move||{
      let result=(||{
       let received=broker_windows::receive(client)?;
@@ -68,17 +81,17 @@ fn serve(image:&std::path::Path,upstream:Upstream,seconds:u64,activate_policy:bo
         }
         Upstream::VerifiedSsh{remote,authority} => {
           let trusted=received.claim_and_connect_trusted_ssh(&d,remote)?;
-          trusted.relay(authority)?;
+          trusted.relay(authority,worker_revocation)?;
         }
       }
       done.fetch_add(1,Ordering::AcqRel);Ok::<_,std::io::Error>(())
      })();
-     if result.is_err(){s.store(true,Ordering::Release);}result
+     if result.is_err(){revoke(&s,&notify);}result
     }));
-   },Err(e)if e.kind()==std::io::ErrorKind::WouldBlock=>{},Err(e)=>{error=Some(e);stop.store(true,Ordering::Release);break;}
+   },Err(e)if e.kind()==std::io::ErrorKind::WouldBlock=>{},Err(e)=>{error=Some(e);revoke(&stop,&revocation_tx);break;}
   }}thread::sleep(Duration::from_millis(20));
  }
- stop.store(true,Ordering::Release);
+ revoke(&stop,&revocation_tx);
  match heartbeat.join(){Ok(Ok(()))=>{},_=>error=Some(std::io::Error::other("kernel_stop_failed"))}
  for worker in workers{match worker.join(){Ok(Ok(()))=>{},_=>error=Some(std::io::Error::other("admission_or_relay_failed"))}}
  drop(v4);drop(v6);
@@ -87,6 +100,21 @@ fn serve(image:&std::path::Path,upstream:Upstream,seconds:u64,activate_policy:bo
  if let Some(p)=policy{if p.close().is_err(){error=Some(std::io::Error::other("lab_policy_close_failed"));}}
  let _=writeln!(output,"{{\"completed_admitted_relays\":{},\"g2_pass\":false,\"release_accepted\":false}}",completed.load(Ordering::Acquire));
  if let Some(e)=error{Err(e)}else{Ok(())}
+}
+#[cfg(all(test, windows))]
+mod broker_revocation_tests {
+    use super::*;
+    use std::sync::{Arc,atomic::{AtomicBool,Ordering}};
+    #[test]
+    fn kernel_lease_loss_broadcast_is_sticky() {
+        let stop=Arc::new(AtomicBool::new(false));
+        let (send,rx)=tokio::sync::watch::channel(false);
+        revoke(&stop,&send);
+        assert!(stop.load(Ordering::Acquire));
+        assert!(*rx.borrow());
+        let after=send.subscribe();
+        assert!(*after.borrow());
+    }
 }
 fn main(){
  let args:Vec<String>=std::env::args().collect();
