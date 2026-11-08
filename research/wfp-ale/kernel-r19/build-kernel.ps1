@@ -41,6 +41,10 @@ try {
 if ($LASTEXITCODE -ne 0) { throw 'Exact kernel ledger tests did not compile' }
 & "$out/ledger-tests.exe"
 if ($LASTEXITCODE -ne 0) { throw 'Exact kernel ledger regression failed' }
+& rustc --edition=2021 --test "$root/kernel/src/auth_appid.rs" -o "$out/auth-appid-tests.exe"
+if ($LASTEXITCODE -ne 0) { throw 'R36 actual AUTH AppId tests did not compile' }
+& "$out/auth-appid-tests.exe"
+if ($LASTEXITCODE -ne 0) { throw 'R36 actual AUTH AppId tests failed' }
 & rustc --edition=2021 --test "$root/kernel/src/handoff.rs" -o "$out/handoff-tests.exe"
 if ($LASTEXITCODE -ne 0) { throw 'Handoff tests compile failed' }
 & "$out/handoff-tests.exe"

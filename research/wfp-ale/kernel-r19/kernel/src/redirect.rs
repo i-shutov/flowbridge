@@ -221,7 +221,10 @@ unsafe fn auth_check(values:*const k::FWPS_INCOMING_VALUES0,meta:*const k::FWPS_
         || (*raw_app).size%2!=0{return false;}
     let mut current_app=slice::from_raw_parts((*raw_app).data,(*raw_app).size as usize);
     if current_app.ends_with(&[0,0]){current_app=&current_app[..current_app.len()-2];}
-    if current_app.is_empty(){return false;}
+    // The original AppId is pinned to the referenced originating process.
+    // Current AppId can differ on a proxied flow; it is syntax-checked only.
+    // Kernel endpoint, epoch, original destination and one-shot ticket remain
+    // mandatory and cannot be inferred from either AppId alone.
     let socklen=if family==4{16}else{28};
     // The trusted WFP pointer denotes SOCKADDR / SOCKADDR_IN6. Read only its
     // family-specific length, not an assumed 128-byte backing allocation.
@@ -231,7 +234,7 @@ unsafe fn auth_check(values:*const k::FWPS_INCOMING_VALUES0,meta:*const k::FWPS_
     let _guard=Guard::take();
     if !ready(now()){return false;}
     let route=&mut *ROUTE.0.get();
-    if orig!=&route.name[..route.len] || current_app!=&route.name[..route.len]
+    if !super::auth_appid::original_matches_selected(orig,current_app,&route.name[..route.len])
         || m.localRedirectTargetPID!=route.pid as u32
         || actual_port != route.ports[if family==4{0}else{1}] {return false;}
     let Some((owner,generation))=(*STATE.0.get()).lookup(m.processId)else{return false};

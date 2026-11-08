@@ -9,6 +9,7 @@ use core::{cell::UnsafeCell, ffi::c_void, mem, ptr, slice, sync::atomic::{Atomic
 mod k { include!(concat!(env!("OUT_DIR"), "/wdk.rs")); }
 mod ledger;
 mod handoff;
+mod auth_appid;
 mod redirect;
 use ledger::{Ledger,Owner,Witness,MAX_NAME};
 
