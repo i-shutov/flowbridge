@@ -47,6 +47,7 @@ impl client::Handler for VerifiedHost {
     }
 }
 
+#[derive(Clone)]
 pub struct ChannelAuthority {
     pub host: VerifiedHost,
     pub username: String,

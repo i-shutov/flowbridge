@@ -12,3 +12,5 @@ path = "../broker.rs"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Rpc", "Win32_NetworkManagement_WindowsFilteringPlatform"] }
+flowbridge-trusted-ssh-r37 = { path = "../trusted-ssh-r37" }
+tokio = { version = "=1.48.0", features = ["rt-multi-thread", "macros", "io-util", "net", "time"] }

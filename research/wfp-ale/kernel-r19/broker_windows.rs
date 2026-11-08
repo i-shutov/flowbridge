@@ -103,6 +103,83 @@ impl Admitted{
   crate::transport::relay(self.accepted,self.upstream,stop)
  }
 }
+/// R37: created only from an actual socket-owned WFP receipt after terminal
+/// kernel CLAIM, never from a caller-constructed destination or SOCKS reply.
+/// The physical SSH TCP socket already received SIO_SET_WFP redirect records
+/// before connect; it is consumed by the pinned-host-key Russh client.
+pub struct TrustedSshRelay {
+    accepted: TcpStream,
+    physical_ssh: TcpStream,
+    destination: h::Destination,
+}
+
+impl Received {
+    /// IPv4 SSH server socket only in R37. Original IPv4/IPv6 destination is
+    /// still sent inside SSH channel_open_direct_tcpip after authentication.
+    pub fn claim_and_connect_trusted_ssh(
+        self,
+        device: &Device,
+        remote: std::net::SocketAddrV4,
+    ) -> io::Result<TrustedSshRelay> {
+        if remote.port()==0 || remote.ip().is_unspecified() || remote.ip().is_multicast(){
+            return Err(fail());
+        }
+        // A malformed/missing foreign context fails receive() before this.
+        // CLAIM is terminal even when the trusted SSH TCP setup subsequently
+        // fails: the ticket cannot be replayed against a different upstream.
+        device.command(h::CLAIM, &self.context.0)?;
+        let s=Raw(unsafe{socket(2,1,6)});
+        if s.0==usize::MAX {return Err(fail());}
+        let mut n=0;
+        let status=unsafe{WSAIoctl(s.0,SET_RECORDS,self.records.as_ptr().cast(),
+            self.records.len() as u32,ptr::null_mut(),0,&mut n,ptr::null_mut(),ptr::null_mut())};
+        if status!=0{return Err(fail());}
+        let mut one=1u32;
+        if unsafe{ioctlsocket(s.0,0x8004667eu32 as i32,&mut one)}!=0{return Err(fail());}
+        let address=SockAddr{family:2,port:remote.port().to_be(),
+            ip:remote.ip().octets(),zero:[0;8]};
+        if unsafe{connect(s.0,(&address as *const SockAddr).cast(),
+            mem::size_of::<SockAddr>() as i32)}!=0{
+            if unsafe{WSAGetLastError()}!=10035{return Err(fail());}
+            let mut write=FdSet{count:1,sockets:[0;64]};write.sockets[0]=s.0;
+            let mut except=FdSet{count:1,sockets:[0;64]};except.sockets[0]=s.0;
+            if unsafe{select(0,ptr::null_mut(),&mut write,&mut except,
+                &TimeVal{seconds:5,micros:0})}<=0{return Err(fail());}
+            let mut error=0i32;let mut size=4;
+            if unsafe{getsockopt(s.0,0xffff,0x1007,(&mut error as *mut i32).cast(),
+                &mut size)}!=0 || error!=0 {return Err(fail());}
+        }
+        let mut zero=0u32;
+        if unsafe{ioctlsocket(s.0,0x8004667eu32 as i32,&mut zero)}!=0{return Err(fail());}
+        let raw=s.0;mem::forget(s);
+        Ok(TrustedSshRelay{
+            accepted:self.accepted,
+            physical_ssh:unsafe{TcpStream::from_raw_socket(raw as _)},
+            destination:self.context.destination(),
+        })
+    }
+}
+
+impl TrustedSshRelay {
+    /// Rust SSH owns the physical WFP-record-tagged TCP socket from this point.
+    /// No local SOCKS listener exists in the trusted path.
+    pub fn relay(self, authority:flowbridge_trusted_ssh_r37::ChannelAuthority)
+        -> io::Result<(u64,u64)> {
+        let destination=if self.destination.family==4{
+            std::net::IpAddr::V4(std::net::Ipv4Addr::new(
+                self.destination.ip[0],self.destination.ip[1],
+                self.destination.ip[2],self.destination.ip[3]))
+        }else{
+            std::net::IpAddr::V6(std::net::Ipv6Addr::from(self.destination.ip))
+        };
+        let runtime=tokio::runtime::Builder::new_current_thread()
+            .enable_all().build()?;
+        runtime.block_on(flowbridge_trusted_ssh_r37::relay_over_pinned_ssh(
+            self.accepted,self.physical_ssh,destination,
+            self.destination.port,authority))
+    }
+}
+
 pub fn ordinary_socket_negative()->io::Result<()>{
  for ipv6 in [false,true]{let listener=TcpListener::bind(if ipv6{"[::1]:0"}else{"127.0.0.1:0"})?;
   let a=TcpStream::connect(listener.local_addr()?)?;let(b,_)=listener.accept()?;
