@@ -101,15 +101,19 @@ def case(binary, ssh_port, user, key, pinned, family, expected_good):
 
 def main():
     result={'ok':False,'g2_pass':False,'kernel_redirect_executed':False,'wfp_records_forwarded':False}
+    stage='start'
     try:
         if os.name!='posix' or os.geteuid()==0:raise Fail('linux_unprivileged_required')
         if not Path('/usr/sbin/sshd').is_file():raise Fail('sshd_unavailable')
         binary=Path(sys.argv[1]).resolve();out=Path(sys.argv[2]);out.parent.mkdir(parents=True,exist_ok=True)
+        stage='create_fixture'
         with tempfile.TemporaryDirectory(prefix='.flowbridge-r37-',dir=Path.home()) as dirname:
             root=Path(dirname);os.chmod(root,0o700)
             ssh_port=free_port();user=pwd.getpwuid(os.getuid()).pw_name
             key=root/'client';host=root/'host';fake=root/'fake'
+            stage='generate_keys'
             for f in (key,host,fake):run_checked(['ssh-keygen','-q','-t','ed25519','-N','','-f',str(f)],'key_generation')
+            stage='configure_sshd'
             cfg=root/'sshd_config'
             cfg.write_text(f'Port {ssh_port}\nListenAddress 127.0.0.1\nHostKey {host}\nPidFile {root / "sshd.pid"}\n'
                 f'AuthorizedKeysFile {key.with_suffix(".pub")}\nAllowUsers {user}\n'
@@ -121,9 +125,11 @@ def main():
                     # Existing CI's private mount-namespace technique.
                     script=('set -eu; mount -t tmpfs -o mode=0755,size=1m tmpfs /run; '
                             'mkdir -m 0755 /run/sshd; exec /usr/sbin/sshd -D -e -f "$1"')
+                    stage='launch_isolated_sshd'
                     server=subprocess.Popen(['sudo','-n','unshare','--mount','--fork','--kill-child=TERM',
                         '--propagation','private','/bin/sh','-c',script,'r37-sshd',str(cfg)],
                         stdout=log,stderr=log,start_new_session=True)
+                    stage='probe_sshd'
                     start=time.monotonic()
                     while True:
                         if server.poll() is not None:raise Fail('isolated_sshd_start_failed')
@@ -132,17 +138,26 @@ def main():
                         except OSError:
                             if time.monotonic()-start>8:raise Fail('isolated_sshd_timeout')
                             time.sleep(.05)
-                    cases=[case(binary,ssh_port,user,key,host.with_suffix('.pub'),4,True),
-                           case(binary,ssh_port,user,key,host.with_suffix('.pub'),6,True),
-                           case(binary,ssh_port,user,key,fake.with_suffix('.pub'),4,False)]
+                    stage='ipv4_good'
+                    result4=case(binary,ssh_port,user,key,host.with_suffix('.pub'),4,True)
+                    stage='ipv6_good'
+                    result6=case(binary,ssh_port,user,key,host.with_suffix('.pub'),6,True)
+                    stage='wrong_host_key'
+                    resultbad=case(binary,ssh_port,user,key,fake.with_suffix('.pub'),4,False)
+                    cases=[result4,result6,resultbad]
                     result.update(ok=True,source_sha=os.environ['GITHUB_SHA'],
                         transport='owned_socket_and_pinned_SSH_direct_tcpip',cases=cases,
                         actual_ssh_authenticated=True,negative_wrong_host_pin_rejected=True,
                         native_host_protection_mutated=False)
-                finally:stop(server,privileged=True)
+                finally:
+                    stage='cleanup_sshd' if stage=='done' else stage
+                    stop(server,privileged=True)
         result['fixture_keys_and_processes_removed']=True
-    except Fail as e:result['error']=str(e)
-    except Exception:result['error']='unexpected_r37_fixture_failure'
+    except Fail as e:
+        result['error']=str(e);result['stage']=stage
+    except Exception as e:
+        result['error']='unexpected_r37_fixture_failure';result['stage']=stage
+        result['exception_class']=type(e).__name__
     try:out.write_text(json.dumps(result,indent=2)+'\n')
     except Exception:return 2
     print(json.dumps(result))
