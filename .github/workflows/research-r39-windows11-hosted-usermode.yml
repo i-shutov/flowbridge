@@ -95,6 +95,44 @@ jobs:
           if($guest.bcd_test_mode_requested -or $guest.driver_installed -or $guest.status -ne 'AUDIT_ONLY_NO_CHANGE'){
             throw 'Guest audit was not read-only'
           }
+      - name: Retrieve exact native x64 BROKER binary for unredirected negative tests
+        uses: actions/download-artifact@v4
+        with:
+          name: FlowBridge-R24-kernel-broker-42465140005
+          run-id: 42465140005
+          github-token: ${{ github.token }}
+          path: build/r39-win11-hosted/old-x64-broker
+      - name: Execute x64 user-mode broker under Windows 11 ARM64 emulation; NO driver
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $exe='build/r39-win11-hosted/old-x64-broker/flowbridge-redirect-broker.exe'
+          if(-not (Test-Path -LiteralPath $exe -PathType Leaf)){throw 'Pinned exact broker binary missing'}
+          $sha=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($sha -ne '295bc4b74c42e95f3f94d7576bfba7a4e1aeee4e2ba52dc2c84f007d703ac2bb'){
+            throw 'Pinned x64 broker SHA mismatch'
+          }
+          $outputs=@{}
+          foreach($mode in @('--reject-unredirected','--verify-policy-plan')){
+            $text=(& $exe $mode 2>&1|Out-String)
+            $code=$LASTEXITCODE
+            if($code -ne 0){throw "x64 guest broker mode failed $mode exit=$code"}
+            $parsed=$text|ConvertFrom-Json -AsHashtable
+            if(-not $parsed.ok -or $parsed.g2_pass -ne $false){
+              throw "x64 guest broker returned unexpected proof claims for $mode"
+            }
+            $outputs[$mode]=[ordered]@{passed=$true;result=$parsed}
+          }
+          [ordered]@{
+            exact_x64_broker_sha256=$sha
+            real_os='Windows 11 ARM64'
+            x64_emulation_used=$true
+            exact_binary_negative_tests=$outputs
+            kernel_driver_loaded=$false
+            wfp_filters_installed=$false
+            actual_ale_redirect_executed=$false
+            g2_pass=$false
+          }|ConvertTo-Json -Depth 7|Set-Content 'build/r39-win11-hosted/x64-broker-result.json' -Encoding utf8
       - name: Preserve real OS and source test evidence, no VM or kernel artifacts
         if: always()
         uses: actions/upload-artifact@v4
