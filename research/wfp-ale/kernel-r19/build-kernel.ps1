@@ -74,5 +74,11 @@ if ($LASTEXITCODE -ne 0) { throw 'Accepted-socket compile-time ownership check f
 [ordered]@{ ok=$true; source_sha=$env:GITHUB_SHA; actual_broker_tests_passed=$tests; scoped_policy_code_compiled=$true; accepted_socket_ownership_compile_tests=$true; actual_policy_installed=$false; kernel_driver_loaded=$false; full_redirect_chain_executed=$false; g2_pass=$false; release_accepted=$false } | ConvertTo-Json | Set-Content -Encoding utf8 "$out/r24-build-scope.json"
 & python "$root/verify-build.py" "$out/flowbridge_g2_witness.sys" "$out/build-result.json"
 if ($LASTEXITCODE -ne 0) { throw 'Kernel PE audit failed' }
+# Stage an UNSIGNED kernel submission candidate with exact source/provenance
+# hashes and re-extracted CAB member checks. No signing/loading or policy change.
+& "$root/signing-r38/prepare_submission_r38.ps1" -BuildDirectory "$out" -OutputDirectory (Join-Path "$out" "signing-r38")
+if ($LASTEXITCODE -ne 0) { throw 'R38 unsigned CAB pre-submission failed' }
+& python -m unittest discover -s "$root/signing-r38" -p 'test_*.py' -v
+if ($LASTEXITCODE -ne 0) { throw 'R38 signed-driver admission source tests failed' }
 # NEVER invoke --serve-admitted-lab here: no signed-driver/VNC/rescue admission.
 # No kernel load, filter installation, signature bypass, service or host-policy change.

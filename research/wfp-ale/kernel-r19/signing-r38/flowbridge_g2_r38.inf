@@ -1,0 +1,41 @@
+; FlowBridge G2 research WFP callout -- submission candidate, NOT installed.
+; Non-PnP primitive kernel driver package (Windows 10 1903+ x64).
+; This INF must pass independent InfVerif and Microsoft Partner Center review.
+[Version]
+Signature="$WINDOWS NT$"
+Class=System
+ClassGuid={4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider=%Provider%
+CatalogFile=FlowBridgeG2R38.cat
+DriverVer=11/08/2026,0.0.38.0
+PnpLockdown=1
+
+[DestinationDirs]
+DriverFiles=13
+
+[SourceDisksNames]
+1=%MediaName%,,,
+
+[SourceDisksFiles]
+flowbridge_g2_witness.sys=1
+
+[DefaultInstall.NTamd64]
+CopyFiles=DriverFiles
+
+[DefaultInstall.NTamd64.Services]
+AddService=FlowBridgeG2WitnessR38,0,FlowBridgeG2.Service
+
+[DriverFiles]
+flowbridge_g2_witness.sys
+
+[FlowBridgeG2.Service]
+DisplayName=%ServiceName%
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%13%\flowbridge_g2_witness.sys
+
+[Strings]
+Provider="FlowBridge Research"
+MediaName="FlowBridge G2 signed kernel lab"
+ServiceName="FlowBridge G2 research WFP witness"
