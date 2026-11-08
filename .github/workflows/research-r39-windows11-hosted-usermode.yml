@@ -1,0 +1,105 @@
+name: R39 Windows 11 hosted ARM64 user-mode only (no driver load)
+on:
+  push:
+    branches:
+      - feat/r39-win11-dev-lab-20261108
+    paths:
+      - .github/workflows/research-r39-windows11-hosted-usermode.yml
+      - research/wfp-ale/lab-win11/**
+      - research/wfp-ale/r42_per_ticket_revocation.rs
+      - research/wfp-ale/trust_contract.rs
+      - research/wfp-ale/kernel-r19/kernel/src/handoff.rs
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: r39-hosted-windows11-user-mode
+  cancel-in-progress: false
+jobs:
+  windows11-arm-user-mode:
+    runs-on: windows-11-arm
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Confirm real Windows 11 ARM64 OS; never set TESTSIGNING or load a driver
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force build/r39-win11-hosted | Out-Null
+          $os=Get-CimInstance Win32_OperatingSystem
+          $arch=[System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+          if($os.Caption -notmatch 'Windows 11' -or $arch -ne 'Arm64'){
+            throw "Expected Windows 11 ARM64; got $($os.Caption) $arch"
+          }
+          [ordered]@{
+            schema='flowbridge-r39-real-win11-user-mode-evidence-v1'
+            source_sha=$env:GITHUB_SHA
+            os_caption=$os.Caption
+            os_build=$os.BuildNumber
+            os_arch=$arch
+            user_mode_tests_only=$true
+            x64_kernel_driver_compatible=$false
+            kernel_driver_loaded=$false
+            bfe_policy_changed=$false
+            guest_vm_created=$false
+            g2_pass=$false
+            release_accepted=$false
+          }|ConvertTo-Json -Depth 6 | Set-Content 'build/r39-win11-hosted/environment.json' -Encoding utf8
+      - name: Compile and execute exact-source standalone Rust contracts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $tests=@(
+            @{Name='r42-postclaim-liveness';Source='research/wfp-ale/r42_per_ticket_revocation.rs'},
+            @{Name='native-handoff-wire';Source='research/wfp-ale/kernel-r19/kernel/src/handoff.rs'},
+            @{Name='wfp-trust-contract';Source='research/wfp-ale/trust_contract.rs'}
+          )
+          $results=@()
+          foreach($test in $tests){
+            $bin="build/r39-win11-hosted/$($test.Name).exe"
+            & rustc --edition=2021 --test $test.Source -o $bin
+            if($LASTEXITCODE -ne 0){throw "Rust compile failed: $($test.Name)"}
+            $output=@(& $bin --nocapture 2>&1)
+            $code=$LASTEXITCODE
+            $output|Set-Content -Encoding utf8 "build/r39-win11-hosted/$($test.Name).log"
+            if($code -ne 0){throw "Rust tests failed: $($test.Name)"}
+            $summary=($output|Out-String)
+            $match=[regex]::Match($summary,'test result: ok\. (\d+) passed; 0 failed')
+            if(-not $match.Success){throw "Missing exact test count: $($test.Name)"}
+            $results+=@{suite=$test.Name;tests=[int]$match.Groups[1].Value;compiled=$true;executed=$true;pass=$true}
+          }
+          [ordered]@{
+            environment='real-hosted-windows-11-arm64'
+            suites=$results
+            user_mode_only=$true
+            native_x64_wfp_kernel_executed=$false
+            g2_pass=$false
+          }|ConvertTo-Json -Depth 7 | Set-Content 'build/r39-win11-hosted/rust-result.json' -Encoding utf8
+      - name: Execute read-only lab audit under Windows 11
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          & research/wfp-ale/lab-win11/host-preflight.ps1 -OutputPath 'build/r39-win11-hosted/host-readonly.json' | Out-Null
+          $audit=Get-Content 'build/r39-win11-hosted/host-readonly.json' -Raw|ConvertFrom-Json -AsHashtable
+          if($audit.ready_to_create -or $audit.any_host_changed){
+            throw 'Hosted Windows11 runner must not be admitted for nested VM'
+          }
+          if($audit.blockers -notcontains 'github_actions_runner_not_authorized_lab_host'){
+            throw 'Hosted runner isolation guard missing'
+          }
+          & research/wfp-ale/lab-win11/guest-testmode.ps1 -OutputPath 'build/r39-win11-hosted/guest-readonly.json' | Out-Null
+          $guest=Get-Content 'build/r39-win11-hosted/guest-readonly.json' -Raw|ConvertFrom-Json -AsHashtable
+          if($guest.bcd_test_mode_requested -or $guest.driver_installed -or $guest.status -ne 'AUDIT_ONLY_NO_CHANGE'){
+            throw 'Guest audit was not read-only'
+          }
+      - name: Preserve real OS and source test evidence, no VM or kernel artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-R39-real-Windows11-ARM64-user-mode-${{ github.run_id }}
+          path: build/r39-win11-hosted/*.json
+          retention-days: 14
+          if-no-files-found: warn
