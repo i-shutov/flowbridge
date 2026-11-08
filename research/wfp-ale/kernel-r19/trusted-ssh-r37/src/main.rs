@@ -28,5 +28,8 @@ async fn run() -> io::Result<(u64,u64)> {
     println!("R37_TRANSPORT_READY");io::stdout().flush()?;
     let (client,_)=listener.accept()?;
     let ssh=TcpStream::connect_timeout(&SocketAddr::new(ssh_ip,ssh_port),Duration::from_secs(5))?;
-    relay_over_pinned_ssh(client,ssh,dest,dest_port,authority).await
+    // Transport-only lab has no kernel owner; keep an explicit live sender.
+    // In the Windows broker the sender is driven by actual PING/STOP health.
+    let (_keepalive,revocation)=tokio::sync::watch::channel(false);
+    relay_over_pinned_ssh(client,ssh,dest,dest_port,authority,revocation).await
 }
