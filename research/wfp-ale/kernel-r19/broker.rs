@@ -4,6 +4,7 @@
 //! admitted signed-driver lab ONLY; its name is NOT a verifier of safety gates.
 #[allow(dead_code)]#[path="kernel/src/handoff.rs"]mod handoff;
 mod transport;
+#[cfg(windows)]mod broker_lifecycle;
 mod policy_plan;
 #[cfg(windows)]mod broker_windows;
 #[cfg(windows)]mod policy_windows;
@@ -29,8 +30,9 @@ fn revoke(stop:&std::sync::Arc<std::sync::atomic::AtomicBool>,
 
 #[cfg(windows)]
 fn serve(image:&std::path::Path,upstream:Upstream,seconds:u64,activate_policy:bool)->std::io::Result<()> {
- use std::{net::TcpListener,sync::{Arc,atomic::{AtomicBool,AtomicUsize,Ordering}},time::{Duration,Instant},thread,io::Write};
+ use std::{net::TcpListener,sync::{Arc,atomic::{AtomicBool,Ordering}},time::{Duration,Instant},thread,io::Write};
  use broker_windows::{Device,SelectedImage};
+ use broker_lifecycle::{WorkerPool,WorkerOutcome};
  let selection=SelectedImage::open(image)?;
  let v4=TcpListener::bind("127.0.0.1:0")?;let v6=TcpListener::bind("[::1]:0")?;
  let ports=[v4.local_addr()?.port(),v6.local_addr()?.port()];
@@ -42,7 +44,7 @@ fn serve(image:&std::path::Path,upstream:Upstream,seconds:u64,activate_policy:bo
  let plan=policy_plan::Plan::new(selection.wfp_appid(),ports).map_err(|_|std::io::Error::other("policy_plan"))?;
  v4.set_nonblocking(true)?;v6.set_nonblocking(true)?;
  let device=Arc::new(Device::open()?);device.arm(&selection,ports[0],ports[1])?;
- let stop=Arc::new(AtomicBool::new(false));let completed=Arc::new(AtomicUsize::new(0));
+ let stop=Arc::new(AtomicBool::new(false));
  // Own, sticky revocation shared with each running verified SSH worker.
  // A new worker after STOP immediately observes true.
  let (revocation_tx,revocation_rx)=tokio::sync::watch::channel(false);
@@ -64,41 +66,65 @@ fn serve(image:&std::path::Path,upstream:Upstream,seconds:u64,activate_policy:bo
  let mut output=std::io::stdout();
  let mut error=writeln!(output,"{{\"broker_ready\":true,\"scoped_lab_policy_active\":{},\"native_admission_verified_by_broker\":false,\"g2_pass\":false}}",activate_policy).and_then(|_|output.flush()).err();
  if error.is_some(){revoke(&stop,&revocation_tx);}
- let started=Instant::now();let mut workers=Vec::new();
+
+ let started=Instant::now();
+ // Capacity is reserved only by LIVE workers, not by every connection ever
+ // accepted during the session. A rejected local socket is never authority
+ // to revoke an unrelated, already authenticated SSH relay.
+ let mut workers=WorkerPool::new(32);
  while !stop.load(Ordering::Acquire)&&started.elapsed()<Duration::from_secs(seconds){
-  for listener in [&v4,&v6]{match listener.accept(){
-   Ok((client,_))=>{
-    if workers.len()>=32{error=Some(std::io::Error::other("connection_cap"));revoke(&stop,&revocation_tx);break;}
-    let d=device.clone();let s=stop.clone();let done=completed.clone();
-    let notify=revocation_tx.clone();let worker_revocation=revocation_rx.clone();
-    let upstream=upstream.clone();workers.push(thread::spawn(move||{
-     let result=(||{
-      let received=broker_windows::receive(client)?;
-      match upstream {
-        Upstream::LegacySocks(p) => {
-          let admitted=received.claim_and_connect(&d,p)?;
-          admitted.relay(s.clone())?;
+  if let Err(e)=workers.poll(){error=Some(e);revoke(&stop,&revocation_tx);break;}
+  for listener in [&v4,&v6]{
+   if stop.load(Ordering::Acquire){break;}
+   match listener.accept(){
+    Ok((client,_))=>{
+     let d=device.clone();let s=stop.clone();
+     let notify=revocation_tx.clone();let worker_revocation=revocation_rx.clone();
+     let upstream=upstream.clone();
+     match workers.spawn(move||{
+      // Ordinary or forged ingress cannot obtain the WFP accepted-socket
+      // receipt. Reject ONLY this stream, without global STOP. A selected
+      // client with missing/malformed evidence also fails closed per-flow.
+      let received=match broker_windows::receive(client){
+       Ok(value)=>value,
+       Err(_)=>return Ok(WorkerOutcome::IngressRejected),
+      };
+      // Once an owned WFP receipt exists, any CLAIM/physical-SSH/relay
+      // failure revokes the shared kernel lease and every active SSH relay.
+      let result=(||->std::io::Result<()>{
+       match upstream{
+        Upstream::LegacySocks(p)=>{
+         let admitted=received.claim_and_connect(&d,p)?;
+         admitted.relay(s.clone())?;
         }
-        Upstream::VerifiedSsh{remote,authority} => {
-          let trusted=received.claim_and_connect_trusted_ssh(&d,remote)?;
-          trusted.relay(authority,worker_revocation)?;
+        Upstream::VerifiedSsh{remote,authority}=>{
+         let trusted=received.claim_and_connect_trusted_ssh(&d,remote)?;
+         trusted.relay(authority,worker_revocation)?;
         }
-      }
-      done.fetch_add(1,Ordering::AcqRel);Ok::<_,std::io::Error>(())
-     })();
-     if result.is_err(){revoke(&s,&notify);}result
-    }));
-   },Err(e)if e.kind()==std::io::ErrorKind::WouldBlock=>{},Err(e)=>{error=Some(e);revoke(&stop,&revocation_tx);break;}
-  }}thread::sleep(Duration::from_millis(20));
+       }
+       Ok(())
+      })();
+      if result.is_err(){revoke(&s,&notify);}
+      result.map(|_|WorkerOutcome::Relayed)
+     }){
+      Ok(_scheduled)=>{}, // false means drop this stream at the active cap
+      Err(e)=>{error=Some(e);revoke(&stop,&revocation_tx);break;}
+     }
+    }
+    Err(e)if e.kind()==std::io::ErrorKind::WouldBlock=>{},
+    Err(e)=>{error=Some(e);revoke(&stop,&revocation_tx);break;}
+   }
+  }
+  thread::sleep(Duration::from_millis(20));
  }
  revoke(&stop,&revocation_tx);
  match heartbeat.join(){Ok(Ok(()))=>{},_=>error=Some(std::io::Error::other("kernel_stop_failed"))}
- for worker in workers{match worker.join(){Ok(Ok(()))=>{},_=>error=Some(std::io::Error::other("admission_or_relay_failed"))}}
+ if workers.finish().is_err(){error=Some(std::io::Error::other("admission_or_relay_failed"));}
  drop(v4);drop(v6);
  // Dynamic policy is ONLY a bounded lab aid. The external harness must end all
  // selected clients before this teardown; it is not a crash-persistent barrier.
  if let Some(p)=policy{if p.close().is_err(){error=Some(std::io::Error::other("lab_policy_close_failed"));}}
- let _=writeln!(output,"{{\"completed_admitted_relays\":{},\"g2_pass\":false,\"release_accepted\":false}}",completed.load(Ordering::Acquire));
+ let _=writeln!(output,"{{\"completed_admitted_relays\":{},\"rejected_unproven_ingress\":{},\"dropped_at_active_capacity\":{},\"g2_pass\":false,\"release_accepted\":false}}",workers.completed(),workers.rejected_ingress(),workers.dropped_capacity());
  if let Some(e)=error{Err(e)}else{Ok(())}
 }
 #[cfg(all(test, windows))]
