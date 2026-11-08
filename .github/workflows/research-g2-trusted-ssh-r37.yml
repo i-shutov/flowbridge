@@ -1,0 +1,78 @@
+name: G2 R37 trusted SSH transport, no kernel load
+on:
+  push:
+    branches:
+      - research/windows-wfp-ale-attribution-20261107
+    paths:
+      - research/wfp-ale/kernel-r19/trusted-ssh-r37/**
+      - .github/workflows/research-g2-trusted-ssh-r37.yml
+permissions:
+  contents: read
+concurrency:
+  group: research-g2-trusted-ssh-r37
+  cancel-in-progress: false
+jobs:
+  linux-real-ssh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build pinned Rust direct SSH adapter
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd research/wfp-ale/kernel-r19/trusted-ssh-r37
+          cargo generate-lockfile
+          cargo test --locked
+          cargo build --locked --release
+      - name: Real isolated OpenSSH host-key and direct-tcpip acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/g2-r37
+          python3 research/wfp-ale/kernel-r19/trusted-ssh-r37/ssh_r37_smoke.py \
+            research/wfp-ale/kernel-r19/trusted-ssh-r37/target/release/flowbridge-trusted-ssh-r37 \
+            build/g2-r37/native-result.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: FlowBridge-R37-trusted-ssh-linux-${{ github.run_id }}
+          path: |
+            build/g2-r37/*.json
+            research/wfp-ale/kernel-r19/trusted-ssh-r37/Cargo.lock
+          retention-days: 14
+          if-no-files-found: warn
+  windows-compile-no-driver:
+    runs-on: windows-2025
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Compile and test exact trusted SSH upstream on native Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Push-Location research/wfp-ale/kernel-r19/trusted-ssh-r37
+          try {
+            cargo generate-lockfile
+            if ($LASTEXITCODE -ne 0) { throw 'R37 dependency lock failed' }
+            cargo test --locked
+            if ($LASTEXITCODE -ne 0) { throw 'R37 Windows tests failed' }
+            cargo build --release --locked
+            if ($LASTEXITCODE -ne 0) { throw 'R37 Windows compile failed' }
+          } finally { Pop-Location }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: FlowBridge-R37-trusted-ssh-windows-${{ github.run_id }}
+          path: research/wfp-ale/kernel-r19/trusted-ssh-r37/Cargo.lock
+          if-no-files-found: warn
+          retention-days: 14
