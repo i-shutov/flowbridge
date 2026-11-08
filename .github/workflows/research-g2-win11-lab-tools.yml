@@ -9,6 +9,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 jobs:
   windows-readonly-lab-qa:
     runs-on: windows-2025
@@ -68,6 +69,33 @@ jobs:
             g2_pass=$false
             result='PASS_STATIC_AND_AUDIT_ONLY'
           }|ConvertTo-Json -Depth 5 | Set-Content -LiteralPath 'build/r39-win11/ci-result.json' -Encoding utf8
+      - name: Download exact prior unsigned R39 candidate (READ ONLY)
+        uses: actions/download-artifact@v4
+        with:
+          name: FlowBridge-R24-kernel-broker-42465140005
+          run-id: 42465140005
+          github-token: ${{ github.token }}
+          path: build/r39-win11/pinned
+      - name: Verify exact unsigned hashes and ensure a changed SYS is rejected
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $base='research/wfp-ale/lab-win11'
+          $sys='build/r39-win11/pinned/flowbridge_g2_witness.sys'
+          $inf='build/r39-win11/pinned/signing-r38/FlowBridgeG2R38/flowbridge_g2_r38.inf'
+          & "$base/sign-lab-driver.ps1" -UnsignedSys $sys -UnsignedInf $inf -OutputPath 'build/r39-win11/unsigned-audit.json' | Out-Null
+          $good=Get-Content 'build/r39-win11/unsigned-audit.json' -Raw|ConvertFrom-Json -AsHashtable
+          if($good.status -ne 'AUDIT_ONLY' -or -not $good.original_source_hashes_verified -or $good.driver_signed){throw 'Exact-source read-only pre-sign audit failed'}
+          $bad='build/r39-win11/flowbridge_g2_witness.sys'
+          Copy-Item -LiteralPath $sys -Destination $bad
+          $bytes=[IO.File]::ReadAllBytes((Resolve-Path $bad))
+          $bytes[4096]=$bytes[4096] -bxor 1
+          [IO.File]::WriteAllBytes((Resolve-Path $bad),$bytes)
+          & pwsh -NoProfile -File "$base/sign-lab-driver.ps1" -UnsignedSys $bad -UnsignedInf $inf -OutputPath 'build/r39-win11/mutated-audit.json' | Out-Null
+          if($LASTEXITCODE -ne 2){throw 'Mutated .sys did not fail closed'}
+          $badReport=Get-Content 'build/r39-win11/mutated-audit.json' -Raw|ConvertFrom-Json -AsHashtable
+          if($badReport.status -ne 'BLOCKED' -or $badReport.driver_signed -or $badReport.original_source_hashes_verified){throw 'Mutation was incorrectly admitted'}
+          [ordered]@{exact_source_sha256_verified=$true;mutated_source_blocked=$true;driver_signed=$false;native_redirect_executed=$false;g2_pass=$false}|ConvertTo-Json|Set-Content 'build/r39-win11/candidate-qa.json' -Encoding utf8
       - uses: actions/upload-artifact@v4
         if: always()
         with:
