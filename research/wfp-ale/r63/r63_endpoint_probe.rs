@@ -34,13 +34,18 @@ pub fn assess(o: Observation) -> Assessment {
     Assessment::EndpointOnlyNotOrigin
 }
 
+/// From the Windows SDK: mstcpip.h `_WSAIOR(IOC_VENDOR, 205)`.
+/// Microsoft-generated windows-rs metadata: 1476395213u32 (0x580000CD).
+/// Do not confuse with `_WSAIOR(IOC_WS2, 3)` (= 0x48000003).
+pub const ALE_ENDPOINT_IOCTL_OPCODE: u32 = 0x4000_0000 | 0x1800_0000 | 205;
+
 #[cfg(all(windows, not(target_pointer_width = "64")))]
 compile_error!("R63 FFI layout audit is restricted to Windows x64; x86 layout not validated");
 
 #[cfg(windows)]
 mod windows_readonly {
     use std::{ffi::c_void, mem, net::TcpStream, os::windows::io::AsRawSocket, ptr};
-    const SIO_QUERY_WFP_ALE_ENDPOINT_HANDLE: u32 = 0x4800_0003; // _WSAIOR(IOC_WS2, 3)
+    const SIO_QUERY_WFP_ALE_ENDPOINT_HANDLE: u32 = super::ALE_ENDPOINT_IOCTL_OPCODE; // _WSAIOR(IOC_VENDOR, 205)
     const RPC_C_AUTHN_WINNT: u32 = 10;
     const MAX_APPID_BYTES: usize = 8192;
     #[repr(C)] union IpAddr { v4: u32, v6: [u8; 16] }
@@ -136,6 +141,11 @@ mod windows_readonly {
         returned_bytes:8,engine_open_ok:true,endpoint_get_ok:true,endpoint_equal:true,
         family_supported:true,appid_present:true,protocol_tcp:true,
         owner_notification_live:true,ssh_ready:true,wfp_ready:true} }
+    #[test] fn endpoint_ioctl_matches_windows_sdk() {
+        assert_eq!(ALE_ENDPOINT_IOCTL_OPCODE, 1476395213u32);
+        assert_eq!(ALE_ENDPOINT_IOCTL_OPCODE, 0x5800_00CD);
+        assert_ne!(ALE_ENDPOINT_IOCTL_OPCODE, 0x4800_0003);
+    }
     #[test] fn diagnostic_is_not_orig_owner_proof() {
         assert_eq!(assess(base()), Assessment::EndpointOnlyNotOrigin);
     }
