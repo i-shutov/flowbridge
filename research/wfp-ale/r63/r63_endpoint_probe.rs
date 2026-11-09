@@ -42,101 +42,39 @@ pub const ALE_ENDPOINT_IOCTL_OPCODE: u32 = 0x4000_0000 | 0x1800_0000 | 205;
 #[cfg(all(windows, not(target_pointer_width = "64")))]
 compile_error!("R63 FFI layout audit is restricted to Windows x64; x86 layout not validated");
 
+// R65 safety quarantine: the public allocation/free ownership contract for
+// FwpsAleEndpointGetById0's returned FWPS_ALE_ENDPOINT_PROPERTIES0** is NOT proven.
+// Do not ship a live FFI implementation and do not guess an allocator.
+// This module deliberately has no WSAIoctl, BFE, or memory-free imports.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProbeReadiness { DisabledAllocatorOwnershipUnverified }
+
+pub const fn probe_readiness() -> ProbeReadiness {
+    ProbeReadiness::DisabledAllocatorOwnershipUnverified
+}
+
 #[cfg(windows)]
 mod windows_readonly {
-    use std::{ffi::c_void, mem, net::TcpStream, os::windows::io::AsRawSocket, ptr};
-    const SIO_QUERY_WFP_ALE_ENDPOINT_HANDLE: u32 = super::ALE_ENDPOINT_IOCTL_OPCODE; // _WSAIOR(IOC_VENDOR, 205)
-    const RPC_C_AUTHN_WINNT: u32 = 10;
-    const MAX_APPID_BYTES: usize = 8192;
-    #[repr(C)] union IpAddr { v4: u32, v6: [u8; 16] }
-    #[repr(C)] struct FwpByteBlob { size: u32, data: *mut u8 }
-    #[repr(C)] struct EndpointProperties {
-        endpoint_id: u64,
-        ip_version: u32,
-        local: IpAddr,
-        remote: IpAddr,
-        ip_protocol: u8,
-        local_port: u16,
-        remote_port: u16,
-        local_token_modified_id: u64,
-        mm_sa_id: u64,
-        qm_sa_id: u64,
-        ipsec_status: u32,
-        flags: u32,
-        app_id: FwpByteBlob,
-    }
+    use std::net::TcpStream;
     #[derive(Debug)] pub struct EndpointDiagnostic {
-        pub id: u64, pub ip_version: u32, pub protocol: u8,
-        pub appid_bytes: usize,
+        pub id: u64, pub ip_version: u32, pub protocol: u8, pub appid_bytes: usize,
     }
-    #[derive(Debug)] pub enum ProbeError { Winsock(i32), WrongOutput(u32), Bfe(u32), Lookup(u32), BadProperties }
-    #[link(name="ws2_32")]
-    unsafe extern "system" {
-        fn WSAIoctl(s: usize, code: u32, inbuf:*const c_void, inlen:u32,
-                    outbuf:*mut c_void, outlen:u32, returned:*mut u32,
-                    overlapped:*mut c_void, completion:*mut c_void) -> i32;
-        fn WSAGetLastError() -> i32;
-    }
-    #[link(name="fwpuclnt")]
-    unsafe extern "system" {
-        fn FwpmEngineOpen0(server:*const u16, authn:u32, creds:*const c_void,
-                           session:*const c_void, engine:*mut *mut c_void) -> u32;
-        fn FwpmEngineClose0(engine:*mut c_void) -> u32;
-        fn FwpsAleEndpointGetById0(engine:*mut c_void, endpoint:u64,
-                                   props:*mut *mut EndpointProperties) -> u32;
-        fn FwpmFreeMemory0(memory:*mut *mut c_void);
-    }
-    struct Engine(*mut c_void);
-    impl Drop for Engine { fn drop(&mut self) { unsafe { FwpmEngineClose0(self.0); } } }
-    struct Properties(*mut EndpointProperties);
-    impl Drop for Properties {
-        fn drop(&mut self) {
-            if !self.0.is_null() { unsafe {
-                let mut raw=self.0.cast::<c_void>(); FwpmFreeMemory0(&mut raw);
-            }}
-        }
-    }
-    /// Read-only. Consumes NO socket; requires a borrowed *already accepted* TCP stream.
-    /// Deliberately private/not invoked by main. No AUTH_CONNECT proof is returned.
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum ProbeError { AllocatorOwnershipUnverified }
+    /// No syscalls, no FFI, no socket modifications, even when called on Windows.
+    /// Original unsafe prototype is preserved in git history (R63/R64), not in live code.
     #[allow(dead_code)]
-    pub fn inspect_existing_socket(socket: &TcpStream) -> Result<EndpointDiagnostic, ProbeError> {
-        let mut id=0u64;
-        let mut got=0u32;
-        let ret=unsafe { WSAIoctl(socket.as_raw_socket() as usize,
-            SIO_QUERY_WFP_ALE_ENDPOINT_HANDLE, ptr::null(), 0,
-            (&mut id as *mut u64).cast(), mem::size_of::<u64>() as u32,
-            &mut got, ptr::null_mut(), ptr::null_mut()) };
-        if ret != 0 { return Err(ProbeError::Winsock(unsafe {WSAGetLastError()})); }
-        if got != 8 || id == 0 { return Err(ProbeError::WrongOutput(got)); }
-        let mut h=ptr::null_mut();
-        let status=unsafe {FwpmEngineOpen0(ptr::null(), RPC_C_AUTHN_WINNT,
-                                          ptr::null(), ptr::null(), &mut h)};
-        if status != 0 { return Err(ProbeError::Bfe(status)); }
-        if h.is_null() { return Err(ProbeError::BadProperties); }
-        let engine=Engine(h);
-        let mut prop_ptr=ptr::null_mut();
-        let status=unsafe {FwpsAleEndpointGetById0(engine.0, id, &mut prop_ptr)};
-        let props=Properties(prop_ptr);
-        if status != 0 { return Err(ProbeError::Lookup(status)); }
-        if props.0.is_null() { return Err(ProbeError::BadProperties); }
-        let p=unsafe {&*props.0};
-        if p.endpoint_id != id || p.ip_protocol != 6 || p.ip_version > 1
-            || p.app_id.size == 0 || p.app_id.size as usize > MAX_APPID_BYTES
-            || p.app_id.data.is_null() { return Err(ProbeError::BadProperties); }
-        // No dereference/copy of WFP appId or endpoint pointers beyond this scope.
-        Ok(EndpointDiagnostic {id,ip_version:p.ip_version,
-                               protocol:p.ip_protocol,appid_bytes:p.app_id.size as usize})
-    }
-    #[test] fn documented_x64_abi_sizes() {
-        assert_eq!(mem::size_of::<IpAddr>(),16);
-        assert_eq!(mem::size_of::<FwpByteBlob>(),16);
-        assert_eq!(mem::size_of::<EndpointProperties>(),104);
-        assert_eq!(mem::offset_of!(EndpointProperties,app_id),88);
+    pub fn inspect_existing_socket(_socket: &TcpStream) -> Result<EndpointDiagnostic, ProbeError> {
+        Err(ProbeError::AllocatorOwnershipUnverified)
     }
 }
 
 #[cfg(test)] mod tests {
     use super::*;
+    #[test] fn r65_quarantine_is_unconditional() {
+        assert_eq!(probe_readiness(), ProbeReadiness::DisabledAllocatorOwnershipUnverified);
+    }
+
     fn base()->Observation { Observation {dispatched:true,socket_query_ok:true,
         returned_bytes:8,engine_open_ok:true,endpoint_get_ok:true,endpoint_equal:true,
         family_supported:true,appid_present:true,protocol_tcp:true,
@@ -177,5 +115,5 @@ mod windows_readonly {
 }
 
 fn main() {
-    println!("R63 offline-only. Winsock/BFE functions are not invoked. No original-owner proof.");
+    println!("R65 quarantined: allocator ownership unverified; NO Winsock/BFE calls or original-owner proof.");
 }
