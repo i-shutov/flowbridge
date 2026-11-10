@@ -1,0 +1,25 @@
+// Independent Node source-reading audit. Only static string inspection, no OS APIs.
+import fs from 'node:fs';
+import { createHash } from 'node:crypto';
+const source = process.env.R87_R19_SOURCE || new URL('../kernel-r19/kernel/src/redirect.rs', import.meta.url);
+const src = fs.readFileSync(source, 'utf8');
+const head = src.indexOf('unsafe fn auth_check(');
+if (head < 0) throw Error('auth_check not found');
+const auth = src.slice(head);
+const start = auth.indexOf('let needed');
+const end = auth.indexOf(';', start);
+if (start < 0 || end < 0) throw Error('required metadata declaration not found');
+const names = auth.slice(start, end).split('|').map(x => x.trim().match(/FWPS_METADATA_FIELD_[A-Z_]+/)?.[0]);
+if (names.some(x => !x) || new Set(names).size !== 4) throw Error('unexpected metadata syntax');
+if (!auth.includes('m.currentMetadataValues & needed != needed')) throw Error('guard changed');
+if (!auth.includes('FWPS_LAYER_ALE_AUTH_CONNECT_V4') || !auth.includes('FWPS_LAYER_ALE_AUTH_CONNECT_V6')) throw Error('family missing');
+const generic = new Set(('FLOW_HANDLE PROCESS_PATH TOKEN PROCESS_ID RESERVED TRANSPORT_HEADER_SIZE COMPARTMENT_ID COMPLETION_HANDLE TRANSPORT_ENDPOINT_HANDLE REMOTE_SCOPE_ID PACKET_DIRECTION PARENT_ENDPOINT_HANDLE ICMP_ID_AND_SEQUENCE SUB_PROCESS_TAG').split(' ').map(x => 'FWPS_METADATA_FIELD_' + x));
+const special = new Set(['FWPS_METADATA_FIELD_LOCAL_REDIRECT_TARGET_PID','FWPS_METADATA_FIELD_ORIGINAL_DESTINATION']);
+const required = names.sort();
+const gap = required.filter(x => !generic.has(x));
+const complete = (sets) => required.every(x => sets.has(x));
+if (gap.length !== 2 || gap.some(x => !special.has(x)) || complete(generic) || !complete(new Set([...generic, ...special]))) throw Error('contract assumptions changed');
+for (const missing of special) if (complete(new Set(required.filter(x => x !== missing)))) throw Error('guard accepts missing bit');
+const rows = ['required='+required.join(','), 'generic_gap='+gap.join(','), 'special_doc_covers='+gap.filter(x=>special.has(x)).join(','), 'generic_complete=false', 'special_plus_generic_complete=true'];
+const digest = createHash('sha256').update(rows.join('\n')+'\n').digest('hex');
+console.log(JSON.stringify({required, generic_gap:gap, digest, rows}));
