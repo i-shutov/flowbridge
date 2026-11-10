@@ -79,6 +79,8 @@ mod win {
         Guid::from_u128(0x1649f016_25b3_4e01_9ca1_5ca803010019),
     ];
     const RPC_C_AUTHN_WINNT: u32 = 10;
+    // fwpmtypes.h: observation-only kernel registration state, not proof of classifyFn.
+    const FWPM_CALLOUT_FLAG_REGISTERED: u32 = 0x00040000;
 
     struct Engine(*mut c_void);
     impl Drop for Engine {
@@ -104,7 +106,8 @@ mod win {
             return 2;
         }
         let engine = Engine(h);
-        let mut complete = true;
+        let mut shape_complete = true;
+        let mut registered_snapshot_complete = true;
         for i in 0..4usize {
             let key = Guid::from_u128(FILTER_BASE + ((i as u128) << 96));
             let mut f: *mut FilterPrefix = ptr::null_mut();
@@ -119,15 +122,20 @@ mod win {
                 fv.filter_key == key && fv.sub_layer_key == SUB && fv.flags == 0 &&
                 cv.callout_key == CALLOUTS[i] && fv.layer_key == cv.applicable_layer
             } else { false };
-            complete &= shape;
+            shape_complete &= shape;
             let flags = if callout.0.is_null() { 0 } else { unsafe { (*callout.0).flags } };
-            println!("{{\"rule\":\"{}\",\"filter_status\":{},\"callout_status\":{},\"callout_flags\":{},\"shape_present\":{shape}}}",
+            // Missing or unregistered runtime callout must not pass this snapshot gate.
+            let kernel_registered = cs == 0 && !callout.0.is_null() &&
+                (flags & FWPM_CALLOUT_FLAG_REGISTERED) != 0;
+            registered_snapshot_complete &= kernel_registered;
+            println!("{{\"rule\":\"{}\",\"filter_status\":{},\"callout_status\":{},\"callout_flags\":{},\"kernel_registered\":{kernel_registered},\"shape_present\":{shape}}}",
                      LABELS[i], fs, cs, flags);
         }
         // A complete snapshot does not certify a live classifyFn, conditions,
         // current AppId, flow origin, filter enforcement, or future presence.
-        println!("{{\"inventory_shape_complete\":{complete},\"kernel_origin_proof\":false,\"continuous_enforcement_proof\":false}}");
-        if complete { 0 } else { 3 }
+        let snapshot_gate_complete = shape_complete && registered_snapshot_complete;
+        println!("{{\"inventory_shape_complete\":{shape_complete},\"registered_snapshot_complete\":{registered_snapshot_complete},\"snapshot_gate_complete\":{snapshot_gate_complete},\"kernel_origin_proof\":false,\"continuous_enforcement_proof\":false}}");
+        if snapshot_gate_complete { 0 } else { 3 }
     }
 
     #[cfg(test)]
@@ -139,6 +147,11 @@ mod win {
                            0x1649f030 + i as u32);
             }
             assert_eq!(CALLOUTS.map(|x| x.data1), [0x1649f018,0x1649f019,0x1649f014,0x1649f016]);
+        }
+        #[test] fn registered_flag_is_not_merely_callout_presence() {
+            assert_eq!(FWPM_CALLOUT_FLAG_REGISTERED, 0x00040000);
+            assert_eq!(0x00010000 & FWPM_CALLOUT_FLAG_REGISTERED, 0);
+            assert_ne!((0x00010000 | FWPM_CALLOUT_FLAG_REGISTERED) & FWPM_CALLOUT_FLAG_REGISTERED, 0);
         }
         #[test] fn ffi_prefix_alignment_x64() {
             assert_eq!(std::mem::size_of::<Guid>(),16);
