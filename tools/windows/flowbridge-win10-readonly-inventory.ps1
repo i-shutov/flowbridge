@@ -1,10 +1,11 @@
 # FlowBridge Win10 R39/Release read-only inventory, 2026-11-10.
+# The specific host name is supplied by the caller and is not stored in this file.
 # No installer, elevation attempt, driver load, registry write, WFP, BCD,
 # Defender, firewall, service, runner, network, credential or RDP change.
 # Only the caller-selected JSON report is written.
 [CmdletBinding()]
 param(
-  [string]$ExpectedHost = 'VM-910136',
+  [string]$ExpectedHost = '',
   [string]$OutputPath = (Join-Path ([IO.Path]::GetTempPath()) 'FlowBridge-Win10-ReadOnly-Inventory.json')
 )
 Set-StrictMode -Version Latest
@@ -24,7 +25,7 @@ $report = [ordered]@{
   timestamp_utc = [DateTime]::UtcNow.ToString('o')
   intended_host = $ExpectedHost
   observed_host = $env:COMPUTERNAME
-  expected_host_matched = ($ExpectedHost -ieq $env:COMPUTERNAME)
+  expected_host_matched = ([bool]$ExpectedHost -and $ExpectedHost -ieq $env:COMPUTERNAME)
   os = [ordered]@{ name = 'unknown'; version=''; build=''; ubr=$null; x64=[Environment]::Is64BitOperatingSystem }
   identity = [ordered]@{ whoami = ''; elevated_admin = $false; integrity = 'unknown' }
   system = [ordered]@{ memory_gb=$null; free_memory_gb=$null; system_drive_free_gb=$null }
@@ -111,7 +112,8 @@ try {
     ForEach-Object { [string]$_.PSChildName })
   $report.flowbridge_service_names=$names
 } catch { $problems.Add('service_registry_read_unavailable') }
-if(-not $report.expected_host_matched){$problems.Add('unexpected_hostname')}
+if(-not $ExpectedHost){$problems.Add('expected_hostname_not_supplied')}
+elseif(-not $report.expected_host_matched){$problems.Add('unexpected_hostname')}
 if(-not $report.os.x64){$problems.Add('non_x64_os')}
 if($report.os.build -ne '19045'){$problems.Add('expected_windows10_22h2_build_not_observed')}
 if(-not $report.identity.elevated_admin){$problems.Add('not_elevated_for_future_kernel_operations')}
