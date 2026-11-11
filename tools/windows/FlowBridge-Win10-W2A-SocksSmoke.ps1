@@ -12,7 +12,9 @@ HOSTED_NON_TARGET, never acceptance of the user's actual Windows 10 machine.
 param(
   [Parameter(Mandatory=$true)][ValidateNotNullOrEmpty()][string]$ExpectedComputerName,
   [string]$EvidenceRoot = "$env:ProgramData\FlowBridge\W2A-Evidence",
-  [switch]$AllowHostedCI
+  [switch]$AllowHostedCI,
+  [switch]$ToolDiscoveryOnly,
+  [string]$RustBinDirectory = ''
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
@@ -22,10 +24,29 @@ $branch='integration/windows-rust-capture-agent-20261031'
 $origin='https://github.com/i-shutov/flowbridge.git'
 function SHA256([string]$path){(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()}
 function FindCmd([string]$name){
- $x=Get-Command $name -ErrorAction SilentlyContinue|Select-Object -First 1
- if(-not $x){return ''}
- if([string]$x.Source -match '[\\/]WindowsApps[\\/](python|python3)\.exe$'){return ''}
- return [string]$x.Source
+ # W1 already supports per-user rustc under %USERPROFILE%\.cargo\bin.
+ # W2a must discover Cargo the same way: PATH alone misses rustup shims
+ # installed without a new login session. Never alter global/user PATH.
+ $x=Get-Command $name -CommandType Application -ErrorAction SilentlyContinue|Select-Object -First 1
+ if($null -ne $x){
+   $candidate=[string]$x.Source
+   if($candidate -notmatch '[\\/]WindowsApps[\\/](python|python3)\.exe$'){
+     return $candidate
+   }
+ }
+ if($name -in @('cargo.exe','rustc.exe','rustup.exe')){
+   $folders=New-Object 'System.Collections.Generic.List[string]'
+   if($RustBinDirectory){$folders.Add($RustBinDirectory)}
+   if($env:CARGO_HOME){$folders.Add((Join-Path $env:CARGO_HOME 'bin'))}
+   if($env:USERPROFILE){$folders.Add((Join-Path $env:USERPROFILE '.cargo\bin'))}
+   foreach($dir in $folders){
+     $candidate=Join-Path $dir $name
+     if(Test-Path -LiteralPath $candidate -PathType Leaf){
+       return [IO.Path]::GetFullPath($candidate)
+     }
+   }
+ }
+ return ''
 }
 function Native([string]$exe,[string[]]$argv,[string]$cwd,[string]$stem,[int]$timeout=900){
  $psi=New-Object Diagnostics.ProcessStartInfo
@@ -67,6 +88,7 @@ $report=[ordered]@{
  hosted_ci=$false;target_admitted=$false
  source_sha_expected=$sourceSha;source_sha_actual='';source_exact=$false
  rustc_version='';cargo_version='';git_version='';python_version=''
+ tools=[ordered]@{git='';cargo='';rustc='';python='';python_launcher=$false}
  steps=@();smoke_tests_run=0;capabilities_explicit=$false
  W2a='NOT_STARTED';W2b='NOT_RUN';W3='NO_GO';G2='NO_GO'
  driver_loaded=$false;wfp_filters_modified=$false
@@ -91,8 +113,22 @@ try{
  }
  $git=FindCmd 'git.exe';$cargo=FindCmd 'cargo.exe'
  $rustc=FindCmd 'rustc.exe';$python=FindCmd 'python.exe'
- foreach($v in @(@('git',$git),@('cargo',$cargo),@('rustc',$rustc),@('python',$python))){
-   if(-not $v[1]){throw ($v[0]+' not found; no installation performed')}
+ $pyLauncher=$false
+ if(-not $python){$python=FindCmd 'py.exe';$pyLauncher=([bool]$python)}
+ $report.tools=[ordered]@{
+   git=$git;cargo=$cargo;rustc=$rustc;python=$python;python_launcher=$pyLauncher
+ }
+ $missing=New-Object 'System.Collections.Generic.List[string]'
+ foreach($pair in @(@('git',$git),@('cargo',$cargo),@('rustc',$rustc),@('python-or-py',$python))){
+   if(-not $pair[1]){$missing.Add([string]$pair[0])}
+ }
+ if($missing.Count -gt 0){
+   throw ('Missing executable(s): '+($missing -join ', ')+
+     '. Probed PATH, supplied RustBinDirectory, CARGO_HOME/bin and USERPROFILE/.cargo/bin; no installation performed')
+ }
+ if($ToolDiscoveryOnly){
+   $report.W2a='TOOLS_FOUND_ONLY_NOT_ACCEPTED'
+   return
  }
  $v=Native $git @('--version') $work 'git-version' 30
  if(-not $v.ok){throw 'git version check failed'};$report.git_version=$v.stdout.Trim()
@@ -100,7 +136,8 @@ try{
  if(-not $v.ok){throw 'rustc version check failed'};$report.rustc_version=$v.stdout.Trim()
  $v=Native $cargo @('--version') $work 'cargo-version' 30
  if(-not $v.ok){throw 'cargo version check failed'};$report.cargo_version=$v.stdout.Trim()
- $v=Native $python @('--version') $work 'python-version' 30
+ $pythonVersionArgs=if($pyLauncher){@('-3','--version')}else{@('--version')}
+ $v=Native $python $pythonVersionArgs $work 'python-version' 30
  if(-not $v.ok){throw 'python version check failed'};$report.python_version=($v.stdout+$v.stderr).Trim()
  $src=Join-Path $work 'src'
  $env:GIT_TERMINAL_PROMPT='0'
@@ -133,7 +170,8 @@ try{
  $report.capabilities_explicit=$true
  $report.steps+=@('capabilities_explicit_only_pass')
  $env:FLOWBRIDGE_BIN=$exe
- $smoke=Native $python @('tests/smoke.py') $src 'python-socks-smoke' 180
+ $pythonSmokeArgs=if($pyLauncher){@('-3','tests/smoke.py')}else{@('tests/smoke.py')}
+ $smoke=Native $python $pythonSmokeArgs $src 'python-socks-smoke' 180
  if(-not $smoke.ok){throw 'Native SOCKS black-box smoke failed; see python-socks-smoke.stderr.log'}
  $raw=$smoke.stdout+[Environment]::NewLine+$smoke.stderr
  $m=[regex]::Match($raw,'Ran\s+(\d+)\s+tests')
