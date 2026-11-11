@@ -139,7 +139,7 @@ jobs:
             'build/windows/Release/flowbridge_ffi.dll',
             'build/windows/Release/resources/presets.json',
             'target/release/flowbridge.exe',
-            'artifacts/'+$installer.Name
+            ('artifacts/'+$installer.Name)
           )
           $files=@($items |ForEach-Object {
             if(-not(Test-Path -LiteralPath $_ -PathType Leaf)){throw ('Expected package file missing: '+$_)}
