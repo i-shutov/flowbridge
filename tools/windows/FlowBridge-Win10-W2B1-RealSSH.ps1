@@ -102,9 +102,9 @@ function RealEcho([int]$port,[int]$target,[Net.Sockets.TcpListener]$listener){
   }finally{$peer.Close()}
  }finally{$s.client.Close()}
 }
-function Own([string]$name,[string]$exe,[string[]]$args){
+function Own([string]$name,[string]$exe,[string[]]$arguments){
  $out=Join-Path $work ($name+'.stdout.log');$err=Join-Path $work ($name+'.stderr.log')
- $p=Start-Process -FilePath $exe -ArgumentList $args -PassThru -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err
+ $p=Start-Process -FilePath $exe -ArgumentList ($arguments -join ' ') -PassThru -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err
  $owned.Add($p)
  return $p
 }
