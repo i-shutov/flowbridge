@@ -52,7 +52,6 @@ mod win {
     const FWP_UINT64:u32=4;
     const PAGE:u32=128;
     const MAX_VISIBLE:u64=131072;
-    const FWPM_TXN_READ_ONLY:u32=1;
     const RPC_C_AUTHN_WINNT:u32=10;
 
     #[link(name="fwpuclnt")]
@@ -60,11 +59,6 @@ mod win {
         fn FwpmEngineOpen0(server:*const u16,authn:u32,id:*const c_void,
                           session:*const c_void,handle:*mut *mut c_void)->u32;
         fn FwpmEngineClose0(handle:*mut c_void)->u32;
-        fn FwpmTransactionBegin0(handle:*mut c_void,flags:u32)->u32;
-        fn FwpmTransactionCommit0(handle:*mut c_void)->u32;
-        fn FwpmTransactionAbort0(handle:*mut c_void)->u32;
-        fn FwpmFilterGetByKey0(handle:*mut c_void,key:*const Guid,
-                               filter:*mut *mut Filter)->u32;
         fn FwpmFilterCreateEnumHandle0(handle:*mut c_void,template:*const c_void,
                                        enumerator:*mut *mut c_void)->u32;
         fn FwpmFilterEnum0(handle:*mut c_void,enumerator:*mut c_void,requested:u32,
@@ -75,23 +69,6 @@ mod win {
     struct Engine(*mut c_void);
     impl Drop for Engine {
         fn drop(&mut self) {if !self.0.is_null(){unsafe{let _=FwpmEngineClose0(self.0);}}}
-    }
-    struct Txn { engine:*mut c_void,active:bool }
-    impl Txn {
-        fn new(engine:*mut c_void)->Result<Self,(&'static str,u32)> {
-            let rc=unsafe{FwpmTransactionBegin0(engine,FWPM_TXN_READ_ONLY)};
-            if rc!=0 {return Err(("begin_read_only",rc));}
-            Ok(Self{engine,active:true})
-        }
-        fn commit(mut self)->Result<(),(&'static str,u32)> {
-            let rc=unsafe{FwpmTransactionCommit0(self.engine)};
-            if rc!=0 {return Err(("commit_read_only",rc));}
-            self.active=false;
-            Ok(())
-        }
-    }
-    impl Drop for Txn {
-        fn drop(&mut self){if self.active {unsafe{let _=FwpmTransactionAbort0(self.engine);}}}
     }
     struct EnumHandle { engine:*mut c_void,enumerator:*mut c_void }
     impl EnumHandle {
@@ -106,12 +83,6 @@ mod win {
         fn drop(&mut self){if !self.enumerator.is_null(){
             unsafe{let _=FwpmFilterDestroyEnumHandle0(self.engine,self.enumerator);}
         }}
-    }
-    struct OwnedFilter(*mut Filter);
-    impl Drop for OwnedFilter {
-        fn drop(&mut self){if !self.0.is_null(){unsafe{
-            let mut raw=self.0.cast::<c_void>();FwpmFreeMemory0(&mut raw);
-        }}}
     }
     // Per Microsoft, ONLY the returned pointer array is freed, not its elements.
     struct PageBuffer(*mut *mut Filter);
@@ -134,19 +105,13 @@ mod win {
                                       ptr::null(),ptr::null(),&mut raw)};
         if rc!=0||raw.is_null(){return Err(("open",if rc==0{1}else{rc}));}
         let engine=Engine(raw);
-        let txn=Txn::new(engine.0)?;
-        let mut weights=[0u64;4];
-        for i in 0..4 {
-            let key=Guid::from_u128(BASE+((i as u128)<<96));
-            let mut ptr:*mut Filter=ptr::null_mut();
-            let rc=unsafe{FwpmFilterGetByKey0(engine.0,&key,&mut ptr)};
-            let filter=OwnedFilter(ptr);
-            if rc!=0||filter.0.is_null(){return Err(("baseline_filter",if rc==0{1}else{rc}));}
-            let f=unsafe{&*filter.0};
-            if f.key!=key||f.layer!=LAYERS[i]||f.sublayer!=SUB||
-                f.weight.kind!=FWP_EMPTY {return Err(("baseline_shape",1));}
-            weights[i]=effective(f).ok_or(("baseline_effective_weight",1))?;
-        }
+        // One enumerator is a single ACL-limited BFE filter snapshot, per
+        // FwpmFilterEnum0. An explicit read transaction around the entire
+        // enumeration (up to 1,024 pages) would hold a BFE transaction lock.
+        // Resolve the four owned baselines FROM THE SAME ENUMERATOR as the
+        // foreign filters, not by an earlier GetByKey0 snapshot.
+        let mut owned_weights:[Option<u64>;4]=[None;4];
+        let mut foreign_weights:[Vec<u64>;4]=std::array::from_fn(|_|Vec::new());
         // NULL template: enumerate all *visible* filters, including other providers.
         let mut eh:*mut c_void=ptr::null_mut();
         let rc=unsafe{FwpmFilterCreateEnumHandle0(engine.0,ptr::null(),&mut eh)};
@@ -172,20 +137,31 @@ mod win {
                     let f=unsafe{&*fp};
                     counts.visible+=1;
                     for i in 0..4 {
-                        if f.layer!=LAYERS[i]||f.sublayer!=SUB {continue;}
-                        if f.key==Guid::from_u128(BASE+((i as u128)<<96)) {continue;}
-                        let w=effective(f).ok_or(("foreign_effective_weight",1))?;
-                        if w>weights[i] {counts.greater[i]+=1;}
-                        else if w==weights[i] {counts.equal[i]+=1;}
-                        else {counts.lower[i]+=1;}
-                        // Do not infer condition intersection, decision, enforcement or liveness.
+                        let key=Guid::from_u128(BASE+((i as u128)<<96));
+                        if f.key==key {
+                            if owned_weights[i].is_some() {return Err(("duplicate_baseline",1));}
+                            if f.layer!=LAYERS[i]||f.sublayer!=SUB||f.weight.kind!=FWP_EMPTY {
+                                return Err(("baseline_shape",1));
+                            }
+                            owned_weights[i]=Some(effective(f).ok_or(("baseline_effective_weight",1))?);
+                        } else if f.layer==LAYERS[i] && f.sublayer==SUB {
+                            foreign_weights[i].push(effective(f).ok_or(("foreign_effective_weight",1))?);
+                        }
                     }
                 }
             }
             if returned<PAGE {break;}
         }
         enumerator.destroy()?;
-        txn.commit()?;
+        for i in 0..4 {
+            // ACL-denied/missing owned baseline is UNKNOWN, never zero risk.
+            let baseline=owned_weights[i].ok_or(("baseline_not_visible",1))?;
+            for foreign in &foreign_weights[i] {
+                if *foreign>baseline {counts.greater[i]+=1;}
+                else if *foreign==baseline {counts.equal[i]+=1;}
+                else {counts.lower[i]+=1;}
+            }
+        }
         Ok(counts)
     }
     pub fn run()->i32 {
@@ -202,7 +178,7 @@ mod win {
                              LABELS[i],c.greater[i],c.equal[i],c.lower[i]);
                 }
                 // Absence of a visible candidate is still UNKNOWN: enum is ACL-filtered.
-                println!("{{\"status\":\"{}\",\"visible_filters\":{},\"acl_hidden_filters_possible\":true,\"kernel_proof\":false,\"no_direct_proof\":false}}",
+                println!("{{\"status\":\"{}\",\"visible_filters\":{},\"single_enum_snapshot\":true,\"acl_hidden_filters_possible\":true,\"kernel_proof\":false,\"no_direct_proof\":false}}",
                          if candidate{"VISIBLE_ARBITRATION_CANDIDATE"}else{"UNKNOWN_NO_VISIBLE_CANDIDATE"},c.visible);
                 if candidate {3} else {4}
             }
