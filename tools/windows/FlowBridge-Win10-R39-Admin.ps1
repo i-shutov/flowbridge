@@ -73,7 +73,7 @@ function Loopback([string]$ipString){
    if($k -le 0){throw 'socket closed before echo return'}
    $n+=$k
   }
-  if(-not ([Linq.Enumerable]::SequenceEqual([byte[]]$data,[byte[]]$echo))){throw 'echo bytes differ'}
+  if([Convert]::ToBase64String($data) -cne [Convert]::ToBase64String($echo)){throw 'echo bytes differ'}
   return [ordered]@{address=$ipString;pass=$true;bytes=$n;error=''}
  }catch{
   return [ordered]@{address=$ipString;pass=$false;bytes=0;error=$_.Exception.Message}
