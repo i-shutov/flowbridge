@@ -131,9 +131,53 @@ try {
             $report.inspector_sha256 = (Get-FileHash -LiteralPath $inspector -Algorithm SHA256).Hash.ToLowerInvariant()
             $inventory = Invoke-Local $inspector @() 'bfe-readonly-inventory.jsonl'
             $report.bfe_inventory_exit_code = $inventory.ExitCode
-            # The inventory can only return candidate / UNKNOWN and never proves packet enforcement.
-            $report.status = 'BFE_READONLY_MANAGEMENT_SNAPSHOT_NO_KERNEL_PROOF'
-            $exitStatus = 0
+            # Inspector contract: 2=UNKNOWN/management failure, 3=visible
+            # arbitration candidate, 4=no visible candidate (still UNKNOWN).
+            # Never report exit 0 after attempting live BFE enumeration.
+            if ($inventory.ExitCode -eq 2) {
+                throw 'BFE management query returned UNKNOWN/error; see bfe-readonly-inventory.jsonl'
+            }
+            if ($inventory.ExitCode -ne 3 -and $inventory.ExitCode -ne 4) {
+                throw ('Unexpected BFE inspector exit code: ' + $inventory.ExitCode)
+            }
+            # Require exactly four per-rule JSON records plus one terminal JSON.
+            # Do not classify an arbitrary command response as a valid snapshot.
+            $lines = @($inventory.Output -split '\r?\n' | Where-Object { $_.Trim().Length -gt 0 })
+            if ($lines.Count -ne 5) { throw 'Malformed BFE inventory: expected 5 JSONL records' }
+            $labels = @('auth_connect_v4','auth_connect_v6',
+                        'connect_redirect_v4','connect_redirect_v6')
+            $candidate = $false
+            for ($i = 0; $i -lt 4; $i++) {
+                $item = $lines[$i] | ConvertFrom-Json -ErrorAction Stop
+                if ($item.rule -cne $labels[$i] -or
+                    $item.match_and_runtime_action_unverified -cne $true) {
+                    throw 'Malformed BFE inventory: rule or proof boundary mismatch'
+                }
+                foreach ($key in @('visible_higher','visible_equal','visible_lower','visible_disabled')) {
+                    $value = $item.$key
+                    if ($null -eq $value -or $value -isnot [ValueType] -or [decimal]$value -lt 0) {
+                        throw ('Malformed BFE inventory counter: ' + $key)
+                    }
+                }
+                if ([decimal]$item.visible_higher -gt 0 -or [decimal]$item.visible_equal -gt 0) {
+                    $candidate = $true
+                }
+            }
+            $terminal = $lines[4] | ConvertFrom-Json -ErrorAction Stop
+            $expectedStatus = if ($candidate) {'VISIBLE_ARBITRATION_CANDIDATE'}
+                              else {'UNKNOWN_NO_VISIBLE_CANDIDATE'}
+            $expectedExit = if ($candidate) {3} else {4}
+            if ($terminal.status -cne $expectedStatus -or
+                $inventory.ExitCode -ne $expectedExit -or
+                $terminal.single_enum_snapshot -cne $true -or
+                $terminal.acl_hidden_filters_possible -cne $true -or
+                $terminal.kernel_proof -cne $false -or
+                $terminal.no_direct_proof -cne $false) {
+                throw 'Inconsistent BFE terminal JSON / exit code / proof boundary'
+            }
+            $report.status = if ($candidate) {'BFE_VISIBLE_ARBITRATION_CANDIDATE_NO_KERNEL_PROOF'}
+                             else {'BFE_UNKNOWN_NO_VISIBLE_CANDIDATE'}
+            $exitStatus = $expectedExit   # Both results are NON-GO and NON-ZERO.
         }
     }
 }

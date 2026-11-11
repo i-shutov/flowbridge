@@ -1,0 +1,7 @@
+# Captured source block from Git blob 6c85b367ead60d3ca490e7fec2f70eb468cb608c.
+# Not an executable script. R112 Windows harness would return 0 after all BFE outcomes.
+            $report.bfe_inventory_exit_code = $inventory.ExitCode
+            # The inventory can only return candidate / UNKNOWN and never proves packet enforcement.
+            $report.status = 'BFE_READONLY_MANAGEMENT_SNAPSHOT_NO_KERNEL_PROOF'
+            $exitStatus = 0
+        }
