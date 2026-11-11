@@ -8,7 +8,7 @@ def verdict(available, owner_count, owned_ok, higher, equal, lower, visible):
         return 2
     if visible > 16384 or higher+equal+lower != visible-1:
         return 2
-    return 3 if higher or equal else 4
+    return 3 if higher or equal or lower else 4
 
 def outcomes():
     for x in itertools.product((False, True),(0,1,2),(False,True),
@@ -22,7 +22,7 @@ def run():
     assert verdict(True,1,True,0,0,0,1)==4
     assert verdict(True,1,True,1,0,0,2)==3
     assert verdict(True,1,True,0,1,0,2)==3
-    assert verdict(True,1,True,0,0,1,2)==4
+    assert verdict(True,1,True,0,0,1,2)==3  # lower sublayer can veto / override soft permit
     assert verdict(True,0,True,0,0,0,0)==2
     assert verdict(True,1,True,1,0,0,1)==2
     assert verdict(True,1,False,0,0,0,1)==2

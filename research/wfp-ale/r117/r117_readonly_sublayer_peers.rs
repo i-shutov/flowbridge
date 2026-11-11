@@ -1,5 +1,5 @@
 //! R117: read-only, ACL-limited snapshot of visible BFE sublayer weights.
-//! An observed weight peer is NOT a matching filter, runtime arbitration,
+//! A visible foreign sublayer (even LOWER weight) is NOT a matching filter, runtime arbitration,
 //! kernel-origin process evidence, packet capture or a no-DIRECT proof.
 #![deny(unsafe_op_in_unsafe_fn)]
 const OWNER_KEY: u128 = 0x1649f024_25b3_4e01_9ca1_5ca803010019;
@@ -13,7 +13,7 @@ fn classify(c:Count)->i32 {
     if c.total>CAP || c.owners!=1 || !c.descriptor_ok
         || c.higher.checked_add(c.equal).and_then(|x|x.checked_add(c.lower))
             != c.total.checked_sub(1) {return 2;}
-    if c.higher>0 || c.equal>0 {3} else {4}
+    if c.higher>0 || c.equal>0 || c.lower>0 {3} else {4}
 }
 
 #[cfg(not(all(windows,target_pointer_width="64")))]
@@ -114,8 +114,8 @@ mod native {
             }
             Ok(c)=>{
                 let verdict=classify(c);
-                let status=if verdict==3 {"VISIBLE_SUBLAYER_WEIGHT_PEER_UNQUALIFIED"}
-                           else {"UNKNOWN_NO_VISIBLE_WEIGHT_PEER"};
+                let status=if verdict==3 {"VISIBLE_SUBLAYER_ARBITRATION_PEER_UNQUALIFIED"}
+                           else {"UNKNOWN_NO_VISIBLE_FOREIGN_SUBLAYER"};
                 println!("{{\"status\":\"{status}\",\"visible_total\":{},\"foreign_higher\":{},\"foreign_equal\":{},\"foreign_lower\":{},\"owned_descriptor_match_only\":true,\"acl_hidden_possible\":true,\"filters_and_layer_overlap_unverified\":true,\"temporal_join_unverified\":true,\"kernel_origin_proof\":false,\"no_direct_proof\":false}}",
                          c.total,c.higher,c.equal,c.lower);verdict
             }
@@ -140,6 +140,9 @@ fn main(){std::process::exit(native::run())}
     use super::*;
     fn base()->Count{Count{total:1,owners:1,descriptor_ok:true,..Count::default()}}
     #[test]fn no_visible_peers_still_unknown(){assert_eq!(classify(base()),4)}
+    #[test]fn lower_priority_peer_may_veto_or_override_soft_permit(){
+        let mut c=base();c.lower=1;c.total=2;assert_eq!(classify(c),3);
+    }
     #[test]fn higher_and_equal_are_only_candidates(){
         for (higher,equal) in [(1,0),(0,1),(2,3)]{
             let mut c=base();c.higher=higher;c.equal=equal;c.total+=higher+equal;

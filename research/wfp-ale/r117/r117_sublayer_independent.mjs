@@ -10,7 +10,7 @@ for(const total of totals){
     let code=2;
     if(available&&owner===1&&descriptor&&total>=1 &&
        high+same+low===total-1&&total<=16384){
-        code=(high!==0||same!==0)?3:4;
+        code=(high!==0||same!==0||low!==0)?3:4;
     }
     bytes+=i+','+code+'\n';i++;counts[code]++;
 }
