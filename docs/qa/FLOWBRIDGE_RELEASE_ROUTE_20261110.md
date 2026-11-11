@@ -338,3 +338,25 @@ the hosted Windows runner. Original artifact 13844199728 SHA256
 This is `PASS_HOSTED_NON_TARGET_CONFIG_DENIAL_ONLY` — **not** Win10
 native W2b0 acceptance. Actual target execution of the same script
 is next. W3/G2 and release remain NO-GO.
+
+## 2026-11-11 — W2b0 native target completed; W2b1 isolated SSH next
+
+Owner PowerShell output on the dedicated Windows 10 Pro machine:
+`W2b0: PASS_NATIVE_WIN10_CONFIG_DENIAL_ONLY; W2b1 SSH: NOT_RUN;
+W2b2 GUI: NOT_RUN; W3/G2: NO_GO`, using `W2b0` script commit
+`7d6583c711bd4675934bb928ece5dc21a5416e0a`.
+Displayed script SHA256:
+`50dfc5d66ca395430331ce4492d118f04d977cd8f4895acbdcb18847129f08cd`.
+Locally generated evidence ZIP SHA256:
+`6b95fd8fb12a44216b62a9224143a97229528050711ec33e6d07e557687b4fc9`.
+
+This is **owner-reported positive native W2b0**, requiring later independent
+review of actual JSON/logs; it validates explicit managed SSH *configuration
+denial* gates only. It does NOT authenticate over SSH, launch a managed
+ready session, prove SSH child cleanup, exercise GUI/installer, or change
+WFP/ALE native G2 verdict.
+
+Next W2b1 is a strictly isolated loopback SSH fixture with
+ephemeral keys and exact-source W2a-built user-mode CLI. No system
+SSH service or driver installation, firewall/proxy/registry changes,
+global TestSigning, login password reuse, or external SSH target.
