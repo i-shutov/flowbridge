@@ -76,7 +76,7 @@ jobs:
           $script='tools/windows/FlowBridge-Win10-R39-Admin.ps1'
           $t=$null;$e=$null
           [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script),[ref]$t,[ref]$e)
-          if(@($e).Count){$e|ForEach-Object {Write-Output $_.Message};throw 'Invalid PS5 script'}
+          if(@($e).Count){$e|ForEach-Object {Write-Output ('ParseError line='+$_.Extent.StartLineNumber+' column='+$_.Extent.StartColumnNumber+' text='+$_.Extent.Text+' message='+$_.Message)};throw 'Invalid PS5 script'}
           & $script -ExpectedComputerName 'NOT-THE-HOSTED-RUNNER' -ReportRoot 'build/flowbridge-admin-smoke'
           $candidate=@(Get-ChildItem 'build/flowbridge-admin-smoke' -Filter inventory.json -Recurse)
           if($candidate.Count -ne 1){throw 'JSON not produced exactly once'}
