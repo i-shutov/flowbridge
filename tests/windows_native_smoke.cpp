@@ -494,7 +494,11 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
         wchar_t appData[32768]{};
         const DWORD appDataChars=GetEnvironmentVariableW(L"LOCALAPPDATA",appData,32768);
         need(appDataChars>0&&appDataChars<32768,"LOCALAPPDATA is unavailable");
+#ifdef FLOWBRIDGE_EXPLICIT_BETA_ONLY
+        const auto desktopFile=std::filesystem::path(appData)/L"FlowBridgeExplicitBeta"/L"desktop-settings.json";
+#else
         const auto desktopFile=std::filesystem::path(appData)/L"FlowBridge"/L"desktop-settings.json";
+#endif
         auto savedDns=[&] {
             std::ifstream in(desktopFile,std::ios::binary);
             need(in.good(),"Desktop settings were not persisted");
