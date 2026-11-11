@@ -433,3 +433,39 @@ A prior native Windows CI installer passed on a PR test merge commit,
 not on this exact user-tested SHA; do not substitute historical
 artifact proof. The exact-source Windows action and PowerShell target
 acceptance script are separate from driver and kernel work.
+
+## 2026-11-11 — W2b2 exact-source Win32 GUI/NSIS: first installer NO-GO
+
+The exact beta source `c339df2e4d20edf1d11d45786581a68451a71929`
+has been compiled separately from the PR test-merge in hosted Windows CI:
+[Run #43004408469](https://github.com/i-shutov/flowbridge/actions/runs/43004408469).
+Native x64 Rust CLI/FFI, CMake Win32 GUI, WFP capture helper **compiled
+without driver load**, the native C++ GUI runtime suite, and portable NSIS
+construction all PASS. Existing `tests/windows_installer_native.py` passed
+actual per-user NSIS install into a Cyrillic+spaced path, file hashes,
+native GUI TCP, UI page screenshots and upgrade/user-data preservation.
+
+**Exact-source uninstaller gate FAILED:** after `Uninstall.exe /S`,
+one or more known installed payloads, HKCU registered values or Start Menu
+shortcuts persisted beyond the existing 90-second convergence deadline.
+This is an actual Windows hosted product acceptance failure, not evidence
+of kernel capture, not a release PASS, and not yet reproduced on the user's
+Win10 VM. DO NOT deploy this exact-source GUI installer on the user's VM
+until a clean isolated undo/rollback is proven.
+
+The PR test-merge-era installer PASS from #42339966411 was compiled from
+the transient PR merge commit `ab6ed5273db6e9741915a96c74809433af125870`,
+**not** from the user-tested product SHA. Therefore the earlier PASS must
+not override exact-source uninstall NO-GO. The NSIS script blob matches
+`main`, so this is not yet attributed to changed NSIS source; identify
+the precise residual process, mutex, HKCU key or file and reproducibility.
+
+Separate follow-up CI
+[Run #43005363958](https://github.com/i-shutov/flowbridge/actions/runs/43005363958)
+adds **read-only** diagnostic of the hosted VM's post-uninstall file,
+registry, Start Menu, process and UI mutex state; do not apply any
+blind cleanup/registry deletion on a machine with user data. The
+W2b2 native target script is intentionally **not admitted**:
+`requiredArtifactZipSha=NOT_PINNED_YET` and prior-install guard.
+W2b2 remains NO-GO until both exact-source CI jobs and independent native
+Win10 acceptance pass. W3/G2 remain separate NO-GO.
