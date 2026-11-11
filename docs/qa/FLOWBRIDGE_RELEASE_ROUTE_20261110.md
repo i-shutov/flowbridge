@@ -399,3 +399,37 @@ exact version executes there. The SSH test proves neither Windows kernel
 capture/PacketBound nor direct/UDP/DNS leak protection and does not
 cover the GUI/installer W2b2, 128-channel/10k high-load acceptance,
 upgrade, or macOS NE. Limited beta release A0–A6 remains open.
+
+## 2026-11-11 — W2b1 physical Win10 owner report, full real SSH loopback
+
+The owner executed source-pinned `FlowBridge-Win10-W2B1-RealSSH.ps1`,
+source commit `8bc657db2f3b3824b594bf0360779429063c80bc`,
+on the separately authorized physical Windows 10 Pro x64 target
+in elevated PowerShell. The console returned:
+
+```text
+W2b1: PASS_NATIVE_WIN10_REAL_SSH_LOOPBACK_ONLY
+W2b2 GUI: NOT_RUN
+W3/G2: NO_GO
+```
+
+Displayed script SHA-256:
+`b331ed3abcf06f2f6171ecc0585ee534c2926ac2ffd8dd866320e61414959e75`.
+Owner-produced local evidence-only ZIP SHA-256:
+`9b8c964e419d44a4f6404750f6c3bf117265f7e5f8d7582770488f86c86ec1a9`.
+
+This is **owner-observed native W2b1 PASS**, not independent
+review of private JSON, all original process logs, or a network
+observer/remote destination proof. The script's internal positive gate
+requires actual managed SSH TCP byte parity, pinned official portable
+OpenSSH fixture, preexisting exact SHA W2a binary, and owned listener
+close. Real remote SSH to external hosts is not tested, nor are GUI,
+upgrades, managed stress 128/10k, system transparent capture,
+DNS/UDP/QUIC or leak-free guarantee. W3/G2 remains NO-GO.
+
+**W2b2 next:** build and QA a Windows GUI/NSIS engineering package
+from the exact same beta HEAD `c339df2e4d20edf1d11d45786581a68451a71929`.
+A prior native Windows CI installer passed on a PR test merge commit,
+not on this exact user-tested SHA; do not substitute historical
+artifact proof. The exact-source Windows action and PowerShell target
+acceptance script are separate from driver and kernel work.
