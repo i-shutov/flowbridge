@@ -244,3 +244,38 @@ reports all absent tools in one explicit blocker record. Diagnostic
 `PASS_NATIVE_WIN10_USERMODE_CLI_ONLY` and the source report/logs, may
 close W2a. If Cargo truly does not exist, no automatic install is performed.
 W2b managed SSH+GUI and W3 native WFP remain OPEN / NO-GO.
+
+## 2026-11-11 — W2a target Win10 missing Python: dependency-free 4-test fallback
+
+Second owner-reported actual Windows 10 W2a attempt with the corrected
+Cargo lookup returned `FAILED_OR_BLOCKED`, diagnostics
+`Missing executable(s): python-or-py`. This occurred **before clone,
+compile, and SOCKS test traffic**, so it is an environment prerequisite
+failure, not a failing FlowBridge binary.
+
+Avoid installing Python for this stage. The self-contained script
+`tools/windows/FlowBridge-Win10-W2A-SocksSmoke.ps1` now treats Python
+as optional, and automatically uses a **separate PowerShell/.NET SOCKS5
+black-box subset** on Windows lacking both `python.exe` and `py.exe`.
+It exercises four cases with real loopback sockets against the pinned beta
+CLI: SOCKS5 CONNECT + binary byte parity, UDP ASSOCIATE denial,
+policy BLOCK without contacting the target, and failed upstream without
+DIRECT fallback. It does NOT claim the full **nine Python smoke tests**
+or managed SSH, GUI, kernel WFP, DNS leak control, or full beta acceptance.
+
+[Actions #42991667473](https://github.com/i-shutov/flowbridge/actions/runs/42991667473)
+on actual source `f9e5a817907f34dbf1a96dd0a283afb68a4a211e`: **SUCCESS**,
+Cargo tool discovery without PATH PASS, pinned source clone and
+`cargo build --locked -j 2` PASS, and the four PowerShell/.NET
+end-to-end SOCKS5 checks PASS on a disposable hosted Windows runner.
+Report: `smoke_engine=powershell-native-dotnet`,
+`smoke_tests_run=4`, `smoke_coverage=powershell_four_test_subset_not_python_nine_tests`.
+Artifact 13842146603, archive SHA256
+`dca1732a3f93de5800ee9c8ba6b23b7080ea54ed8b366a8f0726dd64d70b7b51`.
+Hosted result is only `PASS_HOSTED_NON_TARGET_ONLY`.
+
+**Open:** owner must run this exact script on Win10 and provide
+`PASS_NATIVE_WIN10_USERMODE_CLI_ONLY` with original JSON/log evidence.
+Only then can W2a be provisionally accepted; 4 tests do not establish
+the original nine-test coverage or A0-A6 beta release signoff.
+W2b, W3, G2 and release remain NOT_RUN/NO_GO.
