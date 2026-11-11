@@ -190,12 +190,29 @@ try{
  $hostKey=Join-Path $secrets 'host_key'
  $clientKey=Join-Path $secrets 'client_key'
  foreach($path in @($hostKey,$clientKey)){
-  $keyProc=Own 'ephemeral-keygen' $keygen @('-q','-t','ed25519','-N','""','-f',('"'+$path+'"'))
-  if(-not $keyProc.WaitForExit(15000)){
-   try{$keyProc.Kill();$keyProc.WaitForExit()}catch{}
-   throw 'Ephemeral SSH keygen timed out'
-  }
-  if($keyProc.ExitCode -ne 0){throw 'Ephemeral SSH key generation failed'}
+  # Use .NET ProcessStartInfo with a literal zero-length -N argument.
+  # Windows PowerShell 5.1 Start-Process flattens quotes and can turn -N
+  # into a nonempty passphrase or omit the empty argument entirely.
+  $keyInfo=New-Object Diagnostics.ProcessStartInfo
+  $keyInfo.FileName=$keygen
+  $keyInfo.Arguments='-q -t ed25519 -N "" -f "'+$path+'"'
+  $keyInfo.UseShellExecute=$false
+  $keyInfo.CreateNoWindow=$true
+  $keyInfo.RedirectStandardOutput=$true
+  $keyInfo.RedirectStandardError=$true
+  $keyProc=New-Object Diagnostics.Process
+  $keyProc.StartInfo=$keyInfo
+  try{
+   if(-not $keyProc.Start()){throw 'Unable to start ephemeral SSH keygen'}
+   $outTask=$keyProc.StandardOutput.ReadToEndAsync()
+   $errTask=$keyProc.StandardError.ReadToEndAsync()
+   $done=$keyProc.WaitForExit(15000)
+   if(-not $done){try{$keyProc.Kill();$keyProc.WaitForExit()}catch{}}
+   $keyLog=Join-Path $work ('keygen-'+[IO.Path]::GetFileName($path)+'.log')
+   [IO.File]::WriteAllText($keyLog,([string]$outTask.GetAwaiter().GetResult()+[Environment]::NewLine+[string]$errTask.GetAwaiter().GetResult()),[Text.UTF8Encoding]::new($false))
+   if(-not $done -or $keyProc.ExitCode -ne 0){throw ('Ephemeral SSH key generation failed, see '+[IO.Path]::GetFileName($keyLog))}
+  }finally{$keyProc.Dispose()}
+  if(-not(Test-Path -LiteralPath $path -PathType Leaf)){throw 'Ephemeral private key file missing'}
   SecureTestFile $path $sid
  }
  $authorized=Join-Path $secrets 'authorized_keys'
