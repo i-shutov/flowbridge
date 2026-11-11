@@ -28,8 +28,8 @@ jobs:
             if(@($err).Count){$err|ForEach-Object{Write-Output ($_.Extent.StartLineNumber.ToString()+': '+$_.Message)};throw ('PS5 parser rejected '+$file)}
           }
           $source=Get-Content 'tools/windows/FlowBridge-Win10-W2B0-ManagedPreflight.ps1' -Raw
-          foreach($guard in @("W3='NO_GO'","G2='NO_GO'","driver_loaded=$false",
-                             "service_installed=$false","ssh_network_connection_performed=$false")){
+          foreach($guard in @('W3=''NO_GO''','G2=''NO_GO''','driver_loaded=$false',
+                             'service_installed=$false','ssh_network_connection_performed=$false')){
             if(-not $source.Contains($guard)){throw ('Missing read-only guard '+$guard)}
           }
       - name: Build a real binary and prove loopback-only SOCKS in clean W2a evidence
