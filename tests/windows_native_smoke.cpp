@@ -636,6 +636,15 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
         SendMessageW(GetDlgItem(window,288),CB_SETCURSEL,0,0);
         edit(GetDlgItem(window,236),"1080");SendMessageW(GetDlgItem(window,modeId),CB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(modeId,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,modeId)));edit(GetDlgItem(window,editorId),changed.dump());
         click(window,202);need(IsWindow(GetDlgItem(window,282))&&IsWindow(GetDlgItem(window,283))&&IsWindow(GetDlgItem(window,284)),"Native capture GUI controls absent");
+#ifdef FLOWBRIDGE_EXPLICIT_BETA_ONLY
+        // Explicit-only binary MUST NOT offer native/WFP controls even if
+        // a malicious actor synthesizes GUI events or a stale profile exists.
+        need(!IsWindowEnabled(GetDlgItem(window,282)) &&
+             !IsWindowEnabled(GetDlgItem(window,283)) &&
+             !IsWindowEnabled(GetDlgItem(window,284)) &&
+             !IsWindowEnabled(GetDlgItem(window,267)),
+             "Explicit-only beta accidentally enabled protected/EXE routing controls");
+#endif
         waitFor([&]{return IsWindowEnabled(GetDlgItem(window,260));},"bounded application discovery did not finish");
         need(IsWindowVisible(GetDlgItem(window,261)),"application discovery table hidden");
         click(window,262);click(window,263);click(window,264);need(SendMessageW(GetDlgItem(window,267),BM_GETCHECK,0,0)==BST_UNCHECKED,"native template unexpectedly blocks other apps by default");
