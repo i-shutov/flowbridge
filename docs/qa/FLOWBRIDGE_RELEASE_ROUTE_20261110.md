@@ -360,3 +360,42 @@ Next W2b1 is a strictly isolated loopback SSH fixture with
 ephemeral keys and exact-source W2a-built user-mode CLI. No system
 SSH service or driver installation, firewall/proxy/registry changes,
 global TestSigning, login password reuse, or external SSH target.
+
+## 2026-11-11 — W2b1 isolated real SSH ready, tested on hosted Windows
+
+Script: `tools/windows/FlowBridge-Win10-W2B1-RealSSH.ps1`,
+fixed tested commit `8bc657db2f3b3824b594bf0360779429063c80bc`.
+On the target Win10 this will reuse the **already accepted** W2a
+source-pinned `flowbridge.exe` and its SHA from `w2a-report.json`;
+no Cargo rebuild or Python dependency.
+
+The test uses a pinned Microsoft-signed portable OpenSSH 10.4 preview
+server fixture (official ZIP SHA256
+`b67ff8becd203502190ec42ac7787c24c2cd3325ed7700485fe7a1c83d2a7957`)
+without installing any Windows sshd service. It verifies the existing
+Microsoft-signed SSH client/keygen, generates only ephemeral keys and
+an isolated SSHD config under a fresh evidence directory, binds SSHD
+strictly to 127.0.0.1, and establishes a real authenticated flow
+through `flowbridge serve-managed` and its user-owned OpenSSH -D child
+to a local TCP echo listener. Checks exact response-byte parity and
+that the owned SOCKS listener closes on forced termination of only the
+owned FlowBridge process; deletes ephemeral private keys before
+packaging evidence. No firewall, DNS, system service, host keys,
+TESTSIGNING, driver or WFP/BFE mutation.
+
+[Hosted Windows Action #43001150579](https://github.com/i-shutov/flowbridge/actions/runs/43001150579)
+**SUCCESS** at tested source `8bc657db2f3b3824b594bf0360779429063c80bc`.
+The completed original evidence JSON was independently extracted from
+artifact 13846955153 (archive SHA256
+`3c277587c74ec8a6aad9bd859b026e519cd164a709d355c4cb0ed4e43ced0ae4`);
+ZIP CRC validated. Results:
+- `W2b1=PASS_HOSTED_NON_TARGET_REAL_SSH_LOOPBACK_ONLY`
+- `real_ssh_authenticated=true`, `bytes_returned=16`,
+  `ssh_child_owned=true`, `managed_owner_shutdown_cleanup=SOCKS_LISTENER_CLOSED`
+- `ephemeral_keys_deleted=true`, `problems=[]`, `G2=NO_GO`
+
+The native target Win10 W2b1 result remains **NOT_RUN** until this
+exact version executes there. The SSH test proves neither Windows kernel
+capture/PacketBound nor direct/UDP/DNS leak protection and does not
+cover the GUI/installer W2b2, 128-channel/10k high-load acceptance,
+upgrade, or macOS NE. Limited beta release A0–A6 remains open.
