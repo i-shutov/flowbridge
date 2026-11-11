@@ -25,6 +25,9 @@ $report = [ordered]@{
     research_source_git_blob_expected = $expectedGitBlob
     source_git_blob_observed = $null
     source_sha256 = $null
+    source_compilation_sha256 = $null
+    source_crlf_normalized = $false
+    source_normalized_git_blob = $null
     windows_build = $null
     rustc_version = $null
     rustc_target = $null
@@ -80,8 +83,31 @@ try {
     $report.source_git_blob_observed = Git-BlobSha1 $resolved
     $report.source_sha256 = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($report.source_git_blob_observed -ne $expectedGitBlob) {
-        throw 'Source Git blob mismatch: refuse unverified source'
+        # The checkout can expand LF into CRLF (core.autocrlf). Never treat
+        # git hash-object's clean-filter result as a hash of raw source bytes.
+        # Accept only a byte-preserving CRLF -> LF transform that produces the
+        # *exact* pinned Git blob; compile those verified canonical bytes.
+        $originalBytes = [IO.File]::ReadAllBytes($resolved)
+        $canonicalPath = Join-Path $evidence 'r115-canonical-source.rs'
+        $stream = New-Object System.IO.MemoryStream
+        try {
+            for ($i = 0; $i -lt $originalBytes.Length; $i++) {
+                if ($originalBytes[$i] -eq 13 -and ($i + 1) -lt $originalBytes.Length -and
+                    $originalBytes[$i + 1] -eq 10) { continue }
+                $stream.WriteByte($originalBytes[$i])
+            }
+            [IO.File]::WriteAllBytes($canonicalPath, $stream.ToArray())
+        }
+        finally { $stream.Dispose() }
+        $normalizedBlob = Git-BlobSha1 $canonicalPath
+        $report.source_normalized_git_blob = $normalizedBlob
+        if ($normalizedBlob -ne $expectedGitBlob) {
+            throw 'Source Git blob mismatch after exact CRLF normalization: refuse unverified source'
+        }
+        $resolved = $canonicalPath
+        $report.source_crlf_normalized = $true
     }
+    $report.source_compilation_sha256 = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant()
     $rust = Get-Command rustc.exe -ErrorAction SilentlyContinue
     if ($null -eq $rust) { throw 'rustc.exe not installed: no installation attempted' }
     $rustInfo = Invoke-Local $rust.Source @('-vV') 'rustc-version.txt'
