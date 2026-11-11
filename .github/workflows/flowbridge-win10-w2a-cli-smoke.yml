@@ -32,8 +32,8 @@ jobs:
             throw 'W2a PowerShell 5.1 parse failed'
           }
           $src=Get-Content $path -Raw
-          foreach($required in @("W3='NO_GO'","G2='NO_GO'","driver_loaded=$false",
-                "wfp_filters_modified=$false","system_network_changed=$false")){
+          foreach($required in @('W3=''NO_GO''','G2=''NO_GO''','driver_loaded=$false',
+                'wfp_filters_modified=$false','system_network_changed=$false')){
             if(-not $src.Contains($required)){throw "Missing safety guard $required"}
           }
       - name: Execute real CLI and loopback SOCKS smoke, never accept hosted runner as Win10
