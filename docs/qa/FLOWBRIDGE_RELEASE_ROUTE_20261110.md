@@ -139,3 +139,25 @@ Research branch управляется отдельным исследовате
 5. **v0.3.0-beta.1: NOT_ACCEPTED** до A0–A6.
    **v1.0.0: NO_GO** до W3–W6, Mac NE, production signatures и RC.
 
+
+## 2026-11-11 — Win10 W0 observed; W1 script ready, target execution pending
+
+The owner supplied actual elevated PowerShell stdout on the dedicated Win10 Pro
+x64 machine: `W0: READONLY_HOST_CONFIRMED, W1: NOT_RUN, W3: NO_GO`.
+The locally generated diagnostic ZIP SHA256 was
+`a36f695e60361e4b8d568b3c11d835270f077d48dc649c48b8072865ec4ff828`.
+This is **owner-submitted native stdout**, not an independently retrieved
+inventory.json/ZIP or a physical kernel-driver test. Do not convert W3/G2 to GO.
+The exact Run W0 executable SHA256 and precise host identity remain in the
+user's private evidence; do not store device names or account identifiers here.
+
+Next W1 uses [fixed-source user-mode script](../../tools/windows/FlowBridge-Win10-R39-W1-Usermode.ps1)
+with source commit `992a84b87c328483e08744d98ac5051183914066`,
+per-file pinned Git blob checks, and 4 separate Rust test executables.
+[Hosted Windows source-and-compile CI #42981695756](https://github.com/i-shutov/flowbridge/actions/runs/42981695756):
+**SUCCESS: 42/42** (handoff 19, ledger 11, auth_appid 7,
+broker lifecycle 5), on **Windows Server 2025**, hence labeled
+`PASS_NON_TARGET_HOST_ONLY`. This does not prove W1 on target Win10 and
+never installs/loads the kernel driver. The script produces JSON, per-suite
+logs, a ZIP and SHA256 manifest in its own evidence folder. If rustc is
+missing, it reports a toolchain blocker and leaves Windows unchanged.
