@@ -305,3 +305,36 @@ clone/rebuild automatically, and verify OpenSSH client/signature, managed
 profile denial guards and fail-closed loss behaviour on the target Win10.
 Any actual SSH authentication, native GUI installer and upgrade tests
 remain separate gates until observed.
+
+## 2026-11-11 — W2b-0 preflight: hosted exact-source managed SSH safety guards
+
+W2a already passed on the owner's target Win10. The next action does **not**
+rebuild Cargo or need Python: `tools/windows/FlowBridge-Win10-W2B0-ManagedPreflight.ps1`
+finds the newest **locally completed** W2a JSON, verifies the exact pinned
+PR #56 source SHA `c339df2e4d20edf1d11d45786581a68451a71929` and
+compares the previously built CLI executable SHA against W2a manifest.
+
+It reports the currently installed system OpenSSH executable
+(Authenticode/Microsoft signature), optional ssh-keygen/sshd and
+PATH-visible GUI build prerequisites (CMake/MSVC/NSIS). It launches
+the *own exact-source CLI only* for three invalid managed profiles that
+MUST be rejected **before** an SSH client is started:
+1. missing exact consent string;
+2. automatic/direct route disallowed in managed beta;
+3. missing explicit SSH identity path.
+
+The expected *reason* must match each case, not merely any nonzero exit.
+The test creates only its own JSON/log files, uses no external SSH target,
+makes no SSH connection, installs no service/driver and changes no network
+or Windows security settings. W2b1 real SSH authentication and W2b2 GUI/
+installer are separate **OPEN** gates.
+
+[Hosted Windows CI #42998744754](https://github.com/i-shutov/flowbridge/actions/runs/42998744754):
+**SUCCESS** at W2b0 script commit
+`7d6583c711bd4675934bb928ece5dc21a5416e0a`, three exact
+negative cases PASS, actual Microsoft-signed `ssh.exe` verified on
+the hosted Windows runner. Original artifact 13844199728 SHA256
+`0c198a4f2cf5cf3636756ded1c520a0d832fa808887f0edb379fe517614c956e`.
+This is `PASS_HOSTED_NON_TARGET_CONFIG_DENIAL_ONLY` — **not** Win10
+native W2b0 acceptance. Actual target execution of the same script
+is next. W3/G2 and release remain NO-GO.
