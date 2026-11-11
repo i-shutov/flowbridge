@@ -80,7 +80,7 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference='Stop'
-          & tools/windows/FlowBridge-Win10-W2A-SocksSmoke.ps1 -ExpectedComputerName 'THIS-IS-NOT-THE-WIN10-VM' -AllowHostedCI -EvidenceRoot build/w2a-hosted
+          & tools/windows/FlowBridge-Win10-W2A-SocksSmoke.ps1 -ExpectedComputerName 'THIS-IS-NOT-THE-WIN10-VM' -AllowHostedCI -ForcePowerShellSmoke -EvidenceRoot build/w2a-hosted
           $items=@(Get-ChildItem build/w2a-hosted -Filter w2a-report.json -Recurse -File)
           if($items.Count -ne 1){throw 'Expected exactly one W2a JSON'}
           $r=Get-Content -LiteralPath $items[0].FullName -Raw | ConvertFrom-Json
@@ -89,7 +89,10 @@ jobs:
              $r.target_admitted -or
              $r.source_exact -ne $true -or
              $r.capabilities_explicit -ne $true -or
-             $r.smoke_tests_run -lt 1 -or
+             $r.smoke_tests_run -ne 4 -or
+             $r.smoke_engine -ne 'powershell-native-dotnet' -or
+             $r.smoke_coverage -ne 'powershell_four_test_subset_not_python_nine_tests' -or
+             @($r.smoke_checks).Count -ne 4 -or
              $r.G2 -ne 'NO_GO' -or
              $r.W3 -ne 'NO_GO' -or
              $r.driver_loaded -or
