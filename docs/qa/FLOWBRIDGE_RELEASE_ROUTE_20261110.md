@@ -24,7 +24,7 @@ Read-only диагностика получает точный hostname **лок
 Текущий процесс администратора был medium-integrity (UAC не elevated).
 CIM/WMI иногда возвращал Access Denied. Компьютер dot/Work может быть
 зарегистрирован, но это не переносит удалённую оболочку автоматически
-между разными чатами. До получения новых логов **native PASS не существует**.
+между разными чатами. По состоянию на **11.11.2026**, владелец предоставил консольные результаты **W0–W2b2 PASS**. Первоначальная строка относилась к исходной ревизии плана; независимая проверка ZIP/JSON ещё открыта.
 
 ## 2. Две независимые линии выпуска
 
@@ -50,7 +50,7 @@ accepted SOCKET и real SSH socket records; macOS реально активир�
 | A0 | Из PR #56 отделить только explicit SOCKS + supervised OpenSSH от 110-файловой WFP/NDISRD интеграции | Чистая release branch, no kernel installer/filter/transparent claim | OPEN |
 | A1 | Заморозить точный SHA; cargo fmt/clippy/unit, DNS, Windows/Linux/macOS native | Весь обязательный **beta-scope** CI PASS на одном SHA с артифактами | PARTIAL |
 | A2 | Изолированный managed-SSH 64/128 streams, bad host key, half-close, overload, Stop/reconnect, 10k churn | Исходные логи, byte parity, отсутствие DIRECT fallback для принятых SOCKS клиентов | PARTIAL |
-| A3 | Win10 Pro x64: CLI + GUI, русские пути, установщик, upgrade/uninstall, loopback SSH | Нативные user-mode доказательства от **целевой** Windows, без драйвера/UAC | NOT_RUN |
+| A3 | Win10 Pro x64: CLI + GUI, русские пути, установщик, upgrade/uninstall, loopback SSH | Нативные user-mode доказательства от **целевой** Windows, без драйвера/UAC | **OWNER-REPORTED PASS W0–W2b2**; отдельная проверка JSON/ZIP ещё открыта |
 | A4 | macOS universal: реальная сборка .app/.pkg, запуск, SOCKS, GUI, install/update/remove | Статус **local app** без заявленного activated NE | PARTIAL |
 | A5 | Упаковка, сторонние лицензии/SBOM, SHA256SUMS и release notes | Источник/пакет/хеши сверены, scope ограничен | OPEN |
 | A6 | Независимый reviewer: no P0 в **explicit SOCKS-only** scope | Матрица PASS/FAIL без замены native FAIL на фиктивный успех | OPEN |
@@ -569,3 +569,53 @@ profile or forcibly close unrelated processes to satisfy the gate.
 Until target W2b2 returns `PASS_NATIVE_WIN10_GUI_INSTALL_UPGRADE_UNINSTALL`
 and independent logs are reviewed, **W2b2 target NOT_RUN**.
 W3/G2 NO-GO and 0.3.0-beta.1 release NOT_ACCEPTED (A0-A6 incomplete).
+
+## 2026-11-11 — physical Windows 10 Pro user-mode W2b2 PASS (owner console)
+
+The owner executed the exact verified `-BundleZip` acceptance script
+from commit `05f77feb9a09f05f9879b8dfef3f709417d5bfc1` on
+the previously accepted dedicated Windows 10 Pro 22H2 x64 host, with
+the exact source-pinned GUI/installer engineering package. The
+PowerShell console returned:
+
+```text
+W2b2: PASS_NATIVE_WIN10_GUI_INSTALL_UPGRADE_UNINSTALL; W3/G2: NO_GO
+```
+
+Native report path was produced under
+`C:\ProgramData\FlowBridge\W2B2-Evidence\`.
+Owner-provided evidence-only ZIP SHA256:
+`dd3988e39a188d100ac5ded6c52d5b64102b0934e783c522649985ef68db9e37`.
+This is **owner-observed Win10 GUI/installer PASS**, not a claim that
+I received the private report JSON or checked image layouts independently.
+The script's strict PASS requires exact-source/installer SHA, all files
+in manifest, real installed GUI TCP, five unique BMP page hashes,
+per-user NSIS install, upgrade to the same registered directory,
+uninstall of app files/registration/shortcuts and preservation of
+user profile and unrelated note. It does NOT install/enable a driver,
+SCM service, system proxy, firewall changes, WFP/BFE filters or macOS NE.
+
+### Current gates (post owner W2b2)
+
+| Gate | Verdict | Important limitation |
+|---|---|---|
+| W0 | **OWNER PASS** | Exact Win10 Pro, elevated read-only inventory |
+| W1 | **OWNER PASS** | Four pinned Rust model suites; no driver |
+| W2a | **OWNER PASS** | Native CLI & 4 PowerShell SOCKS5 black-box scenarios |
+| W2b-0 | **OWNER PASS** | 3 exact-denial managed SSH configuration tests |
+| W2b-1 | **OWNER PASS** | Authenticated portable SSHD loopback and owned SSH cleanup |
+| W2b-2 | **OWNER PASS** | Exact-SHA unsigned engineering GUI, NSIS install/upgrade/remove |
+| Independent physical evidence audit | **OPEN** | Need original machine's JSON/evidence ZIP; console hashes recorded |
+| A0 explicit SOCKS-only branch/scope separation | **OPEN** | Beta source still includes WFP/NDISRD research, not permissible protected release |
+| A1/A2 and A4/A5/A6 beta release | **PARTIAL/OPEN** | Single-SHA acceptance, managed load and macOS/metadata/reviewer remain |
+| A7 GitHub prerelease | **NOT_RELEASED** | No tag / signed package / owner acceptance |
+| W3/G2 native WFP/ALE | **NO-GO** | No driver/physical owner proof attempted |
+
+**Release sequence, not more Win10 ad hoc probes:** freeze an isolated
+explicit SOCKS-only candidate at the accepted source lineage, remove
+protected-driver/helper activation from published package, run managed
+SSH stress acceptance, package macOS local-only, produce source/binary
+hashes and third-party notices, get independent GO/NO-GO, then tag a
+clearly limited `v0.3.0-beta.1` prerelease. Keep opaque independent
+WFP research PRs out of this branch. Do NOT assert full 1.0 or
+transparent process capture based on the Win10 tests.
