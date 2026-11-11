@@ -210,3 +210,37 @@ To be accepted on the target Win10, W2a must return
 `PASS_NATIVE_WIN10_USERMODE_CLI_ONLY` and its original JSON+test logs
 should be reviewed. This **is not W2b** managed real SSH / GUI installer,
 and G2 native WFP remains **NO-GO**. Only explicit SOCKS traffic is tested.
+
+## 2026-11-11 — target Win10 W2a tool discovery RCA and correction
+
+User-provided elevated Windows 10 Pro W2a console on the original
+`ce99492b87cd69a41148451caec19d319b18e17f` script returned
+`W2a: FAILED_OR_BLOCKED`, `Notes: cargo not found; no installation performed`.
+Source code stopped during **PATH-only executable discovery**, before
+`git clone`, `cargo build`, SOCKS sockets or GUI. This is a **tool-discovery
+blocker**, not a failed native FlowBridge TCP test; no beta release acceptance.
+
+The previously accepted W1 script located `rustc.exe` through
+`%USERPROFILE%\.cargo\bin` even when absent from PATH. W2a did not check
+that location for `cargo.exe`. Corrected `FindCmd` searches PATH,
+optional `-RustBinDirectory`, preexisting CARGO_HOME/bin and current
+user .cargo/bin without modifying persistent environment or installing tools.
+Also supports Python launcher `py.exe -3` when python.exe is not on PATH;
+reports all absent tools in one explicit blocker record. Diagnostic
+`-ToolDiscoveryOnly` never downloads sources or executes build/tests.
+
+[GitHub Actions #42987932602](https://github.com/i-shutov/flowbridge/actions/runs/42987932602)
+**SUCCESS** on exact W2a source commit
+`b368b822e199c1bf3166ce481142fe8ec19e7938`:
+1. Deliberately removed Cargo's installation directory from PATH and
+   provided a non-executable CARGO_HOME/bin/cargo.exe marker; tool-discovery
+   probe found it **without execution** and returned NOT_ACCEPTED.
+2. Then restored the real hosted Windows environment, compiled the pinned
+   beta CLI and executed real loopback SOCKS smoke: `PASS_HOSTED_NON_TARGET_ONLY`.
+3. Artifact 13841380479 ZIP SHA256
+   `7f5133186f4cde204f1317d612a4c95ca11a6477605295f7d9122be06f066e2e`.
+
+**Next gate:** only an actual rerun on target Win10, with
+`PASS_NATIVE_WIN10_USERMODE_CLI_ONLY` and the source report/logs, may
+close W2a. If Cargo truly does not exist, no automatic install is performed.
+W2b managed SSH+GUI and W3 native WFP remain OPEN / NO-GO.
