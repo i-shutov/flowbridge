@@ -82,6 +82,44 @@ jobs:
           $ErrorActionPreference='Stop'
           python tests/windows_installer_native.py --manifest docs/verification/windows-package.json --harness build/windows/Release/FlowBridgeNativeSmoke.exe --output build/verification/windows
           if($LASTEXITCODE -ne 0){throw 'Native Windows installer acceptance failed'}
+      - name: On installer failure, capture read-only native uninstall state
+        if: failure()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Continue'
+          $root=Join-Path $env:RUNNER_TEMP 'flowbridge-install-*'
+          $found=@(Get-ChildItem $root -Directory -ErrorAction SilentlyContinue)
+          $installations=@()
+          foreach($base in $found){
+            foreach($path in @(Get-ChildItem $base.FullName -Directory -ErrorAction SilentlyContinue)){
+              $list=@(Get-ChildItem $path.FullName -File -ErrorAction SilentlyContinue|Select-Object -ExpandProperty Name)
+              $installations+=@{path=$path.FullName;files=$list;uninstall_exists=(Test-Path (Join-Path $path.FullName 'Uninstall.exe'));GUI_exists=(Test-Path (Join-Path $path.FullName 'FlowBridge.exe'))}
+            }
+          }
+          $settings=Get-ItemProperty 'HKCU:\Software\FlowBridge' -ErrorAction SilentlyContinue
+          $uninstall=Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\FlowBridge' -ErrorAction SilentlyContinue
+          $shortcuts=@(Get-ChildItem (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\FlowBridge') -ErrorAction SilentlyContinue|Select-Object -ExpandProperty Name)
+          $procs=@(Get-Process -ErrorAction SilentlyContinue|Where-Object {$_.ProcessName -match '(?i)flowbridge|uninstall|nsis'}|Select-Object ProcessName,Id)
+          $mutex_exists=$false
+          try {
+            $mutex=[Threading.Mutex]::OpenExisting('Local\FlowBridge.NativeUI.v02')
+            $mutex_exists=$true;$mutex.Dispose()
+          }catch{}
+          $state=[ordered]@{
+            schema='flowbridge-w2b2-hosted-uninstall-readonly-diagnostics-v1'
+            host_windows_runner=$true;diagnostics_only=$true
+            installations=$installations
+            registered_user_install_directory=$settings.InstallDir
+            registered_uninstall_display_name=$uninstall.DisplayName
+            registered_uninstall_path=$uninstall.InstallLocation
+            shortcuts=$shortcuts;matching_processes=$procs
+            running_gui_mutex_exists=$mutex_exists
+            did_not_relaunch_uninstaller=$true
+            network_or_host_security_mutation=$false
+          }
+          New-Item -ItemType Directory -Force build/w2b2-qa|Out-Null
+          $state|ConvertTo-Json -Depth 10|Set-Content build/w2b2-qa/uninstall-failure-diagnostic.json -Encoding utf8
+          Write-Output ($state|ConvertTo-Json -Depth 10)
       - name: Emit immutable target QA manifest
         shell: pwsh
         run: |
