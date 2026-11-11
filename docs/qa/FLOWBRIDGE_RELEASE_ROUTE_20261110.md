@@ -181,3 +181,32 @@ No kernel load, WFP filter activation or G2 network acceptance followed.
 Next: W2a actual Windows10 native **explicit SOCKS CLI** `cargo build --locked`
 and loopback-only `tests/smoke.py` with full logs and exact source SHA; W2b
 managed OpenSSH isolated fixture and GUI/installer to follow independently.
+
+## 2026-11-11 — W2a product CLI smoke is runner-PASS; target Win10 pending
+
+W2a script: `tools/windows/FlowBridge-Win10-W2A-SocksSmoke.ps1`,
+source-pinned beta PR #56 commit `c339df2e4d20edf1d11d45786581a68451a71929`,
+exact version after bounding Cargo to two compilation jobs:
+`ce99492b87cd69a41148451caec19d319b18e17f`.
+No separate runner, service or driver installed. It clones source into a
+new evidence folder (one GitHub remote), verifies HEAD exact, builds CLI
+with `cargo build --locked -j 2 -p flowbridge-cli --bin flowbridge`,
+runs `capabilities` (transparent interception must remain false) and
+executes `tests/smoke.py`: actual loopback-only SOCKS5 TCP black-box tests.
+All logs and file SHA256 manifest are local. The script limits Cargo/cache,
+Git checkout and output to its own evidence folder.
+
+[Hosted Windows W2a #42985646597](https://github.com/i-shutov/flowbridge/actions/runs/42985646597)
+**SUCCESS** on source `ce99492b87cd69a41148451caec19d319b18e17f`;
+actual CLI built and test script passed. Earlier first full CLI evidence
+run #42985334613 had independently extracted report `smoke_tests_run=9`,
+`source_exact=true`, `capabilities_explicit=true`, no errors, ZIP CRC
+PASS. The newer two-job run's uploaded artifact is #13839317294,
+SHA256 `bed4b401ee9177df6a75027551f39cc76714a712374436b09fb46ada2055b28b`.
+Both runs **deliberately** return `PASS_HOSTED_NON_TARGET_ONLY`:
+Windows Server CI does NOT count as Windows 10 Pro W2a.
+
+To be accepted on the target Win10, W2a must return
+`PASS_NATIVE_WIN10_USERMODE_CLI_ONLY` and its original JSON+test logs
+should be reviewed. This **is not W2b** managed real SSH / GUI installer,
+and G2 native WFP remains **NO-GO**. Only explicit SOCKS traffic is tested.
