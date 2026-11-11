@@ -1,0 +1,25 @@
+{
+  "cycle": "R105",
+  "date": "2026-11-11",
+  "baseline_research_head": "c1163f2d183079619dab917df1343b7068c915c0",
+  "baseline_main_head": "5b5afc2feeda2195f302380e615ba003d4906e09",
+  "source_blobs": {
+    "policy_windows.rs": "acf60334320d970f58af3349ee75fbaa59826602",
+    "policy_plan.rs": "c8ab344551f1adfc20fd0019c4606cf3ca3c81c4",
+    "redirect.rs": "9a07e026134d46ef646d39862bd982cc48bbc5f6"
+  },
+  "test": {
+    "matrix_states": 256,
+    "match": 16,
+    "no_match": 240,
+    "independent_oracles": [
+      "Python",
+      "Node.js"
+    ],
+    "sha256": "5f311bc57889ffde3d3a9e644d29455fa78919ed27544ff8a03cbd0c0fd63fb9",
+    "executed": true
+  },
+  "proof_scope": "Only four R19 owned filter-match predicates; no global WFP or packets",
+  "native_windows_proof": false,
+  "architecture_go": false
+}
