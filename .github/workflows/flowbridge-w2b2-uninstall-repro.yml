@@ -1,0 +1,64 @@
+name: FlowBridge W2b2 exact installer uninstall reproducibility (no build)
+on:
+  push:
+    branches:
+      - docs/release-win10-vm910136-20261110
+    paths:
+      - tools/windows/FlowBridge-Win10-W2B2-GUIInstaller.ps1
+      - .github/workflows/flowbridge-w2b2-uninstall-repro.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  isolated-package-uninstall-repro:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Retrieve the already-built exact-beta installer (no rebuild, no new binary)
+        uses: actions/download-artifact@v4
+        with:
+          name: FlowBridge-W2b2-ExactBeta-GUI-Installer-43005937922
+          run-id: 43005937922
+          github-token: ${{ github.token }}
+          path: bundle
+      - name: Check PowerShell syntax and exact artifact manifest on disposable hosted Windows
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $script='tools/windows/FlowBridge-Win10-W2B2-GUIInstaller.ps1'
+          $tokens=$null;$errors=$null
+          [void][Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script),[ref]$tokens,[ref]$errors)
+          if(@($errors).Count){$errors|ForEach-Object{Write-Output ($_.Extent.StartLineNumber.ToString()+': '+$_.Message)};throw 'W2b2 target PowerShell script does not parse'}
+          $p=Get-Content 'bundle/build/w2b2-qa/bundle-manifest.json' -Raw|ConvertFrom-Json
+          if($p.source_sha -ne 'c339df2e4d20edf1d11d45786581a68451a71929' -or $p.driver_installed){
+             throw 'Artifact source or scope mismatch'
+          }
+      - name: Repeat installed GUI and uninstall with detailed residue on failure
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          & tools/windows/FlowBridge-Win10-W2B2-GUIInstaller.ps1 -AllowHostedCI -ExpectedComputerName 'ISOLATED-NONTARGET-CI' -BundleDirectory bundle -ReportRoot build/w2b2-independent-repro
+          $items=@(Get-ChildItem build/w2b2-independent-repro -Filter w2b2-report.json -Recurse -File)
+          if($items.Count -ne 1){throw 'W2b2 report missing'}
+          $r=Get-Content -LiteralPath $items[0].FullName -Raw|ConvertFrom-Json
+          Write-Output ($r|ConvertTo-Json -Depth 10)
+          if($r.W2b2 -ne 'PASS_HOSTED_NON_TARGET_GUI_INSTALL_UPGRADE_UNINSTALL' -or
+             -not $r.uninstaller_removed_payload -or -not $r.user_note_preserved -or
+             -not $r.profile_preserved_after_uninstall -or $r.G2 -ne 'NO_GO'){
+            throw 'Exact beta uninstall reproducibility failed; inspect uninstall_residue'
+          }
+      - name: Persist isolated hosted diagnostics and GUI page evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-W2b2-Uninstall-Repro-${{ github.run_id }}
+          path: |
+            build/w2b2-independent-repro/**/w2b2-report.json
+            build/w2b2-independent-repro/**/*.log
+            build/w2b2-independent-repro/**/*.bmp
+          retention-days: 14
+          if-no-files-found: warn
