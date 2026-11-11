@@ -165,7 +165,15 @@ try{
    [IO.File]::WriteAllText($cfg,($p|ConvertTo-Json -Depth 12),[Text.UTF8Encoding]::new($false))
    $result=RunCli $exe $cfg $scenario
    if(-not $result.denied -or $result.timed_out){throw ($scenario+' accepted or timed out; see '+$result.log)}
-   $report.negative_managed_tests+=@([ordered]@{name=$scenario;denied=$true;exit_code=$result.exit_code;log=$result.log})
+   $expectedReason=switch($scenario){
+     invalid_consent {'requires exact explicit consent'}
+     disallow_direct {'managed beta permits one pinned SSH SOCKS5 hop'}
+     missing_identity {'SSH executable, private key and pinned known_hosts must be absolute paths'}
+   }
+   if(-not $result.message.Contains($expectedReason)){
+     throw ($scenario+' failed for WRONG reason, expected '+$expectedReason+'; see '+$result.log)
+   }
+   $report.negative_managed_tests+=@([ordered]@{name=$scenario;denied=$true;reason_matched=$true;exit_code=$result.exit_code;log=$result.log})
    $report.completed_guard_cases++
  }
  if($report.target_admitted){$report.W2b0='PASS_NATIVE_WIN10_CONFIG_DENIAL_ONLY'}
