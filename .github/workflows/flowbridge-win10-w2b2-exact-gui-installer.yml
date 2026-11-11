@@ -5,6 +5,7 @@ on:
       - docs/release-win10-vm910136-20261110
     paths:
       - .github/workflows/flowbridge-win10-w2b2-exact-gui-installer.yml
+      - tools/windows/FlowBridge-Win10-W2B2-GUIInstaller.ps1
   workflow_dispatch:
 permissions:
   contents: read
@@ -144,4 +145,55 @@ jobs:
             build/w2b2-qa/
             build/verification/windows/
           retention-days: 14
+          if-no-files-found: warn
+
+  independent-hosted-ps5-target-harness:
+    needs: exact-beta-gui-installer
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Download exact-source package from first completed job
+        uses: actions/download-artifact@v4
+        with:
+          name: FlowBridge-W2b2-ExactBeta-GUI-Installer-${{ github.run_id }}
+          path: bundle
+      - name: PowerShell 5.1 parse and execute isolated target-style GUI/NSIS regression
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $script='tools/windows/FlowBridge-Win10-W2B2-GUIInstaller.ps1'
+          $tokens=$null;$issues=$null
+          [void][Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script),[ref]$tokens,[ref]$issues)
+          if(@($issues).Count){
+             $issues|ForEach-Object { Write-Output ($_.Extent.StartLineNumber.ToString()+': '+$_.Message) }
+             throw 'W2b2 PS5 syntax invalid'
+          }
+          & $script -ExpectedComputerName 'THIS-IS-NOT-THE-WIN10-VM' -AllowHostedCI -BundleDirectory bundle -ReportRoot build/w2b2-native-replay
+          $reports=@(Get-ChildItem build/w2b2-native-replay -Recurse -Filter w2b2-report.json -File)
+          if($reports.Count -ne 1){throw 'Expected exactly one W2b2 report'}
+          $report=Get-Content -LiteralPath $reports[0].FullName -Raw|ConvertFrom-Json
+          Write-Output ($report|ConvertTo-Json -Depth 8)
+          if($report.W2b2 -ne 'PASS_HOSTED_NON_TARGET_GUI_INSTALL_UPGRADE_UNINSTALL' -or
+              $report.target_win10 -or $report.source_sha_verified -ne $true -or
+              -not $report.real_installed_gui_tcp_pass -or
+              -not $report.installer_hashes_match -or $report.ui_full_screenshots -ne 5 -or
+              -not $report.upgrade_kept_registered_dir -or -not $report.uninstaller_removed_payload -or
+              -not $report.profile_preserved_after_uninstall -or -not $report.user_note_preserved -or
+              $report.driver_loaded -or $report.service_installed -or
+              $report.release_accepted -or $report.G2 -ne 'NO_GO'){
+            throw 'W2b2 hosted target-style PowerShell acceptance failed'
+          }
+      - name: Upload independent target-style GUI/installer reports, logs and GUI BMP
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-W2b2-Hosted-PS5-Independent-${{ github.run_id }}
+          path: |
+            build/w2b2-native-replay/**/w2b2-report.json
+            build/w2b2-native-replay/**/*.log
+            build/w2b2-native-replay/**/*.bmp
+          retention-days: 30
           if-no-files-found: warn
