@@ -279,3 +279,29 @@ Hosted result is only `PASS_HOSTED_NON_TARGET_ONLY`.
 Only then can W2a be provisionally accepted; 4 tests do not establish
 the original nine-test coverage or A0-A6 beta release signoff.
 W2b, W3, G2 and release remain NOT_RUN/NO_GO.
+
+## 2026-11-11 — W2a completed on target Win10 (owner-generated native evidence)
+
+The owner ran exact source-pinned W2a from commit
+`f9e5a817907f34dbf1a96dd0a283afb68a4a211e` on the separately
+authorized Windows 10 Pro x64, with the PowerShell-only TCP subset.
+Reported local script SHA256:
+`919f8eb231e040ed8ff3d248a792bf90b4cc877584d0a0fda9a8c5c5afae8608`.
+Console returned **`W2a: PASS_NATIVE_WIN10_USERMODE_CLI_ONLY`**,
+`W2b: NOT_RUN`, `W3/G2: NO_GO`.
+
+Native report path was returned locally in
+`C:\ProgramData\FlowBridge\W2A-Evidence\` and original owner-produced
+ZIP SHA256 was
+`66376d65d27b7640c2e9a215b152530880e701a8c5ac2572810b584c4ea0b56f`.
+We have **not** downloaded/reviewed that private ZIP or `w2a-report.json`;
+the accepted scope is owner-observed CLI+4 local TCP smoke, not independent
+binary reviewer verification or Windows GUI/SSH. No driver, BFE session or
+physical G2 native capture was installed/activated; product release is NO-GO
+until full A0–A6 independent acceptance.
+
+Next W2b: consume **the already built exact-SHA W2a executable**, do not
+clone/rebuild automatically, and verify OpenSSH client/signature, managed
+profile denial guards and fail-closed loss behaviour on the target Win10.
+Any actual SSH authentication, native GUI installer and upgrade tests
+remain separate gates until observed.
