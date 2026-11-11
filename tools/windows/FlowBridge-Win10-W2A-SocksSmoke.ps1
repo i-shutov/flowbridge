@@ -48,6 +48,138 @@ function FindCmd([string]$name){
  }
  return ''
 }
+
+# Self-contained subset of tests/smoke.py. No Python/SSH/WFP or external sockets.
+function Read-Exact([System.IO.Stream]$stream,[int]$size){
+ $bytes=New-Object byte[] $size;$read=0
+ while($read -lt $size){
+  $got=$stream.Read($bytes,$read,$size-$read)
+  if($got -le 0){throw "Socket closed before $size bytes"}
+  $read+=$got
+ }
+ return ,$bytes
+}
+function Free-LoopbackPort {
+ $listener=[Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0)
+ try{$listener.Start();return ([Net.IPEndPoint]$listener.LocalEndpoint).Port}
+ finally{$listener.Stop()}
+}
+function Connect-Socks([int]$port,[int]$command,[string]$host,[int]$destPort){
+ $client=New-Object Net.Sockets.TcpClient
+ try{
+  $client.ReceiveTimeout=5000;$client.SendTimeout=5000
+  $client.Connect([Net.IPAddress]::Loopback,$port)
+  $stream=$client.GetStream();$stream.ReadTimeout=5000;$stream.WriteTimeout=5000
+  [byte[]]$hello=@(5,1,0);$stream.Write($hello,0,$hello.Length)
+  [byte[]]$method=Read-Exact $stream 2
+  if($method[0] -ne 5 -or $method[1] -ne 0){throw 'SOCKS5 no-auth negotiation failed'}
+  $name=[Text.Encoding]::ASCII.GetBytes($host)
+  if($name.Length -lt 1 -or $name.Length -gt 250){throw 'Invalid fixture hostname'}
+  $data=[System.Collections.Generic.List[byte]]::new()
+  $data.AddRange([byte[]]@(5,$command,0,3,$name.Length))
+  $data.AddRange([byte[]]$name)
+  $data.Add([byte]($destPort -shr 8));$data.Add([byte]($destPort -band 255))
+  $request=$data.ToArray();$stream.Write($request,0,$request.Length)
+  [byte[]]$reply=Read-Exact $stream 4
+  if($reply[0] -ne 5){throw 'Non-SOCKS5 reply'}
+  $addressBytes=0
+  switch([int]$reply[3]){
+    1 {$addressBytes=6}
+    4 {$addressBytes=18}
+    3 {[byte[]]$len=Read-Exact $stream 1;$addressBytes=[int]$len[0]+2}
+    default {throw 'Invalid SOCKS5 reply address type'}
+  }
+  [void](Read-Exact $stream $addressBytes)
+  return [pscustomobject]@{client=$client;stream=$stream;code=[int]$reply[1]}
+ }catch{$client.Close();throw}
+}
+function Start-SocksCli([string]$exe,[int]$listenPort,[string]$label,[hashtable]$profile){
+ $cfg=Join-Path $work ('ps-socks-'+$label+'.json')
+ $profile.listen="127.0.0.1:$listenPort"
+ $json=$profile|ConvertTo-Json -Depth 12
+ [IO.File]::WriteAllText($cfg,$json,[Text.UTF8Encoding]::new($false))
+ $stdout=Join-Path $work ('ps-socks-'+$label+'.stdout.log')
+ $stderr=Join-Path $work ('ps-socks-'+$label+'.stderr.log')
+ $proc=Start-Process -FilePath $exe -ArgumentList @('serve','--config',('"'+$cfg+'"')) -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+ $owned.Add($proc)
+ $ready=$false;$deadline=[DateTime]::UtcNow.AddSeconds(12)
+ while([DateTime]::UtcNow -lt $deadline){
+  if($proc.HasExited){throw "CLI exited before listening ($label), inspect stderr log"}
+  $probe=New-Object Net.Sockets.TcpClient
+  try{$probe.Connect([Net.IPAddress]::Loopback,$listenPort);$ready=$true;break}
+  catch{Start-Sleep -Milliseconds 100}
+  finally{$probe.Close()}
+ }
+ if(-not $ready){throw "CLI listener readiness timeout ($label)"}
+}
+function Invoke-PSSocksSmoke([string]$exe){
+ $owned=New-Object 'System.Collections.Generic.List[System.Diagnostics.Process]'
+ $listener=[Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0)
+ $checks=New-Object 'System.Collections.Generic.List[string]'
+ try{
+  $listener.Start(4);$targetPort=([Net.IPEndPoint]$listener.LocalEndpoint).Port
+  $base=@{
+    version=1;listen='127.0.0.1:0';proxies=@();chains=@();rules=@()
+    default_action=@{type='direct'};connect_timeout_ms=1500
+    handshake_timeout_ms=1500;idle_timeout_ms=5000;max_connections=16
+  }
+  $directPort=Free-LoopbackPort
+  Start-SocksCli $exe $directPort 'direct' $base
+  $exchange=Connect-Socks $directPort 1 '127.0.0.1' $targetPort
+  try{
+    if($exchange.code -ne 0){throw "SOCKS CONNECT failed with code $($exchange.code)"}
+    if(-not $listener.Server.Poll(8000000,[Net.Sockets.SelectMode]::SelectRead)){throw 'Local target was never contacted'}
+    $accepted=$listener.AcceptTcpClient()
+    try{
+      $accepted.ReceiveTimeout=5000;$accepted.SendTimeout=5000
+      $targetStream=$accepted.GetStream();$targetStream.ReadTimeout=5000;$targetStream.WriteTimeout=5000
+      [byte[]]$payload=0..255
+      $exchange.stream.Write($payload,0,$payload.Length)
+      [byte[]]$arrived=Read-Exact $targetStream $payload.Length
+      if([Convert]::ToBase64String($arrived) -cne [Convert]::ToBase64String($payload)){throw 'SOCKS relay corrupted target bytes'}
+      $targetStream.Write($arrived,0,$arrived.Length)
+      [byte[]]$echo=Read-Exact $exchange.stream $payload.Length
+      if([Convert]::ToBase64String($echo) -cne [Convert]::ToBase64String($payload)){throw 'SOCKS relay corrupted echo bytes'}
+      $checks.Add('real_socks5_connect_binary_roundtrip_256_bytes')
+    }finally{$accepted.Close()}
+  }finally{$exchange.client.Close()}
+  $udp=Connect-Socks $directPort 3 '127.0.0.1' $targetPort
+  try{
+    if($udp.code -ne 7){throw "UDP ASSOCIATE not rejected with code 7 (got $($udp.code))"}
+    $checks.Add('udp_associate_rejected')
+  }finally{$udp.client.Close()}
+  $blockCfg=$base.Clone();$blockCfg.default_action=@{type='block'}
+  $blockPort=Free-LoopbackPort
+  Start-SocksCli $exe $blockPort 'block' $blockCfg
+  $blocked=Connect-Socks $blockPort 1 '127.0.0.1' $targetPort
+  try{
+    if($blocked.code -ne 2){throw "BLOCK policy not rejected with code 2 (got $($blocked.code))"}
+    if($listener.Pending()){throw 'BLOCK unexpectedly contacted target'}
+    $checks.Add('policy_block_does_not_dial_target')
+  }finally{$blocked.client.Close()}
+  $deadCfg=$base.Clone();$deadPort=Free-LoopbackPort
+  $deadCfg.proxies=@(@{id='dead';kind='socks5';endpoint=@{host='127.0.0.1';port=$deadPort};username=$null;password_env=$null})
+  $deadCfg.default_action=@{type='proxy';id='dead'}
+  $viaPort=Free-LoopbackPort
+  Start-SocksCli $exe $viaPort 'deadproxy' $deadCfg
+  $noUpstream=Connect-Socks $viaPort 1 '127.0.0.1' $targetPort
+  try{
+    if($noUpstream.code -eq 0){throw 'Unavailable SOCKS upstream incorrectly returned success'}
+    if($listener.Pending()){throw 'Failed upstream fell back to DIRECT target'}
+    $checks.Add('failed_upstream_no_direct_fallback')
+  }finally{$noUpstream.client.Close()}
+  $log=Join-Path $work 'ps-socks-smoke.json'
+  [IO.File]::WriteAllText($log,($checks.ToArray()|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
+  return [ordered]@{ok=$true;count=$checks.Count;names=@($checks.ToArray());engine='powershell-native-dotnet'}
+ }finally{
+  $listener.Stop()
+  foreach($process in $owned){
+    try{if(-not $process.HasExited){$process.Kill();$process.WaitForExit(5000)|Out-Null}}catch{}
+    try{$process.Dispose()}catch{}
+  }
+ }
+}
+
 function Native([string]$exe,[string[]]$argv,[string]$cwd,[string]$stem,[int]$timeout=900){
  $psi=New-Object Diagnostics.ProcessStartInfo
  $psi.FileName=$exe
