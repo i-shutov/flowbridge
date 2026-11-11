@@ -146,28 +146,51 @@ try {
             if ($lines.Count -ne 5) { throw 'Malformed BFE inventory: expected 5 JSONL records' }
             $labels = @('auth_connect_v4','auth_connect_v6',
                         'connect_redirect_v4','connect_redirect_v6')
+            # R114: PowerShell's [ValueType] includes Boolean and floating point.
+            # The Rust inspector serializes u64 integer counters only, <= 131072
+            # visible snapshot entries; neither booleans nor fractions are evidence.
             $candidate = $false
+            [long]$totalForeign = 0
             for ($i = 0; $i -lt 4; $i++) {
                 $item = $lines[$i] | ConvertFrom-Json -ErrorAction Stop
-                if ($item.rule -cne $labels[$i] -or
+                if ($item.rule -isnot [string] -or $item.rule -cne $labels[$i] -or
+                    $item.match_and_runtime_action_unverified -isnot [bool] -or
                     $item.match_and_runtime_action_unverified -cne $true) {
                     throw 'Malformed BFE inventory: rule or proof boundary mismatch'
                 }
                 foreach ($key in @('visible_higher','visible_equal','visible_lower','visible_disabled')) {
                     $value = $item.$key
-                    if ($null -eq $value -or $value -isnot [ValueType] -or [decimal]$value -lt 0) {
-                        throw ('Malformed BFE inventory counter: ' + $key)
+                    if (($value -isnot [int] -and $value -isnot [long]) -or
+                        $value -lt 0 -or $value -gt 131072) {
+                        throw ('Malformed BFE inventory integer counter: ' + $key)
                     }
+                    $totalForeign += [long]$value
                 }
-                if ([decimal]$item.visible_higher -gt 0 -or [decimal]$item.visible_equal -gt 0) {
+                if ($item.visible_higher -gt 0 -or $item.visible_equal -gt 0) {
                     $candidate = $true
                 }
             }
             $terminal = $lines[4] | ConvertFrom-Json -ErrorAction Stop
+            # Four owned baselines must be present and each foreign filter is
+            # counted at most once: four disjoint ALE layers, one layer/filter.
+            if (($terminal.visible_filters -isnot [int] -and
+                 $terminal.visible_filters -isnot [long]) -or
+                $terminal.visible_filters -lt 4 -or
+                $terminal.visible_filters -gt 131072 -or
+                $totalForeign -gt ([long]$terminal.visible_filters - 4)) {
+                throw 'Inconsistent BFE snapshot counter cardinality'
+            }
+            foreach ($flag in @('single_enum_snapshot','acl_hidden_filters_possible',
+                                'kernel_proof','no_direct_proof')) {
+                if ($terminal.$flag -isnot [bool]) {
+                    throw ('Malformed BFE terminal boolean: ' + $flag)
+                }
+            }
             $expectedStatus = if ($candidate) {'VISIBLE_ARBITRATION_CANDIDATE'}
                               else {'UNKNOWN_NO_VISIBLE_CANDIDATE'}
             $expectedExit = if ($candidate) {3} else {4}
-            if ($terminal.status -cne $expectedStatus -or
+            if ($terminal.status -isnot [string] -or
+                $terminal.status -cne $expectedStatus -or
                 $inventory.ExitCode -ne $expectedExit -or
                 $terminal.single_enum_snapshot -cne $true -or
                 $terminal.acl_hidden_filters_possible -cne $true -or

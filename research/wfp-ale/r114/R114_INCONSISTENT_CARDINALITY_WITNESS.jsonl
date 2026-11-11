@@ -1,0 +1,5 @@
+{"match_and_runtime_action_unverified":true,"rule":"auth_connect_v4","visible_disabled":0,"visible_equal":0,"visible_higher":1,"visible_lower":0}
+{"match_and_runtime_action_unverified":true,"rule":"auth_connect_v6","visible_disabled":0,"visible_equal":0,"visible_higher":0,"visible_lower":0}
+{"match_and_runtime_action_unverified":true,"rule":"connect_redirect_v4","visible_disabled":0,"visible_equal":0,"visible_higher":0,"visible_lower":0}
+{"match_and_runtime_action_unverified":true,"rule":"connect_redirect_v6","visible_disabled":0,"visible_equal":0,"visible_higher":0,"visible_lower":0}
+{"acl_hidden_filters_possible":true,"kernel_proof":false,"no_direct_proof":false,"single_enum_snapshot":true,"status":"VISIBLE_ARBITRATION_CANDIDATE","visible_filters":4}
