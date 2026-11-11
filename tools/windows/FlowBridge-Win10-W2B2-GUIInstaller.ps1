@@ -227,7 +227,8 @@ try{
   WaitUntil {
   -not(Test-Path -LiteralPath (Join-Path $install 'FlowBridge.exe')) -and
   -not(Test-Path -LiteralPath (Join-Path $install 'Uninstall.exe')) -and
-  -not(Test-Path $userKey) -and -not(Test-Path $uninstallKey) -and
+  ((RegText $userKey 'InstallDir') -eq '') -and
+  -not(Test-Path $uninstallKey) -and
   -not(Test-Path (Join-Path $shortcuts 'FlowBridge.lnk'))
   } 'NSIS uninstall did not converge: binaries/keys/shortcut remain' 90
  }catch{
@@ -239,6 +240,7 @@ try{
    $report.uninstall_residue=[ordered]@{
      gui_binary_remaining=(Test-Path -LiteralPath (Join-Path $install 'FlowBridge.exe'))
      uninstall_binary_remaining=(Test-Path -LiteralPath (Join-Path $install 'Uninstall.exe'))
+     retained_user_settings_key_exists=(Test-Path $userKey)
      registered_install_dir=(RegText $userKey 'InstallDir')
      uninstall_registration=(RegText $uninstallKey 'DisplayName')
      shortcut_remaining=(Test-Path -LiteralPath (Join-Path $shortcuts 'FlowBridge.lnk'))
@@ -253,7 +255,16 @@ try{
       throw ('Uninstaller retained owned file '+$item.path)
    }
  }
+ # The NSIS uninstaller intentionally leaves HKCU:\Software\FlowBridge
+ # (e.g. InstallerLanguage) and the user profile intact. Only InstallDir is
+ # registration; a residual parent key is NOT an installed product.
+ if((RegText $userKey 'InstallDir') -ne '' -or
+    (Test-Path $uninstallKey) -or
+    (Test-Path (Join-Path $shortcuts 'FlowBridge.lnk'))){
+   throw 'Uninstaller retained an install registration or shortcut'
+ }
  $report.uninstaller_removed_payload=$true
+ $report.retained_user_settings_key_allowed=(Test-Path $userKey)
  $report.user_note_preserved=(Test-Path -LiteralPath $note -PathType Leaf)
  $report.profile_preserved_after_uninstall=($report.user_note_preserved -and
    (FileHash $savedProfile) -ceq $originalProfileHash)
