@@ -223,12 +223,31 @@ try{
  if(-not(Test-Path -LiteralPath $uninstaller -PathType Leaf)){throw 'NSIS Uninstall.exe missing'}
  $result=DoProcess $uninstaller '/S' 'nsis-uninstall' 120
  if(-not $result.ok){throw 'NSIS uninstaller failed'}
- WaitUntil {
+ try {
+  WaitUntil {
   -not(Test-Path -LiteralPath (Join-Path $install 'FlowBridge.exe')) -and
   -not(Test-Path -LiteralPath (Join-Path $install 'Uninstall.exe')) -and
   -not(Test-Path $userKey) -and -not(Test-Path $uninstallKey) -and
   -not(Test-Path (Join-Path $shortcuts 'FlowBridge.lnk'))
- } 'NSIS uninstall did not converge: binaries/keys/shortcut remain' 90
+  } 'NSIS uninstall did not converge: binaries/keys/shortcut remain' 90
+ }catch{
+   $mutexExists=$false
+   try{
+      $m=[Threading.Mutex]::OpenExisting('Local\FlowBridge.NativeUI.v02')
+      $mutexExists=$true;$m.Dispose()
+   }catch{}
+   $report.uninstall_residue=[ordered]@{
+     gui_binary_remaining=(Test-Path -LiteralPath (Join-Path $install 'FlowBridge.exe'))
+     uninstall_binary_remaining=(Test-Path -LiteralPath (Join-Path $install 'Uninstall.exe'))
+     registered_install_dir=(RegText $userKey 'InstallDir')
+     uninstall_registration=(RegText $uninstallKey 'DisplayName')
+     shortcut_remaining=(Test-Path -LiteralPath (Join-Path $shortcuts 'FlowBridge.lnk'))
+     gui_session_mutex_exists=$mutexExists
+     owned_install_files=@(Get-ChildItem -LiteralPath $install -File -ErrorAction SilentlyContinue|Select-Object -ExpandProperty Name)
+     candidate_processes=@(Get-Process -ErrorAction SilentlyContinue|Where-Object {$_.ProcessName -match '(?i)flowbridge|uninst|nsis'}|Select-Object ProcessName,Id)
+   }
+   throw
+ }
  foreach($item in @($pkg.payload)){
    if(Test-Path -LiteralPath (Join-Path $install ([string]$item.path)) -PathType Leaf){
       throw ('Uninstaller retained owned file '+$item.path)
