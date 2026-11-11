@@ -14,6 +14,7 @@ param(
   [string]$EvidenceRoot = "$env:ProgramData\FlowBridge\W2A-Evidence",
   [switch]$AllowHostedCI,
   [switch]$ToolDiscoveryOnly,
+  [switch]$ForcePowerShellSmoke,
   [string]$RustBinDirectory = ''
 )
 Set-StrictMode -Version Latest
@@ -220,6 +221,7 @@ $report=[ordered]@{
  hosted_ci=$false;target_admitted=$false
  source_sha_expected=$sourceSha;source_sha_actual='';source_exact=$false
  rustc_version='';cargo_version='';git_version='';python_version=''
+ smoke_engine='NOT_RUN';smoke_coverage='NOT_RUN';smoke_checks=@()
  tools=[ordered]@{git='';cargo='';rustc='';python='';python_launcher=$false}
  steps=@();smoke_tests_run=0;capabilities_explicit=$false
  W2a='NOT_STARTED';W2b='NOT_RUN';W3='NO_GO';G2='NO_GO'
@@ -251,7 +253,7 @@ try{
    git=$git;cargo=$cargo;rustc=$rustc;python=$python;python_launcher=$pyLauncher
  }
  $missing=New-Object 'System.Collections.Generic.List[string]'
- foreach($pair in @(@('git',$git),@('cargo',$cargo),@('rustc',$rustc),@('python-or-py',$python))){
+ foreach($pair in @(@('git',$git),@('cargo',$cargo),@('rustc',$rustc))){
    if(-not $pair[1]){$missing.Add([string]$pair[0])}
  }
  if($missing.Count -gt 0){
@@ -268,9 +270,14 @@ try{
  if(-not $v.ok){throw 'rustc version check failed'};$report.rustc_version=$v.stdout.Trim()
  $v=Native $cargo @('--version') $work 'cargo-version' 30
  if(-not $v.ok){throw 'cargo version check failed'};$report.cargo_version=$v.stdout.Trim()
- $pythonVersionArgs=if($pyLauncher){@('-3','--version')}else{@('--version')}
- $v=Native $python $pythonVersionArgs $work 'python-version' 30
- if(-not $v.ok){throw 'python version check failed'};$report.python_version=($v.stdout+$v.stderr).Trim()
+ if($python){
+   try{
+     $pythonVersionArgs=if($pyLauncher){@('-3','--version')}else{@('--version')}
+     $v=Native $python $pythonVersionArgs $work 'python-version' 30
+     if($v.ok){$report.python_version=($v.stdout+$v.stderr).Trim()}
+     else{$python='';$report.tools.python=''}
+   }catch{$python='';$report.tools.python=''}
+ }
  $src=Join-Path $work 'src'
  $env:GIT_TERMINAL_PROMPT='0'
  $clone=Native $git @('clone','--single-branch','--depth','1','--no-tags','--branch',$branch,$origin,$src) $work 'git-clone' 240
@@ -302,15 +309,28 @@ try{
  $report.capabilities_explicit=$true
  $report.steps+=@('capabilities_explicit_only_pass')
  $env:FLOWBRIDGE_BIN=$exe
- $pythonSmokeArgs=if($pyLauncher){@('-3','tests/smoke.py')}else{@('tests/smoke.py')}
- $smoke=Native $python $pythonSmokeArgs $src 'python-socks-smoke' 180
- if(-not $smoke.ok){throw 'Native SOCKS black-box smoke failed; see python-socks-smoke.stderr.log'}
- $raw=$smoke.stdout+[Environment]::NewLine+$smoke.stderr
- $m=[regex]::Match($raw,'Ran\s+(\d+)\s+tests')
- if(-not $m.Success -or [int]$m.Groups[1].Value -lt 1 -or
-    $raw -notmatch 'OK'){throw 'Expected unittest positive summary missing'}
- $report.smoke_tests_run=[int]$m.Groups[1].Value
- $report.steps+=@('actual_loopback_socks_smoke_pass')
+ if($python -and -not $ForcePowerShellSmoke){
+   $pythonSmokeArgs=if($pyLauncher){@('-3','tests/smoke.py')}else{@('tests/smoke.py')}
+   $smoke=Native $python $pythonSmokeArgs $src 'python-socks-smoke' 180
+   if(-not $smoke.ok){throw 'Native SOCKS black-box smoke failed; see python-socks-smoke.stderr.log'}
+   $raw=$smoke.stdout+[Environment]::NewLine+$smoke.stderr
+   $m=[regex]::Match($raw,'Ran\s+(\d+)\s+tests')
+   if(-not $m.Success -or [int]$m.Groups[1].Value -lt 1 -or $raw -notmatch 'OK'){
+     throw 'Expected Python unittest positive summary missing'
+   }
+   $report.smoke_tests_run=[int]$m.Groups[1].Value
+   $report.smoke_engine='python'
+   $report.smoke_coverage='original_tests_smoke_py'
+   $report.steps+=@('actual_loopback_python_socks_smoke_pass')
+ }else{
+   $psSmoke=Invoke-PSSocksSmoke $exe
+   if(-not $psSmoke.ok -or $psSmoke.count -lt 4){throw 'Native PowerShell SOCKS smoke incomplete'}
+   $report.smoke_tests_run=[int]$psSmoke.count
+   $report.smoke_checks=@($psSmoke.names)
+   $report.smoke_engine=$psSmoke.engine
+   $report.smoke_coverage='powershell_four_test_subset_not_python_nine_tests'
+   $report.steps+=@('actual_loopback_powershell_socks_smoke_pass')
+ }
  if($report.target_admitted){$report.W2a='PASS_NATIVE_WIN10_USERMODE_CLI_ONLY'}
  else{$report.W2a='PASS_HOSTED_NON_TARGET_ONLY'}
 }catch{
