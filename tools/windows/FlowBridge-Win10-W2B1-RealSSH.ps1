@@ -190,8 +190,12 @@ try{
  $hostKey=Join-Path $secrets 'host_key'
  $clientKey=Join-Path $secrets 'client_key'
  foreach($path in @($hostKey,$clientKey)){
-  & $keygen -q -t ed25519 -N '' -f $path
-  if($LASTEXITCODE -ne 0){throw 'Ephemeral SSH key generation failed'}
+  $keyProc=Own 'ephemeral-keygen' $keygen @('-q','-t','ed25519','-N','""','-f',('"'+$path+'"'))
+  if(-not $keyProc.WaitForExit(15000)){
+   try{$keyProc.Kill();$keyProc.WaitForExit()}catch{}
+   throw 'Ephemeral SSH keygen timed out'
+  }
+  if($keyProc.ExitCode -ne 0){throw 'Ephemeral SSH key generation failed'}
   SecureTestFile $path $sid
  }
  $authorized=Join-Path $secrets 'authorized_keys'
@@ -295,7 +299,9 @@ try{
  $lines=@($files|Sort-Object Name|ForEach-Object{(Hash $_.FullName)+'  '+$_.Name})
  [IO.File]::WriteAllLines($manifest,$lines,[Text.UTF8Encoding]::new($false))
  $archive=Join-Path $work 'evidence-only.zip'
- try{Compress-Archive -LiteralPath @($files.FullName)+@($manifest) -DestinationPath $archive -Force -ErrorAction Stop}
+ $paths=@($files|ForEach-Object {$_.FullName})
+ $paths+=@($manifest)
+ try{Compress-Archive -LiteralPath $paths -DestinationPath $archive -Force -ErrorAction Stop}
  catch{Write-Warning ('Evidence-only ZIP unavailable: '+$_.Exception.Message)}
  Write-Host ('W2b1: '+$report.W2b1+'; W2b2 GUI: NOT_RUN; W3/G2: NO_GO')
  Write-Host ('Report: '+$json)
