@@ -60,15 +60,16 @@ jobs:
           Copy-Item target/release/flowbridge_ffi.dll build/windows-explicit-beta/Release/flowbridge_ffi.dll -Force
           New-Item -ItemType Directory -Force build/windows-explicit-beta/Release/resources|Out-Null
           Copy-Item resources/presets.json build/windows-explicit-beta/Release/resources/presets.json
-      - name: Native C++ rule editor and actual Win32 SOCKS GUI smoke
+      - name: Native rule-editor unit checks before user GUI installation
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
           New-Item -ItemType Directory -Force build/verification/explicit-beta|Out-Null
           & build/windows-explicit-beta/Release/FlowBridgeRuleModelTest.exe
           if($LASTEXITCODE -ne 0){throw 'Rule editor model regression'}
-          & build/windows-explicit-beta/Release/FlowBridgeNativeSmoke.exe "$env:GITHUB_WORKSPACE/build/windows-explicit-beta/Release/FlowBridge.exe" "$env:GITHUB_WORKSPACE/build/verification/explicit-beta/uninstalled-ui.bmp"
-          if($LASTEXITCODE -ne 0){throw 'Explicit-only Win32 GUI smoke did not pass'}
+          # Do NOT launch the GUI here: it writes an actual user profile,
+          # and the installed-product test must first assert no prior profile.
+          # That test runs FlowBridgeNativeSmoke against the installed GUI.
       - name: Bootstrap pinned official portable NSIS compiler
         shell: pwsh
         run: |
