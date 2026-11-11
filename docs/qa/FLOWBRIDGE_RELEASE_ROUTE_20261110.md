@@ -161,3 +161,23 @@ broker lifecycle 5), on **Windows Server 2025**, hence labeled
 never installs/loads the kernel driver. The script produces JSON, per-suite
 logs, a ZIP and SHA256 manifest in its own evidence folder. If rustc is
 missing, it reports a toolchain blocker and leaves Windows unchanged.
+
+## 2026-11-11 — W1 actual Windows 10 Pro run (owner-provided console)
+
+Dedicated Windows 10 Pro machine, PowerShell 5.1, source-verified W1 script
+`tools/windows/FlowBridge-Win10-R39-W1-Usermode.ps1` at GitHub commit
+`7a7fe922fe19269c1d88b0e9823a9024b628b0d2`.
+Owner's displayed script SHA-256:
+`1ec1dbd479fb94b2bb85524108e36aa9d162f57aca52b298d523846b62ed5da0`.
+Actual console verdict **`W1: PASS_NATIVE_USERMODE_ONLY; W3/G2: NO_GO`**.
+The user provided a local absolute `w1-report.json` path but not its JSON
+contents, compile/test logs or ZIP; thus **W1 is owner-reported PASS, not
+independently artifact-reviewed**, and an exact native count must not be
+inferred solely from console summary. The script requires all four source blob
+checks, successful compiler tests and positive test counts before emitting
+PASS; on a separate Windows hosted runner those same sources yielded 42/42.
+No kernel load, WFP filter activation or G2 network acceptance followed.
+
+Next: W2a actual Windows10 native **explicit SOCKS CLI** `cargo build --locked`
+and loopback-only `tests/smoke.py` with full logs and exact source SHA; W2b
+managed OpenSSH isolated fixture and GUI/installer to follow independently.
