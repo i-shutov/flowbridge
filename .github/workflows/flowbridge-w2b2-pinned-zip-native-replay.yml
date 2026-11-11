@@ -1,0 +1,79 @@
+name: FlowBridge W2b2 pinned original Actions ZIP native PowerShell QA
+on:
+  push:
+    branches:
+      - docs/release-win10-vm910136-20261110
+    paths:
+      - .github/workflows/flowbridge-w2b2-pinned-zip-native-replay.yml
+      - tools/windows/FlowBridge-Win10-W2B2-GUIInstaller.ps1
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: read
+jobs:
+  pinned-archive-native-install-replay:
+    runs-on: windows-2025
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Download canonical artifact ZIP directly from GitHub REST with job-scoped token
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $uri='https://api.github.com/repos/i-shutov/flowbridge/actions/artifacts/13851018456/zip'
+          $zip=Join-Path $env:RUNNER_TEMP 'FlowBridge-W2b2-ExactBeta-GUI-Installer-43012107722.zip'
+          $headers=@{
+            Authorization=('Bearer '+$env:GH_TOKEN)
+            Accept='application/vnd.github+json'
+            'X-GitHub-Api-Version'='2022-11-28'
+            'User-Agent'='FlowBridge-W2b2-PinnedZipQA'
+          }
+          Invoke-WebRequest -Uri $uri -Headers $headers -OutFile $zip -UseBasicParsing
+          $actual=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expected='088d67ab94985d026f9f526a8772c578e674bc76de0d1399dc4bd1a6cf0751fb'
+          if($actual -cne $expected){throw 'Canonical original ZIP SHA256 mismatch'}
+          if((Get-Item $zip).Length -ne 4965239){throw 'Unexpected ZIP length'}
+          Write-Output ('Original Actions artifact is SHA-256-pinned: '+$actual)
+      - name: Test unchanged user-facing -BundleZip code path, no Python or rebuild
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $script='tools/windows/FlowBridge-Win10-W2B2-GUIInstaller.ps1'
+          $tokens=$null;$errors=$null
+          [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script),[ref]$tokens,[ref]$errors)
+          if(@($errors).Count){throw 'Windows PowerShell 5.1 parser rejected target script'}
+          $zip=Join-Path $env:RUNNER_TEMP 'FlowBridge-W2b2-ExactBeta-GUI-Installer-43012107722.zip'
+          & $script -ExpectedComputerName 'NON-TARGET-HOSTED-CI' -AllowHostedCI -BundleZip $zip -ReportRoot build/w2b2-pinned-zip-qa
+          $files=@(Get-ChildItem build/w2b2-pinned-zip-qa -Recurse -Filter w2b2-report.json -File)
+          if($files.Count -ne 1){throw 'Exactly one JSON report required'}
+          $r=Get-Content $files[0].FullName -Raw|ConvertFrom-Json
+          Write-Output ($r|ConvertTo-Json -Depth 12)
+          if($r.W2b2 -ne 'PASS_HOSTED_NON_TARGET_GUI_INSTALL_UPGRADE_UNINSTALL' -or
+             $r.target_win10 -or
+             $r.artifact_zip_sha256 -ne '088d67ab94985d026f9f526a8772c578e674bc76de0d1399dc4bd1a6cf0751fb' -or
+             -not $r.source_sha_verified -or
+             -not $r.installer_hashes_match -or
+             -not $r.real_installed_gui_tcp_pass -or
+             $r.ui_full_screenshots -ne 5 -or
+             -not $r.uninstaller_removed_payload -or
+             -not $r.user_note_preserved -or
+             -not $r.profile_preserved_after_uninstall -or
+             $r.driver_loaded -or $r.service_installed -or $r.host_security_changed -or
+             $r.release_accepted -or $r.G2 -ne 'NO_GO'){
+            throw 'Original archive native PowerShell install/GUI/uninstall QA failed'
+          }
+      - name: Upload independent pinned original ZIP acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-W2b2-PinnedOriginalZIP-NativePS5-${{ github.run_id }}
+          path: |
+            build/w2b2-pinned-zip-qa/**/w2b2-report.json
+            build/w2b2-pinned-zip-qa/**/*.log
+            build/w2b2-pinned-zip-qa/**/*.bmp
+          retention-days: 21
+          if-no-files-found: warn
