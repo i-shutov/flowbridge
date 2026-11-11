@@ -52,6 +52,23 @@ mod win {
     const FWP_UINT64:u32=4;
     // Values from the Microsoft fwpmtypes.h filter flags contract.
     // BFE may add INDEXED on read; DISABLED means the filter is NOT effective.
+    // Values per Microsoft fwptypes.h/FWPM_ACTION0 and R19's four-rule plan.
+    const FWP_UINT8:u32=1;
+    const FWP_BYTE_BLOB_TYPE:u32=12;
+    const FWP_MATCH_EQUAL:u32=0;
+    // FWP_ACTION_TYPE includes FLAGS: CALLOUT (0x4000) + TERMINATING (0x1000).
+    // Never compare only the low action ordinal (3/5) against FWPM_ACTION0.type.
+    const FWP_ACTION_CALLOUT_TERMINATING:u32=0x00005003;
+    const FWP_ACTION_CALLOUT_UNKNOWN:u32=0x00004005;
+    const APP_CONDITION:Guid=Guid::from_u128(0xd78e1e87_8644_4ea5_9437_d809ecefc971);
+    const ORIGINAL_APP_CONDITION:Guid=Guid::from_u128(0x0e6cd086_e1fb_4212_842f_8a9f993fb3f6);
+    const TCP_CONDITION:Guid=Guid::from_u128(0x3971ef2b_623e_4f9a_8cb1_6e79b806b9a7);
+    const CALLOUTS:[Guid;4]=[
+        Guid::from_u128(0x1649f018_25b3_4e01_9ca1_5ca803010019), // AUTH v4
+        Guid::from_u128(0x1649f019_25b3_4e01_9ca1_5ca803010019), // AUTH v6
+        Guid::from_u128(0x1649f014_25b3_4e01_9ca1_5ca803010019), // REDIRECT v4
+        Guid::from_u128(0x1649f016_25b3_4e01_9ca1_5ca803010019), // REDIRECT v6
+    ];
     const FWPM_FILTER_FLAG_DISABLED:u32=0x00000020;
     const FWPM_FILTER_FLAG_INDEXED:u32=0x00000040;
     // R19 installs the owned filters with flags=0. INDEXED is an allowed
@@ -109,6 +126,54 @@ mod win {
         if p.is_null(){return None;}
         Some(unsafe{p.read_unaligned()})
     }
+    // R112: verify the R19 action/condition contract BEFORE using a keyed
+    // object as the owned effective-weight baseline. BFE key alone is not an
+    // ownership proof. This checks structural consistency, NOT the user-selected
+    // canonical executable identity, a live callout, kernel PID/epoch or traffic.
+    fn owned_policy_shape(f:&Filter, i:usize)->Result<Vec<u8>,(&'static str,u32)> {
+        let expected_action=if i<2 {FWP_ACTION_CALLOUT_TERMINATING}
+                            else {FWP_ACTION_CALLOUT_UNKNOWN};
+        if f.action.kind!=expected_action || f.action.key!=CALLOUTS[i] {
+            return Err(("baseline_action_or_callout_changed",1));
+        }
+        if f.num_conditions!=2 || f.conditions.is_null() {
+            return Err(("baseline_condition_shape",1));
+        }
+        let expected_app=if i<2 {ORIGINAL_APP_CONDITION}else{APP_CONDITION};
+        let conditions=unsafe{slice::from_raw_parts(f.conditions,2)};
+        let mut appid:Option<Vec<u8>>=None;
+        let mut tcp_found=false;
+        for c in conditions {
+            if c.key==expected_app {
+                if appid.is_some() || c.op!=FWP_MATCH_EQUAL || c.val.kind!=FWP_BYTE_BLOB_TYPE {
+                    return Err(("baseline_appid_condition",1));
+                }
+                let raw=c.val.bits as usize as *const Blob;
+                if raw.is_null(){return Err(("baseline_appid_null_blob",1));}
+                let blob=unsafe{&*raw};
+                let n=blob.len as usize;
+                // R19 Plan::new accepts 4..=514 UTF-16LE bytes including NUL.
+                if n<4 || n>514 || n%2!=0 || blob.data.is_null() {
+                    return Err(("baseline_appid_blob_shape",1));
+                }
+                let bytes=unsafe{slice::from_raw_parts(blob.data,n)};
+                if !bytes.ends_with(&[0,0]) || bytes[..n-2].chunks_exact(2).any(|v|v==[0,0]) {
+                    return Err(("baseline_appid_terminator",1));
+                }
+                appid=Some(bytes.to_vec());
+            } else if c.key==TCP_CONDITION {
+                if tcp_found || c.op!=FWP_MATCH_EQUAL || c.val.kind!=FWP_UINT8
+                    || c.val.bits as u8!=6 {
+                    return Err(("baseline_tcp_condition",1));
+                }
+                tcp_found=true;
+            } else {
+                return Err(("baseline_unexpected_condition",1));
+            }
+        }
+        if !tcp_found {return Err(("baseline_tcp_missing",1));}
+        appid.ok_or(("baseline_appid_missing",1))
+    }
     #[derive(Default)]
     struct Counts { greater:[u64;4],equal:[u64;4],lower:[u64;4],
                     disabled_visible:[u64;4],visible:u64 }
@@ -124,6 +189,7 @@ mod win {
         // Resolve the four owned baselines FROM THE SAME ENUMERATOR as the
         // foreign filters, not by an earlier GetByKey0 snapshot.
         let mut owned_weights:[Option<u64>;4]=[None;4];
+        let mut owned_appid:Option<Vec<u8>>=None;
         let mut foreign_weights:[Vec<u64>;4]=std::array::from_fn(|_|Vec::new());
         // NULL template: enumerate all *visible* filters, including other providers.
         let mut eh:*mut c_void=ptr::null_mut();
@@ -161,6 +227,10 @@ mod win {
                             if !owned_flags_expected(f.flags) {
                                 return Err(("baseline_flags_unverified",f.flags));
                             }
+                            let appid=owned_policy_shape(f,i)?;
+                            if let Some(ref prior)=owned_appid {
+                                if *prior!=appid {return Err(("baseline_cross_family_appid_mismatch",1));}
+                            } else {owned_appid=Some(appid);}
                             owned_weights[i]=Some(effective(f).ok_or(("baseline_effective_weight",1))?);
                         } else if f.layer==LAYERS[i] && f.sublayer==SUB {
                             // BFE may return a disabled competitor with an old effective
@@ -228,6 +298,55 @@ mod win {
             assert!(foreign_filter_disabled(FWPM_FILTER_FLAG_DISABLED));
             assert!(foreign_filter_disabled(FWPM_FILTER_FLAG_DISABLED|FWPM_FILTER_FLAG_INDEXED));
             assert!(!foreign_filter_disabled(FWPM_FILTER_FLAG_INDEXED));
+        }
+        #[test] fn r19_action_and_condition_keys(){
+            assert_eq!(FWP_ACTION_CALLOUT_TERMINATING,0x5003);
+            assert_eq!(FWP_ACTION_CALLOUT_UNKNOWN,0x4005);
+            assert_eq!(FWP_BYTE_BLOB_TYPE,12);
+            assert_eq!(FWP_UINT8,1);
+            assert_eq!(FWP_MATCH_EQUAL,0);
+            assert_eq!(std::mem::size_of::<Condition>(),40);
+            assert_eq!(std::mem::offset_of!(Condition,val),24);
+            assert_eq!(std::mem::offset_of!(Filter,conditions),120);
+            assert_eq!(ORIGINAL_APP_CONDITION.d1,0x0e6cd086);
+            assert_eq!(APP_CONDITION.d1,0xd78e1e87);
+            assert_eq!(TCP_CONDITION.d1,0x3971ef2b);
+            assert_eq!(CALLOUTS[0].d1,0x1649f018);
+            assert_eq!(CALLOUTS[2].d1,0x1649f014);
+        }
+        #[test] fn owned_shape_synthetic_mutants(){
+            // Pure in-process synthetic FWPM_FILTER0 values, not BFE evidence.
+            let mut bytes=vec![97u8,0,0,0];
+            let mut blob=Blob{len:bytes.len() as u32,data:bytes.as_mut_ptr()};
+            let mut conditions=[
+                Condition{key:ORIGINAL_APP_CONDITION,op:FWP_MATCH_EQUAL,
+                          val:Value{kind:FWP_BYTE_BLOB_TYPE,_pad:0,
+                                    bits:(&mut blob as *mut Blob) as usize as u64}},
+                Condition{key:TCP_CONDITION,op:FWP_MATCH_EQUAL,
+                          val:Value{kind:FWP_UINT8,_pad:0,bits:6}},
+            ];
+            let mut f:Filter=unsafe{std::mem::zeroed()};
+            f.action=Action{kind:FWP_ACTION_CALLOUT_TERMINATING,key:CALLOUTS[0]};
+            f.num_conditions=2;f.conditions=conditions.as_mut_ptr();
+            assert_eq!(owned_policy_shape(&f,0).unwrap(),bytes);
+            f.action.kind=0x1002;assert!(owned_policy_shape(&f,0).is_err());
+            f.action.kind=3;assert!(owned_policy_shape(&f,0).is_err());
+            f.action.kind=5;assert!(owned_policy_shape(&f,0).is_err());
+            f.action.kind=0x4005;assert!(owned_policy_shape(&f,0).is_err());
+            f.action.kind=FWP_ACTION_CALLOUT_TERMINATING;
+            f.action.key=CALLOUTS[1];assert!(owned_policy_shape(&f,0).is_err());
+            f.action.key=CALLOUTS[0];
+            conditions[1].val.bits=17;assert!(owned_policy_shape(&f,0).is_err());
+            conditions[1].val.bits=6;
+            conditions[0].key=APP_CONDITION;assert!(owned_policy_shape(&f,0).is_err());
+            conditions[0].key=ORIGINAL_APP_CONDITION;
+            conditions[0].val.kind=FWP_UINT8;assert!(owned_policy_shape(&f,0).is_err());
+            conditions[0].val.kind=FWP_BYTE_BLOB_TYPE;
+            f.num_conditions=1;assert!(owned_policy_shape(&f,0).is_err());
+            f.num_conditions=2;
+            blob.len=2;assert!(owned_policy_shape(&f,0).is_err());
+            blob.len=4;
+            bytes[2]=1;assert!(owned_policy_shape(&f,0).is_err());
         }
         #[test] fn exact_rule_order(){
             for i in 0..4 {assert_eq!(Guid::from_u128(BASE+((i as u128)<<96)).d1,0x1649f030+i as u32);}
