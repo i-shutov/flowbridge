@@ -22,7 +22,7 @@ $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 $exactSource='c339df2e4d20edf1d11d45786581a68451a71929'
 # Updated only after native exact-source package CI and independent SHA audit.
-$requiredArtifactZipSha='a6b854d05d55f05614fa8f582ee881ee9a6d4dd58cbcbfd8f753853a57d01d7d'
+$requiredArtifactZipSha='088d67ab94985d026f9f526a8772c578e674bc76de0d1399dc4bd1a6cf0751fb'
 function FileHash([string]$path){(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()}
 function DoProcess([string]$binary,[string]$arguments,[string]$label,[int]$maxSeconds=180){
  $p=New-Object Diagnostics.Process
