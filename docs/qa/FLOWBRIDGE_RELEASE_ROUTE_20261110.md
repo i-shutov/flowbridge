@@ -469,3 +469,65 @@ W2b2 native target script is intentionally **not admitted**:
 `requiredArtifactZipSha=NOT_PINNED_YET` and prior-install guard.
 W2b2 remains NO-GO until both exact-source CI jobs and independent native
 Win10 acceptance pass. W3/G2 remain separate NO-GO.
+
+## 2026-11-11 — W2b2 apparent uninstall failure was an auditor bug (RCA)
+
+**Root cause**: PowerShell target QA `FlowBridge-Win10-W2B2-GUIInstaller.ps1`
+required `-not(Test-Path HKCU:\Software\FlowBridge)` after uninstall.
+Actual `packaging/windows/FlowBridge.nsi` deliberately uses
+`DeleteRegValue HKCU "Software\FlowBridge" "InstallDir"`, **not**
+`DeleteRegKey`, explicitly preserving the user language preference and
+profile. Thus the whole parent HKCU key may correctly persist.
+
+The original installed-package sample on [CI #43006976889](https://github.com/i-shutov/flowbridge/actions/runs/43006976889)
+was held until the incorrect 90-second timeout, but read-only residue
+diagnostics showed:
+- `gui_binary_remaining=false`; `uninstall_binary_remaining=false`
+- `registered_install_dir=""`; `uninstall_registration=""`
+- `shortcut_remaining=false`; `gui_session_mutex_exists=false`
+- no matching FlowBridge/uninstall/NSIS processes, only preserved
+  `user-owned-notes.txt`
+
+The real product uninstaller had removed the owned binaries and
+registration; the test was asserting deletion of a correctly retained
+user-preference parent key. Fixed by replacing the whole-key assertion
+with an explicit absence check for *InstallDir* (plus the existing
+uninstaller registry key, shortcut and both binaries). No FlowBridge
+product source, installer NSIS or user-data cleanup logic was changed.
+
+**Independent retest** [#43012107772](https://github.com/i-shutov/flowbridge/actions/runs/43012107772):
+**PASS_HOSTED_NON_TARGET_GUI_INSTALL_UPGRADE_UNINSTALL** using the
+same exact existing source-pinned installer ZIP, without rebuilding code.
+Also [two-job source-pinned GUI/installer CI #43012107722](https://github.com/i-shutov/flowbridge/actions/runs/43012107722)
+passed: Windows native build + original Python installed-product suite
+**11/11**, then a separate new Windows hosted runner with Python-free
+PowerShell 5.1 GUI/NSIS/upgrade/uninstall suite **PASS**.
+
+Canonical exact-beta package from source
+`c339df2e4d20edf1d11d45786581a68451a71929`:
+- Actions package artifact **13851018456**
+- Original ZIP SHA256:
+  `088d67ab94985d026f9f526a8772c578e674bc76de0d1399dc4bd1a6cf0751fb`
+- ZIP bytes: **4,965,239**; independently verified by SHA, ZIP CRC, source
+  SHA in bundle manifest, and original package's 11 acceptance checks
+- Uninstaller/installer SHA256 *inside* ZIP:
+  `a6631e66d12b708449e96ea9943a89883f42fe7880d17470f3a8954cd73adc37`
+- UNSIGNED, version 0.2.0 engineering installer, **NOT** production
+  0.3.0 beta and **NOT** production release; WFP driver not packaged
+- User Drive mirror in dedicated subfolder:
+  https://drive.google.com/file/d/1RLxFP4ETMiF3v5_2mDdzcsadcg-8oupo/view?usp=drivesdk
+  (Drive file metadata confirmed 4,965,239 bytes, private/not broadly shared)
+- Win10 target script `tools/windows/FlowBridge-Win10-W2B2-GUIInstaller.ps1`
+  pins this original ZIP checksum and validates every file in the bundle,
+  refuses an existing FlowBridge installation/profile and makes no changes
+  to OS firewall, services, WFP, Defender, DNS or routes. The *installed
+  per-user* package uses HKCU and Start Menu, then uninstalls, **preserving
+  user-generated configuration**.
+
+**W2b2 on owner's Win10 remains NOT_RUN**, despite hosted PASS.
+Current [original ZIP native Windows PS5 replay #43013314496](https://github.com/i-shutov/flowbridge/actions/runs/43013314496)
+tests the exact end-user `-BundleZip` path with GitHub artifact SHA
+before starting the owner's physical Win10 QA.
+
+W3/G2: **NO-GO**. Full limited beta A0-A6 including scope separation,
+Windows/macOS packaging acceptance and signatures remains OPEN.
