@@ -639,11 +639,13 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
 #ifdef FLOWBRIDGE_EXPLICIT_BETA_ONLY
         // Explicit-only binary MUST NOT offer native/WFP controls even if
         // a malicious actor synthesizes GUI events or a stale profile exists.
+        // 284 is a STATUS LABEL and is intentionally enabled for readability.
+        // Assert only the four actionable native/EXE-routing controls.
         need(!IsWindowEnabled(GetDlgItem(window,282)) &&
              !IsWindowEnabled(GetDlgItem(window,283)) &&
-             !IsWindowEnabled(GetDlgItem(window,284)) &&
+             !IsWindowEnabled(GetDlgItem(window,266)) &&
              !IsWindowEnabled(GetDlgItem(window,267)),
-             "Explicit-only beta accidentally enabled protected/EXE routing controls");
+             "Explicit-only beta accidentally enabled protected/EXE routing actions");
 #endif
         waitFor([&]{return IsWindowEnabled(GetDlgItem(window,260));},"bounded application discovery did not finish");
         need(IsWindowVisible(GetDlgItem(window,261)),"application discovery table hidden");
