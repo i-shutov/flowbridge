@@ -50,6 +50,18 @@ mod win {
                             "connect_redirect_v4","connect_redirect_v6"];
     const FWP_EMPTY:u32=0;
     const FWP_UINT64:u32=4;
+    // Values from the Microsoft fwpmtypes.h filter flags contract.
+    // BFE may add INDEXED on read; DISABLED means the filter is NOT effective.
+    const FWPM_FILTER_FLAG_DISABLED:u32=0x00000020;
+    const FWPM_FILTER_FLAG_INDEXED:u32=0x00000040;
+    // R19 installs the owned filters with flags=0. INDEXED is an allowed
+    // BFE-derived observation; all other unexpected owned flags are UNKNOWN.
+    fn owned_flags_expected(flags:u32)->bool {
+        flags & !FWPM_FILTER_FLAG_INDEXED == 0
+    }
+    fn foreign_filter_disabled(flags:u32)->bool {
+        flags & FWPM_FILTER_FLAG_DISABLED != 0
+    }
     const PAGE:u32=128;
     const MAX_VISIBLE:u64=131072;
     const RPC_C_AUTHN_WINNT:u32=10;
@@ -98,7 +110,8 @@ mod win {
         Some(unsafe{p.read_unaligned()})
     }
     #[derive(Default)]
-    struct Counts { greater:[u64;4],equal:[u64;4],lower:[u64;4],visible:u64 }
+    struct Counts { greater:[u64;4],equal:[u64;4],lower:[u64;4],
+                    disabled_visible:[u64;4],visible:u64 }
     fn inventory()->Result<Counts,(&'static str,u32)> {
         let mut raw: *mut c_void=ptr::null_mut();
         let rc=unsafe{FwpmEngineOpen0(ptr::null(),RPC_C_AUTHN_WINNT,
@@ -143,9 +156,20 @@ mod win {
                             if f.layer!=LAYERS[i]||f.sublayer!=SUB||f.weight.kind!=FWP_EMPTY {
                                 return Err(("baseline_shape",1));
                             }
+                            // A disabled (or unexpectedly reflagged) owned filter cannot
+                            // serve as a meaningful reference for live arbitration.
+                            if !owned_flags_expected(f.flags) {
+                                return Err(("baseline_flags_unverified",f.flags));
+                            }
                             owned_weights[i]=Some(effective(f).ok_or(("baseline_effective_weight",1))?);
                         } else if f.layer==LAYERS[i] && f.sublayer==SUB {
-                            foreign_weights[i].push(effective(f).ok_or(("foreign_effective_weight",1))?);
+                            // BFE may return a disabled competitor with an old effective
+                            // weight. It is visible, but NOT a current arbitrator.
+                            if foreign_filter_disabled(f.flags) {
+                                counts.disabled_visible[i]+=1;
+                            } else {
+                                foreign_weights[i].push(effective(f).ok_or(("foreign_effective_weight",1))?);
+                            }
                         }
                     }
                 }
@@ -174,8 +198,8 @@ mod win {
                 let mut candidate=false;
                 for i in 0..4 {
                     candidate|=c.greater[i]>0||c.equal[i]>0;
-                    println!("{{\"rule\":\"{}\",\"visible_higher\":{},\"visible_equal\":{},\"visible_lower\":{},\"match_and_runtime_action_unverified\":true}}",
-                             LABELS[i],c.greater[i],c.equal[i],c.lower[i]);
+                    println!("{{\"rule\":\"{}\",\"visible_higher\":{},\"visible_equal\":{},\"visible_lower\":{},\"visible_disabled\":{},\"match_and_runtime_action_unverified\":true}}",
+                             LABELS[i],c.greater[i],c.equal[i],c.lower[i],c.disabled_visible[i]);
                 }
                 // Absence of a visible candidate is still UNKNOWN: enum is ACL-filtered.
                 println!("{{\"status\":\"{}\",\"visible_filters\":{},\"single_enum_snapshot\":true,\"acl_hidden_filters_possible\":true,\"kernel_proof\":false,\"no_direct_proof\":false}}",
@@ -194,6 +218,16 @@ mod win {
             assert_eq!(std::mem::offset_of!(Filter,filter_id),176);
             assert_eq!(std::mem::offset_of!(Filter,effective_weight),184);
             assert_eq!(std::mem::size_of::<Filter>(),200);
+        }
+        #[test] fn disabled_and_unknown_owned_flags_fail_closed(){
+            assert!(owned_flags_expected(0));
+            assert!(owned_flags_expected(FWPM_FILTER_FLAG_INDEXED));
+            assert!(!owned_flags_expected(FWPM_FILTER_FLAG_DISABLED));
+            assert!(!owned_flags_expected(FWPM_FILTER_FLAG_DISABLED|FWPM_FILTER_FLAG_INDEXED));
+            assert!(!owned_flags_expected(0x10)); // PERMIT_IF_CALLOUT_UNREGISTERED
+            assert!(foreign_filter_disabled(FWPM_FILTER_FLAG_DISABLED));
+            assert!(foreign_filter_disabled(FWPM_FILTER_FLAG_DISABLED|FWPM_FILTER_FLAG_INDEXED));
+            assert!(!foreign_filter_disabled(FWPM_FILTER_FLAG_INDEXED));
         }
         #[test] fn exact_rule_order(){
             for i in 0..4 {assert_eq!(Guid::from_u128(BASE+((i as u128)<<96)).d1,0x1649f030+i as u32);}
