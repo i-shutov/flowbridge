@@ -65,7 +65,7 @@ function Free-LoopbackPort {
  try{$listener.Start();return ([Net.IPEndPoint]$listener.LocalEndpoint).Port}
  finally{$listener.Stop()}
 }
-function Connect-Socks([int]$port,[int]$command,[string]$host,[int]$destPort){
+function Connect-Socks([int]$port,[int]$command,[string]$destinationHost,[int]$destPort){
  $client=New-Object Net.Sockets.TcpClient
  try{
   $client.ReceiveTimeout=5000;$client.SendTimeout=5000
@@ -74,7 +74,7 @@ function Connect-Socks([int]$port,[int]$command,[string]$host,[int]$destPort){
   [byte[]]$hello=@(5,1,0);$stream.Write($hello,0,$hello.Length)
   [byte[]]$method=Read-Exact $stream 2
   if($method[0] -ne 5 -or $method[1] -ne 0){throw 'SOCKS5 no-auth negotiation failed'}
-  $name=[Text.Encoding]::ASCII.GetBytes($host)
+  $name=[Text.Encoding]::ASCII.GetBytes($destinationHost)
   if($name.Length -lt 1 -or $name.Length -gt 250){throw 'Invalid fixture hostname'}
   $data=[System.Collections.Generic.List[byte]]::new()
   $data.AddRange([byte[]]@(5,$command,0,3,$name.Length))
