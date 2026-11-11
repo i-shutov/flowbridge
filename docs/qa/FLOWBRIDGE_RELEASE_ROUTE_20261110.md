@@ -531,3 +531,41 @@ before starting the owner's physical Win10 QA.
 
 W3/G2: **NO-GO**. Full limited beta A0-A6 including scope separation,
 Windows/macOS packaging acceptance and signatures remains OPEN.
+
+## 2026-11-11 — W2b2 exact original ZIP `-BundleZip` PASS on a third hosted Windows
+
+[GitHub Windows CI #43013314496](https://github.com/i-shutov/flowbridge/actions/runs/43013314496)
+**SUCCESS**: a fresh Windows PowerShell 5.1 runner downloaded the exact
+canonical original Actions ZIP using read-scoped GitHub API credentials.
+Its SHA256 was verified **before** any installer execution as
+`088d67ab94985d026f9f526a8772c578e674bc76de0d1399dc4bd1a6cf0751fb`;
+the archive length was exactly 4,965,239 bytes. Then it ran
+`tools/windows/FlowBridge-Win10-W2B2-GUIInstaller.ps1`
+with the actual user-facing `-BundleZip` path, not the special CI-only
+extracted-folder shortcut. All exact source/manifest, installed GUI TCP,
+5 separate window screenshot hashes, upgrade and uninstall checks passed.
+The result was **`PASS_HOSTED_NON_TARGET_GUI_INSTALL_UPGRADE_UNINSTALL`**,
+not native Windows10. Independent acceptance artifact 13851273032 SHA256
+`a9ff38c83c4bbb098c71f2df98cce12ba08319850bbc1da9136deaaa48691bfe`.
+
+Canonical GUI/NSIS ZIP mirrored from the same GitHub Actions artifact
+to the user's private Google Drive dedicated FlowBridge/Win10 QA folder:
+https://drive.google.com/file/d/1RLxFP4ETMiF3v5_2mDdzcsadcg-8oupo/view?usp=drivesdk
+Drive metadata verified the exact 4,965,239-byte file, and source ZIP
+SHA256, integrity, per-file package hashes and source commit were checked
+independently. No sandbox:/ links are needed for user download.
+
+**Physical target next:** On the previously tested dedicated Win10 Pro
+host, download that exact ZIP from Drive, compare its SHA256 against the
+above canonical digest and run the SHA-pinned script directly from
+GitHub `05f77feb9a09f05f9879b8dfef3f709417d5bfc1`
+with `-BundleZip` and expected host. Requires active interactive RDP.
+The installer is **unsigned engineering package**, not an approved release.
+It installs per-user, tests GUI, upgrade/uninstall in a fresh test directory,
+and preserves new user profile and QA note. The target runner refuses any
+pre-existing FlowBridge profile/registration; never delete a real user
+profile or forcibly close unrelated processes to satisfy the gate.
+
+Until target W2b2 returns `PASS_NATIVE_WIN10_GUI_INSTALL_UPGRADE_UNINSTALL`
+and independent logs are reviewed, **W2b2 target NOT_RUN**.
+W3/G2 NO-GO and 0.3.0-beta.1 release NOT_ACCEPTED (A0-A6 incomplete).
