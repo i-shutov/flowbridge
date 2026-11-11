@@ -1,0 +1,129 @@
+name: Explicit SOCKS-only beta engineering package (Windows)
+on:
+  push:
+    branches:
+      - release/explicit-socks-beta-20261111
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - crates/**
+      - native/windows/**
+      - native/include/**
+      - tests/windows_native_smoke.cpp
+      - tests/windows_explicit_beta_installer.py
+      - packaging/windows/FlowBridgeExplicitBeta.nsi
+      - packaging/windows/README-EXPLICIT-BETA.txt
+      - packaging/windows/build-explicit-beta.py
+      - resources/**
+      - third_party/**
+      - .github/workflows/explicit-socks-beta-windows.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: explicit-beta-win-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  PYTHONUTF8: '1'
+  PYTHONIOENCODING: utf-8
+jobs:
+  isolated-explicit-beta:
+    runs-on: windows-2025
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify Rust user-mode lockfile and compile only GUI/CLI/FFI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          cargo build --locked --release -j 2 -p flowbridge-ffi -p flowbridge-cli
+          if($LASTEXITCODE -ne 0){throw 'User-mode Rust build failed'}
+      - name: Compile strict explicit-beta GUI variant with WFP activation unavailable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $ffi="$env:GITHUB_WORKSPACE/target/release/flowbridge_ffi.dll.lib"
+          cmake -S native/windows -B build/windows-explicit-beta -A x64 -DFLOWBRIDGE_EXPLICIT_BETA_ONLY=ON -DFLOWBRIDGE_BUILD_NATIVE_TESTS=ON "-DFLOWBRIDGE_FFI_LIBRARY=$ffi"
+          if($LASTEXITCODE -ne 0){throw 'Explicit beta CMake configuration failed'}
+          cmake --build build/windows-explicit-beta --config Release --parallel 2
+          if($LASTEXITCODE -ne 0){throw 'Explicit beta native Win32 build failed'}
+          $cache=Get-Content build/windows-explicit-beta/CMakeCache.txt -Raw
+          if(-not $cache.Contains('FLOWBRIDGE_EXPLICIT_BETA_ONLY:BOOL=ON')){
+            throw 'Beta GUI WFP compile-time scope NOT enabled'
+          }
+          Copy-Item target/release/flowbridge_ffi.dll build/windows-explicit-beta/Release/flowbridge_ffi.dll -Force
+          New-Item -ItemType Directory -Force build/windows-explicit-beta/Release/resources|Out-Null
+          Copy-Item resources/presets.json build/windows-explicit-beta/Release/resources/presets.json
+      - name: Native C++ rule editor and actual Win32 SOCKS GUI smoke
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force build/verification/explicit-beta|Out-Null
+          & build/windows-explicit-beta/Release/FlowBridgeRuleModelTest.exe
+          if($LASTEXITCODE -ne 0){throw 'Rule editor model regression'}
+          & build/windows-explicit-beta/Release/FlowBridgeNativeSmoke.exe "$env:GITHUB_WORKSPACE/build/windows-explicit-beta/Release/FlowBridge.exe" "$env:GITHUB_WORKSPACE/build/verification/explicit-beta/uninstalled-ui.bmp"
+          if($LASTEXITCODE -ne 0){throw 'Explicit-only Win32 GUI smoke did not pass'}
+      - name: Bootstrap pinned official portable NSIS compiler
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          ./scripts/ci-setup-nsis.ps1
+          if($LASTEXITCODE -ne 0){throw 'Official portable NSIS setup failed'}
+      - name: Build separately registered explicit-only NSIS (no capture helper)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          python packaging/windows/build-explicit-beta.py --skip-build
+          if($LASTEXITCODE -ne 0){throw 'Explicit-only NSIS packaging failed'}
+      - name: Real per-user explicit-beta install GUI upgrade uninstall with stable profile preserved
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          python tests/windows_explicit_beta_installer.py --manifest build/verification/explicit-beta-package.json --harness build/windows-explicit-beta/Release/FlowBridgeNativeSmoke.exe --output build/verification/explicit-beta
+          if($LASTEXITCODE -ne 0){throw 'Native explicitly-scoped installed product regression failed'}
+      - name: Fail if packaging contains a protected-mode helper, driver or false claim
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $m=Get-Content build/verification/explicit-beta-package.json -Raw|ConvertFrom-Json
+          $r=Get-Content build/verification/explicit-beta/explicit-beta-installer-result.json -Raw|ConvertFrom-Json
+          $sha=(git rev-parse HEAD).Trim()
+          if(-not $r.passed -or $r.source_sha -cne $sha -or
+             $m.source_sha -cne $sha -or -not $m.gui_protected_ui_compiled_disabled -or
+             $m.driver_included -or $m.capture_helper_included -or
+             $m.signed -or $m.publisher_release_approved -or
+             $m.wfp_native_gate -ne 'NO_GO' -or $m.app_specific_interception){
+            throw 'Explicit beta package/reviewer safety scope guard failed'
+          }
+          if(@($m.payload|Where-Object {$_.path -match '(?i)(capture|wfp|ndisrd|\.sys$|\.inf$)'}).Count -gt 0){
+            throw 'Protected driver/helper file is present in package'
+          }
+          Write-Output ("EXPLICIT_ONLY_BETA_QA PASS; source=$sha; Windows hosted only; kernel G2=NO_GO")
+      - name: Preserve one source-correlated Windows beta installer and QA
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-Explicit-SOCKS-EngineeringCandidate-Windows-${{ github.run_id }}
+          path: |
+            artifacts/FlowBridge-0.2.0-explicit-candidate-windows-x64-setup.exe
+            artifacts/FlowBridge-0.2.0-explicit-candidate-windows-x64-setup.exe.sha256
+            build/verification/explicit-beta-package.json
+            build/verification/explicit-beta/explicit-beta-installer-result.json
+            build/verification/explicit-beta/*.bmp
+          retention-days: 30
+          if-no-files-found: error
+      - name: Publish errors for diagnosis but never call these release artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-ExplicitBeta-Windows-Failure-${{ github.run_id }}
+          path: |
+            build/verification/explicit-beta/
+            build/verification/explicit-beta-package.json
+          retention-days: 14
+          if-no-files-found: warn
