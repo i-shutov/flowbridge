@@ -117,7 +117,7 @@ try{
  # Avoid changing pre-existing Cargo caches, tools, SSH or OS paths.
  $env:CARGO_HOME=Join-Path $work 'cargo-home'
  $env:CARGO_TARGET_DIR=Join-Path $work 'build'
- $build=Native $cargo @('build','--locked','-p','flowbridge-cli','--bin','flowbridge') $src 'cargo-build' 900
+ $build=Native $cargo @('build','--locked','-j','2','-p','flowbridge-cli','--bin','flowbridge') $src 'cargo-build' 900
  if(-not $build.ok){throw 'cargo build failed; see cargo-build.stderr.log'}
  $report.steps+=@('cargo_build_locked_pass')
  $exe=Join-Path $env:CARGO_TARGET_DIR 'debug\flowbridge.exe'
