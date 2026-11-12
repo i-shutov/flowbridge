@@ -293,14 +293,14 @@ def validate_blueprint(bp: Any) -> None:
     syms = [n["symbol"] for n in bp["graph"]]
     need(bp.get("provisioning_design_order") == syms, "wrong_dag_order")
     need(bp.get("rollback_design_order") == list(reversed(syms)), "wrong_rollback_order")
-    need(bp.get("boot_handoff") == {
+    need(same_typed(bp.get("boot_handoff"), {
         "object_kind": "SEPARATE_BOOT_DESIGN", "persistent_flag_combined": False,
-        "runtime_bfe_restart_coverage": "UNPROVEN"}, "invalid_boot_handoff_claim")
+        "runtime_bfe_restart_coverage": "UNPROVEN"}), "invalid_boot_handoff_claim")
     sm = bp.get("state_machine")
-    need(type(sm) is dict and sm == {"initial": "BLOCKING_BASELINE",
+    need(type(sm) is dict and same_typed(sm, {"initial": "BLOCKING_BASELINE",
          "states": list(PHASES), "events": list(EVENTS),
          "ready_requires": list(READY_OBSERVATIONS),
-         "ready_observations_proven": False, "state_names_are_model_only": True},
+         "ready_observations_proven": False, "state_names_are_model_only": True}),
          "state_machine_must_remain_synthetic")
     need(bp.get("unresolved") == [
         "NATIVE_WFP_ARBITRATION", "BOOT_TO_BFE_HANDOFF",

@@ -134,6 +134,9 @@ class CompilationTests(unittest.TestCase):
     def test_forged_compiled_extra_top_field_even_if_rehashed(self):self.bad_blueprint(['run_command'],'FwpmFilterAdd0')
     def test_forged_compiled_ready_proof_even_if_rehashed(self):self.bad_blueprint(['state_machine','ready_observations_proven'],True)
     def test_forged_compiled_boot_continuity_even_if_rehashed(self):self.bad_blueprint(['boot_handoff','runtime_bfe_restart_coverage'],'PROVEN')
+    def test_compiled_boot_false_to_zero_with_rehash(self):self.bad_blueprint(['boot_handoff','persistent_flag_combined'],0)
+    def test_compiled_ready_false_to_zero_with_rehash(self):self.bad_blueprint(['state_machine','ready_observations_proven'],0)
+    def test_compiled_model_only_true_to_one_with_rehash(self):self.bad_blueprint(['state_machine','state_names_are_model_only'],1)
     def test_forged_compiled_incomplete_unresolved_even_if_rehashed(self):self.bad_blueprint(['unresolved'],[])
     def test_forged_compiled_recovery_executable_even_if_rehashed(self):self.bad_blueprint(['rollback_executable'],True)
     def test_forged_compiled_sha_without_rehash(self):
