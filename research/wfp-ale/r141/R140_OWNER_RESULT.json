@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "stage": "R140",
+  "recorded_date": "2026-11-12",
+  "source": "owner-provided Windows PowerShell 5.1 console transcript",
+  "status": "R140_STATIC_ACTION_GUARD_PASS_RELEASE_NO_GO",
+  "diagnostic_exit_code": 3,
+  "powershell_parser": "PASS",
+  "verified_source_blobs": {
+    "kernel/src/lib.rs": "53f5ce6faa0f9f591974287f38ea890cafeb0dd2",
+    "kernel/src/redirect.rs": "a093f049d162987981a957aac90db1014bc6ff09",
+    "kernel/src/action_rights.rs": "c6a4a107255cc5ecca82266481935c93467a01ed",
+    "policy_windows.rs": "acf60334320d970f58af3349ee75fbaa59826602",
+    "r140_guard_harness.rs": "6c04a26f30ab05d773c6d5cce4b8f97fde5fc634"
+  },
+  "reported_windows_evidence_folder": "not_published",
+  "raw_evidence_zip_received": false,
+  "kernel_driver_executed": false,
+  "bfe_policy_modified": false,
+  "continuous_enforcement_proved": false,
+  "kernel_origin_proof": false,
+  "packet_bound_g2_pass": false,
+  "no_direct_proved": false
+}

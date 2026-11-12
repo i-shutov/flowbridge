@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "recorded_date": "2026-11-12",
+  "stage": "R141",
+  "status": "OFFLINE_BLUEPRINT_VALIDATED_NOT_DEPLOYABLE",
+  "repo": "i-shutov/flowbridge",
+  "scope_branch": "research/windows-wfp-ale-attribution-20261107",
+  "python_unit_tests": {
+    "passed": 36,
+    "failed": 0
+  },
+  "independent_oracles": {
+    "python": "r141_lifetime_oracle.py",
+    "node": "r141_lifetime_independent.mjs",
+    "states": 192,
+    "sha256": "5b99f8a5d2147bb8f54704dbeec81fb89dbe30a684b19376236d1abe5651f4bf",
+    "agree": true
+  },
+  "preflight": {
+    "blocker_conditions": 21,
+    "default_r19_rejected": true,
+    "naive_hard_block_rejected": true,
+    "even_full_dossier_no_release_pass": true
+  },
+  "policy_descriptor": {
+    "kind": "NON_INSTALLABLE_DESIGN_ONLY",
+    "selected_v4_tcp": true,
+    "selected_v6_tcp": true,
+    "selected_v4_udp": true,
+    "selected_v6_udp": true,
+    "permit_if_callout_unregistered": false,
+    "missing_concrete_selected_appid": true,
+    "missing_real_wfp_guids": true
+  },
+  "r140_evidence": "owner_console_only",
+  "r140_raw_zip_received": false,
+  "win10_native_r141_test_run": false,
+  "bfe_engine_opened": false,
+  "wfp_object_mutated": false,
+  "driver_loaded": false,
+  "accepted_socket_proved": false,
+  "bfe_runtime_continuity_proved": false,
+  "packet_bound_g2_pass": false,
+  "no_direct_proved": false,
+  "release_accepted": false
+}

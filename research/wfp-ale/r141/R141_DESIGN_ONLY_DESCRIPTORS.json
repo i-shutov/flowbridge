@@ -1,0 +1,85 @@
+{
+  "apply_permitted": false,
+  "boot_time_filter": {
+    "bfe_runtime_outage_coverage_proved": false,
+    "flag": "BOOTTIME_ONLY",
+    "pair_transition_proved": false,
+    "separate_object": true
+  },
+  "callout": {
+    "kernel_registration_native_proved": false,
+    "key": "NOT_ALLOCATED",
+    "persistent": false
+  },
+  "filters": [
+    {
+      "action": "CALLOUT_TERMINATING_CANDIDATE",
+      "app_condition": "ALE_ORIGINAL_APP_ID",
+      "app_match": "EXACT_PINNED_BINARY_BLOB_NOT_PROVIDED",
+      "callout_unregistered_fallback": "BLOCK_IF_FILTER_ACTIVE",
+      "layer": "ALE_AUTH_CONNECT_V4",
+      "lifetime": "PERSISTENT_CANDIDATE",
+      "name": "selected_tcp_v4",
+      "native_hit_proof": false,
+      "permit_if_callout_unregistered": false,
+      "protocol": "TCP",
+      "redirect_exception": "UNPROVEN_NO_ALLOW_RULE"
+    },
+    {
+      "action": "BLOCK_CANDIDATE",
+      "app_condition": "ALE_ORIGINAL_APP_ID",
+      "app_match": "EXACT_PINNED_BINARY_BLOB_NOT_PROVIDED",
+      "callout_unregistered_fallback": "NOT_APPLICABLE",
+      "layer": "ALE_AUTH_CONNECT_V4",
+      "lifetime": "PERSISTENT_CANDIDATE",
+      "name": "selected_udp_v4",
+      "native_hit_proof": false,
+      "permit_if_callout_unregistered": false,
+      "protocol": "UDP",
+      "redirect_exception": "NO_UDP_TUNNEL_CURRENTLY"
+    },
+    {
+      "action": "CALLOUT_TERMINATING_CANDIDATE",
+      "app_condition": "ALE_ORIGINAL_APP_ID",
+      "app_match": "EXACT_PINNED_BINARY_BLOB_NOT_PROVIDED",
+      "callout_unregistered_fallback": "BLOCK_IF_FILTER_ACTIVE",
+      "layer": "ALE_AUTH_CONNECT_V6",
+      "lifetime": "PERSISTENT_CANDIDATE",
+      "name": "selected_tcp_v6",
+      "native_hit_proof": false,
+      "permit_if_callout_unregistered": false,
+      "protocol": "TCP",
+      "redirect_exception": "UNPROVEN_NO_ALLOW_RULE"
+    },
+    {
+      "action": "BLOCK_CANDIDATE",
+      "app_condition": "ALE_ORIGINAL_APP_ID",
+      "app_match": "EXACT_PINNED_BINARY_BLOB_NOT_PROVIDED",
+      "callout_unregistered_fallback": "NOT_APPLICABLE",
+      "layer": "ALE_AUTH_CONNECT_V6",
+      "lifetime": "PERSISTENT_CANDIDATE",
+      "name": "selected_udp_v6",
+      "native_hit_proof": false,
+      "permit_if_callout_unregistered": false,
+      "protocol": "UDP",
+      "redirect_exception": "NO_UDP_TUNNEL_CURRENTLY"
+    }
+  ],
+  "kind": "NON_INSTALLABLE_DESIGN_ONLY",
+  "native_accepted_socket_to_ssh_proved": false,
+  "no_direct_proved": false,
+  "provider": {
+    "auto_start_verified": false,
+    "enabled_at_bfe_start_verified": false,
+    "persistent_metadata_verified": false,
+    "service_name": "UNSPECIFIED_AND_NOT_AUTHORIZED"
+  },
+  "release_accepted": false,
+  "schema": 1,
+  "sublayer": {
+    "key": "NOT_ALLOCATED",
+    "persistent": false,
+    "weight_arbitration_proved": false
+  },
+  "unattended_rollback_proved": false
+}
