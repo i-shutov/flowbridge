@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "source": "owner-provided chat console transcript",
+  "recorded_date": "2026-11-12",
+  "stage": "R130",
+  "source_commit": "0f1bd42e2639aae456b549c3e67697b7f52572e9",
+  "reported_status": "EXACT_SOURCE_NATIVE_TESTS_PASS_NOT_KERNEL_PROOF",
+  "reported_exit_code": 0,
+  "reported_tests": {
+    "passed": 60,
+    "failed": 0,
+    "ignored": 0,
+    "measured": 0,
+    "filtered_out": 0,
+    "seconds": 0.07
+  },
+  "reported_source_blobs": {
+    "auth_appid.rs": "f16ab6ad0f618c74ed4e79ce606583169084970d",
+    "handoff.rs": "e1d17217db50362ba9c4efc83af820b6beb094cf",
+    "ledger.rs": "b88c4c9237c4c118517978fc454f5048f522aa7f",
+    "policy_plan.rs": "c8ab344551f1adfc20fd0019c4606cf3ca3c81c4",
+    "r130_exact_logic_suite.rs": "6bd76b7f91675a047124883eb89e04130c1d5c3a"
+  },
+  "raw_evidence_zip_independently_received": false,
+  "test_binary_sha256_independently_received": false,
+  "new_r132_native_tests_run": false,
+  "kernel_origin_proof": false,
+  "packet_bound_g2_pass": false,
+  "no_direct_proof": false
+}

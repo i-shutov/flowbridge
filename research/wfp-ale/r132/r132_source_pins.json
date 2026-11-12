@@ -1,0 +1,27 @@
+[
+  {
+    "path": "research/wfp-ale/kernel-r19/kernel/src/auth_appid.rs",
+    "git_blob": "f16ab6ad0f618c74ed4e79ce606583169084970d",
+    "sha256": "c3da7a7107cf4b72b8ed372a18f7b0fa226c2d2c4f6fa044e98606bc5b2d95a1"
+  },
+  {
+    "path": "research/wfp-ale/kernel-r19/kernel/src/handoff.rs",
+    "git_blob": "e1d17217db50362ba9c4efc83af820b6beb094cf",
+    "sha256": "8d64d156ecce6cd17ad0a55802a7e0150aa5fee39b8067e67d944a31d25731f9"
+  },
+  {
+    "path": "research/wfp-ale/kernel-r19/kernel/src/ledger.rs",
+    "git_blob": "b88c4c9237c4c118517978fc454f5048f522aa7f",
+    "sha256": "bb07015b6bb97191e9e3d9321c6b9b60d0b770a0358864a70706bc72ebf852b1"
+  },
+  {
+    "path": "research/wfp-ale/kernel-r19/policy_plan.rs",
+    "git_blob": "c8ab344551f1adfc20fd0019c4606cf3ca3c81c4",
+    "sha256": "1683f9b2300868ba399632308c1db0c2e6deb7fe09969fef4b1bacc17eba6851"
+  },
+  {
+    "path": "research/wfp-ale/r132/r132_event_orders.rs",
+    "git_blob": "82b97b3952cb8006ed389c68030bf136af9bdf47",
+    "sha256": "a0509d3c36e7279a508c2691e6adf059839725f3df0a6c3c8385a07f30d8e452"
+  }
+]
