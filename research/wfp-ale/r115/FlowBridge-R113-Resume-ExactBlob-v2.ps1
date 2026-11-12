@@ -4,10 +4,12 @@ FlowBridge WFP/ALE R113: RESUME the already-pinned checkout, without cloning.
 Fixes Windows core.autocrlf checkout bytes vs. raw Git blob SHA1 mismatch.
 No Git ref changes, Windows settings, install, driver, callout/filter writes,
 service/CI/runner/VNC operations. Rust/SDK must already be installed.
-By default builds metadata, runs synthetic Rust tests and READ-ONLY BFE inventory.
--CompileOnly limits operation to Rust metadata compilation (no BFE calls).
--SkipReadOnlyBfe runs Rust synthetic tests but does not query BFE.
-A BFE result is never proof of kernel origin or no-DIRECT.
+By default builds metadata and runs synthetic Rust tests; NO BFE query.
+-CompileOnly limits operation to Rust metadata compilation.
+-SkipReadOnlyBfe is retained for compatibility; no BFE query runs in either mode.
+The pinned R113 Rust/harness predates R114/R123/R124 BFE hardening.
+Use the exact newer R124 harness separately for BFE read-only diagnostics.
+Neither run provides kernel origin, packet-bound or no-DIRECT proof.
 #>
 [CmdletBinding()]
 param(
@@ -180,12 +182,13 @@ try {
     $runnerArguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
               $exactHarness, '-Source', $exactRust)
     if (-not $CompileOnly) {
+        # R128: legacy R113 inspect/parser predate R114/R123/R124 hardening.
+        # This rescue is restricted to compilation and synthetic tests.
+        # Never request a legacy BFE management inventory from this path.
         $runnerArguments += '-RunUnitTests'
-        if (-not $SkipReadOnlyBfe) { $runnerArguments += '-RunReadOnlyBfe' }
     }
-    Write-Host ('R113 mode: ' + $(if ($CompileOnly) { 'metadata compile only' }
-        elseif ($SkipReadOnlyBfe) { 'metadata + synthetic Rust tests' }
-        else { 'metadata + synthetic Rust tests + READ-ONLY BFE' }))
+    Write-Host ('R113 mode: ' + $(if ($CompileOnly) { 'metadata compile only; BFE disabled' }
+        else { 'metadata + synthetic Rust tests; BFE disabled (R128)' }))
     $ps = (Get-Command powershell.exe -ErrorAction Stop).Source
     $previous = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
@@ -195,11 +198,9 @@ try {
     }
     finally { $ErrorActionPreference = $previous }
     Write-Host ('R113 result exit code: ' + $exitCode)
-    if ($exitCode -eq 3) {
-        Write-Host 'Visible BFE competitor; NOT a PASS or kernel proof.'
-    }
-    elseif ($exitCode -eq 4) {
-        Write-Host 'No visible competitor; still UNKNOWN, NOT a PASS.'
+    if ($exitCode -eq 3 -or $exitCode -eq 4) {
+        Write-Host 'Unexpected BFE exit code from no-BFE rescue; reject result.' -ForegroundColor Red
+        $exitCode = 2
     }
     elseif ($exitCode -eq 0) {
         Write-Host 'Only requested compilation/synthetic tests succeeded; NOT kernel proof.'
