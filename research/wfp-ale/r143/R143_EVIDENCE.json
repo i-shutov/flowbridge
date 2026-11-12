@@ -1,0 +1,36 @@
+{
+  "blueprint_sha256": "f1f08d056e88010fee2cf9bc4f47ea6e3dfc2af22231117a98bffda62f605ebb",
+  "compiler_git_blob_expected": "72df6b48b7ea605aeea26cabf56ebf599a6ec063",
+  "driver_compiled_loaded": false,
+  "generated_date": "2026-11-12",
+  "independent_model": {
+    "native_acceptances": 0,
+    "not_ready": 2047,
+    "release_accepted": false,
+    "sha256": "36217fa663c9e2454ade494bae3554e81dbf55310added36d8ec3f1c25c81e54",
+    "simulated_ready_candidates": 1,
+    "states": 2048
+  },
+  "native_bfe_wfp_called": false,
+  "no_direct_proved": false,
+  "node_version": "v22.16.0",
+  "python_tests": {
+    "failed": 0,
+    "optimized_negative_case_passed": true,
+    "passed": 71,
+    "skipped": 0
+  },
+  "python_version": "3.13.5",
+  "r141_reference_git_blob": "b9c1e5f2c7ffed691d613fa2f8927d7fd8582fc6",
+  "r141_reference_sha256": "28c86cdaabeae107ca9ddfb95097622d940eee2ea454cf04edb781d52bb3c289",
+  "r142_source_sha": "af2d14c2d6c7738d3ad80cc776a0dd7479056a1e",
+  "release_accepted": false,
+  "repository": "i-shutov/flowbridge",
+  "research_base_sha": "bc75fc1691986715a5f87d3e67c8bb501483eb3b",
+  "schema": 1,
+  "socket_created": false,
+  "stage": "R143",
+  "status": "OFFLINE_DESIGN_COMPILER_TESTS_PASS_NOT_NATIVE_PROOF",
+  "subagents_dispatched": false,
+  "wfp_policy_installed": false
+}

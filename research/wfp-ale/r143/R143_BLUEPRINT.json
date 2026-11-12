@@ -1,0 +1,202 @@
+{
+  "apply_permitted": false,
+  "bfe_outage_continuity_proved": false,
+  "blueprint_sha256": "0709309dd0f1b4b79e1a3bda4940a03bde30be5c5702c3a16065b388ebf3873e",
+  "boot_handoff": {
+    "object_kind": "SEPARATE_BOOT_DESIGN",
+    "persistent_flag_combined": false,
+    "runtime_bfe_restart_coverage": "UNPROVEN"
+  },
+  "graph": [
+    {
+      "depends_on": [],
+      "kind": "provider",
+      "lifetime": "PERSISTENT_REVIEW_CANDIDATE",
+      "native_status": "NOT_PROVED",
+      "service_name": "UNSPECIFIED",
+      "symbol": "DESIGN_PROVIDER"
+    },
+    {
+      "arbitration": "UNREVIEWED",
+      "depends_on": [
+        "DESIGN_PROVIDER"
+      ],
+      "kind": "sublayer",
+      "lifetime": "PERSISTENT_REVIEW_CANDIDATE",
+      "symbol": "DESIGN_SUBLAYER"
+    },
+    {
+      "depends_on": [
+        "DESIGN_PROVIDER",
+        "DESIGN_SUBLAYER"
+      ],
+      "kind": "callout",
+      "lifetime": "PERSISTENT_REVIEW_CANDIDATE",
+      "registration": "NOT_PROVED",
+      "symbol": "DESIGN_CALLOUT_V4"
+    },
+    {
+      "depends_on": [
+        "DESIGN_PROVIDER",
+        "DESIGN_SUBLAYER"
+      ],
+      "kind": "callout",
+      "lifetime": "PERSISTENT_REVIEW_CANDIDATE",
+      "registration": "NOT_PROVED",
+      "symbol": "DESIGN_CALLOUT_V6"
+    },
+    {
+      "action": "CALLOUT_TERMINATING_CANDIDATE",
+      "depends_on": [
+        "DESIGN_PROVIDER",
+        "DESIGN_SUBLAYER",
+        "DESIGN_CALLOUT_V4"
+      ],
+      "family": "v4",
+      "kind": "filter",
+      "layer": "ALE_AUTH_CONNECT_V4",
+      "lifetime": "PERSISTENT_REVIEW_CANDIDATE",
+      "match": "ALE_ORIGINAL_APP_ID",
+      "native_status": "NOT_PROVED",
+      "permit_if_callout_unregistered": false,
+      "protocol": "TCP",
+      "selected_appid": "OPAQUE_APPID_NOT_PROVIDED",
+      "symbol": "DESIGN_FILTER_SELECTED_TCP_V4"
+    },
+    {
+      "action": "BLOCK_CANDIDATE",
+      "depends_on": [
+        "DESIGN_PROVIDER",
+        "DESIGN_SUBLAYER"
+      ],
+      "family": "v4",
+      "kind": "filter",
+      "layer": "ALE_AUTH_CONNECT_V4",
+      "lifetime": "PERSISTENT_REVIEW_CANDIDATE",
+      "match": "ALE_ORIGINAL_APP_ID",
+      "native_status": "NOT_PROVED",
+      "permit_if_callout_unregistered": false,
+      "protocol": "UDP",
+      "selected_appid": "OPAQUE_APPID_NOT_PROVIDED",
+      "symbol": "DESIGN_FILTER_SELECTED_UDP_V4"
+    },
+    {
+      "action": "CALLOUT_TERMINATING_CANDIDATE",
+      "depends_on": [
+        "DESIGN_PROVIDER",
+        "DESIGN_SUBLAYER",
+        "DESIGN_CALLOUT_V6"
+      ],
+      "family": "v6",
+      "kind": "filter",
+      "layer": "ALE_AUTH_CONNECT_V6",
+      "lifetime": "PERSISTENT_REVIEW_CANDIDATE",
+      "match": "ALE_ORIGINAL_APP_ID",
+      "native_status": "NOT_PROVED",
+      "permit_if_callout_unregistered": false,
+      "protocol": "TCP",
+      "selected_appid": "OPAQUE_APPID_NOT_PROVIDED",
+      "symbol": "DESIGN_FILTER_SELECTED_TCP_V6"
+    },
+    {
+      "action": "BLOCK_CANDIDATE",
+      "depends_on": [
+        "DESIGN_PROVIDER",
+        "DESIGN_SUBLAYER"
+      ],
+      "family": "v6",
+      "kind": "filter",
+      "layer": "ALE_AUTH_CONNECT_V6",
+      "lifetime": "PERSISTENT_REVIEW_CANDIDATE",
+      "match": "ALE_ORIGINAL_APP_ID",
+      "native_status": "NOT_PROVED",
+      "permit_if_callout_unregistered": false,
+      "protocol": "UDP",
+      "selected_appid": "OPAQUE_APPID_NOT_PROVIDED",
+      "symbol": "DESIGN_FILTER_SELECTED_UDP_V6"
+    }
+  ],
+  "installer_present": false,
+  "kind": "NON_INSTALLABLE_POLICY_BLUEPRINT",
+  "native_wfp_executed": false,
+  "no_direct_proved": false,
+  "provisioning_design_order": [
+    "DESIGN_PROVIDER",
+    "DESIGN_SUBLAYER",
+    "DESIGN_CALLOUT_V4",
+    "DESIGN_CALLOUT_V6",
+    "DESIGN_FILTER_SELECTED_TCP_V4",
+    "DESIGN_FILTER_SELECTED_UDP_V4",
+    "DESIGN_FILTER_SELECTED_TCP_V6",
+    "DESIGN_FILTER_SELECTED_UDP_V6"
+  ],
+  "real_guids_present": false,
+  "real_selected_appid_present": false,
+  "redirect_exception_proved": false,
+  "reference_sha256": "28c86cdaabeae107ca9ddfb95097622d940eee2ea454cf04edb781d52bb3c289",
+  "release_accepted": false,
+  "rollback_design_order": [
+    "DESIGN_FILTER_SELECTED_UDP_V6",
+    "DESIGN_FILTER_SELECTED_TCP_V6",
+    "DESIGN_FILTER_SELECTED_UDP_V4",
+    "DESIGN_FILTER_SELECTED_TCP_V4",
+    "DESIGN_CALLOUT_V6",
+    "DESIGN_CALLOUT_V4",
+    "DESIGN_SUBLAYER",
+    "DESIGN_PROVIDER"
+  ],
+  "rollback_executable": false,
+  "schema": 1,
+  "source": "R141_PINNED_DESIGN_ONLY",
+  "source_structural_sha256": "28c86cdaabeae107ca9ddfb95097622d940eee2ea454cf04edb781d52bb3c289",
+  "state_machine": {
+    "events": [
+      "ASSEMBLE",
+      "WITNESS_READY",
+      "REVOKE_COMPLETE",
+      "RECOVER_BASELINE",
+      "RESTART",
+      "BROKER_LOSS",
+      "SSH_LOSS",
+      "DRIVER_LOSS",
+      "BFE_LOSS",
+      "POLICY_OBJECT_LOSS",
+      "REAUTHPROVENANCE_LOSS",
+      "WFP_RIGHTS_MISMATCH"
+    ],
+    "initial": "BLOCKING_BASELINE",
+    "ready_observations_proven": false,
+    "ready_requires": [
+      "selected_image_pinned",
+      "provider_persistent",
+      "sublayer_persistent",
+      "callout_persistent",
+      "filter_persistent",
+      "provider_auto_start",
+      "kernel_callout_registered",
+      "bfe_active",
+      "independent_direct_block_observed",
+      "accepted_socket_wfp_receipt_verified",
+      "ssh_authenticated"
+    ],
+    "state_names_are_model_only": true,
+    "states": [
+      "BLOCKING_BASELINE",
+      "VERIFIED_REDIRECT_READY",
+      "REVOKING",
+      "RECOVERY"
+    ]
+  },
+  "unresolved": [
+    "NATIVE_WFP_ARBITRATION",
+    "BOOT_TO_BFE_HANDOFF",
+    "RUNTIME_BFE_OUTAGE",
+    "CALL_OUT_REGISTRATION_AND_STARTUP",
+    "CURRENT_VS_ORIGINAL_APPID",
+    "NATIVE_ALE_REAUTHORIZATION",
+    "SOCKET_RECORD_CLAIM_SSH",
+    "SELECTED_APP_DNS_AND_QUIC",
+    "INDEPENDENT_ROLLBACK",
+    "EXTERNAL_NO_DIRECT_OBSERVER"
+  ]
+}
