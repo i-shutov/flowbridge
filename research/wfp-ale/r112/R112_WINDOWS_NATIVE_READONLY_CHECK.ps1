@@ -15,7 +15,9 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$expectedGitBlob = '49506ca07145c18947a0845f2a1a63b3de1f54ec'
+# R124: exact Git blob of the R123-patched R103 source; previous pinned blob
+# belonged to pre-R123 R103 and rejected the legitimate updated source.
+$expectedGitBlob = '06c677b484ef2cf5fa0330f819524dfa6b52e55a'
 $evidence = Join-Path ([IO.Path]::GetTempPath()) ('FlowBridge-R112-' + [guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $evidence -ErrorAction Stop
 $report = [ordered]@{
