@@ -49,7 +49,7 @@ pub unsafe fn ioctl(code:u32,input:&[u8],caller:k::PEPROCESS)->i32{
   return super::SUCCESS;
  }super::INVALID
 }
-unsafe fn block(out:*mut k::FWPS_CLASSIFY_OUT0){(*out).actionType=k::FWP_ACTION_BLOCK;(*out).rights&=!k::FWPS_RIGHT_ACTION_WRITE;}
+unsafe fn block(out:*mut k::FWPS_CLASSIFY_OUT0){let _=super::guarded_block(out);}
 struct Writable{handle:u64,request:*mut k::FWPS_CONNECT_REQUEST0}
 impl Drop for Writable{fn drop(&mut self){unsafe{
  if !self.request.is_null(){k::FwpsApplyModifiedLayerData0(self.handle,self.request.cast(),0);}
@@ -126,7 +126,7 @@ pub unsafe fn classify(values:*const k::FWPS_INCOMING_VALUES0,meta:*const k::FWP
  // Writable acquisition clears ACTION_WRITE. Restore only the incoming right
  // after our successful modification, following Microsoft's inline sample.
  // No earlier read-only or failure branch reaches this point.
- (*out).actionType=k::FWP_ACTION_PERMIT;(*out).rights|=incoming_write;
+ (*out).rights|=incoming_write;(*out).actionType=k::FWP_ACTION_PERMIT;
  drop(w);
 }
 

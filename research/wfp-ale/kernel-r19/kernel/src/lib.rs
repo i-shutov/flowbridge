@@ -10,6 +10,7 @@ mod k { include!(concat!(env!("OUT_DIR"), "/wdk.rs")); }
 mod ledger;
 mod handoff;
 mod auth_appid;
+mod action_rights;
 mod redirect;
 use ledger::{Ledger,Owner,Witness,MAX_NAME};
 
@@ -49,6 +50,18 @@ impl Drop for Active {fn drop(&mut self){unsafe{k::ExReleaseRundownProtection(pt
 unsafe fn read_at<T:Copy>(base:*const c_void,offset:i32)->T{ptr::read_unaligned(base.cast::<u8>().add(offset as usize).cast())}
 unsafe fn write_at<T>(base:*mut c_void,offset:i32,v:T){ptr::write_unaligned(base.cast::<u8>().add(offset as usize).cast(),v);}
 
+unsafe fn guarded_block(out:*mut k::FWPS_CLASSIFY_OUT0)->bool {
+    if out.is_null(){return false;}
+    // R140: When action-write is absent, BLOCK is legal ONLY as a veto of
+    // a prior PERMIT. A different prior action must be left untouched.
+    let gate=action_rights::decision((*out).rights,(*out).actionType as u32,
+        k::FWPS_RIGHT_ACTION_WRITE as u32,k::FWP_ACTION_PERMIT as u32);
+    if matches!(gate,action_rights::BlockDecision::MustPreserve){return false;}
+    (*out).actionType=k::FWP_ACTION_BLOCK;
+    (*out).rights &= !k::FWPS_RIGHT_ACTION_WRITE;
+    true
+}
+
 unsafe extern "C" fn process_event(process:k::PEPROCESS,pid:k::HANDLE,info:*mut k::PS_CREATE_NOTIFY_INFO) {
     let Some(_active)=Active::enter() else{return};
     if STOP.load(Ordering::Acquire) || process.is_null(){return;}
@@ -83,18 +96,18 @@ unsafe extern "C" fn classify(values:*const k::FWPS_INCOMING_VALUES0,meta:*const
     _layer:*mut c_void,_context:*const c_void,_filter:*const k::FWPS_FILTER1,_flow:u64,out:*mut k::FWPS_CLASSIFY_OUT0) {
     // Unarmed callbacks continue; selected armed traffic is decided by redirect.rs.
     if !out.is_null() && (*out).rights & k::FWPS_RIGHT_ACTION_WRITE!=0{(*out).actionType=k::FWP_ACTION_CONTINUE;}
-    let Some(_active)=Active::enter() else{if !out.is_null(){(*out).actionType=k::FWP_ACTION_BLOCK;(*out).rights&=!k::FWPS_RIGHT_ACTION_WRITE;}return};
-    if STOP.load(Ordering::Acquire){if !out.is_null(){(*out).actionType=k::FWP_ACTION_BLOCK;(*out).rights&=!k::FWPS_RIGHT_ACTION_WRITE;}return;}
+    let Some(_active)=Active::enter() else{let _=guarded_block(out);return};
+    if STOP.load(Ordering::Acquire){let _=guarded_block(out);return;}
     redirect::classify(values,meta,_context,_filter,out);
 }
 unsafe extern "C" fn auth_callback(values:*const k::FWPS_INCOMING_VALUES0,meta:*const k::FWPS_INCOMING_METADATA_VALUES0,
     _layer:*mut c_void,_context:*const c_void,_filter:*const k::FWPS_FILTER1,_flow:u64,out:*mut k::FWPS_CLASSIFY_OUT0) {
     let Some(_active)=Active::enter() else {
-        if !out.is_null(){(*out).actionType=k::FWP_ACTION_BLOCK;(*out).rights&=!k::FWPS_RIGHT_ACTION_WRITE;}
+        let _=guarded_block(out);
         return;
     };
     if STOP.load(Ordering::Acquire){
-        if !out.is_null(){(*out).actionType=k::FWP_ACTION_BLOCK;(*out).rights&=!k::FWPS_RIGHT_ACTION_WRITE;}
+        let _=guarded_block(out);
         return;
     }
     redirect::auth_classify(values,meta,out);

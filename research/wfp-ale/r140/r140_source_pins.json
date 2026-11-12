@@ -1,0 +1,24 @@
+[
+  {
+    "path": "research/wfp-ale/kernel-r19/kernel/src/lib.rs",
+    "blob": "53f5ce6faa0f9f591974287f38ea890cafeb0dd2"
+  },
+  {
+    "path": "research/wfp-ale/kernel-r19/kernel/src/redirect.rs",
+    "blob": "a093f049d162987981a957aac90db1014bc6ff09"
+  },
+  {
+    "path": "research/wfp-ale/kernel-r19/kernel/src/action_rights.rs",
+    "blob": "c6a4a107255cc5ecca82266481935c93467a01ed",
+    "sha256": "fa17c5d2880dabc62567f618bf7f0c0919103310795877da8ca3ecc7249b3faf"
+  },
+  {
+    "path": "research/wfp-ale/kernel-r19/policy_windows.rs",
+    "blob": "acf60334320d970f58af3349ee75fbaa59826602"
+  },
+  {
+    "path": "research/wfp-ale/r140/r140_guard_harness.rs",
+    "blob": "6c04a26f30ab05d773c6d5cce4b8f97fde5fc634",
+    "sha256": "5a53c38876635e0426dfdab2f413aa0a373f1d025775b853c71819e3434ffcc6"
+  }
+]

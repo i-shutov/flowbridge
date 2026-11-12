@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "recorded_date": "2026-11-12",
+  "provenance": "owner-supplied R139 PowerShell console transcript",
+  "status": "R139_SOURCE_RECEIPT_VALIDATED_RELEASE_NO_GO",
+  "exit_code": 3,
+  "parser": "PASS",
+  "exact_source_blobs": {
+    "broker_windows": "16ec8853d322b40f0e00e14d49ae3410741b9395",
+    "kernel_lib": "0af6d4539673d2894cbaa91af0ea8f3524862a26",
+    "redirect": "9a07e026134d46ef646d39862bd982cc48bbc5f6",
+    "policy_windows": "acf60334320d970f58af3349ee75fbaa59826602"
+  },
+  "raw_evidence_json_received": false,
+  "kernel_executed": false,
+  "release_accepted": false,
+  "kernel_origin_proof": false,
+  "no_direct_proof": false
+}
