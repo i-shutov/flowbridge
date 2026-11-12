@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "status": "R134_NATIVE_LOGS_ACCEPTED_NOT_ORIGIN_PROOF",
+  "archive_sha256": "79cdb99f14c550982b8477bc3c69ee88bde21b167ce850a97ef065c93165ea4e",
+  "members": 18,
+  "crc": "OK",
+  "source_git_blob_reported": "06825134c15d609abbf9f2b2f72248fdffe85f60",
+  "source_sha256_reported": "863da6390116e4806dea135311120c121e0760eeed29891c0548828ba1ce8f25",
+  "rustc_host_reported": "x86_64-pc-windows-msvc",
+  "native_os_reported": "Майкрософт Windows 10 Pro / 10.0.19045 / 19045",
+  "native_rustc_reported": "rustc 1.91.0 (f8297e351 2025-10-28)\nbinary: rustc\ncommit-hash: f8297e351a40c1439a467bbbb6879088047f50b3\ncommit-date: 2025-10-28\nhost: x86_64-pc-windows-msvc\nrelease: 1.91.0\nLLVM version: 21.1.2",
+  "tests_listed_and_passed": 18,
+  "matrix_states": 256,
+  "matrix_sha256": "bae850d1de8c78c1acbf4aee36fb1a1a67a54c6b72c7c6e09677c774442385ec",
+  "two_file_handles": 2,
+  "file_ids_stable_and_equal": true,
+  "appid_four_equal": true,
+  "names_stable": true,
+  "native_names_equal": true,
+  "observations_mask": 255,
+  "binary_sha256_reported": {
+    "test_exe_sha256": "f1cb2f581ecba85e341fab3fc626f180b830a1eab74c77badd25abb54eff4796",
+    "inspector_sha256": "9a7a75fc4dff4816621b1f4e3b20791863da66516088f1631d307dc2ca16f6e5"
+  },
+  "binary_files_received": false,
+  "raw_sensitive_paths_published": false,
+  "appids_published": false,
+  "image_section_identity_proof": false,
+  "kernel_origin_proof": false,
+  "no_direct_proof": false,
+  "native_replay_performed_by_this_auditor": false
+}
