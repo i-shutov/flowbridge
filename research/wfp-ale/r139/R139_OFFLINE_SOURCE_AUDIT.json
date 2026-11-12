@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "stage": "R139 exact-source four-blob read-only audit",
+  "status": "SOURCE_CONTRACT_SATISFIED_RELEASE_NO_GO",
+  "source_commit": "9d013262a08a7f7f887a28fa54b4a5b961bed385",
+  "sources": {
+    "broker_windows.rs": "16ec8853d322b40f0e00e14d49ae3410741b9395",
+    "kernel_lib.rs": "0af6d4539673d2894cbaa91af0ea8f3524862a26",
+    "redirect.rs": "9a07e026134d46ef646d39862bd982cc48bbc5f6",
+    "policy_windows.rs": "acf60334320d970f58af3349ee75fbaa59826602"
+  },
+  "checks": {
+    "source_git_blob_pins": true,
+    "receipt_uses_one_owned_accepted_socket": true,
+    "receipt_fields_private": true,
+    "physical_ssh_claim_then_set_then_connect": true,
+    "ordinary_upstream_claim_then_set_then_connect": true,
+    "exact_wfp_ioctl_constants": true,
+    "fail_closed_on_unredirected": true,
+    "kernel_attaches_redirect_pid_handle_context": true,
+    "conditional_action_rights_blocker": true,
+    "dynamic_session_lifetime_gap": true
+  },
+  "audit_kind": "source strings and ordered-call signatures, not formal control-flow proof",
+  "windows_sdk_header_check": "NOT_RUN",
+  "native_wfp_redirect": "NOT_RUN",
+  "bfe_policy_changed": false,
+  "driver_executed": false,
+  "sockets_created": false,
+  "kernel_origin_proof": false,
+  "no_direct_proof": false,
+  "packet_bound_g2_pass": false,
+  "observation_limits": "Signed code/headers may require future authorized kernel/WFP lab; source evidence alone cannot prove packet owner or crash-safe blocking."
+}
