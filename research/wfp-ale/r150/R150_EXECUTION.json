@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "branch": "research/windows-wfp-ale-attribution-20261107",
+  "research_head_at_start": "4f9c6268bcf424aed4f7a73829cd9ae40451307c",
+  "main_head_at_start": "5b5afc2feeda2195f302380e615ba003d4906e09",
+  "cases": 2022,
+  "matrix_sha256": "f7584ef7aaf3840df499d36eb3c1563648c1e9323968a7f0c71ca57bb277679a",
+  "python": "3.13.5",
+  "node": "22.16.0",
+  "python_normal": "PASS_MODEL_ONLY",
+  "python_optimized": "PASS_MODEL_ONLY",
+  "node_oracle": "PASS",
+  "python_source_gate_with_missing_tree": "FAIL_CLOSED_NORMAL_AND_OPTIMIZED",
+  "original_r19_git_blobs_verified_remotely": 3,
+  "local_source_checkout_pinned_test": false,
+  "rust_compiled": false,
+  "windows_native": false,
+  "wfp_called": false,
+  "release_accepted": false,
+  "files": {
+    "python_blob": "3e81d27a80e88671775be9015f436bdf5cd100bb",
+    "node_blob": "a8c6d985b031610f95d1d293469ca9f2200bb8be"
+  },
+  "checkpoint_zip_sha256": "7614b43f6a78ae48c76c9d11853b35701054d75c55e2ffc8310a7a79b4c8dcb7",
+  "trust_boundary": "SYNTHETIC_BEFORE_REAL_KERNEL_CLASSIFY"
+}
