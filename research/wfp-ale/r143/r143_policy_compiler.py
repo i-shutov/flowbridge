@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -331,7 +332,7 @@ def main() -> None:
     parser.add_argument("--model-matrix", action="store_true", help="Print 2048 synthetic gate rows")
     args = parser.parse_args()
     if args.model_matrix:
-        print(model_matrix(), end="")
+        sys.stdout.buffer.write(model_matrix().encode("ascii"))
         return
     result = compile_from_bytes(args.input.read_bytes() if args.input else None)
     payload = canonical_bytes(result)
@@ -339,7 +340,7 @@ def main() -> None:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_bytes(payload)
     else:
-        print(payload.decode("utf-8"), end="")
+        sys.stdout.buffer.write(payload)
 
 if __name__ == "__main__":
     main()

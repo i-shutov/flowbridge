@@ -26,6 +26,7 @@ CASES = (
 def main():
     pristine = compiler.compile_from_bytes()
     compiler.validate_blueprint(pristine)
+    completed = old_false_accepts = strict_false_accepts = 0
     for label, path, replacement, legacy_false_accept in CASES:
         forged = copy.deepcopy(pristine)
         pointer = forged
@@ -35,16 +36,24 @@ def main():
         forged["blueprint_sha256"] = compiler.digest(
             {k: v for k, v in forged.items() if k != "blueprint_sha256"})
         legacy = forged[path[0]] == pristine[path[0]]
-        assert legacy is legacy_false_accept, label + ": unexpected legacy result"
+        if legacy is not legacy_false_accept:
+            raise RuntimeError(label + ": unexpected legacy result")
         try:
             compiler.validate_blueprint(forged)
         except compiler.GateError:
             accepted = False
         else:
             accepted = True
-        assert not accepted, label + ": tampered rehashed blueprint accepted"
+        completed += 1
+        old_false_accepts += int(legacy)
+        strict_false_accepts += int(accepted)
+        if accepted:
+            raise RuntimeError(label + ": tampered rehashed blueprint accepted")
         print(f"{label}|old={int(legacy)}|strict={int(accepted)}")
-    print("negative_regressions=8; old_false_accept=3; strict_false_accept=0; native_wfp_executed=false")
+    if (completed, old_false_accepts, strict_false_accepts) != (8, 3, 0):
+        raise RuntimeError("incomplete negative regression campaign")
+    print(f"negative_regressions={completed}; old_false_accept={old_false_accepts}; "
+          f"strict_false_accept={strict_false_accepts}; native_wfp_executed=false")
 
 if __name__ == "__main__":
     main()

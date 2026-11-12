@@ -1,0 +1,178 @@
+{
+  "base_sha": "ce046f20289da250c7eccde7410e5d216219b1ff",
+  "blackbox": {
+    "accepted_designs": 3,
+    "cases_per_mode": 2125,
+    "rejected": 2122,
+    "sha256": "79bb1b4f251e06225fa175601c768b85faffe48c6b8ad8400a249cd105d7a49b"
+  },
+  "branch": "research/windows-wfp-ale-attribution-20261107",
+  "checkpoint_evidence": [
+    {
+      "path": "evidence/groups/baseline/R147_EVIDENCE.json",
+      "sha256": "b177e599c179240e2691126f74676a311db0281105af85089490ce09c11c6a7b"
+    },
+    {
+      "path": "evidence/groups/baseline/r143_node.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "evidence/groups/baseline/r143_node.stdout",
+      "sha256": "2391c27daafd7603e9df7e0bf126044ed997313a4c66139aa12556c391f0ab90"
+    },
+    {
+      "path": "evidence/groups/baseline/r143_normal.stderr",
+      "sha256": "fcda327c2254a6ff8b969e828c608769bbf656e43ae8a4c6faf940a90027168c"
+    },
+    {
+      "path": "evidence/groups/baseline/r143_normal.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "evidence/groups/baseline/r143_optimized.stderr",
+      "sha256": "e6b22e296a838710f330962d1e8e82ac533f562a0315ac431306d06bda42e888"
+    },
+    {
+      "path": "evidence/groups/baseline/r143_optimized.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "evidence/groups/baseline/r144_node.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "evidence/groups/baseline/r144_node.stdout",
+      "sha256": "16d84660233ceb863da49fc2ceb1c4338468f78bc70dbc7c23093a4e998c7df1"
+    },
+    {
+      "path": "evidence/groups/baseline/r144_normal.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "evidence/groups/baseline/r144_normal.stdout",
+      "sha256": "16d84660233ceb863da49fc2ceb1c4338468f78bc70dbc7c23093a4e998c7df1"
+    },
+    {
+      "path": "evidence/groups/baseline/r144_optimized.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "evidence/groups/baseline/r144_optimized.stdout",
+      "sha256": "16d84660233ceb863da49fc2ceb1c4338468f78bc70dbc7c23093a4e998c7df1"
+    },
+    {
+      "path": "evidence/groups/blackbox/R147_EVIDENCE.json",
+      "sha256": "47d559d6dd0ac2c9830391afa0b46368497a38effc2742554352df0547692234"
+    },
+    {
+      "path": "evidence/groups/blackbox/r147_blackbox.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "evidence/groups/blackbox/r147_blackbox.stdout",
+      "sha256": "6914c96d77a90732a2b8453f29240e308f1b146baec889427a6ebde06f13e1ad"
+    },
+    {
+      "path": "evidence/groups/boundary/R147_EVIDENCE.json",
+      "sha256": "eb42ee65e18c360a726bc41b22d22caf59a3650b847e6b761f9d04db6d65b563"
+    },
+    {
+      "path": "evidence/groups/boundary/r147_normal.stderr",
+      "sha256": "3b993e6b59e2836ef692c074d15dba9d8d6abd26e17c2b4ede9fd9ec70ac0fae"
+    },
+    {
+      "path": "evidence/groups/boundary/r147_normal.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "evidence/groups/boundary_optimized/R147_EVIDENCE.json",
+      "sha256": "68abcc237b05133cbf2c20466062599ab023850ae77c04e6923fcde4a8719d1f"
+    },
+    {
+      "path": "evidence/groups/boundary_optimized/r147_optimized.stderr",
+      "sha256": "5a044690a233a9f299f39207455d2a0e0bf7e7aefa670d58e177403021814a6d"
+    },
+    {
+      "path": "evidence/groups/boundary_optimized/r147_optimized.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "evidence/accepted/R147_EVIDENCE.json",
+      "sha256": "b789ec1eb3934b98abec9b0e7049896c0a108ab55e3fe16cf24ec69948ed6691"
+    }
+  ],
+  "code": [
+    {
+      "bytes": 18791,
+      "git_blob": "a9948ffe5ca9bce253541b078afdb44f0e3931a3",
+      "path": "research/wfp-ale/r143/r143_policy_compiler.py",
+      "sha256": "6c589616069451901db62364a0837f6bbcaf3a3dcad973f6970f6550df26382d"
+    },
+    {
+      "bytes": 2705,
+      "git_blob": "01e20cadf8c5d6d9142155565349dbf251a6364b",
+      "path": "research/wfp-ale/r144/r144_compiled_blueprint_negative.py",
+      "sha256": "4f8f6dc59dd7364045394e1c37f36cbc0eee0e00d33dea3341cd6ecd4ddb3af8"
+    },
+    {
+      "bytes": 5969,
+      "git_blob": "1de9246bfeb0258d598096895ebb7aafb84ec937",
+      "path": "research/wfp-ale/r147/r147_blackbox.mjs",
+      "sha256": "73c5bf645bbd97029617f4c7096e14d8b94046c2c366044f9b6907d32951a641"
+    },
+    {
+      "bytes": 3811,
+      "git_blob": "ebc3d807b7b3da6b17c29a6d0ee8b1e730751ae7",
+      "path": "research/wfp-ale/r147/r147_blueprint_verify.py",
+      "sha256": "344e606ec5c6fde1d2094d9bd7834eadaad4047be6dcf970d2ea2ef83d21a402"
+    },
+    {
+      "bytes": 3854,
+      "git_blob": "ce71069b4a4d3c64cc7d9ba825cb420379580352",
+      "path": "research/wfp-ale/r147/r147_receipt_mutations.py",
+      "sha256": "ebe6f27c8244b1e3e0ad46f692057f0329cb64196d8821162cf0f5c05fb237aa"
+    },
+    {
+      "bytes": 15002,
+      "git_blob": "0e79c7e50a695b04e5727eab8483a544ceefe7f8",
+      "path": "research/wfp-ale/r147/r147_regression_gate.py",
+      "sha256": "e342aee7589342cabf5c13e66e1b72ac84ec2f51c67dc9652e83d95e5bd940de"
+    },
+    {
+      "bytes": 12257,
+      "git_blob": "2e3bcaa501e01bf541a29cf8b8d305e66f0cbd96",
+      "path": "research/wfp-ale/r147/test_r147.py",
+      "sha256": "398b946cc8f6bf20625795bdf62057fd978c383a8cfac32ea02f34b04c1475e1"
+    }
+  ],
+  "commands": 9,
+  "environment": {
+    "node": "22.16.0",
+    "os": "linux",
+    "python": "3.13.5"
+  },
+  "execution": "FOUR_FIXED_GROUPS_THEN_VERIFIED_AGGREGATION",
+  "interrupted_unsharded_runs_accepted": false,
+  "kind": "R147_OFFLINE_EXECUTION_RESULTS",
+  "main_sha_observed": "5b5afc2feeda2195f302380e615ba003d4906e09",
+  "modes": [
+    "normal",
+    "-O"
+  ],
+  "native_rust_executed": false,
+  "native_wfp_executed": false,
+  "native_windows_executed": false,
+  "no_direct_proved": false,
+  "r143_tests_per_mode": 74,
+  "r144_cases_per_mode": 8,
+  "r147_tests_per_mode": 36,
+  "receipt_mutations": {
+    "cases_per_mode": 14,
+    "rejected": 13,
+    "sha256": "9a21d5277b0b02ce159b9a2d0f5a59a1644f030396065dbb77644776d9d42f18",
+    "valid_control": 1
+  },
+  "release_accepted": false,
+  "schema": 1,
+  "status": "OFFLINE_QA_PASS"
+}

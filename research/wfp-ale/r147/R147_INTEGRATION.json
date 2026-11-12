@@ -1,0 +1,24 @@
+{
+  "branch": "research/windows-wfp-ale-attribution-20261107",
+  "concurrent_added_files_preserved": [
+    "research/wfp-ale/r147/R147_REAUTH_FILTER_NONMATCH_NO_GO.md",
+    "research/wfp-ale/r147/r147_filter_coverage_negative.py",
+    "research/wfp-ale/r147/r147_independent_oracle.mjs"
+  ],
+  "concurrent_research_tests_executed_in_this_qa_cycle": false,
+  "development_base": "ce046f20289da250c7eccde7410e5d216219b1ff",
+  "fresh_head_and_full_diff_re_read": true,
+  "integration_base_tree": "12a972f7507c7f00d871f1c4748ee0d7e6391b6c",
+  "integration_parent": "9e69c12043fc61b9792d062b1e6bd7b5ab1e0856",
+  "main_sha_observed": "5b5afc2feeda2195f302380e615ba003d4906e09",
+  "native_wfp_executed": false,
+  "overlapping_changed_files": [],
+  "publication_paused_on_head_change": true,
+  "ref_update_requirement": {
+    "expected_sha": "9e69c12043fc61b9792d062b1e6bd7b5ab1e0856",
+    "force": false
+  },
+  "release_accepted": false,
+  "schema": 1,
+  "tested_code_changed_by_concurrent_commit": false
+}
