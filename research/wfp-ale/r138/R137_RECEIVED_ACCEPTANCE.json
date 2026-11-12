@@ -1,0 +1,117 @@
+{
+  "schema": 1,
+  "result": "R137_RECEIVED_LOGS_VALIDATED_NOT_KERNEL_PROOF",
+  "archive_sha256": "c860fe51ed61ddccec3c3c1be959247406a3c67ea08a0a1f66fbdcb5550358a8",
+  "source": "owner-uploaded evidence-only(3).zip",
+  "members": {
+    "R137_EVIDENCE.json": {
+      "bytes": 1928,
+      "sha256": "667a50be31c73eaaadd901c866f2aec9700ebec0002d732da5f35fdfda3fabdd"
+    },
+    "contract-matrix.stderr.txt": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "contract-matrix.stdout.txt": {
+      "bytes": 1536,
+      "sha256": "a42dbe4fe12b36fd15b525dc0d659058c49aad3c77e3066305ad8529c5a65367"
+    },
+    "metadata.stderr.txt": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "metadata.stdout.txt": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "missing-name.jsonl": {
+      "bytes": 739,
+      "sha256": "c9cb91f6bccf23ec929d631e831785921306fb40f4d00673f70b953c5ce66ec4"
+    },
+    "missing-name.stderr.txt": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "missing-name.stdout.txt": {
+      "bytes": 739,
+      "sha256": "c9cb91f6bccf23ec929d631e831785921306fb40f4d00673f70b953c5ce66ec4"
+    },
+    "probe-build.stderr.txt": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "probe-build.stdout.txt": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "rustc-version.stderr.txt": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "rustc-version.stdout.txt": {
+      "bytes": 194,
+      "sha256": "69f4ed37c244eea2204569769ed8157d71fbb722ed9794939164020fc57feae9"
+    },
+    "test-build.stderr.txt": {
+      "bytes": 372,
+      "sha256": "aca2436e18601cd252b0106c98f0f644fdc457dbf1431d3d8c6c2f6f1806736b"
+    },
+    "test-build.stdout.txt": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "test-list.stderr.txt": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "test-list.stdout.txt": {
+      "bytes": 729,
+      "sha256": "655a76ecba9f117b1fafb4bd096db7fcc11f5eeb9f0ed07fc97b56e312447bfc"
+    },
+    "unit-tests.stderr.txt": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "unit-tests.stdout.txt": {
+      "bytes": 952,
+      "sha256": "28613ef5c1d01bc4d88fe869f71a9eb40812acea9a688c39c8b27ba0c2d42e67"
+    }
+  },
+  "native_tests": 18,
+  "matrix_states": 256,
+  "matrix_sha256": "a42dbe4fe12b36fd15b525dc0d659058c49aad3c77e3066305ad8529c5a65367",
+  "diagnostic_exit": 4,
+  "observation_status": "ABSENT_PATH_APPID_REJECTED_NOT_ORIGIN_PROOF",
+  "observations_mask": 15,
+  "raw_api_codes": [
+    2,
+    2
+  ],
+  "absence_before_after": true,
+  "own_appid_bytes": 252,
+  "missing_name_appid_bytes": 0,
+  "absent_path_hypothesis": "NOT_CONFIRMED_ON_THIS_HOST",
+  "compiler_warnings": {
+    "test-build.stderr.txt": {
+      "sha256": "aca2436e18601cd252b0106c98f0f644fdc457dbf1431d3d8c6c2f6f1806736b",
+      "warning_headers": [
+        "warning: constant `INVALID_FILE_ATTRIBUTES` is never used",
+        "warning: 1 warning emitted"
+      ]
+    }
+  },
+  "windows_build_reported": "Майкрософт Windows 10 Pro / 10.0.19045 / 19045",
+  "rustc_version_reported": "rustc 1.91.0 (f8297e351 2025-10-28)\nbinary: rustc\ncommit-hash: f8297e351a40c1439a467bbbb6879088047f50b3\ncommit-date: 2025-10-28\nhost: x86_64-pc-windows-msvc\nrelease: 1.91.0\nLLVM version: 21.1.2",
+  "source_blob_reported": "1b7ba8f0097811a3f636100cd843a26764b4238a",
+  "source_sha256_reported": "766f0495b4489958cdde0fbdfc3d9085fc55c780eaf58c91de524f10376be77d",
+  "binary_sha256_reported": {
+    "test_exe_sha256": "04e9fb18e6e7f6e3bccb1370eaac8198b3a2f9b9b8342afcc2a0da1ef7a602ea",
+    "inspector_sha256": "27fdf4ce1e0f9003e3911c5eb2bbefb0984fb3590a164e007b3990218363f2aa"
+  },
+  "binaries_received": false,
+  "binaries_independently_rehashed": false,
+  "host_clock_attested": false,
+  "universal_absent_path_rejection_proved": false,
+  "kernel_origin_proof": false,
+  "no_direct_proof": false
+}
