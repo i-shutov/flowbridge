@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "research_head_before": "7ddc0e34503726cf5d46727eb6438ba9ffbe71c8",
+  "main_head": "5b5afc2feeda2195f302380e615ba003d4906e09",
+  "source_git_blobs_remote_verified": {
+    "ledger.rs": "b88c4c9237c4c118517978fc454f5048f522aa7f",
+    "lib.rs": "53f5ce6faa0f9f591974287f38ea890cafeb0dd2",
+    "redirect.rs": "a093f049d162987981a957aac90db1014bc6ff09"
+  },
+  "local_source_pin_pass": false,
+  "model_only": true,
+  "cases_per_oracle": 783,
+  "python_normal_pass": true,
+  "python_O_pass": true,
+  "node_independent_pass": true,
+  "matrix_sha256": "23e078cc3b297664b34ca1f87652ef3cda29a0f758572144892ae99f9d64393f",
+  "native_windows_executed": false,
+  "native_rust_executed": false,
+  "native_wfp_executed": false,
+  "no_direct_proved": false,
+  "release_accepted": false,
+  "evidence_kind": "SYNTHETIC_NEGATIVE_TRACE_NOT_KERNEL_PROOF"
+}
