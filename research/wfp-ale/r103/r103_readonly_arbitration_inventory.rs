@@ -258,6 +258,13 @@ mod win {
         }
         Ok(counts)
     }
+    // R123: An owned CONNECT_REDIRECT CALLOUT_UNKNOWN may return CONTINUE.
+    // WFP then considers a matching lower-weight filter in the SAME sublayer.
+    // AUTH_CONNECT uses CALLOUT_TERMINATING; a successful matching AUTH action
+    // cannot CONTINUE. Counts alone do not establish condition overlap.
+    fn candidate_for_rule(index:usize, higher:u64, equal:u64, lower:u64)->bool {
+        higher>0 || equal>0 || (index>=2 && lower>0)
+    }
     pub fn run()->i32 {
         match inventory(){
             Err((stage,code))=>{
@@ -267,7 +274,7 @@ mod win {
             Ok(c)=>{
                 let mut candidate=false;
                 for i in 0..4 {
-                    candidate|=c.greater[i]>0||c.equal[i]>0;
+                    candidate|=candidate_for_rule(i,c.greater[i],c.equal[i],c.lower[i]);
                     println!("{{\"rule\":\"{}\",\"visible_higher\":{},\"visible_equal\":{},\"visible_lower\":{},\"visible_disabled\":{},\"match_and_runtime_action_unverified\":true}}",
                              LABELS[i],c.greater[i],c.equal[i],c.lower[i],c.disabled_visible[i]);
                 }
@@ -347,6 +354,16 @@ mod win {
             blob.len=2;assert!(owned_policy_shape(&f,0).is_err());
             blob.len=4;
             bytes[2]=1;assert!(owned_policy_shape(&f,0).is_err());
+        }
+        #[test] fn r123_lower_only_redirect_is_visible_candidate(){
+            for i in 2..4 {assert!(candidate_for_rule(i,0,0,1));}
+            // Same-sub-layer AUTH uses TERMINATING, unlike REDIRECT UNKNOWN.
+            for i in 0..2 {assert!(!candidate_for_rule(i,0,0,1));}
+            for i in 0..4 {
+                assert!(candidate_for_rule(i,1,0,0));
+                assert!(candidate_for_rule(i,0,1,0));
+                assert!(!candidate_for_rule(i,0,0,0));
+            }
         }
         #[test] fn exact_rule_order(){
             for i in 0..4 {assert_eq!(Guid::from_u128(BASE+((i as u128)<<96)).d1,0x1649f030+i as u32);}

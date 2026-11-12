@@ -192,7 +192,9 @@ try {
                     }
                     $totalForeign += [long]$value
                 }
-                if ($item.visible_higher -gt 0 -or $item.visible_equal -gt 0) {
+                # R123: UNKNOWN redirect callouts can CONTINUE to lower same-sublayer filters.
+                if ($item.visible_higher -gt 0 -or $item.visible_equal -gt 0 -or
+                    ($i -ge 2 -and $item.visible_lower -gt 0)) {
                     $candidate = $true
                 }
             }
