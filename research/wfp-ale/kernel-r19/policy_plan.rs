@@ -28,6 +28,11 @@ impl Plan {
         Ok(Self{appid:appid.to_vec(),ports})
     }
     pub fn port(&self,f:Family)->u16{self.ports[if f==Family::V4{0}else{1}]}
+    /// Exact selected image / WFP filter target / ARM port identity.
+    /// Local byte agreement only; not kernel ALE proof.
+    pub fn arm_matches(&self,selected_appid:&[u8],ports:[u16;2])->bool {
+        self.appid.as_slice()==selected_appid && self.ports==ports
+    }
 }
 pub trait Operations {
     fn begin(&mut self)->Result<(),PolicyError>;
@@ -78,4 +83,11 @@ mod tests {
     #[test]fn zero_broker_ports_rejected(){assert!(Plan::new(&[97,0,0,0],[0,2]).is_err());assert!(Plan::new(&[97,0,0,0],[1,0]).is_err());}
     #[test]fn only_authorized_same_origin_callout_can_permit(){for r in RULES {assert!(matches!(r.kind,Kind::Redirect|Kind::AttestOriginal));}}
     #[test]fn family_port_is_not_swapped(){let p=plan();assert_eq!(p.port(Family::V4),1091);assert_eq!(p.port(Family::V6),1092);}
+    #[test]fn arm_target_matches_plan_bytes_and_ports(){
+        let p=plan();assert!(p.arm_matches(&p.appid,[1091,1092]));
+        let mut different=p.appid.clone();different[0]^=1;
+        assert!(!p.arm_matches(&different,[1091,1092]));
+        assert!(!p.arm_matches(&p.appid,[1092,1091]));
+        assert!(!p.arm_matches(&p.appid[..p.appid.len()-2],[1091,1092]));
+    }
 }

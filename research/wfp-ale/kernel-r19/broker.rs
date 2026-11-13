@@ -43,7 +43,15 @@ fn serve(image:&std::path::Path,upstream:Upstream,seconds:u64,activate_policy:bo
  }
  let plan=policy_plan::Plan::new(selection.wfp_appid(),ports).map_err(|_|std::io::Error::other("policy_plan"))?;
  v4.set_nonblocking(true)?;v6.set_nonblocking(true)?;
- let device=Arc::new(Device::open()?);device.arm(&selection,ports[0],ports[1])?;
+ // Install/read back BFE filters before arming the kernel redirect, so
+ // the broker cannot advertise an armed path before its own policy exists.
+ // Object readback is NOT proof of actual WFP enforcement or BFE continuity.
+ let policy=if activate_policy{
+  Some(unsafe{policy_windows::Installed::activate_admitted(&plan)}
+   .map_err(|_|std::io::Error::other("policy_activation_failed"))?)
+ }else{None};
+ let device=Arc::new(Device::open()?);
+ device.arm(&selection,&plan,ports[0],ports[1])?;
  let stop=Arc::new(AtomicBool::new(false));
  // Own, sticky revocation shared with each running verified SSH worker.
  // A new worker after STOP immediately observes true.
@@ -55,13 +63,8 @@ fn serve(image:&std::path::Path,upstream:Upstream,seconds:u64,activate_policy:bo
   if stopped.is_err(){revoke(&s,&notify);}
   if healthy{stopped}else{Err(std::io::Error::other("kernel_lease_lost"))}
  })};
- let policy=if activate_policy{
-  // The external native harness must validate signature, exact binary, current
-  // VNC, SYSTEM rescue, host protections and rollback BEFORE invoking this mode.
-  match unsafe{policy_windows::Installed::activate_admitted(&plan)}{
-   Ok(p)=>Some(p),Err(_)=>{revoke(&stop,&revocation_tx);let _=heartbeat.join();return Err(std::io::Error::other("policy_activation_failed"));}
-  }
- }else{None};
+ // Native lab admission, signing, independent rescue and rollback must
+ // still be approved externally before this function is used.
  // Write failure must still stop the kernel lease and join workers/heartbeat.
  let mut output=std::io::stdout();
  let mut error=writeln!(output,"{{\"broker_ready\":true,\"scoped_lab_policy_active\":{},\"native_admission_verified_by_broker\":false,\"g2_pass\":false}}",activate_policy).and_then(|_|output.flush()).err();

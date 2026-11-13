@@ -2,6 +2,7 @@
 //! neither context nor redirect records can be detached or replaced by callers.
 use std::{ffi::c_void,fs::File,io,mem,net::{TcpStream,TcpListener},os::windows::{io::{AsRawSocket,FromRawSocket,AsRawHandle},fs::OpenOptionsExt},path::{Path,Component,Prefix},ptr,sync::{Arc,atomic::AtomicBool}};
 use crate::handoff::{self as h,Context};
+use crate::policy_plan::Plan;
 const QUERY_RECORDS:u32=0x980000dc;const QUERY_CONTEXT:u32=0x980000dd;const SET_RECORDS:u32=0x980000de;
 const CAP:usize=65536;
 fn fail()->io::Error{io::Error::new(io::ErrorKind::PermissionDenied,"native_handoff_rejected")}
@@ -59,7 +60,9 @@ impl Device{
   let mut n=0;let ok=unsafe{DeviceIoControl(self.0.as_raw_handle(),code,data.as_ptr().cast(),data.len() as u32,ptr::null_mut(),0,&mut n,ptr::null_mut())};
   if ok==0||n!=0{Err(fail())}else{Ok(())}
  }
- pub fn arm(&self,image:&SelectedImage,port4:u16,port6:u16)->io::Result<()>{
+ pub fn arm(&self,image:&SelectedImage,plan:&Plan,port4:u16,port6:u16)->io::Result<()>{
+  // BFE-selected A and ARM-selected B must never silently diverge.
+  if !plan.arm_matches(image.wfp_appid(),[port4,port6]){return Err(fail());}
   let appid=image.kernel_name();if port4==0||port6==0{return Err(fail());}
   let mut data=[0u8;h::ARM_LEN];data[..8].copy_from_slice(b"FBA3\x01\x00\x10\x02");
   data[8..10].copy_from_slice(&port4.to_le_bytes());data[10..12].copy_from_slice(&port6.to_le_bytes());
