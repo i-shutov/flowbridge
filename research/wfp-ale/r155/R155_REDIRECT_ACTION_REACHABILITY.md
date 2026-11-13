@@ -1,3 +1,16 @@
+> **Superseded conclusion — R156 correction, 2026-11-13.** The R155
+> "inherited/unspecified SELF action" NO-GO below was based on the inner
+> `redirect::classify` alone and is withdrawn for the pinned full call chain.
+> The registered outer `lib.rs::classify` sets `CONTINUE` when ACTION_WRITE is
+> present; the inner no-write guard exits before querying redirect state.
+> Thus every modelled reachable SELF/PREVIOUS_SELF return has `CONTINUE`;
+> no-write inputs do not reach that branch. R156 pins all four participating
+> sources and tests the composition, including direct regression against the
+> frozen R155 model. The historical text/model remains below for reproducibility,
+> **not as a current architecture acceptance claim**. See
+> [R156](../r156/README.md). CONTINUE is not AUTH permission or native proof;
+> all broader attribution and no-DIRECT gates remain NO-GO.
+
 # FlowBridge WFP/ALE R155 — self-redirect action ambiguity (offline)
 
 Date: 2026-11-13. Research branch only: research/windows-wfp-ale-attribution-20261107.

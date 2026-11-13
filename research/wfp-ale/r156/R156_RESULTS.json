@@ -1,0 +1,196 @@
+{
+  "analysis_base": "0b9a0d720d68fc160d1a08c089fbf03ce86cd80e",
+  "branch": "research/windows-wfp-ale-attribution-20261107",
+  "checkpoint_evidence": [
+    {
+      "path": "evidence/r147_accepted/R147_EVIDENCE.json",
+      "sha256": "407c49705dc5b830c9e9646e1a47db2e72544e90a699896c6acc41b3a112df68"
+    },
+    {
+      "path": "evidence/r147_receipt_check/EVIDENCE.json",
+      "sha256": "043cc685be8bf9823e3513953d80c98362654ac47a4c2d77179bbdc86f9672fd"
+    },
+    {
+      "path": "evidence/source_pinned_148_154_v2/EVIDENCE.json",
+      "sha256": "c1728b139c416dfab51059220c00ffe050d8470830684cbb3555b6eefe274459"
+    },
+    {
+      "path": "evidence/r156_integrated_tests/EVIDENCE.json",
+      "sha256": "d91b8bc35cefb02a42087545f9da3785bd42fd500ccefcacd12beca3b38c96a8"
+    },
+    {
+      "path": "evidence/native_gate_unit/EVIDENCE.json",
+      "sha256": "7289d6287c69e2cf9c4be21934d2366daa2afbf3761514808f3c157d43437461"
+    },
+    {
+      "path": "evidence/r156_matrix/EVIDENCE.json",
+      "sha256": "a591ea2470a716916d4e9da9bfb34125c21e422f9ae4d208b17df2114d863dbf"
+    },
+    {
+      "path": "evidence/r156_native_attempt/NATIVE_EVIDENCE.json",
+      "sha256": "1f839b4e01ea92aed072ef9a261e5af242aa5f35b6aa1493eeb30d8425988869"
+    }
+  ],
+  "code": [
+    {
+      "git_blob": "788aea91ad309608231af05e6b2b4408f1a22288",
+      "path": "research/wfp-ale/r156/README.md",
+      "sha256": "2c76a9f47d1770bbdbc4f02aa655ad57c45f4b2b4ef3f60d22a076acc4f146be"
+    },
+    {
+      "git_blob": "4a1b8b585ea5837f268bc383efbbfc6fcefd0ebc",
+      "path": "research/wfp-ale/r156/r156_callback_contract.py",
+      "sha256": "4674f2b28a9008889c3b61406aaadb14802a1f166b95146ed688c97881b71c45"
+    },
+    {
+      "git_blob": "2c35f8820ef9486f32437851ee1262fc6d2322bf",
+      "path": "research/wfp-ale/r156/r156_comprehensive_oracle.mjs",
+      "sha256": "a909817e7c5bcb8e78ac41ae025fbd0fe126f9f7fecdaea2daa572dde916e61d"
+    },
+    {
+      "git_blob": "399931dd90036c0fa889cce3fd4d4e8a843b175d",
+      "path": "research/wfp-ale/r156/r156_pure_regressions.rs",
+      "sha256": "814aacfda8c1c07432120961eb6716bbd3f7037ef86be0dae35b79ef26bdcd8a"
+    },
+    {
+      "git_blob": "e96af6fe9958a9e1f7bc940fa1655d9be9d0539d",
+      "path": "research/wfp-ale/r156/run_r156_native.py",
+      "sha256": "3b9d89553993b48bf8be1ed85a5ae11511680e7cb9c786081a1bd5e775c67232"
+    },
+    {
+      "git_blob": "8f89646e0abb839e2968639ea60230c2e9bf140c",
+      "path": "research/wfp-ale/r156/test_native_gate.py",
+      "sha256": "90fda87d5ff1fe19f071e7c8dc75897b0a56a598774ad73020ad39153579e02b"
+    },
+    {
+      "git_blob": "1b232b30dc53ce2848796dd2835f7d837ecae43a",
+      "path": "research/wfp-ale/r156/test_r156_fullchain.py",
+      "sha256": "07003ed38f71e0b4615beac6c9c7364d224f96bf151f7d73a1b77e37dcf8bc42"
+    }
+  ],
+  "date": "2026-11-13",
+  "driver_built": false,
+  "environment": {
+    "node": "v22.16.0",
+    "os": "linux",
+    "python": "3.13.5"
+  },
+  "integration": {
+    "additional_regression": {
+      "action_differences": 4,
+      "concurrent_blob": "d9e4798a7c734bafd4584302434373c3bd1e4066",
+      "no_write_cases": 16
+    },
+    "force": false,
+    "parent": "f4c73be7ca0e66800f670f9256bd3979edbe1470",
+    "preserved_concurrent_files": [
+      "R156_MANIFEST.json",
+      "R156_WRAPPER_ACTION_CORRECTION.md",
+      "r156_callback_composition.py",
+      "r156_independent.mjs",
+      "test_r156.py"
+    ],
+    "publication_paused_on_head_change": true,
+    "renamed_our_files": [
+      "r156_comprehensive_oracle.mjs",
+      "test_r156_fullchain.py"
+    ],
+    "stale_commit_never_attached": "34da85b7b03d68956c81e9b39779ee28bfa4928e"
+  },
+  "main_observed": "5b5afc2feeda2195f302380e615ba003d4906e09",
+  "native_rust_compiled": false,
+  "native_rust_executed": false,
+  "native_wfp_executed": false,
+  "native_windows_executed": false,
+  "no_direct_proved": false,
+  "r147": {
+    "completed_commands": 9,
+    "r143_tests_per_mode": 74,
+    "r147_tests_per_mode": 36,
+    "real_cli_cases_per_mode": 2125,
+    "receipt_mutations_per_mode": 14,
+    "receipt_mutations_rejected": 13
+  },
+  "r148_r154": {
+    "completed_commands": 32,
+    "distinct_model_cases": 8573,
+    "execution": "26 completed commands revalidated after interruption, remaining six completed separately",
+    "native_proof": false,
+    "source_pinned_not_model_only": true
+  },
+  "r155_correction": {
+    "changed_action_predictions": 16,
+    "counts_overlap": true,
+    "kernel_changed": false,
+    "legacy_cases": 32,
+    "unreachable_legacy_self_branches": 16
+  },
+  "r156": {
+    "all_reachable_self_actions": "CONTINUE",
+    "independent_node": true,
+    "matrix_sha256": "54d4a483c38d0d0e4bff979a8881798a1dcf3eb0cde31adcd674c7ac7f52e78a",
+    "matrix_states": 720,
+    "python_modes": [
+      "normal",
+      "-O",
+      "-OO"
+    ],
+    "reachable_self_returns": 48,
+    "unit_tests_per_mode": 28
+  },
+  "release_accepted": false,
+  "rust_preparation": {
+    "attempt_exit_code": 3,
+    "compiler_commands_executed": 0,
+    "count_observed_from_rust_binary": null,
+    "expected_declared_test_count": 52,
+    "launcher_modes": [
+      "normal",
+      "-O",
+      "-OO"
+    ],
+    "python_launcher_tests_per_mode": 8,
+    "status": "NOT_RUN_COMPILER_UNAVAILABLE"
+  },
+  "schema": 1,
+  "source_pins": [
+    {
+      "git_blob": "c6a4a107255cc5ecca82266481935c93467a01ed",
+      "path": "research/wfp-ale/kernel-r19/kernel/src/action_rights.rs",
+      "role": "READ_ONLY_SOURCE_INPUT",
+      "sha256": "fa17c5d2880dabc62567f618bf7f0c0919103310795877da8ca3ecc7249b3faf"
+    },
+    {
+      "git_blob": "e1d17217db50362ba9c4efc83af820b6beb094cf",
+      "path": "research/wfp-ale/kernel-r19/kernel/src/handoff.rs",
+      "role": "READ_ONLY_SOURCE_INPUT",
+      "sha256": "8d64d156ecce6cd17ad0a55802a7e0150aa5fee39b8067e67d944a31d25731f9"
+    },
+    {
+      "git_blob": "b88c4c9237c4c118517978fc454f5048f522aa7f",
+      "path": "research/wfp-ale/kernel-r19/kernel/src/ledger.rs",
+      "role": "READ_ONLY_SOURCE_INPUT",
+      "sha256": "bb07015b6bb97191e9e3d9321c6b9b60d0b770a0358864a70706bc72ebf852b1"
+    },
+    {
+      "git_blob": "53f5ce6faa0f9f591974287f38ea890cafeb0dd2",
+      "path": "research/wfp-ale/kernel-r19/kernel/src/lib.rs",
+      "role": "READ_ONLY_SOURCE_INPUT",
+      "sha256": "a023f1e74fd367057052cf3cfeafce07c8803c4792c1c4805a23015c59a71fbc"
+    },
+    {
+      "git_blob": "a093f049d162987981a957aac90db1014bc6ff09",
+      "path": "research/wfp-ale/kernel-r19/kernel/src/redirect.rs",
+      "role": "READ_ONLY_SOURCE_INPUT",
+      "sha256": "51dd34fad3cdfac6f7ce79cafe086c052a860e6bfa6193eac7838fdf20f5e700"
+    },
+    {
+      "git_blob": "acf60334320d970f58af3349ee75fbaa59826602",
+      "path": "research/wfp-ale/kernel-r19/policy_windows.rs",
+      "role": "READ_ONLY_SOURCE_INPUT",
+      "sha256": "faf41458540e8e7dba28583f97b854ac5be18a857505cd5c20f43393696a873b"
+    }
+  ],
+  "status": "OFFLINE_SOURCE_AND_MODEL_REGRESSIONS_PASS",
+  "subagents_launched": 0
+}
