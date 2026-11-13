@@ -100,3 +100,19 @@ Dedicated Xcode scheme, separate bundle/profile identity and no-NE package path
 are staged in this beta branch. See
 [EXPLICIT_SOCKS_BETA_MACOS_A4.md](EXPLICIT_SOCKS_BETA_MACOS_A4.md).
 Hosted build and original package checks do NOT replace native Mac acceptance.
+
+## 2026-11-13 — macOS hosted candidate PASS, managed SSH retest
+
+- [macOS Actions #43387219678](https://github.com/i-shutov/flowbridge/actions/runs/43387219678):
+  static-scope and universal-package SUCCESS on source 922a32df.
+  Verified universal x64/ARM bundle and independent unsigned explicit beta package;
+  .pkg SHA256 af4149fa0b55db1cf167adbba163cca45f1c153dfbbe3ede60b9efc42d08efdd.
+  Artifact 14018813907, ZIP SHA256 29a91db82011e9ccbdeb6d1d7ff6170179e76718194ccb5ef777560c1d53e3e5.
+  This is HOSTED_BUILD_ONLY, not native owner Mac A4 GO.
+- Historical [Windows OpenSSH run #42339966362](https://github.com/i-shutov/flowbridge/actions/runs/42339966362)
+  had raw 512 held-channel WinError 10054; its managed scenario PASSED.
+  The new explicit-beta-managed-ssh.yml tests actual authenticated managed
+  SSH on the new exact beta SHA (10k bounded churn, source/report pinning).
+  Raw 512 stability remains UNPROVEN; not treated as a managed fail or waived.
+- A2/A3/A4/A5/A6 not closed by hosted-only smoke; requires independent
+  original artifacts and fresh physical Windows 10/11 and macOS acceptance.
