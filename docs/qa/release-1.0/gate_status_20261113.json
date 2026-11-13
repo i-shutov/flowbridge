@@ -5,9 +5,9 @@
   "source": {
     "main": "5b5afc2feeda2195f302380e615ba003d4906e09",
     "pr56": "c339df2e4d20edf1d11d45786581a68451a71929",
-    "pr58": "a390461e4dc12b9b6922214cb1f1f0b69f1091d6",
-    "pr59": "173d8bc5df792fb6b36cf270c4603cfd089ad9b1",
-    "wfp_research": "071599f10bc4299b9313f2040e3b84125c4cb42b"
+    "pr58": "bab43129fcdc8ccac91e7a80ddf602fb4ca9fd7e",
+    "pr59": "5dd6ca35d975e536cd8901ebd9cae158aef02797",
+    "wfp_research": "ca72eee3d5dc422ad6894219f9b68e63cf731034"
   },
   "beta_release_accepted": false,
   "version_1_0_accepted": false,
@@ -20,66 +20,66 @@
     {
       "id": "A0",
       "track": "beta",
-      "status": "PARTIAL",
+      "status": "HOSTED_PASS_OWNER_OPEN",
       "depends_on": [],
       "exit_criterion": "Scope isolated in draft PR59; verify disabled capture controls and zero driver/helper payload",
       "accepted": false,
-      "proof": "NOT_ACCEPTED"
+      "proof": "Unified workflow 43407093536: Windows installer 13 allowed payloads, zero capture helper/driver; macOS pkg zero Network Extension; protected UI/handlers disabled. Independent owner review pending."
     },
     {
       "id": "A1",
       "track": "beta",
-      "status": "PARTIAL",
+      "status": "HOSTED_PASS_OWNER_OPEN",
       "depends_on": [
         "A0"
       ],
       "exit_criterion": "Freeze SHA, exact-source CI; PR59 package workflow PASS but G2 CI job FAIL",
       "accepted": false,
-      "proof": "NOT_ACCEPTED"
+      "proof": "Unified workflow 43407093536: 11/11 SUCCESS on exact source f5ecd48d8f81c594f755a55e7969b57d20903020; tree ac47b5292ec90e13572e88e9133b12d4dc1f77ac; QA kit artifact 14028139291. Separate G2 capture workflow remains FAILURE and is not waived for 1.0."
     },
     {
       "id": "A2",
       "track": "beta",
-      "status": "PARTIAL",
+      "status": "HOSTED_PASS_LIMITED",
       "depends_on": [
         "A1"
       ],
       "exit_criterion": "Managed OpenSSH real authentication, loss/recovery, 251/252 exhaustion, bounded 10k churn/soak",
       "accepted": false,
-      "proof": "NOT_ACCEPTED"
+      "proof": "Packaged DLL and CLI: 128 held, 1152 overload rejections, 10000 TCP churn, four SSH workers, strict host-key, half-close, recovery/shutdown PASS in 43407093536; raw 512 stability and owner real SSH soak unproven."
     },
     {
       "id": "A3",
       "track": "beta",
-      "status": "OWNER_PASS_PRIOR_SHA",
+      "status": "NOT_RUN_NEW_BYTES",
       "depends_on": [
         "A1"
       ],
       "exit_criterion": "Win10 W0-W2b2 owner console PASS on prior c339df2e bytes only; new PR59 exact-package native QA due",
       "accepted": false,
-      "proof": "NOT_ACCEPTED"
+      "proof": "Historical W0-W2b2 PASS only on c339df2e. New source f5ecd48d8f81c594f755a55e7969b57d20903020 owner Windows 10/11 lifecycle/GUI/SSH NOT_RUN."
     },
     {
       "id": "A4",
       "track": "beta",
-      "status": "OPEN",
+      "status": "NOT_RUN_NEW_BYTES",
       "depends_on": [
         "A1"
       ],
       "exit_criterion": "macOS explicit-only package, ARM64/Intel GUI/SSH/native upgrade/remove, without NE",
       "accepted": false,
-      "proof": "NOT_ACCEPTED"
+      "proof": "Hosted macOS arm64 package and six lifecycle checks PASS, but new-source owner Apple Silicon and Intel GUI/SSH NOT_RUN; a 4-second process launch is not a manual GUI acceptance."
     },
     {
       "id": "A5",
       "track": "beta",
-      "status": "OPEN",
+      "status": "PARTIAL_INVENTORY_ONLY",
       "depends_on": [
         "A1"
       ],
       "exit_criterion": "Binary allowlist, version/signing scope, secrets, SBOM/licenses and safe rollback",
       "accepted": false,
-      "proof": "NOT_ACCEPTED"
+      "proof": "Windows 71 and macOS 37 resolved inventory components, SBOM and notices embedded; independent license/security/distribution review OPEN, FlowBridge project license unselected, unsigned Windows/macOS packages."
     },
     {
       "id": "A6",
@@ -118,13 +118,13 @@
     {
       "id": "R01",
       "track": "1.0",
-      "status": "BLOCKED_EXTERNAL",
+      "status": "BLOCKED_ARCHITECTURE_AND_NATIVE",
       "depends_on": [
         "R00"
       ],
-      "exit_criterion": "Signed Windows 10/11 WFP ALE v4/v6 native original owner→redirect→accepted socket→CLAIM→SSH; no-DIRECT",
+      "exit_criterion": "Owner-approved kernel identity architecture (NDISRD proof or separately authorized alternative), real Win10/11 trusted PID+epoch and selected v4/v6 flow→SSH with physical fail-closed evidence",
       "accepted": false,
-      "proof": "NOT_ACCEPTED"
+      "proof": "Issue #41 retains NDISRD-only product authorization; NDISRD packet→PID/epoch native G2 NO-GO, run 43407099791 kernel_connection_id_missing. WFP/ALE branch research is not production authorization."
     },
     {
       "id": "R02",
@@ -135,7 +135,7 @@
       ],
       "exit_criterion": "macOS signed+entitled NE activation v4/v6 on ARM/Intel, selected app, fail-closed/reboot/uninstall",
       "accepted": false,
-      "proof": "NOT_ACCEPTED"
+      "proof": "Hosted unsigned macOS explicit beta contains no NE; real native sign/entitle/approve/activate and Apple Silicon+Intel per-app TCP evidence OPEN."
     },
     {
       "id": "R03",
@@ -203,7 +203,7 @@
       ],
       "exit_criterion": "Signed Windows driver/installer and macOS notarized NE app/pkg, ACL/secure store, upgrade rollback remove",
       "accepted": false,
-      "proof": "NOT_ACCEPTED"
+      "proof": "Windows installer/macOS pkg unsigned, macOS app ad-hoc. Signed kernel/NE, notarization, license, rollback/OS secure storage acceptance pending."
     },
     {
       "id": "R09",
@@ -234,5 +234,22 @@
       "accepted": false,
       "proof": "NOT_ACCEPTED"
     }
-  ]
+  ],
+  "evidence_snapshot": {
+    "state": "B0_HOSTED_VERIFIED_NOT_OWNER_ACCEPTED",
+    "validated_binary_source_sha": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+    "validated_binary_tree_sha": "ac47b5292ec90e13572e88e9133b12d4dc1f77ac",
+    "pr59_documentation_head": "5dd6ca35d975e536cd8901ebd9cae158aef02797",
+    "pr58_previous_head": "bab43129fcdc8ccac91e7a80ddf602fb4ca9fd7e",
+    "unified_run_id": 43407093536,
+    "unified_jobs": "11/11 SUCCESS",
+    "qa_kit_artifact_id": 14028139291,
+    "qa_kit_sha256": "4b51d4136878476b48946361ce1635cb6d630e62b50ca82c73df28a5902ed8b8",
+    "capture_g2_run_id": 43407099791,
+    "capture_g2": "FAIL kernel_connection_id_missing",
+    "raw_openssh_512_stability_proved": false,
+    "owner_windows_new_package": "NOT_RUN",
+    "owner_macos_new_package": "NOT_RUN",
+    "backend_decision": "Issue #41 NDISRD-only authorization still in force; WFP is separate research"
+  }
 }
