@@ -72,3 +72,19 @@ Primary references:
 https://learn.microsoft.com/en-us/windows/win32/fwp/basic-operation
 https://learn.microsoft.com/en-us/windows-hardware/drivers/network/using-bind-or-connect-redirection
 https://learn.microsoft.com/en-us/windows/win32/fwp/object-management
+
+## R159 hosted pure CI: Windows source checkout normalization RCA
+
+First exact R159 hosted run #43389124737: Ubuntu PASS (10/10 Rust tests),
+Windows failed in Python source pin BEFORE Rust compile, because the auditor
+hashed raw worktree bytes. Git's Windows text checkout can convert canonical
+Git blob LF to CRLF. Treating that harmless presentation conversion as a
+changed Git object was an audit-tool false alarm, not WFP runtime evidence.
+
+Correction: query `git rev-parse HEAD:path` and `git show HEAD:path` to pin
+the exact repository Git blob SHA and canonical contents, and additionally
+require worktree bytes (after CRLF->LF only) to equal those contents.
+BOM, arbitrary text edits, incorrect expected SHA or a missing Git object
+still reject. This is read-only, offline and does not alter source pins or
+the WFP guard. The corrected Windows/Ubuntu hosted jobs must both PASS
+before recording R159 pure native test completion. No driver was loaded.

@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import subprocess
 import sys
 import unittest
 
@@ -19,10 +20,28 @@ def git_blob(content:bytes)->str:
     return hashlib.sha1(b"blob "+str(len(content)).encode()+b"\0"+content).hexdigest()
 
 def sources()->dict[str,str]:
+    """Pin the *Git object*, and separately check the worktree.
+
+    Git on Windows may checkout text with CRLF. Treat only CRLF->LF line-ending
+    conversion as harmless; BOM, embedded edits, extra data, changed Git blobs
+    or an untracked substitution are never source acceptance.
+    """
     observed={}
+    repo=ROOT.parents[1]
     for name,pin in PIN.items():
-        data=(K/name).read_bytes()
-        if git_blob(data)!=pin: raise ValueError("changed source blob: "+name)
+        git_path="research/wfp-ale/kernel-r19/"+name
+        try:
+            sha=subprocess.check_output(["git","rev-parse","HEAD:"+git_path],
+                                       cwd=repo,stderr=subprocess.PIPE,timeout=15).decode("ascii").strip()
+            data=subprocess.check_output(["git","show","HEAD:"+git_path],
+                                         cwd=repo,stderr=subprocess.PIPE,timeout=15)
+        except (OSError,subprocess.CalledProcessError,subprocess.TimeoutExpired) as exc:
+            raise ValueError("unavailable canonical Git object: "+name) from exc
+        if sha!=pin or git_blob(data)!=pin:
+            raise ValueError("changed source Git object: "+name)
+        worktree=(K/name).read_bytes()
+        if worktree.replace(b"\r\n",b"\n")!=data:
+            raise ValueError("modified worktree source: "+name)
         observed[name]=data.decode("utf-8")
     return observed
 
