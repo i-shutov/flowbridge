@@ -124,7 +124,9 @@
       ],
       "exit_criterion": "Owner-approved kernel identity architecture (NDISRD proof or separately authorized alternative), real Win10/11 trusted PID+epoch and selected v4/v6 flow→SSH with physical fail-closed evidence",
       "accepted": false,
-      "proof": "Issue #41 retains NDISRD-only product authorization; NDISRD packet→PID/epoch native G2 NO-GO, run 43407099791 kernel_connection_id_missing. WFP/ALE branch research is not production authorization."
+      "proof": "Issue #41 retains NDISRD-only product authorization; NDISRD packet→PID/epoch native G2 NO-GO, run 43407099791 kernel_connection_id_missing. WFP/ALE branch research is not production authorization.",
+      "decision_checkpoint": "docs/qa/WINDOWS_G2_BACKEND_DECISION_20261113.md",
+      "architecture_status": "OWNER_NDISRD_ONLY_AUTHORIZATION_UNCHANGED"
     },
     {
       "id": "R02",
@@ -135,7 +137,22 @@
       ],
       "exit_criterion": "macOS signed+entitled NE activation v4/v6 on ARM/Intel, selected app, fail-closed/reboot/uninstall",
       "accepted": false,
-      "proof": "Hosted unsigned macOS explicit beta contains no NE; real native sign/entitle/approve/activate and Apple Silicon+Intel per-app TCP evidence OPEN."
+      "proof": "Hosted unsigned macOS explicit beta contains no NE; real native sign/entitle/approve/activate and Apple Silicon+Intel per-app TCP evidence OPEN.",
+      "work_package": {
+        "pull_request": "https://github.com/i-shutov/flowbridge/pull/60",
+        "exact_head": "32f15c8131a90f34dee6a86527191c5242fc5576",
+        "synthetic_controls_run": "https://github.com/i-shutov/flowbridge/actions/runs/43446330496",
+        "synthetic_jobs_passed": 2,
+        "synthetic_jobs_total": 2,
+        "test_cases_per_os": 12,
+        "allowed_claim": "SIGNED_BUNDLE_PREREQUISITES_GATE_IMPLEMENTED; owner signed app inspection NOT_RUN",
+        "forbidden_claims": [
+          "NE activation",
+          "network packet interception",
+          "DNS containment",
+          "release acceptance"
+        ]
+      }
     },
     {
       "id": "R03",
