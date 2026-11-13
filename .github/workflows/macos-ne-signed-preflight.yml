@@ -1,0 +1,38 @@
+name: macOS NE signed-package prerequisite checks (no activation)
+on:
+  pull_request:
+    paths:
+      - 'tools/macos_ne_signed_preflight.py'
+      - 'tests/test_macos_ne_signed_preflight.py'
+      - 'docs/qa/MACOS_NE_SIGNED_PREFLIGHT.md'
+      - '.github/workflows/macos-ne-signed-preflight.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static-and-negative-fixtures:
+    name: Synthetic negative controls (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Test read-only signed NE gate with negative fixtures
+        run: python -m unittest discover -s tests -p test_macos_ne_signed_preflight.py -v
+      - name: Parse the operator script without executing native operations
+        run: python -m py_compile tools/macos_ne_signed_preflight.py
+      - name: Do not imply host activation or release approval
+        shell: python
+        run: |
+          from pathlib import Path
+          s=Path('tools/macos_ne_signed_preflight.py').read_text()
+          for flag in ('"activation_accepted": False', '"native_packet_evidence_accepted": False', '"release_accepted": False'):
+              assert flag in s, flag
