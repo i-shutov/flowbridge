@@ -42,3 +42,9 @@ No driver/filter/system proxy/firewall/DNS action, no native PacketBound proof,
 no claim of DIRECT blocking for apps outside explicit client SOCKS configuration.
 
 **v0.3.0-beta.1 NO-GO; v1.0.0 NO-GO until their respective gates pass.**
+
+## Next evidence handoff
+
+Record the frozen workflow run/job conclusions, original package SHA256,
+Xcode version, architectures, the native app/pkg audit JSON and explicit
+separate-profile evidence. A hosted build alone never authorizes a public tag.
