@@ -210,13 +210,14 @@ def windows_run(package: Path, harness: Path, manifest: dict, out: Path, report:
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel.OpenMutexW.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_wchar_p]
     kernel.OpenMutexW.restype = ctypes.c_void_p
-    ctypes.set_last_error(0)
-    handle = kernel.OpenMutexW(0x100000, False, "Local\\FlowBridge.NativeUI.v02")
-    if handle:
-        kernel.CloseHandle.argtypes = [ctypes.c_void_p]
-        kernel.CloseHandle(handle)
-        raise Rejected("running_flowbridge_refused")
-    require(ctypes.get_last_error() == 2, "cannot_exclude_running_flowbridge")
+    for name in ("Local\\FlowBridge.NativeUI.v02", "Local\\FlowBridge.ExplicitBeta.NativeUI"):
+        ctypes.set_last_error(0)
+        handle = kernel.OpenMutexW(0x100000, False, name)
+        if handle:
+            kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+            kernel.CloseHandle(handle)
+            raise Rejected("running_flowbridge_refused")
+        require(ctypes.get_last_error() == 2, "cannot_exclude_running_flowbridge")
     stable_keys = [(stable_settings, "InstallDir"), (stable_uninstall, "InstallLocation"),
                    (stable_uninstall, "DisplayVersion"), (stable_uninstall, "UninstallString")]
     before_registry = [windows_registry(*x) for x in stable_keys]

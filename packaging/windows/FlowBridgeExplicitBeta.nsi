@@ -67,7 +67,7 @@ LangString Need64 ${LANG_ENGLISH} "FlowBridge requires 64-bit Windows 10 or late
 LangString Need64 ${LANG_RUSSIAN} "Для FlowBridge требуется 64-разрядная Windows 10 или более поздняя версия."
 
 !macro CheckRunning
-  System::Call 'kernel32::OpenMutexW(i 0x100000, i 0, w "Local\FlowBridge.NativeUI.v02") p .r0'
+  System::Call 'kernel32::OpenMutexW(i 0x100000, i 0, w "Local\FlowBridge.ExplicitBeta.NativeUI") p .r0'
   ${If} $0 P<> 0
     System::Call 'kernel32::CloseHandle(p r0)'
     MessageBox MB_OK|MB_ICONEXCLAMATION "$(Running)"

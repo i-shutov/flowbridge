@@ -68,10 +68,10 @@ $ManifestSha = '<64 hex manifest SHA-256>'
 $ToolSha = '<64 hex acceptance script SHA-256>'
 
 $Common = @(
-    '.\explicit_beta_acceptance.py',
-    '--manifest', '.\explicit-beta-package.json',
-    '--package', '.\FlowBridge-0.3.0-beta.1-windows-x64-setup.exe',
-    '--harness', '.\FlowBridgeNativeSmoke.exe',
+    '.\tools\explicit_beta_acceptance.py',
+    '--manifest', '.\windows\explicit-beta-package.json',
+    '--package', '.\windows\FlowBridge-0.3.0-beta.1-windows-x64-setup.exe',
+    '--harness', '.\windows\FlowBridgeNativeSmoke.exe',
     '--expected-source', $Source,
     '--expected-package-sha256', $PackageSha,
     '--expected-manifest-sha256', $ManifestSha,
@@ -121,9 +121,9 @@ tool_sha='<64 hex acceptance script SHA-256>'
 expected_computer='<точное имя целевого Mac из hostname>'
 
 common=(
-  ./explicit_beta_acceptance.py
-  --manifest ./explicit-macos-package.json
-  --package ./FlowBridge-0.3.0-beta.1-macOS-universal-explicit-beta.pkg
+  ./tools/explicit_beta_acceptance.py
+  --manifest ./macos/explicit-macos-package.json
+  --package ./macos/FlowBridge-0.3.0-beta.1-macOS-universal-explicit-beta.pkg
   --expected-source "$source_sha"
   --expected-package-sha256 "$package_sha"
   --expected-manifest-sha256 "$manifest_sha"

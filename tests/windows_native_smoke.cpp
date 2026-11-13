@@ -465,13 +465,32 @@ static void actualRuleEditorTest(HWND window, const wchar_t* screenshot) {
     std::puts("PASS Win32 rule editor: real modal controls, Rust validation/evaluation, cancel, responsive bounds and preserved routes");
 }
 static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
+#ifdef FLOWBRIDGE_EXPLICIT_BETA_ONLY
+    // The beta must launch even while the stable product owns its instance guard.
+    auto closeHandle=[](void* handle){if(handle)CloseHandle(handle);};
+    std::unique_ptr<void,decltype(closeHandle)> stableGuard(
+        CreateMutexW(nullptr,FALSE,L"Local\\FlowBridge.NativeUI.v02"),closeHandle);
+    need(stableGuard!=nullptr,"Stable namespace fixture unavailable");
+    const wchar_t* expectedClass=L"FlowBridgeExplicitBeta";
+#else
+    const wchar_t* expectedClass=L"FlowBridgeNativeV02";
+#endif
     STARTUPINFOW start{}; start.cb=sizeof(start); PROCESS_INFORMATION process{};
     std::wstring command=L"\""+std::wstring(executable)+L"\"";
     need(CreateProcessW(executable,command.data(),nullptr,nullptr,FALSE,0,nullptr,nullptr,&start,&process)!=0,"GUI launch failed");
     HWND window=nullptr;
     try {
         need(WaitForInputIdle(process.hProcess,8000)==0,"GUI did not finish initialization");
-        waitFor([&]{ window=FindWindowW(L"FlowBridgeNativeV02",nullptr); return window!=nullptr; },"GUI window did not appear");
+        waitFor([&]{ const HWND candidate=FindWindowW(expectedClass,nullptr); DWORD pid=0;
+            if(candidate)GetWindowThreadProcessId(candidate,&pid);
+            if(!candidate||pid!=process.dwProcessId)return false;
+            window=candidate;return true; },"Launched GUI window did not appear");
+#ifdef FLOWBRIDGE_EXPLICIT_BETA_ONLY
+        const std::string betaVersion=FLOWBRIDGE_BETA_VERSION;
+        need(windowText(window).find(std::wstring(betaVersion.begin(),betaVersion.end()))!=std::wstring::npos,
+             "Beta window title differs from package version");
+        std::puts("PASS explicit beta instance namespace and actual window version");
+#endif
         assertCompactLayout(window,screenshot);
         const int startId=100,stopId=101,applyId=102,proxyId=105,hostId=106,protocolId=108,editorId=109,tableId=110,statusId=112;
         const int modeId=230;SendMessageW(GetDlgItem(window,modeId),CB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(modeId,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,modeId)));
@@ -654,7 +673,12 @@ static void guiTest(const wchar_t* executable,const wchar_t* screenshot) {
         SendMessageW(window,WM_CLOSE,0,0); need(WaitForSingleObject(process.hProcess,8000)==WAIT_OBJECT_0,"GUI close failed");
         DWORD exitCode=1; GetExitCodeProcess(process.hProcess,&exitCode); need(exitCode==0,"GUI nonzero exit");
         std::puts("PASS Win32 GUI: native pages, SSH editor, Apply, SOCKS4a, preserved edits, Start, real traffic, table, Stop, bounded discovery, presets, clean exit");
-    } catch (...) { if(window) PostMessageW(window,WM_CLOSE,0,0); if(WaitForSingleObject(process.hProcess,3000)!=WAIT_OBJECT_0) TerminateProcess(process.hProcess,99); CloseHandle(process.hThread); CloseHandle(process.hProcess); throw; }
+    } catch (...) {
+        DWORD owner=0;if(window)GetWindowThreadProcessId(window,&owner);
+        if(window&&owner==process.dwProcessId)PostMessageW(window,WM_CLOSE,0,0);
+        if(WaitForSingleObject(process.hProcess,3000)!=WAIT_OBJECT_0)TerminateProcess(process.hProcess,99);
+        CloseHandle(process.hThread);CloseHandle(process.hProcess);throw;
+    }
     CloseHandle(process.hThread); CloseHandle(process.hProcess);
 }
 static void nativeOwnedPoolLifecycleTest() {

@@ -1032,7 +1032,16 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
 }
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show) {
     // Shared with installer: an existing process must exit before replacement or uninstall.
-    HANDLE guard=CreateMutexW(nullptr,FALSE,L"Local\\FlowBridge.NativeUI.v02");
+#ifdef FLOWBRIDGE_EXPLICIT_BETA_ONLY
+    const wchar_t* mutexName=L"Local\\FlowBridge.ExplicitBeta.NativeUI";
+    const wchar_t* windowClass=L"FlowBridgeExplicitBeta";
+    const auto windowTitle=wide(std::string("FlowBridge Explicit Beta ")+FLOWBRIDGE_BETA_VERSION+" — локальный SOCKS");
+#else
+    const wchar_t* mutexName=L"Local\\FlowBridge.NativeUI.v02";
+    const wchar_t* windowClass=L"FlowBridgeNativeV02";
+    const std::wstring windowTitle=L"FlowBridge 0.2 — личный маршрут";
+#endif
+    HANDLE guard=CreateMutexW(nullptr,FALSE,mutexName);
     if(!guard || GetLastError()==ERROR_ALREADY_EXISTS) { if(guard) CloseHandle(guard); MessageBoxW(nullptr,L"FlowBridge is already running in this session.",L"FlowBridge",MB_OK|MB_ICONINFORMATION); return 1; }
     INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_LISTVIEW_CLASSES}; InitCommonControlsEx(&controls);
     SetProcessDPIAware();
@@ -1040,13 +1049,13 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show) {
     titleFont=CreateFontW(-28,0,0,0,FW_SEMIBOLD,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
     headingFont=CreateFontW(-21,0,0,0,FW_SEMIBOLD,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
     smallFont=CreateFontW(-13,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
-    WNDCLASSW cls{}; cls.lpfnWndProc=windowProc; cls.hInstance=instance; cls.lpszClassName=L"FlowBridgeNativeV02"; cls.hCursor=LoadCursorW(nullptr,IDC_ARROW); cls.hbrBackground=reinterpret_cast<HBRUSH>(COLOR_WINDOW+1);
+    WNDCLASSW cls{}; cls.lpfnWndProc=windowProc; cls.hInstance=instance; cls.lpszClassName=windowClass; cls.hCursor=LoadCursorW(nullptr,IDC_ARROW); cls.hbrBackground=reinterpret_cast<HBRUSH>(COLOR_WINDOW+1);
     if(!RegisterClassW(&cls)) { CloseHandle(guard); return 1; }
     RECT workArea{};SystemParametersInfoW(SPI_GETWORKAREA,0,&workArea,0);
     const int availableW=workArea.right-workArea.left,availableH=workArea.bottom-workArea.top;
     const int initialW=std::min(1180,std::max(980,availableW));
     const int initialH=std::min(760,std::max(680,availableH));
-    HWND h=CreateWindowW(cls.lpszClassName,L"FlowBridge 0.2 — личный маршрут",WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN,
+    HWND h=CreateWindowW(cls.lpszClassName,windowTitle.c_str(),WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN,
                          workArea.left,workArea.top,initialW,initialH,nullptr,nullptr,instance,nullptr);
     if(!h) { CloseHandle(guard); return 1; } ShowWindow(h,show); MSG msg{}; BOOL status;
     while((status=GetMessageW(&msg,nullptr,0,0))>0) { if(!IsDialogMessageW(h,&msg)) { TranslateMessage(&msg); DispatchMessageW(&msg); } }
