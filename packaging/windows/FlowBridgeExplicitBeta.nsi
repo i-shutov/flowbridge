@@ -20,10 +20,15 @@ Unicode true
   !error "Specify -DPAYLOAD_DIR=/absolute/path/to/staged/payload"
 !endif
 !ifndef OUTPUT_FILE
-  !define OUTPUT_FILE "FlowBridge-0.2.0-explicit-candidate-windows-x64-setup.exe"
+  !error "Specify OUTPUT_FILE from packaging/explicit-beta.json"
+!endif
+!ifndef VERSION
+  !error "Specify VERSION from packaging/explicit-beta.json"
+!endif
+!ifndef FILE_VERSION
+  !error "Specify FILE_VERSION from packaging/explicit-beta.json"
 !endif
 !define PRODUCT "FlowBridge Explicit SOCKS Beta"
-!define VERSION "0.2.0-explicit-candidate"
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\FlowBridgeExplicitBeta"
 Var ExistingInstallDir
 Name "${PRODUCT} ${VERSION}"
@@ -34,11 +39,11 @@ RequestExecutionLevel user
 SetCompressor /SOLID lzma
 SetCompressorDictSize 32
 BrandingText "FlowBridge Explicit SOCKS Beta — no driver / no interception"
-VIProductVersion "0.2.0.0"
+VIProductVersion "${FILE_VERSION}"
 VIAddVersionKey /LANG=1033 "ProductName" "FlowBridge"
-VIAddVersionKey /LANG=1033 "ProductVersion" "0.2.0-explicit-candidate"
+VIAddVersionKey /LANG=1033 "ProductVersion" "${VERSION}"
 VIAddVersionKey /LANG=1033 "FileDescription" "FlowBridge explicit SOCKS-only beta; no driver"
-VIAddVersionKey /LANG=1033 "FileVersion" "0.2.0.0"
+VIAddVersionKey /LANG=1033 "FileVersion" "${FILE_VERSION}"
 VIAddVersionKey /LANG=1033 "LegalCopyright" "FlowBridge contributors"
 !define MUI_ABORTWARNING
 !define MUI_LANGDLL_REGISTRY_ROOT HKCU
@@ -113,6 +118,8 @@ Section "FlowBridge" SEC_MAIN
   File "${PAYLOAD_DIR}${HOST_SEP}flowbridge-cli.exe"
   File "${PAYLOAD_DIR}${HOST_SEP}LICENSE"
   File "${PAYLOAD_DIR}${HOST_SEP}README.txt"
+  File "${PAYLOAD_DIR}${HOST_SEP}SBOM.cdx.json"
+  File "${PAYLOAD_DIR}${HOST_SEP}BUILD-METADATA.json"
   SetOutPath "$INSTDIR\examples"
   File "${PAYLOAD_DIR}${HOST_SEP}examples${HOST_SEP}*.json"
   SetOutPath "$INSTDIR\licenses"
@@ -147,6 +154,8 @@ Section "Uninstall"
   Delete "$INSTDIR\flowbridge-cli.exe"
   Delete "$INSTDIR\LICENSE"
   Delete "$INSTDIR\README.txt"
+  Delete "$INSTDIR\SBOM.cdx.json"
+  Delete "$INSTDIR\BUILD-METADATA.json"
   Delete "$INSTDIR\examples\ssh-socks.json"
   Delete "$INSTDIR\examples\chain.json"
   Delete "$INSTDIR\examples\direct.json"

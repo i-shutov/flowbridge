@@ -1,19 +1,6 @@
 name: Explicit SOCKS beta — real managed Windows OpenSSH acceptance
 on:
-  push:
-    branches: [release/explicit-socks-beta-20261111]
-    paths:
-      - .github/workflows/explicit-beta-managed-ssh.yml
-      - crates/flowbridge-cli/**
-      - crates/flowbridge-ffi/**
-      - crates/flowbridge-tunnel/**
-      - crates/flowbridge-runtime/**
-      - crates/flowbridge-capture/**
-      - tests/*ssh*
-      - tests/real_owned_pool_lifecycle.py
-      - Cargo.lock
-      - Cargo.toml
-  workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 concurrency:
@@ -21,7 +8,7 @@ concurrency:
   cancel-in-progress: true
 env:
   FLOWBRIDGE_HOSTED_WINDOWS_SSH: '1'
-  FLOWBRIDGE_CAPTURE_AGENT: target/debug/flowbridge-agent.exe
+  FLOWBRIDGE_CAPTURE_AGENT: target/release/flowbridge-agent.exe
   PYTHONUTF8: '1'
 jobs:
   real-managed-ssh:
@@ -35,15 +22,40 @@ jobs:
         with:
           python-version: '3.13'
       - uses: dtolnay/rust-toolchain@stable
+      - name: Fetch the Windows package built in this exact candidate run
+        uses: actions/download-artifact@v4
+        with:
+          name: FlowBridge-Explicit-SOCKS-EngineeringCandidate-Windows-${{ github.run_id }}
+          path: build/candidate-input
+      - name: Verify the release DLL and all payload files against the installer manifest
+        shell: python
+        run: |
+          import json, os, pathlib, subprocess, sys
+          sys.path.insert(0, 'tools')
+          from explicit_beta_candidate import payload_map, checked_file
+          root = pathlib.Path('build/candidate-input')
+          matches = list(root.rglob('explicit-beta-package.json'))
+          assert len(matches) == 1, 'Package manifest missing or ambiguous'
+          manifest = json.loads(matches[0].read_text(encoding='utf-8'))
+          source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          assert manifest['source_sha'] == source == os.environ['GITHUB_SHA']
+          libraries = list(root.rglob('flowbridge_ffi.dll'))
+          assert len(libraries) == 1, 'Packaged release DLL missing or ambiguous'
+          stage = libraries[0].parent
+          for name, entry in payload_map(manifest).items():
+              checked_file(stage / name, entry['sha256'], entry['bytes'])
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as env:
+              env.write('FLOWBRIDGE_BETA_FFI=' + str(libraries[0].resolve()) + '\n')
+              env.write('FLOWBRIDGE_BETA_CLI=' + str((stage / 'flowbridge-cli.exe').resolve()) + '\n')
       - name: Strict negative regression; no permissive capacity pass
         shell: pwsh
         run: |
           python -m unittest discover -s tests -p test_windows_ssh_probe.py -v
           if ($LASTEXITCODE -ne 0) { throw 'SSH gate unit tests failed' }
-      - name: Build exact user-mode product and test-only capture fixture
+      - name: Build only the test fixture; use the actual packaged release FFI
         shell: pwsh
         run: |
-          cargo build --locked -p flowbridge-ffi -p flowbridge-cli -p flowbridge-capture
+          cargo build --locked --release -p flowbridge-capture
           if ($LASTEXITCODE -ne 0) { throw 'Exact-source Rust build failed' }
       - name: Pin Microsoft-signed portable sshd and system OpenSSH
         shell: pwsh
@@ -78,7 +90,7 @@ jobs:
       - name: Native real managed SSH 10k bounded churn and fail-closed gates
         shell: pwsh
         run: |
-          python tests/windows_real_ssh_hosted.py --scenario managed --ssh "$env:FLOWBRIDGE_TEST_SSH" --sshd "$env:FLOWBRIDGE_TEST_SSHD" --keygen "$env:FLOWBRIDGE_TEST_KEYGEN" --library target/debug/flowbridge_ffi.dll --output build/verification/explicit-beta-ssh --churn 10000
+          python tests/windows_real_ssh_hosted.py --scenario managed --ssh "$env:FLOWBRIDGE_TEST_SSH" --sshd "$env:FLOWBRIDGE_TEST_SSHD" --keygen "$env:FLOWBRIDGE_TEST_KEYGEN" --library "$env:FLOWBRIDGE_BETA_FFI" --cli "$env:FLOWBRIDGE_BETA_CLI" --output build/verification/explicit-beta-ssh --churn 10000
           if ($LASTEXITCODE -ne 0) { throw 'Real managed SSH acceptance failed' }
           $report = Get-Content 'build/verification/explicit-beta-ssh/summary.json' -Raw | ConvertFrom-Json
           $head = (git rev-parse HEAD).Trim()

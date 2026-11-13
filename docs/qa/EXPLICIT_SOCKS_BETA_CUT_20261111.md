@@ -1,6 +1,6 @@
 # FlowBridge explicit SOCKS beta — release cut and acceptance contract
 
-**Date:** 2026-11-11. **Status:** Engineering candidate / NO-GO for public release.
+**Updated:** 2026-11-13. **Status:** Engineering candidate / NO-GO for public release.
 **Candidate branch:** `release/explicit-socks-beta-20261111`, created from previously verified product source `c339df2e4d20edf1d11d45786581a68451a71929` (PR #56).
 **Review:** [draft PR #59](https://github.com/i-shutov/flowbridge/pull/59), based on PR #56's branch.
 
@@ -38,9 +38,13 @@ hostnames; applications resolving locally remain outside this contract.
   network-hook component. Source-only research may remain in the repo
   but is neither linked as a driver nor shipped as an executable helper.
 - All package file hashes and PE x64 headers must be checked.
-- Engineering package version `0.2.0-explicit-candidate` matches the
-  retained Rust core's `0.2.0` lineage. A new source/lockfile/version cut
-  is required before tagging `v0.3.0-beta.1`.
+- The new version cut uses `0.3.0-beta.1` consistently in Rust, GUI and
+  package metadata. `packaging/explicit-beta.json` is the version contract.
+  This does not authorize a tag, GitHub prerelease, publisher signing or 1.0.
+- Payload also contains source-pinned CycloneDX `SBOM.cdx.json` and
+  `BUILD-METADATA.json`, with real license texts in the notices. The inventory
+  covers resolved production/build inputs; binary composition, native runtime
+  distribution review and independent license review remain separate.
 
 ## Verified user-owned Windows 10 evidence — *previous* product SHA
 
@@ -74,6 +78,37 @@ uninstaller are independently green.
 | A6 | Independent security/release reviewer, zero P0 for explicit SOCKS-only, original source/package hashes match | **OPEN** |
 | A7 | Tag and GitHub prerelease **only after** A0–A6; verify fetched published bytes | **NOT RELEASED** |
 | Native WFP G2/W3 | Signed/loaded driver and independent physical ALE/accepted socket evidence | **NO-GO** (separate 1.0 track) |
+
+### 2026-11-13 unified candidate pipeline
+
+The A0–A7 table remains a release acceptance table. New hosted results are
+recorded per **candidate source SHA**, not inferred from this document.
+`explicit-beta-candidate.yml` is the single push/manual entry point; it calls
+the three platform/SSH workflows as reusable jobs.
+
+1. Strict Rust format/Clippy/workspace tests and DNS loopback regression on
+   Linux, Windows and macOS run on the exact checkout.
+2. Windows explicit install/GUI/upgrade/uninstall and macOS universal
+   package scope checks produce manifests with source, tree and run ID.
+3. Managed OpenSSH uses the **release DLL and CLI from the Windows package**.
+   It requires 128 held channels, 1152 expected overload rejections, 10000
+   churn and four independent workers; a rebuilt debug DLL cannot pass.
+4. Fresh hosted Windows/macOS jobs execute the operator QA runner's install
+   lifecycle. Their result is explicitly CI, never owner acceptance.
+5. `tools/explicit_beta_candidate.py` verifies hashes, exact payload allowlist,
+   source/tree/run identity, metadata and QA reports before producing one
+   portable bundle with `candidate-index.json` and checksums.
+
+The previous [managed SSH run 43388914981](https://github.com/i-shutov/flowbridge/actions/runs/43388914981)
+is accepted hosted evidence for source `6f6f69ad`; it used debug FFI and is
+not a substitute for the packaged-release-byte run. Original ZIP digest:
+`bcd6a3821c01b6402f554ebad54ce0abca0fe122dd93f89ee78cbfe2410d27b1`.
+
+The separate capture G2 job remains strict. Its original failure
+`kernel_connection_id_missing` is retained; no `continue-on-error` or
+manufactured PacketBound approval is introduced. See the
+[current 1.0 plan](../RELEASE_1_0_PLAN.md) for backend scope and B0–B4.
+Owner instructions: [EXPLICIT_BETA_NATIVE_ACCEPTANCE.md](EXPLICIT_BETA_NATIVE_ACCEPTANCE.md).
 
 ## Working checks
 

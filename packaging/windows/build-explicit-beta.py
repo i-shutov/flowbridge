@@ -18,7 +18,11 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-CANDIDATE_NAME = "FlowBridge-0.2.0-explicit-candidate-windows-x64-setup.exe"
+sys.path.insert(0, str(ROOT / "tools"))
+from explicit_beta_metadata import check_versions, generate
+
+VERSION_CONTRACT = check_versions()
+CANDIDATE_NAME = VERSION_CONTRACT["windows_installer"]
 BUILD_DIR = ROOT / "build" / "windows-explicit-beta"
 STAGE = ROOT / "build" / "explicit-beta-payload"
 OUTPUT = ROOT / "artifacts" / CANDIDATE_NAME
@@ -53,6 +57,17 @@ def pe_machine(path: Path, *, installer: bool = False) -> str:
     return f"0x{machine:04x}"
 
 
+def nsis_compiler() -> Path:
+    nsis = shutil.which("makensis.exe")
+    if nsis:
+        return Path(nsis).resolve()
+    for base in (os.environ.get("ProgramFiles(x86)", ""), os.environ.get("ProgramFiles", "")):
+        candidate = Path(base) / "NSIS" / "makensis.exe"
+        if candidate.is_file():
+            return candidate.resolve()
+    raise RuntimeError("Verified portable NSIS was not available; no installer produced")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--skip-build", action="store_true",
@@ -79,6 +94,15 @@ def main() -> None:
     gui = BUILD_DIR / "Release/FlowBridge.exe"
     cli = ROOT / "target/release/flowbridge.exe"
     ffi_dll = ROOT / "target/release/flowbridge_ffi.dll"
+    harness = BUILD_DIR / "Release/FlowBridgeNativeSmoke.exe"
+    if not harness.is_file() or harness.is_symlink():
+        raise RuntimeError("The native QA harness must be materialized and hashed")
+    nsis = nsis_compiler()
+    nsis_root = nsis.parent.parent if nsis.parent.name.lower() == "bin" else nsis.parent
+    metadata_dir = ROOT / "build/explicit-beta-metadata/windows"
+    build_metadata = generate("windows", metadata_dir, nsis_root=nsis_root)
+    if build_metadata["source_sha"] != source_commit:
+        raise RuntimeError("Package and dependency metadata source commits differ")
     files = [
         (gui, "FlowBridge.exe"),
         (cli, "flowbridge-cli.exe"),
@@ -86,7 +110,9 @@ def main() -> None:
         (ROOT / "LICENSE", "LICENSE"),
         (ROOT / "packaging/windows/README-EXPLICIT-BETA.txt", "README.txt"),
         (ROOT / "third_party/nlohmann/LICENSE.MIT", "licenses/nlohmann-json-LICENSE.MIT"),
-        (ROOT / "third_party/THIRD_PARTY_NOTICES.txt", "licenses/THIRD_PARTY_NOTICES.txt"),
+        (metadata_dir / "THIRD_PARTY_NOTICES.txt", "licenses/THIRD_PARTY_NOTICES.txt"),
+        (metadata_dir / "SBOM.cdx.json", "SBOM.cdx.json"),
+        (metadata_dir / "BUILD-METADATA.json", "BUILD-METADATA.json"),
         (ROOT / "resources/presets.json", "resources/presets.json"),
     ]
     files.extend((ROOT / "examples" / name, "examples/" + name)
@@ -109,27 +135,25 @@ def main() -> None:
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     if OUTPUT.exists():
         raise RuntimeError("Refusing to silently replace an existing installer")
-    nsis = shutil.which("makensis.exe")
-    if not nsis:
-        for base in (os.environ.get("ProgramFiles(x86)", ""), os.environ.get("ProgramFiles", "")):
-            candidate = Path(base) / "NSIS" / "makensis.exe"
-            if candidate.is_file():
-                nsis = str(candidate)
-                break
-    if not nsis:
-        raise RuntimeError("Verified portable NSIS was not available; no installer produced")
-    run([nsis, "/INPUTCHARSET", "UTF8", "/DPAYLOAD_DIR=" + str(STAGE),
-         "/DOUTPUT_FILE=" + str(OUTPUT), "packaging/windows/FlowBridgeExplicitBeta.nsi"])
+    run([str(nsis), "/INPUTCHARSET", "UTF8", "/DPAYLOAD_DIR=" + str(STAGE),
+         "/DOUTPUT_FILE=" + str(OUTPUT), "/DVERSION=" + VERSION_CONTRACT["version"],
+         "/DFILE_VERSION=" + VERSION_CONTRACT["windows_file_version"],
+         "packaging/windows/FlowBridgeExplicitBeta.nsi"])
     installer_arch = pe_machine(OUTPUT, installer=True)
     report = {
         "schema": "flowbridge-explicit-beta-windows-qa-package-v1",
-        "candidate": "0.2.0-explicit-candidate",
+        "candidate": VERSION_CONTRACT["version"],
         "source_sha": source_commit,
+        "source_tree_sha": run(["git", "rev-parse", "HEAD^{tree}"]),
+        "workflow_run_id": os.environ.get("GITHUB_RUN_ID"),
         "installer": str(OUTPUT),
         "installer_sha256": digest(OUTPUT),
         "installer_bytes": OUTPUT.stat().st_size,
         "bootstrapper_pe_machine": installer_arch,
         "payload": entries,
+        "qa_harness": {"path": str(harness), "sha256": digest(harness), "bytes": harness.stat().st_size},
+        "sbom_sha256": build_metadata["sbom_sha256"],
+        "build_metadata_sha256": digest(metadata_dir / "BUILD-METADATA.json"),
         "signed": False,
         "publisher_release_approved": False,
         "explicit_socks_only": True,

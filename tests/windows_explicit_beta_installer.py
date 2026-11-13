@@ -74,6 +74,8 @@ def main() -> None:
         "app_process_ownership_proved": False,
         "protected_mode_supported": False,
         "test_steps": [], "source_sha": None,
+        "source_tree_sha": subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], text=True).strip(),
+        "workflow_run_id": os.environ.get("GITHUB_RUN_ID"),
     }
 
     def passed(name: str) -> None:
@@ -93,6 +95,8 @@ def main() -> None:
              and m["publisher_release_approved"] is False,
              "Beta package scope manifest is invalid")
         report["source_sha"] = m["source_sha"]
+        must(m["source_sha"] == subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+             "Package was built from a different source checkout")
         installer = Path(m["installer"]).resolve(strict=True)
         harness = a.harness.resolve(strict=True)
         must(digest(installer) == m["installer_sha256"]

@@ -1,6 +1,9 @@
 # A4: isolated macOS explicit SOCKS beta — engineering candidate
 
-**Status:** source/package changes prepared; hosted build and real Mac installation NOT YET ACCEPTED.
+**Updated 2026-11-13:** historical hosted universal package PASS on `922a32df`
+([run 43387219678](https://github.com/i-shutov/flowbridge/actions/runs/43387219678)).
+The new `0.3.0-beta.1` version/metadata cut requires its own unified candidate run.
+Real owner Mac installation/visual/SSH acceptance remains OPEN.
 Scope ONLY PR #59. Windows WFP/NDISRD, macOS NE and system DNS outside this beta.
 
 ## New identities, no system extension

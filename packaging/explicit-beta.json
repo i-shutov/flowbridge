@@ -1,0 +1,12 @@
+{
+  "schema": "flowbridge-explicit-beta-version-v1",
+  "version": "0.3.0-beta.1",
+  "windows_file_version": "0.3.0.1",
+  "macos_short_version": "0.3.0",
+  "macos_bundle_version": "3.0.1",
+  "windows_installer": "FlowBridge-0.3.0-beta.1-windows-x64-setup.exe",
+  "macos_installer": "FlowBridge-0.3.0-beta.1-macOS-universal-explicit-beta.pkg",
+  "windows_namespace": "FlowBridgeExplicitBeta",
+  "macos_bundle_id": "org.flowbridge.FlowBridgeExplicitBeta",
+  "release_approved": false
+}

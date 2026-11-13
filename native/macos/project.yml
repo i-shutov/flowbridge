@@ -65,6 +65,8 @@ targets:
       base:
         PRODUCT_NAME: FlowBridgeExplicitBeta
         PRODUCT_BUNDLE_IDENTIFIER: org.flowbridge.FlowBridgeExplicitBeta
+        MARKETING_VERSION: '$(FLOWBRIDGE_BETA_SHORT_VERSION)'
+        CURRENT_PROJECT_VERSION: '$(FLOWBRIDGE_BETA_BUILD_VERSION)'
         CODE_SIGN_IDENTITY: '-'
         CODE_SIGN_STYLE: Manual
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: '$(inherited) FLOWBRIDGE_EXPLICIT_BETA_ONLY'
@@ -72,6 +74,7 @@ targets:
       path: Generated/ExplicitBeta-Info.plist
       properties:
         CFBundleDisplayName: FlowBridge Explicit Beta
+        FlowBridgeVersion: '$(FLOWBRIDGE_BETA_VERSION)'
         LSMinimumSystemVersion: '13.0'
         NSHighResolutionCapable: true
   FlowBridgeExtension:

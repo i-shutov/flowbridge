@@ -2,7 +2,7 @@ FlowBridge Explicit SOCKS Candidate — Windows x64
 ================================================
 
 ENGINEERING CANDIDATE, NOT A PRODUCTION RELEASE
-Source family: 0.2.0, explicit-only packaging experiment.
+Candidate version: 0.3.0-beta.1, explicit SOCKS-only engineering build.
 
 Supported: local SOCKS5/SOCKS5h TCP listener, explicitly configured clients,
 external upstream proxies, user-owned OpenSSH -D with watchdog (GUI),
@@ -39,3 +39,8 @@ No Windows kernel driver, helper or network interception service included.
 Do not elevate installer for driver work: this candidate never does it.
 
 Project and updates: https://github.com/i-shutov/flowbridge
+
+BUILD-METADATA.json identifies the exact clean source commit and Cargo.lock.
+SBOM.cdx.json inventories resolved production/build inputs for this target.
+licenses/THIRD_PARTY_NOTICES.txt contains the actual corresponding license texts.
+This inventory does not certify binary linkage, security or independent license review.

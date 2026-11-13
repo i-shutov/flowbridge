@@ -3,7 +3,7 @@ import AppKit
 
 #if FLOWBRIDGE_EXPLICIT_BETA_ONLY
 private let productTitle = "FlowBridge Explicit Beta"
-private let productFooter = "v0.2.0 · explicit SOCKS beta"
+private let productFooter = "v\(Bundle.main.object(forInfoDictionaryKey: "FlowBridgeVersion") as? String ?? "UNKNOWN") · explicit SOCKS beta"
 private let productTagline = "EXPLICIT SOCKS · NO SYSTEM CAPTURE"
 #else
 private let productTitle = "FlowBridge"

@@ -137,7 +137,8 @@ def make_config(ssh: Path, identity: Path, known: Path, user: str,
 
 def run(agent: Path, ssh: Path, identity: Path, known: Path, user: str,
         ssh_port: int, target_port: int, output: Path,
-        installed_banner_helper: Path | None = None) -> dict:
+        installed_banner_helper: Path | None = None,
+        source_banner_helper: Path | None = None) -> dict:
     require(sys.platform == "win32", "This process-level acceptance requires Windows")
     agent = agent.resolve(strict=True)
     ssh = ssh.resolve(strict=True)
@@ -166,8 +167,10 @@ def run(agent: Path, ssh: Path, identity: Path, known: Path, user: str,
         # Exercise the actual original-Rust helper from an installation-like
         # Windows path with spaces, not a hand-written Python ProxyCommand.
         if installed_banner_helper is None:
-            source_cli = Path("target/debug/flowbridge.exe").resolve(strict=True)
-            helper = Path(td) / "FlowBridge Program Files" / "flowbridge.exe"
+            source_cli = (source_banner_helper or Path("target/debug/flowbridge.exe")).resolve(strict=True)
+            require(source_cli.name.lower() in ("flowbridge.exe", "flowbridge-cli.exe"),
+                    "Unrecognized original Rust CLI name")
+            helper = Path(td) / "FlowBridge Program Files" / source_cli.name
             helper.parent.mkdir(parents=True)
             shutil.copy2(source_cli, helper)
             secure_test_file(helper)

@@ -1,23 +1,6 @@
 name: Explicit SOCKS-only beta engineering package (Windows)
 on:
-  push:
-    branches:
-      - release/explicit-socks-beta-20261111
-    paths:
-      - Cargo.toml
-      - Cargo.lock
-      - crates/**
-      - native/windows/**
-      - native/include/**
-      - tests/windows_native_smoke.cpp
-      - tests/windows_explicit_beta_installer.py
-      - packaging/windows/FlowBridgeExplicitBeta.nsi
-      - packaging/windows/README-EXPLICIT-BETA.txt
-      - packaging/windows/build-explicit-beta.py
-      - resources/**
-      - third_party/**
-      - .github/workflows/explicit-socks-beta-windows.yml
-  workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 concurrency:
@@ -35,6 +18,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rust-docs
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -111,11 +96,13 @@ jobs:
         with:
           name: FlowBridge-Explicit-SOCKS-EngineeringCandidate-Windows-${{ github.run_id }}
           path: |
-            artifacts/FlowBridge-0.2.0-explicit-candidate-windows-x64-setup.exe
-            artifacts/FlowBridge-0.2.0-explicit-candidate-windows-x64-setup.exe.sha256
+            artifacts/FlowBridge-0.3.0-beta.1-windows-x64-setup.exe
+            artifacts/FlowBridge-0.3.0-beta.1-windows-x64-setup.exe.sha256
             build/verification/explicit-beta-package.json
             build/verification/explicit-beta/explicit-beta-installer-result.json
             build/verification/explicit-beta/*.bmp
+            build/windows-explicit-beta/Release/FlowBridgeNativeSmoke.exe
+            build/explicit-beta-payload/
           retention-days: 30
           if-no-files-found: error
       - name: Publish errors for diagnosis but never call these release artifacts

@@ -24,6 +24,14 @@ xcodegen generate --spec project.yml
 out="${FLOWBRIDGE_BUILD_DIR:-$root/build/macos/$mode}"
 args=(-project FlowBridge.xcodeproj -scheme "$scheme" -configuration Release -derivedDataPath "$out" \
   'ARCHS=arm64 x86_64' ONLY_ACTIVE_ARCH=NO)
+if [[ "$mode" == explicit-beta ]]; then
+  python3 "$root/tools/explicit_beta_metadata.py" check
+  beta_version=$(python3 "$root/tools/explicit_beta_metadata.py" field version)
+  beta_short_version=$(python3 "$root/tools/explicit_beta_metadata.py" field macos_short_version)
+  beta_build_version=$(python3 "$root/tools/explicit_beta_metadata.py" field macos_bundle_version)
+  args+=("FLOWBRIDGE_BETA_VERSION=$beta_version" "FLOWBRIDGE_BETA_SHORT_VERSION=$beta_short_version" \
+    "FLOWBRIDGE_BETA_BUILD_VERSION=$beta_build_version")
+fi
 if [[ "$mode" == local || "$mode" == explicit-beta ]]; then
   args+=(CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual CODE_SIGNING_ALLOWED=YES)
 else
@@ -55,6 +63,14 @@ if [[ "$mode" == explicit-beta ]]; then
     echo 'Explicit beta has forbidden Network Extension entitlements' >&2
     exit 1
   fi
+  # Include the exact locked inventory before the final ad-hoc signature.
+  python3 "$root/tools/explicit_beta_metadata.py" generate --platform macos \
+    --output "$out/explicit-beta-metadata"
+  cp "$out/explicit-beta-metadata/BUILD-METADATA.json" "$app/Contents/Resources/"
+  cp "$out/explicit-beta-metadata/SBOM.cdx.json" "$app/Contents/Resources/"
+  cp "$out/explicit-beta-metadata/THIRD_PARTY_NOTICES.txt" "$app/Contents/Resources/"
+  cp "$root/LICENSE" "$app/Contents/Resources/FlowBridge-LICENSE.txt"
+  codesign --force --sign - --options runtime "$app"
 fi
 codesign --verify --deep --strict --verbose=2 "$app"
 if [[ "$mode" == native ]]; then

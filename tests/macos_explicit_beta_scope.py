@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import plistlib
 import re
@@ -106,6 +107,15 @@ def package_gate(app:Path,pkg:Path)->dict:
     info=plistlib.loads((app/"Contents/Info.plist").read_bytes())
     require(info["CFBundleIdentifier"]==BUNDLE,"Installed app bundle ID mismatched")
     require(info["CFBundleExecutable"]==PRODUCT,"Executable inside app not isolated")
+    sys.path.insert(0, str(ROOT / "tools"))
+    from explicit_beta_metadata import read_contract
+    from explicit_beta_candidate import validate_inventory
+    version = read_contract()
+    require(info.get("CFBundleShortVersionString") == version["macos_short_version"] and
+            info.get("CFBundleVersion") == version["macos_bundle_version"] and
+            info.get("FlowBridgeVersion") == version["version"], "Beta app version mismatch")
+    source = subprocess_text(["git", "rev-parse", "HEAD"]).strip()
+    validate_inventory(app / "Contents/Resources", source, version["version"], "macos")
     require(not (app/"Contents/Library/SystemExtensions").exists(),"System extension present in beta app")
     require(not (app/"Contents/PlugIns").exists(),"Plugin present in beta app")
     archs=subprocess_text(["xcrun","lipo","-archs",str(app/"Contents/MacOS"/PRODUCT)]).split()
@@ -140,7 +150,10 @@ def main()->None:
     ap.add_argument("--out",type=Path)
     opts=ap.parse_args()
     require((opts.app is None)==(opts.pkg is None),"Supply BOTH app and pkg for native test")
-    result={"schema":"flowbridge-explicit-beta-macos-scope-v1",**source_gate()}
+    result={"schema":"flowbridge-explicit-beta-macos-scope-v1",**source_gate(),
+            "source_sha":subprocess_text(["git","rev-parse","HEAD"]).strip(),
+            "source_tree_sha":subprocess_text(["git","rev-parse","HEAD^{tree}"]).strip(),
+            "workflow_run_id":os.environ.get("GITHUB_RUN_ID")}
     if opts.app is not None: result.update(package_gate(opts.app,opts.pkg))
     else: result["native_package_gate"]="NOT_RUN"
     payload=json.dumps(result,sort_keys=True,indent=2)+"\n"

@@ -7,9 +7,15 @@ bash "$root/packaging/macos/build-app.sh" "$mode"
 out="${FLOWBRIDGE_BUILD_DIR:-$root/build/macos/$mode}"
 product="FlowBridge"
 pkg_identifier="${FLOWBRIDGE_BUNDLE_ID:-org.flowbridge.FlowBridge}.installer"
+pkg_version=0.2.0
 if [[ "$mode" == explicit-beta ]]; then
   product="FlowBridgeExplicitBeta"
   pkg_identifier="org.flowbridge.FlowBridgeExplicitBeta.installer"
+  pkg_version=$(python3 "$root/tools/explicit_beta_metadata.py" field macos_short_version)
+  if [[ -n "${INSTALLER_SIGN_IDENTITY:-}" ]]; then
+    echo 'This engineering beta contract requires an unsigned pkg; release signing is a separate gate.' >&2
+    exit 1
+  fi
 fi
 app="$out/Build/Products/Release/$product.app"
 work="$(mktemp -d "${TMPDIR:-/tmp}/flowbridge-package.XXXXXX")"
@@ -19,13 +25,13 @@ ditto "$app" "$work/root/Applications/$product.app"
 pkgbuild --analyze --root "$work/root" "$work/components.plist"
 /usr/libexec/PlistBuddy -c "Set :0:BundleIsRelocatable false" "$work/components.plist"
 pkgbuild --root "$work/root" --component-plist "$work/components.plist" --identifier "$pkg_identifier" \
-  --version 0.2.0 --install-location / "$work/FlowBridge-component.pkg"
+  --version "$pkg_version" --install-location / "$work/FlowBridge-component.pkg"
 # No scripts, automatic startup, network changes or extension activation on install.
 args=(--package "$work/FlowBridge-component.pkg")
 if [[ -n "${INSTALLER_SIGN_IDENTITY:-}" ]]; then args+=(--sign "$INSTALLER_SIGN_IDENTITY"); fi
 result="$out/packages/FlowBridge-0.2.0-macOS-universal-$mode.pkg"
 if [[ "$mode" == explicit-beta ]]; then
-  result="$out/packages/FlowBridge-0.2.0-explicit-candidate-macOS-universal.pkg"
+  result="$out/packages/$(python3 "$root/tools/explicit_beta_metadata.py" field macos_installer)"
 fi
 productbuild "${args[@]}" "$result"
 pkgutil --check-signature "$result" || {
@@ -44,5 +50,8 @@ if [[ "$mode" == explicit-beta ]]; then
     echo 'Explicit beta package includes forbidden native/system payload' >&2
     exit 1
   fi
+  python3 "$root/tools/explicit_beta_metadata.py" macos-manifest --pkg "$result" \
+    --output "$root/build/verification/explicit-macos-package.json"
+  shasum -a 256 "$result" > "$result.sha256"
 fi
 printf 'Built installer: %s\n' "$result"

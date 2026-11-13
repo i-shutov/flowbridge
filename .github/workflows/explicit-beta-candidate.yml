@@ -1,0 +1,196 @@
+name: Explicit SOCKS beta candidate — one source and packaged binaries
+on:
+  push:
+    branches: [release/explicit-socks-beta-20261111]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: explicit-beta-candidate-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  PYTHONUTF8: '1'
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install 'PyYAML==6.0.2'
+      - name: Reject mixed sources, altered payloads and unsupported native approval
+        run: python -m unittest discover -s tests -p 'test_explicit_beta*.py' -v
+      - name: Check version contract and separated macOS target
+        run: |
+          python tools/explicit_beta_metadata.py check
+          python tests/macos_explicit_beta_scope.py --out build/verification/explicit-macos/static.json
+  core:
+    needs: contract
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - run: cargo test --locked --workspace
+      - run: cargo build --locked -p flowbridge-ffi
+      - name: DNS loopback regression (does not claim native DNS containment)
+        run: python tests/native_dns_integration.py --output build/verification/explicit-core/dns.json
+      - name: Record only checks that really completed on this checkout
+        shell: python
+        run: |
+          import json, os, pathlib, subprocess
+          sha = subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip()
+          tree = subprocess.check_output(['git','rev-parse','HEAD^{tree}'], text=True).strip()
+          assert sha == os.environ['GITHUB_SHA'], 'Source checkout mismatch'
+          report = {'schema':'flowbridge-explicit-beta-core-v1', 'source_sha':sha,
+                    'source_tree_sha':tree, 'workflow_run_id':os.environ['GITHUB_RUN_ID'],
+                    'runner_os':os.environ['RUNNER_OS'], 'passed':True,
+                    'format':True, 'clippy':True, 'workspace_tests':True, 'dns_loopback':True,
+                    'native_release_accepted':False}
+          out = pathlib.Path('build/verification/explicit-core')
+          out.mkdir(parents=True, exist_ok=True)
+          (out / ('core-' + os.environ['RUNNER_OS'] + '.json')).write_text(json.dumps(report, indent=2)+'\n', encoding='utf-8')
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-ExplicitBeta-Core-${{ runner.os }}-${{ github.run_id }}
+          path: build/verification/explicit-core/core-*.json
+          if-no-files-found: error
+  windows:
+    needs: contract
+    uses: ./.github/workflows/explicit-socks-beta-windows.yml
+  macos:
+    needs: contract
+    uses: ./.github/workflows/explicit-socks-beta-macos.yml
+  managed-ssh:
+    needs: windows
+    uses: ./.github/workflows/explicit-beta-managed-ssh.yml
+  native-qa-runner:
+    needs: [windows, macos]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2025
+            artifact_platform: Windows
+            manifest: explicit-beta-package.json
+          - os: macos-15
+            artifact_platform: macOS
+            manifest: explicit-macos-package.json
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v4
+        with:
+          name: FlowBridge-Explicit-SOCKS-EngineeringCandidate-${{ matrix.artifact_platform }}-${{ github.run_id }}
+          path: build/native-qa-input
+      - name: Exercise the operator QA runner on a fresh disposable hosted OS
+        shell: python
+        env:
+          MANIFEST_NAME: ${{ matrix.manifest }}
+        run: |
+          import hashlib, json, os, pathlib, platform, subprocess, sys
+          sys.path.insert(0, 'tools')
+          from explicit_beta_candidate import unique, checked_file
+          root = pathlib.Path('build/native-qa-input')
+          manifest = unique(root, os.environ['MANIFEST_NAME'])
+          m = json.loads(manifest.read_text(encoding='utf-8'))
+          source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          assert m['source_sha'] == source == os.environ['GITHUB_SHA']
+          is_windows = sys.platform == 'win32'
+          field = 'installer' if is_windows else 'pkg'
+          package = unique(root, pathlib.Path(m[field]).name)
+          tool = pathlib.Path('tools/explicit_beta_acceptance.py')
+          sha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
+          checked_file(package, m[field + '_sha256'], m[field + '_bytes'])
+          output = pathlib.Path('build/verification/native-qa-' + os.environ['RUNNER_OS'])
+          command = [sys.executable, str(tool), '--manifest', str(manifest), '--package', str(package),
+                     '--expected-source', source, '--expected-package-sha256', m[field + '_sha256'],
+                     '--expected-manifest-sha256', sha(manifest), '--expected-tool-sha256', sha(tool),
+                     '--expected-computer', platform.node(), '--output', str(output), '--execute']
+          if is_windows:
+              command += ['--harness', str(unique(root, 'FlowBridgeNativeSmoke.exe'))]
+          subprocess.run(command, check=True, timeout=600)
+          report = json.loads((output / 'native-acceptance.json').read_text())
+          assert report['status'] == 'CI_AUTOMATED_CHECKS_PASS'
+          assert report['host']['github_hosted'] and not report['host']['owner_native']
+          assert not report['a3_a4_full_acceptance'] and not report['release_accepted']
+          (output / ('native-qa-' + os.environ['RUNNER_OS'] + '.json')).write_text(json.dumps(report, indent=2)+'\n')
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: FlowBridge-ExplicitBeta-NativeQARunner-${{ runner.os }}-${{ github.run_id }}
+          path: build/verification/native-qa-${{ runner.os }}/
+          if-no-files-found: warn
+          retention-days: 30
+  candidate:
+    needs: [core, windows, macos, managed-ssh, native-qa-runner]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: FlowBridge-Explicit*
+          path: build/candidate-inputs
+      - name: Assemble portable QA kit after verifying source, package and tested DLL hashes
+        run: |
+          python tools/explicit_beta_candidate.py --inputs build/candidate-inputs \
+            --output build/candidate --source-sha "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID"
+      - name: Archive exact source alongside candidate (no tag or release)
+        run: |
+          git archive --format=zip --prefix=flowbridge/ -o build/flowbridge-source-${GITHUB_SHA}.zip HEAD
+          sha256sum build/flowbridge-source-${GITHUB_SHA}.zip > build/source-SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-ExplicitBeta-VerifiedCandidate-${{ github.run_id }}
+          path: |
+            build/FlowBridge-*-candidate-*.zip
+            build/FlowBridge-*-candidate-*.zip.sha256
+            build/candidate/candidate-index.json
+            build/candidate/SHA256SUMS.txt
+            build/flowbridge-source-*.zip
+            build/source-SHA256SUMS.txt
+          retention-days: 30
+          if-no-files-found: error
+      - name: Distinguish hosted candidate from remaining owner and native release gates
+        shell: python
+        run: |
+          import json, os, pathlib
+          r = json.loads(pathlib.Path('build/candidate/candidate-index.json').read_text())
+          rows = ['# Explicit SOCKS beta: hosted candidate verified', '',
+                  'Source: `' + r['source_sha'] + '`', '',
+                  '| Gate | Result |', '|---|---|']
+          rows += ['| ' + k + ' | ' + v + ' |' for k, v in r['gates'].items()]
+          rows += ['', '**FlowBridge 1.0: NO-GO.** G2 remains independently tested by capture-integration.yml.',
+                   'No tag, release, native driver/extension, owner-machine execution or signing is performed.']
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as output:
+              output.write('\n'.join(rows) + '\n')
