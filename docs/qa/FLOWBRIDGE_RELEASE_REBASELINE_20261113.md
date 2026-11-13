@@ -2,6 +2,37 @@
 
 **Статус: RELEASE NO-GO / PLAN REBASELINED.** Это инженерный план в draft PR #58, а не разрешение выпускать продукт, включать системный перехват или менять защищённые настройки. Действующий 1.0 scope сохранён из [RELEASE_1_0_PLAN.md](../RELEASE_1_0_PLAN.md). Предыдущая оперативная хроника [10.11](FLOWBRIDGE_RELEASE_ROUTE_20261110.md) остаётся архивом наблюдений; численные PASS не переносятся на новые SHA.
 
+## Обновление после B0 — 13 ноября 2026 (новые проверенные байты)
+
+**Сведения ниже в исторических разделах 1, 3 и 5 фиксировали более ранний срез PR #59 и WFP research. Эта секция заменяет их для текущего решения; обязательства R00–R10 и NO-GO 1.0 не изменены.**
+
+| Объект | Доказанный результат |
+| --- | --- |
+| PR #59 | Draft; HEAD документации `5dd6ca35d975e536cd8901ebd9cae158aef02797`, бинарный source `f5ecd48d8f81c594f755a55e7969b57d20903020`, tree `ac47b5292ec90e13572e88e9133b12d4dc1f77ac` |
+| [Единый workflow](https://github.com/i-shutov/flowbridge/actions/runs/43407093536) | **11/11 SUCCESS**: пакет Windows, macOS universal, format/Clippy/tests/DNS, managed SSH, native hosted lifecycle и сборка QA kit |
+| [QA kit artifact](https://github.com/i-shutov/flowbridge/actions/runs/43407093536/artifacts/14028139291) | Inner ZIP SHA256 `4b51d4136878476b48946361ce1635cb6d630e62b50ca82c73df28a5902ed8b8` |
+| [Capture/G2](https://github.com/i-shutov/flowbridge/actions/runs/43407099791) | **FAIL** `kernel_connection_id_missing`; G2/native 1.0 **NO-GO** |
+| Research WFP/ALE | Проверенный срез `ca72eee3d5dc422ad6894219f9b68e63cf731034`, R160–R162 — исходные lifecycle и re-auth ограничения, НЕ нативная приёмка |
+
+### Actual beta gate verdict — не переносить hosted PASS на owner acceptance
+
+- **A0:** HOSTED_PASS_OWNER_OPEN: пакет Windows содержит 13 разрешённых файлов, но нет capture helper/driver; macOS pkg не содержит NE. Protected controls отключены.
+- **A1:** HOSTED_PASS_OWNER_OPEN: один binary source, 11/11 CI, 23 файла итогового комплекта, source ZIP проверен.
+- **A2:** HOSTED_PASS_LIMITED: тесты поставляемых Windows DLL/CLI подтвердили 128 held / 1152 expected rejected / 10000 TCP churn / 4 workers, host-key, half-close, shutdown и recovery; raw 512-channel stability и owner SSH soak НЕ доказаны.
+- **A3/A4:** NOT_RUN_NEW_BYTES: прежние owner W0–W2b2 PASS относятся к `c339df2e`, а не к новой сборке. На Win10/Win11 и Mac ARM64/Intel обязательны install, GUI/keyboard, реальный SSH, upgrade/uninstall, независимый аудит исходных отчётов.
+- **A5:** PARTIAL: SBOM/third-party inventory проверены (Windows 71, macOS 37 components); лицензия FlowBridge-specific кода ещё не выбрана; unsigned PKG/installer и независимый license/runtime review открыты.
+- **A6/A7:** OPEN / NOT_RUN. Никакого merge в main, тега или публичного релиза.
+
+Проверяемый пакет, хеши и готовая Windows-команда: [checkpoint PR #59](https://github.com/i-shutov/flowbridge/blob/5dd6ca35d975e536cd8901ebd9cae158aef02797/docs/qa/FLOWBRIDGE_RELEASE_CHECKPOINT_20261113.md). Машинный обновлённый реестр всех 19 gates: [`gate_status_20261113.json`](release-1.0/gate_status_20261113.json). Значение `pr58` в JSON — предшествующий SHA ветки перед записью checkpoint, а не само-ссылка на коммит с JSON.
+
+### Architecture blocker, который нельзя замаскировать новым CI
+
+[Issue #41](https://github.com/i-shutov/flowbridge/issues/41#issuecomment-6702417257) сохраняет разрешённую NDISRD-only архитектуру продукта, тогда как R01 WFP/ALE остаётся **отдельной исследовательской альтернативой**. Нужен независимый kernel-owned packet→PID+epoch trust witness в рамках NDISRD либо отдельное явное решение о переходе на иной подписанный backend. Нельзя автоматически включить WFP в 1.0 лишь потому, что research прошёл source tests. На целевой Win10/11 запрещены незапрошенные driver/filter/BCD/Firewall/Defender изменения.
+
+**Следующий крупный блок:** A3/A4 exact-package native QA + A5/A6 independent decision; параллельно B1 native lab readiness и архитектурный R01 decision, macOS NE signing/entitlement path, DNS R03/R04 threat model, SSH R05 и правила R06. Затем BETA-C с real selected app traffic → R07/R08 → R09 frozen RC и физические тесты/24h soak → R10 подписанный `v1.0.0` по отдельному GO.
+
+---
+
 ## 1. Source-of-truth срез — на момент сверки
 
 | Объект | SHA / состояние | Доказательная граница |
