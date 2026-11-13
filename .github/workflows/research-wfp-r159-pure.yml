@@ -62,3 +62,19 @@ jobs:
           Write-Host "native_ale_classify_observed=false"
           Write-Host "no_direct_proved=false"
           Write-Host "release_accepted=false"
+  broker-windows-typecheck:
+    runs-on: windows-2025
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Typecheck whole Windows broker against locked dependencies, no execution
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cargo check --locked --manifest-path research/wfp-ale/kernel-r19/broker-package/Cargo.toml --bin flowbridge-redirect-broker
+          if ($LASTEXITCODE -ne 0) { throw 'Broker R159 actual Windows typecheck failed' }
+          $head = (git rev-parse HEAD).Trim()
+          Write-Host "R159_BROKER_WIN_TYPECHECK_PASS; source=$head; driver_installed=false; no_direct_proved=false"
