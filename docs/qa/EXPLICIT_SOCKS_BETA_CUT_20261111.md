@@ -4,6 +4,11 @@
 **Candidate branch:** `release/explicit-socks-beta-20261111`, created from previously verified product source `c339df2e4d20edf1d11d45786581a68451a71929` (PR #56).
 **Review:** [draft PR #59](https://github.com/i-shutov/flowbridge/pull/59), based on PR #56's branch.
 
+**Latest verified hosted candidate:** `f5ecd48d8f81c594f755a55e7969b57d20903020`,
+[run 43407093536](https://github.com/i-shutov/flowbridge/actions/runs/43407093536), 11/11 jobs PASS.
+See [checkpoint and exact package hashes](FLOWBRIDGE_RELEASE_CHECKPOINT_20261113.md).
+A3/A4 owner acceptance and public-release approval are still open.
+
 ## What the candidate can claim
 
 One user-owned Windows explicit TCP SOCKS5/SOCKS5h local listener,
@@ -69,12 +74,12 @@ uninstaller are independently green.
 
 | ID | Required evidence | Current |
 |---|---|---|
-| A0 | Strict GUI compile gate + separately namespaced NSIS, no driver/helper, local Windows runtime and install+uninstall | **IN TEST**, not accepted |
-| A1 | All required Rust/Win/macOS CI on the exact final source SHA, stable `Cargo.lock` | **OPEN** |
-| A2 | Real managed SSH 64/128 admission, 10k controlled churn, real shutdown/reconnect, no DIRECT for accepted client traffic | **OPEN** |
+| A0 | Strict GUI compile gate + separately namespaced NSIS, no driver/helper, local Windows runtime and install+uninstall | **HOSTED PASS** on `f5ecd48`; not owner acceptance |
+| A1 | All required Rust/Win/macOS CI on the exact final source SHA, stable `Cargo.lock` | **HOSTED PASS** on `f5ecd48` |
+| A2 | Real managed SSH 64/128 admission, 10k controlled churn, real shutdown/reconnect, no DIRECT for accepted client traffic | **HOSTED PASS**: packaged release DLL/CLI, 128 held / 1152 rejected / 10k churn / 4 workers |
 | A3 | Actual target Win10 install/GUI/OpenSSH/uninstall of the **new** source/payload | **OPEN** |
-| A4 | macOS local SwiftUI universal package plus native install/launch/update/uninstall, no NE claim | **OPEN** |
-| A5 | Exact-version notes, SHA256SUMS, third-party dependencies and SBOM/license audit | **OPEN** |
+| A4 | macOS local SwiftUI universal package plus native install/launch/update/uninstall, no NE claim | **HOSTED PASS**, owner A4 remains **OPEN** |
+| A5 | Exact-version notes, SHA256SUMS, third-party dependencies and SBOM/license audit | Inventory **VALIDATED**; independent license/native runtime review **OPEN** |
 | A6 | Independent security/release reviewer, zero P0 for explicit SOCKS-only, original source/package hashes match | **OPEN** |
 | A7 | Tag and GitHub prerelease **only after** A0–A6; verify fetched published bytes | **NOT RELEASED** |
 | Native WFP G2/W3 | Signed/loaded driver and independent physical ALE/accepted socket evidence | **NO-GO** (separate 1.0 track) |

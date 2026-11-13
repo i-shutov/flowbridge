@@ -1,0 +1,879 @@
+{
+  "schema": "flowbridge-release-checkpoint-v1",
+  "checkpoint_date": "2026-11-13",
+  "timezone": "Europe/Moscow",
+  "initial_source_sha": "6f6f69ad7a567c47be9401330b95e358947c5be0",
+  "candidate_source_sha": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+  "candidate_source_tree_sha": "ac47b5292ec90e13572e88e9133b12d4dc1f77ac",
+  "candidate_workflow_run_id": "43407093536",
+  "candidate_status": "HOSTED_CANDIDATE_VALID",
+  "release_1_0": "NO_GO",
+  "release_accepted": false,
+  "branch": "release/explicit-socks-beta-20261111",
+  "pull_request": "https://github.com/i-shutov/flowbridge/pull/59",
+  "commits_this_session": [
+    "da66c35e656f28ac3f8408d1841ffbe8b670c060",
+    "3f1ab43d88d7246f6cca2d54ebce7586cb9e14f0",
+    "1f5b55c92453e6c965a18dd1981deeb56696a9e6",
+    "f5ecd48d8f81c594f755a55e7969b57d20903020"
+  ],
+  "baseline_original_artifacts": [
+    {
+      "run_id": "43388920330",
+      "artifact_id": 14019194121,
+      "zip_sha256": "909911aa0e65a63062da8f9a1b501158fe76f18b7a26f96ab001f47d64fdcedd",
+      "observed": "kernel_connection_id_missing",
+      "native_G2": "NO_GO"
+    },
+    {
+      "run_id": "43388914981",
+      "artifact_id": 14020930728,
+      "zip_sha256": "bcd6a3821c01b6402f554ebad54ce0abca0fe122dd93f89ee78cbfe2410d27b1",
+      "observed": "debug FFI managed SSH PASS; not shipped candidate binaries"
+    }
+  ],
+  "previous_owner_evidence": {
+    "source_sha": "c339df2e4d20edf1d11d45786581a68451a71929",
+    "machine": "VM-910136",
+    "os": "Windows 10 Pro 22H2 x64, 19045.4412",
+    "gates": [
+      "W0",
+      "W1",
+      "W2a",
+      "W2b0",
+      "W2b1",
+      "W2b2"
+    ],
+    "user_reported_status": "PASS",
+    "independently_reinspected_raw_zip_this_session": false,
+    "zip_sha256": "dd3988e39a188d100ac5ded6c52d5b64102b0934e783c522649985ef68db9e37",
+    "applies_to_new_candidate": false
+  },
+  "local_validation": {
+    "rust_suites": 19,
+    "rust_tests_passed": 238,
+    "rust_tests_failed": 0,
+    "rust_tests_ignored": 0,
+    "cargo_fmt": "PASS",
+    "cargo_clippy_all_targets_warnings_denied": "PASS",
+    "python_focused_tests_passed": 50,
+    "source_identity": "local working-tree candidate before first remote publication; final acceptance uses hosted exact-source reports",
+    "rust_version": "1.91.0",
+    "a5_offline_license_text_inventory_missing": 0,
+    "simulated_windows_checkout_source_bytes": "PASS",
+    "native_windows_or_macos_acceptance": false
+  },
+  "scope": {
+    "version": "0.3.0-beta.1",
+    "mode": "explicit SOCKS only",
+    "requires_client_proxy_configuration": true,
+    "driver_included": false,
+    "system_extension_included": false,
+    "windows_installer_signed": false,
+    "macos_pkg_signed": false,
+    "macos_app_signature": "ad-hoc",
+    "transparent_interception_accepted": false,
+    "system_kill_switch_accepted": false,
+    "universal_dns_no_leak_accepted": false,
+    "owner_machine_test_of_new_bytes": false
+  },
+  "remaining": {
+    "A3_owner_windows": "NOT_RUN",
+    "A4_owner_mac": "NOT_RUN",
+    "A5_independent_license_and_native_runtime_review": "OPEN",
+    "A5_project_license_selection": "OPEN; repository LICENSE explicitly leaves FlowBridge-specific license unselected",
+    "A6_independent_release_acceptance": "OPEN",
+    "A7_publication": "NOT_RELEASED",
+    "native_G2_packet_ownership": "NO_GO",
+    "native_macos_NE": "NOT_ACCEPTED",
+    "signed_release_supply": "NOT_AVAILABLE_AS_ACCEPTED_ARTIFACTS"
+  },
+  "research_snapshot": {
+    "source_sha": "ca72eee3d5dc422ad6894219f9b68e63cf731034",
+    "scope": "independent WFP/ALE research; not integrated into beta/main",
+    "verified_findings": [
+      "R160: dynamic BFE policy can disappear while kernel PING remains healthy",
+      "R161: terminal lease state prevents a new session in the same loaded instance",
+      "R162: one-shot authorization rejects reauthorization of accepted flows"
+    ],
+    "observation_limit": "code review findings; no claim that live packet leaks or disconnects were observed",
+    "integration_authority": "https://github.com/i-shutov/flowbridge/issues/41#issuecomment-6702417257",
+    "native_positive_acceptance": false
+  },
+  "current_native_g2": {
+    "workflow_run_id": "43407099791",
+    "artifact_id": 14026914682,
+    "zip_sha256": "5e5e83a2c31db481d9317acb474192cdc04bfba45584f561b3349d64c24bc9d8",
+    "sanitized_report_sha256": "35cbbe0936cc11494ebfaf9b8a36a5e6f3b7367614fd067ae34131438093679d",
+    "report": {
+      "error_code": "kernel_connection_id_missing",
+      "g2_accepted": false,
+      "native_packet_attribution_proved": false,
+      "ok": false,
+      "packet_owner_bound": false,
+      "protected_redirect_available": false,
+      "release_accepted": false,
+      "source_sha": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+      "workflow_run_id": "43407099791"
+    }
+  },
+  "supplemental_raw_openssh": {
+    "workflow_run_id": "43407099955",
+    "artifact_id": 14027299295,
+    "zip_sha256": "a403dcd2de7e738146053a19dec8f22f15233c56cc3520f2cb2b48d1af0c1179",
+    "source_checkout_sha": "961b5fa92dd3a00ae00546fab4e024db863948bd",
+    "source_tree_sha": "ac47b5292ec90e13572e88e9133b12d4dc1f77ac",
+    "job_pass_means": "minimum baseline and resource recovery; not 512-channel acceptance",
+    "peak_held": 246,
+    "minimum_required_held": 128,
+    "requested_ceiling": 512,
+    "raw_backend_512_stability_proved": false,
+    "system_configuration_modified": false,
+    "new_installer_ffi_test": false
+  },
+  "original_package_reviews": {
+    "windows": {
+      "source_sha": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+      "source_tree_sha": "ac47b5292ec90e13572e88e9133b12d4dc1f77ac",
+      "run_id": "43407093536",
+      "artifact_id": 14028351048,
+      "artifact_sha256": "2c111798b117df2b0980a31db5262f20529ffb19619983aebfad2fa9ee6db535",
+      "installer_sha256": "74ff309d2e8ae115083bed9c5d4f233fd02dc841a8084a22912f3430c1e4b504",
+      "installer_bytes": 1797589,
+      "all_payload_hashes_passed": 13,
+      "qa_harness_hash_passed": true,
+      "installed_passed": true,
+      "inventory_validation": "PASS",
+      "source_byte_hashes": {
+        "Cargo.lock": {
+          "metadata_sha256": "952871865ed2df52a50028e4efa0afd7945c1afa910e8129dbf9b9c93854eace",
+          "git_source_sha256": "952871865ed2df52a50028e4efa0afd7945c1afa910e8129dbf9b9c93854eace",
+          "matches": true
+        },
+        "packaging/explicit-beta.json": {
+          "metadata_sha256": "203ef5d002058c828aeecef88779330c49f4c2d6ece25f871e656843dcbedbb2",
+          "git_source_sha256": "203ef5d002058c828aeecef88779330c49f4c2d6ece25f871e656843dcbedbb2",
+          "matches": true
+        }
+      },
+      "components": 71,
+      "rustc": "rustc 1.100.0 (0ef1bc386 2026-11-09)",
+      "review_scope": "original hosted package and inventory; native owner release not accepted"
+    },
+    "macos": {
+      "source_sha": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+      "source_tree_sha": "ac47b5292ec90e13572e88e9133b12d4dc1f77ac",
+      "run_id": "43407093536",
+      "artifact_id": 14027658178,
+      "artifact_sha256": "c90fffbc9681b44f2af0f3c5514d7e9f4cd65a63b7c7138063806f36e245cbb4",
+      "pkg_sha256": "7eb645e227442ba5a2d12bc1b9c5853212baf8a3d28e7215640f0e3e2ec0453c",
+      "pkg_bytes": 3524634,
+      "version": "0.3.0-beta.1",
+      "inventory_validation": "PASS",
+      "components": 37,
+      "native_package_gate": true,
+      "binary_arches": [
+        "arm64",
+        "x86_64"
+      ],
+      "review_scope": "original hosted package/inventory, native owner lifecycle not accepted",
+      "outer_package_entries": [
+        {
+          "path": "Distribution",
+          "type": "file",
+          "encoding": {
+            "style": "application/x-gzip"
+          },
+          "data_offset": "3523291",
+          "length": "394"
+        },
+        {
+          "path": "FlowBridge-component.pkg",
+          "type": "directory",
+          "encoding": null,
+          "data_offset": null,
+          "length": null
+        },
+        {
+          "path": "FlowBridge-component.pkg/Bom",
+          "type": "file",
+          "encoding": {
+            "style": "application/x-gzip"
+          },
+          "data_offset": "20",
+          "length": "1539"
+        },
+        {
+          "path": "FlowBridge-component.pkg/Payload",
+          "type": "file",
+          "encoding": {
+            "style": "application/octet-stream"
+          },
+          "data_offset": "1559",
+          "length": "3521352"
+        },
+        {
+          "path": "FlowBridge-component.pkg/PackageInfo",
+          "type": "file",
+          "encoding": {
+            "style": "application/x-gzip"
+          },
+          "data_offset": "3522911",
+          "length": "380"
+        }
+      ],
+      "inner_pkg_payload_inspected": true,
+      "inner_pkg_metadata_matches_sidecars": true,
+      "actual_bundle_versions": {
+        "CFBundleIdentifier": "org.flowbridge.FlowBridgeExplicitBeta",
+        "CFBundleExecutable": "FlowBridgeExplicitBeta",
+        "CFBundleShortVersionString": "0.3.0",
+        "CFBundleVersion": "3.0.1",
+        "FlowBridgeVersion": "0.3.0-beta.1"
+      },
+      "actual_macho_cpu_types": [
+        "0x1000007",
+        "0x100000c"
+      ],
+      "inner_package_entries": [
+        {
+          "path": ".",
+          "mode": "0o40755",
+          "bytes": 0
+        },
+        {
+          "path": "Applications",
+          "mode": "0o40755",
+          "bytes": 0
+        },
+        {
+          "path": "Applications/FlowBridgeExplicitBeta.app",
+          "mode": "0o40755",
+          "bytes": 0
+        },
+        {
+          "path": "Applications/FlowBridgeExplicitBeta.app/Contents",
+          "mode": "0o40755",
+          "bytes": 0
+        },
+        {
+          "path": "Applications/FlowBridgeExplicitBeta.app/Contents/_CodeSignature",
+          "mode": "0o40755",
+          "bytes": 0
+        },
+        {
+          "path": "Applications/FlowBridgeExplicitBeta.app/Contents/_CodeSignature/CodeResources",
+          "mode": "0o100644",
+          "bytes": 3424
+        },
+        {
+          "path": "Applications/FlowBridgeExplicitBeta.app/Contents/MacOS",
+          "mode": "0o40755",
+          "bytes": 0
+        },
+        {
+          "path": "Applications/FlowBridgeExplicitBeta.app/Contents/MacOS/FlowBridgeExplicitBeta",
+          "mode": "0o100755",
+          "bytes": 10338448
+        },
+        {
+          "path": "Applications/FlowBridgeExplicitBeta.app/Contents/Resources",
+          "mode": "0o40755",
+          "bytes": 0
+        },
+        {
+          "path": "Applications/FlowBridgeExplicitBeta.app/Contents/Resources/SBOM.cdx.json",
+          "mode": "0o100644",
+          "bytes": 35216
+        },
+        {
+          "path": "Applications/FlowBridgeExplicitBeta.app/Contents/Resources/presets.json",
+          "mode": "0o100644",
+          "bytes": 6320
+        },
+        {
+          "path": "Applications/FlowBridgeExplicitBeta.app/Contents/Resources/THIRD_PARTY_NOTICES.txt",
+          "mode": "0o100644",
+          "bytes": 1808926
+        },
+        {
+          "path": "Applications/FlowBridgeExplicitBeta.app/Contents/Resources/FlowBridge-LICENSE.txt",
+          "mode": "0o100644",
+          "bytes": 816
+        },
+        {
+          "path": "Applications/FlowBridgeExplicitBeta.app/Contents/Resources/BUILD-METADATA.json",
+          "mode": "0o100644",
+          "bytes": 12330
+        },
+        {
+          "path": "Applications/FlowBridgeExplicitBeta.app/Contents/Info.plist",
+          "mode": "0o100644",
+          "bytes": 1679
+        },
+        {
+          "path": "Applications/FlowBridgeExplicitBeta.app/Contents/PkgInfo",
+          "mode": "0o100644",
+          "bytes": 8
+        }
+      ],
+      "payload_no_native_extension_or_privileged_helper": true
+    }
+  },
+  "hosted_operator_lifecycle": {
+    "windows": {
+      "a3_a4_full_acceptance": false,
+      "candidate_version": "0.3.0-beta.1",
+      "checks": {
+        "install": "PASS",
+        "launch": "PASS",
+        "payload": "PASS",
+        "stable_preserved": "PASS",
+        "uninstall": "PASS",
+        "upgrade": "PASS"
+      },
+      "cleanup_required": false,
+      "dns_leak_acceptance": "NOT_RUN",
+      "driver_or_extension_activation_requested": false,
+      "finished_utc": "2026-11-13T10:15:02.787716+00:00",
+      "harness_sha256": "40de39aae8476cb2a28aba201c79ae666aa15c79e299f85e9a146c74f1038807",
+      "host": {
+        "architecture": "AMD64",
+        "ci_environment_detected": true,
+        "github_hosted": true,
+        "host_identity_basis": "operator-supplied hostname; not hardware attestation",
+        "host_sha256": "849192180c8968ccc75901a777bce981d38e672d39ce5d10bc633db073da761b",
+        "os_release": "2025Server",
+        "os_version": "10.0.26100",
+        "owner_native": false,
+        "platform": "windows"
+      },
+      "manifest_sha256": "4a16dd710e468dd6e13e387fa4640c00102771758b4a5eb8c5f7bf9ec62bbf9a",
+      "manual_visual_keyboard_review": "NOT_RUN",
+      "native_transparent_routing": "NOT_RUN",
+      "network_configuration_requested": false,
+      "owner_managed_ssh": "NOT_RUN",
+      "package_sha256": "74ff309d2e8ae115083bed9c5d4f233fd02dc841a8084a22912f3430c1e4b504",
+      "pins_verified": true,
+      "publisher_signature_acceptance": "NOT_RUN",
+      "release_accepted": false,
+      "schema": "flowbridge-explicit-beta-native-acceptance-v1",
+      "screenshots": [
+        {
+          "file": "installed-beta-ui-compact-dashboard.bmp",
+          "sha256": "51420433319e5da180e42c27d8628894be24140feab6dc835f88c5e3730c88dc"
+        },
+        {
+          "file": "installed-beta-ui-compact-ssh.bmp",
+          "sha256": "017baed22fd50d5106c83050a2290859fd52134039c4c0b23edbf73a5fd6d680"
+        },
+        {
+          "file": "installed-beta-ui-compact-proxy.bmp",
+          "sha256": "a379bf66e46bd52eea0633e65380eb3cae87eecfb4208d5f210fbf9bd0834fd2"
+        },
+        {
+          "file": "installed-beta-ui-compact-apps.bmp",
+          "sha256": "24ed63e88b02e6cd165cf3abf6cb8f930fa22b1415b84e1b7df8253378823be5"
+        },
+        {
+          "file": "installed-beta-ui-compact-advanced.bmp",
+          "sha256": "3d2c3ecec516d1681da27747f6b679294f5ac6150e65f4a05774737f7c3d2e47"
+        }
+      ],
+      "source_sha": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+      "started_utc": "2026-11-13T10:14:58.321005+00:00",
+      "status": "CI_AUTOMATED_CHECKS_PASS",
+      "target": "windows",
+      "test_profile_retained": true,
+      "test_work_directory_retained": true,
+      "tool_sha256": "faf62aabeea95ef316f5c0935177a65820ea4679ac94afe8b5461138dd17a33c",
+      "workflow_run_id": "43407093536"
+    },
+    "macos": {
+      "a3_a4_full_acceptance": false,
+      "candidate_version": "0.3.0-beta.1",
+      "checks": {
+        "install": "PASS",
+        "launch": "PASS",
+        "payload": "PASS",
+        "stable_preserved": "PASS",
+        "uninstall": "PASS",
+        "upgrade": "PASS"
+      },
+      "cleanup_required": false,
+      "codesign_entitlements_query": {
+        "no_entitlements_notice": false,
+        "returncode": 0,
+        "stderr_bytes": 312,
+        "stdout_bytes": 0
+      },
+      "dns_leak_acceptance": "NOT_RUN",
+      "driver_or_extension_activation_requested": false,
+      "finished_utc": "2026-11-13T10:15:00.702000+00:00",
+      "host": {
+        "architecture": "arm64",
+        "ci_environment_detected": true,
+        "github_hosted": true,
+        "host_identity_basis": "operator-supplied hostname; not hardware attestation",
+        "host_sha256": "4228c1bc06085b2c8c7f53ba3893c10c4fd3aae750f03205f4e17fe50264bc6a",
+        "os_release": "24.6.0",
+        "os_version": "Darwin Kernel Version 24.6.0: Sun Oct 11 23:44:11 PDT 2026; root:xnu-11417.140.69.713.47~2/RELEASE_ARM64_VMAPPLE",
+        "owner_native": false,
+        "platform": "macos"
+      },
+      "macos_launch_scope": "process survived 4 seconds; visual/routing checks not performed",
+      "manifest_sha256": "ed00c3257a4b5f1db453169fc802c3ba85215265bb2dce783d79275cbb386a03",
+      "manual_visual_keyboard_review": "NOT_RUN",
+      "native_transparent_routing": "NOT_RUN",
+      "network_configuration_requested": false,
+      "owner_managed_ssh": "NOT_RUN",
+      "package_sha256": "7eb645e227442ba5a2d12bc1b9c5853212baf8a3d28e7215640f0e3e2ec0453c",
+      "pins_verified": true,
+      "publisher_signature_acceptance": "NOT_RUN",
+      "release_accepted": false,
+      "schema": "flowbridge-explicit-beta-native-acceptance-v1",
+      "source_sha": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+      "started_utc": "2026-11-13T10:14:51.721568+00:00",
+      "status": "CI_AUTOMATED_CHECKS_PASS",
+      "target": "macos",
+      "test_profile_retained": true,
+      "test_work_directory_retained": true,
+      "tool_sha256": "faf62aabeea95ef316f5c0935177a65820ea4679ac94afe8b5461138dd17a33c",
+      "workflow_run_id": "43407093536"
+    }
+  },
+  "packaged_ssh_original_review": {
+    "artifact_id": 14028482929,
+    "zip_sha256": "93d524c09aca6b0329972db06936ad7dbc57d49d6825261ab66869612737cd40",
+    "files": {
+      "capture-relay-real-ssh.json": {
+        "sha256": "c7ad5d3e3f4dc2e025893e47ba73097bd5178e9c8eca6b60b5c6211d7af7066b",
+        "bytes": 1267
+      },
+      "dns-udp-via-real-ssh.json": {
+        "sha256": "580015744ed7f94533f8f51a1b227944ce16b0b694b3e3f1fb5bb94e2447d8d5",
+        "bytes": 1389
+      },
+      "managed-capacity.json": {
+        "sha256": "64730ffa1a91b783e9e7e73215eafac5aa36b57c683fea2c9bd049dcb50229e8",
+        "bytes": 2856
+      },
+      "owned-four-worker-lifecycle.json": {
+        "sha256": "cd45480b1be8e500c0d2b075083051d0663cd7eb41d854bc731fc090b67870c0",
+        "bytes": 837
+      },
+      "provenance.json": {
+        "sha256": "74a0b0c2a2bd60b49e6ccf0089fd258822f54f4022765e941a313b136af2fd45",
+        "bytes": 374
+      },
+      "rust-owned-ssh-control.json": {
+        "sha256": "0514421de08b335e8a1da095a996815d9a3449128fe50230e5df081ed575ae28",
+        "bytes": 1425
+      },
+      "summary.json": {
+        "sha256": "c45e97224c1b8562d9a2470070c78a73a0e33676abf7d65fec3c5cb878767cc9",
+        "bytes": 6026
+      }
+    },
+    "summary": {
+      "passed": true,
+      "source_commit": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+      "source_tree_sha": "ac47b5292ec90e13572e88e9133b12d4dc1f77ac",
+      "workflow_run_id": "43407093536",
+      "platform": "Windows-2025Server-10.0.26100-SP0",
+      "hosted_windows_runner": true,
+      "windows_10_11_user_machine_tested": false,
+      "wfp_driver_loaded": false,
+      "native_dns_leaks_verified": false,
+      "scenario": "managed",
+      "managed_acceptance_proved": true,
+      "raw_backend_512_stability_proved": false,
+      "ffi_sha256": "b4996b9fee125d13dc963e85e17becd697514362d5cd19634151cd83102f6d41",
+      "cli_sha256": "4dfa9ee61715114589d13c0624cec2b64e00e4b72b37a95fc47f44fcd8815b1b",
+      "managed_capacity": {
+        "passed": true,
+        "held": 128,
+        "churn": 10000,
+        "rejected": 1152
+      },
+      "owned_pool": {
+        "passed": true,
+        "independent_children": 4
+      },
+      "banner_first_real_ssh": {
+        "real_openssh_authenticated": true,
+        "binary_half_close": true,
+        "strict_known_hosts": true,
+        "cli_sha256": "4dfa9ee61715114589d13c0624cec2b64e00e4b72b37a95fc47f44fcd8815b1b"
+      },
+      "supervised_banner_first_real_ssh": {
+        "managed_banner_first_socks_passed": true,
+        "real_authenticated_openssh": true,
+        "binary_half_close": true,
+        "manual_proxycommand_not_required": true,
+        "cli_sha256": "4dfa9ee61715114589d13c0624cec2b64e00e4b72b37a95fc47f44fcd8815b1b"
+      },
+      "rust_owned_ssh_control": {
+        "passed": true,
+        "kind": "rust_owned_ssh_supervisor_and_restricted_windows_socks_ipc",
+        "agent_sha256": "f81994ddca38d4da362665143edc214c494ae8c166fe207ad5b3b022ca81b874",
+        "ssh_sha256": "98d447730047f5df91373e852d057928a921c3d1e89938700ab656ba84b19dc8",
+        "no_driver_installed_or_modified": true,
+        "actual_signed_ssh_fixture": true,
+        "authenticated_ssh_traffic": true,
+        "closed_gate_direct_attempts": 0,
+        "native_packet_pid_proof": false,
+        "persistent_protected_mode": false,
+        "dns_leak_free": false,
+        "windows_10_11_accepted": false,
+        "release_accepted": false,
+        "banner_helper_sha256": "4dfa9ee61715114589d13c0624cec2b64e00e4b72b37a95fc47f44fcd8815b1b",
+        "installed_banner_helper_exercised": false,
+        "banner_gate_no_consent_rejected": true,
+        "banner_gate_shell_injection_rejected": true,
+        "banner_gate_ads_rejected": true,
+        "invalid_direct_profile_rejected": true,
+        "ssh_unreachable_rejected_without_direct": true,
+        "actual_binary_half_close": true,
+        "windows_banner_first_spaced_helper_authenticated": true,
+        "live_socks_reload_without_carrier_change": true,
+        "carrier_change_rejected_and_existing_connection_survived": true,
+        "listener_closed_after_stop": true,
+        "unexpected_ssh_child_death_automatically_closed_gate": true,
+        "unexpected_ssh_child_death_recovered_real_ssh_without_direct": true,
+        "forced_agent_crash_closed_rust_and_openssh_listeners": true
+      }
+    }
+  },
+  "hosted_candidate_workflow_status": "SUCCESS_11_JOBS",
+  "jobs": [
+    {
+      "id": 131824056100,
+      "name": "contract",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 131824170295,
+      "name": "core (windows-2025)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 131824170354,
+      "name": "core (ubuntu-24.04)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 131824170389,
+      "name": "core (macos-15)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 131824170783,
+      "name": "windows / isolated-explicit-beta",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 131824170806,
+      "name": "macos / static-scope",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 131824280728,
+      "name": "macos / universal-package",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 131825969707,
+      "name": "native-qa-runner (windows-2025, Windows, explicit-beta-package.json)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 131825969798,
+      "name": "native-qa-runner (macos-15, macOS, explicit-macos-package.json)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 131825970614,
+      "name": "managed-ssh / real-managed-ssh",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 131831399371,
+      "name": "candidate",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "runs": [
+    {
+      "id": 43407099897,
+      "name": "Native DNS vertical",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "f5ecd48d8f81c594f755a55e7969b57d20903020"
+    },
+    {
+      "id": 43407099791,
+      "name": "Rust capture integration candidate",
+      "status": "completed",
+      "conclusion": "failure",
+      "head_sha": "f5ecd48d8f81c594f755a55e7969b57d20903020"
+    },
+    {
+      "id": 43407099965,
+      "name": "rust-and-native-applications",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "f5ecd48d8f81c594f755a55e7969b57d20903020"
+    },
+    {
+      "id": 43407099955,
+      "name": "Real Windows OpenSSH acceptance",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "f5ecd48d8f81c594f755a55e7969b57d20903020"
+    },
+    {
+      "id": 43407093536,
+      "name": "Explicit SOCKS beta candidate — one source and packaged binaries",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "f5ecd48d8f81c594f755a55e7969b57d20903020"
+    }
+  ],
+  "completed_utc": "2026-11-13 10:35:26 UTC",
+  "candidate_index": {
+    "files": [
+      {
+        "bytes": 14891,
+        "path": "NATIVE-ACCEPTANCE.md",
+        "sha256": "b8cb34679bd810e0ecb6316dc96e1f6a7e5e68a8653e96f081442edf2bae30d4"
+      },
+      {
+        "bytes": 377,
+        "path": "evidence/core-Linux.json",
+        "sha256": "8d0ff620473226c4ee581335fc3f514352322a9fc4f128dbbfac3b35cd1c46e5"
+      },
+      {
+        "bytes": 392,
+        "path": "evidence/core-Windows.json",
+        "sha256": "c2cfb6991f8020e8a127724a13257e6d46214be12b406c102d0de81e8c3ecd40"
+      },
+      {
+        "bytes": 377,
+        "path": "evidence/core-macOS.json",
+        "sha256": "c1d7102a1d2038e9156d59f8ea4c21f1053de53fba6a508d6b547037830c2353"
+      },
+      {
+        "bytes": 1073,
+        "path": "evidence/explicit-beta-installer-result.json",
+        "sha256": "7548aa1b5899831ac24169ba2e97ce88afe3ae5f04f133e865bb2e527961697c"
+      },
+      {
+        "bytes": 700,
+        "path": "evidence/native-package.json",
+        "sha256": "1bb339fa1af1b149387615582402dd6152b0a9e74551def78327cced8df131bc"
+      },
+      {
+        "bytes": 3027,
+        "path": "evidence/native-qa-Windows.json",
+        "sha256": "fed69869651fb63e9da3f1e6f4f93968010f3f1ad2e9a45b002b2a2453c74d65"
+      },
+      {
+        "bytes": 2308,
+        "path": "evidence/native-qa-macOS.json",
+        "sha256": "1515e239ee243db73388cf20b2a383456f037ea34965af42e2b7ba3fd3676a56"
+      },
+      {
+        "bytes": 6026,
+        "path": "evidence/summary.json",
+        "sha256": "c45e97224c1b8562d9a2470070c78a73a0e33676abf7d65fec3c5cb878767cc9"
+      },
+      {
+        "bytes": 12330,
+        "path": "macos/BUILD-METADATA.json",
+        "sha256": "15d13d3e8462232d0d2086f74ddc8a62c6e890a8f3d445d93eac7759bd312ae2"
+      },
+      {
+        "bytes": 3524634,
+        "path": "macos/FlowBridge-0.3.0-beta.1-macOS-universal-explicit-beta.pkg",
+        "sha256": "7eb645e227442ba5a2d12bc1b9c5853212baf8a3d28e7215640f0e3e2ec0453c"
+      },
+      {
+        "bytes": 35216,
+        "path": "macos/SBOM.cdx.json",
+        "sha256": "99a214dedf2cf1756e6843bf68345ff98ebb1266a4887cf5a0700f25babacced"
+      },
+      {
+        "bytes": 1808926,
+        "path": "macos/THIRD_PARTY_NOTICES.txt",
+        "sha256": "6a8a46a6d1dee56420a9c7b7a7079518df6e2a62d4d5b817c7af0d7948a30557"
+      },
+      {
+        "bytes": 929,
+        "path": "macos/explicit-macos-package.json",
+        "sha256": "ed00c3257a4b5f1db453169fc802c3ba85215265bb2dce783d79275cbb386a03"
+      },
+      {
+        "bytes": 25507,
+        "path": "tools/explicit_beta_acceptance.py",
+        "sha256": "faf62aabeea95ef316f5c0935177a65820ea4679ac94afe8b5461138dd17a33c"
+      },
+      {
+        "bytes": 22847,
+        "path": "windows/BUILD-METADATA.json",
+        "sha256": "bb89d07dc3311f4a1ae34affcf90485a68668c591d85639f5924f191ba57b080"
+      },
+      {
+        "bytes": 1797589,
+        "path": "windows/FlowBridge-0.3.0-beta.1-windows-x64-setup.exe",
+        "sha256": "74ff309d2e8ae115083bed9c5d4f233fd02dc841a8084a22912f3430c1e4b504"
+      },
+      {
+        "bytes": 573440,
+        "path": "windows/FlowBridgeNativeSmoke.exe",
+        "sha256": "40de39aae8476cb2a28aba201c79ae666aa15c79e299f85e9a146c74f1038807"
+      },
+      {
+        "bytes": 65788,
+        "path": "windows/SBOM.cdx.json",
+        "sha256": "7ccce9b824774d36063d3e2545c82c1162e6b09c0075ffda27f68a2ea1838785"
+      },
+      {
+        "bytes": 2086325,
+        "path": "windows/THIRD_PARTY_NOTICES.txt",
+        "sha256": "dbcbbb0096f13ac17fe51a7bf161ccc8435bcb361f9fda7a8b344222be9c4408"
+      },
+      {
+        "bytes": 3950,
+        "path": "windows/explicit-beta-package.json",
+        "sha256": "4a16dd710e468dd6e13e387fa4640c00102771758b4a5eb8c5f7bf9ec62bbf9a"
+      }
+    ],
+    "gates": {
+      "A0_scope_and_windows_hosted": "PASS",
+      "A1_same_source_hosted": "PASS",
+      "A2_packaged_ffi_managed_ssh_hosted": "PASS",
+      "A3_owner_windows": "NOT_RUN",
+      "A4_mac_universal_package_hosted": "PASS",
+      "A4_owner_mac": "NOT_RUN",
+      "A5_independent_license_review": "OPEN",
+      "A5_metadata_and_dependency_inventory": "VALIDATED",
+      "A6_independent_release_review": "OPEN",
+      "A7_publication": "NOT_RELEASED",
+      "native_G2_packet_ownership": "NO_GO",
+      "operator_qa_runner_hosted_windows_and_macOS": "PASS"
+    },
+    "hosted_candidate_valid": true,
+    "limitations": [
+      "Explicit client proxy configuration required",
+      "Unsigned engineering installers; macOS app uses ad-hoc code signature",
+      "No WFP/NDISRD/Network Extension activation",
+      "No transparent routing, system kill switch or universal DNS no-leak claim",
+      "Native Windows 10/11 and owner macOS acceptance remain open"
+    ],
+    "managed_ssh": {
+      "churn": 10000,
+      "ffi_sha256": "b4996b9fee125d13dc963e85e17becd697514362d5cd19634151cd83102f6d41",
+      "held": 128,
+      "independent_children": 4
+    },
+    "native_release_1_0": "NO_GO",
+    "publisher_release_approved": false,
+    "release_accepted": false,
+    "schema": "flowbridge-explicit-beta-candidate-v1",
+    "source_sha": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+    "source_tree_sha": "ac47b5292ec90e13572e88e9133b12d4dc1f77ac",
+    "version": "0.3.0-beta.1",
+    "workflow_run_id": "43407093536",
+    "workflow_url": "https://github.com/i-shutov/flowbridge/actions/runs/43407093536"
+  },
+  "independent_archive_audit": {
+    "scope": "HOSTED_EXPLICIT_BETA_ARTIFACT_INTEGRITY",
+    "status": "PASS",
+    "source_sha": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+    "source_tree_sha": "ac47b5292ec90e13572e88e9133b12d4dc1f77ac",
+    "workflow_run_id": "43407093536",
+    "workflow_conclusion": "success",
+    "artifact_id": 14028139291,
+    "original_artifact_sha256": "69e87b6ed4acd94b7abf59a4a825cfef49041004e5afea804e83d4787cf61d9f",
+    "original_artifact_bytes": 6936528,
+    "candidate_archive": "FlowBridge-0.3.0-beta.1-candidate-f5ecd48d8f81.zip",
+    "candidate_archive_sha256": "4b51d4136878476b48946361ce1635cb6d630e62b50ca82c73df28a5902ed8b8",
+    "candidate_archive_bytes": 5697502,
+    "source_archive": "flowbridge-source-f5ecd48d8f81c594f755a55e7969b57d20903020.zip",
+    "source_archive_sha256": "6d57ab8d2321fcce8bf57a1d0aa04716d44d471b013ffc2436912d868a8e284e",
+    "source_archive_bytes": 1305279,
+    "source_git_blob_count": 301,
+    "source_git_blob_hashes_sizes_and_executable_bits": "ALL_MATCH_EXACT_GITHUB_TREE",
+    "source_zip_commit_comment": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+    "candidate_index_sha256": "701b76590b46d662458dc0ec9995915ba7ff5d3498444b3bbaf74eadd904ae5a",
+    "indexed_file_count": 21,
+    "inner_file_count": 23,
+    "all_indexed_files_and_checksums": "PASS",
+    "original_package_core_nativeqa_manifest_bytes": "MATCH",
+    "delivered_tool_and_guide_match_source_zip": true,
+    "cross_report_validator": "PASS_ACTUAL_PACKAGED_SSH",
+    "ssh_summary_sha256": "c45e97224c1b8562d9a2470070c78a73a0e33676abf7d65fec3c5cb878767cc9",
+    "managed_ssh": {
+      "held": 128,
+      "rejected": 1152,
+      "churn": 10000,
+      "independent_children": 4,
+      "ffi_sha256": "b4996b9fee125d13dc963e85e17becd697514362d5cd19634151cd83102f6d41",
+      "cli_sha256": "4dfa9ee61715114589d13c0624cec2b64e00e4b72b37a95fc47f44fcd8815b1b"
+    },
+    "gates": {
+      "A0_scope_and_windows_hosted": "PASS",
+      "A1_same_source_hosted": "PASS",
+      "A2_packaged_ffi_managed_ssh_hosted": "PASS",
+      "A3_owner_windows": "NOT_RUN",
+      "A4_mac_universal_package_hosted": "PASS",
+      "A4_owner_mac": "NOT_RUN",
+      "A5_independent_license_review": "OPEN",
+      "A5_metadata_and_dependency_inventory": "VALIDATED",
+      "A6_independent_release_review": "OPEN",
+      "A7_publication": "NOT_RELEASED",
+      "native_G2_packet_ownership": "NO_GO",
+      "operator_qa_runner_hosted_windows_and_macOS": "PASS"
+    },
+    "release_accepted": false,
+    "native_release_1_0": "NO_GO",
+    "separate_original_ssh_crosscheck": "BYTE_IDENTICAL"
+  },
+  "delivered_kit_verify_only": {
+    "scope": "delivered archive command/path/pin preflight only; no install/launch performed here",
+    "kit_sha256": "4b51d4136878476b48946361ce1635cb6d630e62b50ca82c73df28a5902ed8b8",
+    "checks": [
+      {
+        "target": "windows",
+        "status": "VERIFIED_BYTES_NATIVE_NOT_RUN",
+        "package_sha256": "74ff309d2e8ae115083bed9c5d4f233fd02dc841a8084a22912f3430c1e4b504",
+        "all_lifecycle_checks": "NOT_RUN"
+      },
+      {
+        "target": "macos",
+        "status": "VERIFIED_BYTES_NATIVE_NOT_RUN",
+        "package_sha256": "7eb645e227442ba5a2d12bc1b9c5853212baf8a3d28e7215640f0e3e2ec0453c",
+        "all_lifecycle_checks": "NOT_RUN"
+      }
+    ]
+  },
+  "main_sha_observed": "5b5afc2feeda2195f302380e615ba003d4906e09",
+  "documentation_commit_policy": "This checkpoint commit is documentation only; binary acceptance remains pinned to candidate_source_sha, not the later documentation HEAD.",
+  "artifact_delivery": {
+    "github_actions_artifact_url": "https://github.com/i-shutov/flowbridge/actions/runs/43407093536/artifacts/14028139291",
+    "chat_file_persistence": "FAILED_DESTINATION_FOLDER_404",
+    "verified_local_archive_unchanged": true
+  }
+}

@@ -6,6 +6,10 @@
 ветки [PR #56](https://github.com/i-shutov/flowbridge/pull/56).
 `main` остаётся `5b5afc2feeda2195f302380e615ba003d4906e09`.
 
+**Проверенный кандидат:** `f5ecd48d8f81c594f755a55e7969b57d20903020`.
+[Контрольная точка, hashes, original evidence и готовая команда Win10](qa/FLOWBRIDGE_RELEASE_CHECKPOINT_20261113.md).
+Последующий документальный commit не меняет source привязку испытанных пакетов.
+
 ## Область работы и действующее решение владельца
 
 Цель 1.0 сохраняется: прозрачный TCP IPv4/IPv6 по приложениям и правилам,
@@ -50,7 +54,7 @@ PR-проверки первого ряда использовали merge commi
 
 | Блок | Работа | Проверяемый выход | Состояние |
 |---|---|---|---|
-| **B0 — воспроизводимая explicit beta** | Единая версия, два изолированных пакета, locked dependencies/licenses, проверка поставляемых DLL/CLI и самостоятельный QA kit | `explicit-beta-candidate.yml`: packages, Rust/DNS на 3 ОС, 10k SSH на DLL/CLI из установщика, hosted operator QA, index и SHA256SUMS | Реализовано в текущем блоке; hosted результат проверяется после push |
+| **B0 — единый проверенный explicit-кандидат** | Единая версия, два изолированных пакета, locked dependencies/licenses, проверка поставляемых DLL/CLI и самостоятельный QA kit | `explicit-beta-candidate.yml`: packages, Rust/DNS на 3 ОС, 10k SSH на DLL/CLI из установщика, hosted operator QA, index и SHA256SUMS | **HOSTED PASS** на `f5ecd48`: [run 43407093536](https://github.com/i-shutov/flowbridge/actions/runs/43407093536), 11/11 jobs; owner A3/A4 и выпуск остаются открыты |
 | **B1 — техническая развилка прозрачного перехвата** | Сопоставить NDISRD PacketBound blocker и независимые WFP/ALE результаты; определить интегрируемый backend в разрешённой области; отдельно macOS NE | Доверенная цепь selected process → native flow → Rust → SSH на реальных Windows/macOS с native traces | BLOCKED: нет принятого packet/flow owner witness; WFP research не интегрирован; NE native acceptance отсутствует |
 | **B2 — интеграция и containment** | App/Host/CIDR/Port rules, IPv6, scoped DNS, UDP/QUIC, all-workers-down, Stop/crash/reboot | T01–T08 с независимыми packet/process evidence, без implicit DIRECT или local DNS fallback | OPEN, зависит от B1 |
 | **B3 — продуктовая приёмка** | Компактный GUI, доступность, install/upgrade/remove, нагрузка/soak, реальные ОС, подписи и secure storage | Windows 10/11 и macOS ARM64/Intel matrix; 0 открытых обязательных P0 | OPEN; прежние user-mode результаты только baseline |
