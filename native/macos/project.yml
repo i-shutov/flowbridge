@@ -59,6 +59,26 @@ targets:
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: '$(inherited) FLOWBRIDGE_NATIVE'
         CODE_SIGN_ENTITLEMENTS: App/FlowBridge.entitlements
         PROVISIONING_PROFILE_SPECIFIER: '$(FLOWBRIDGE_APP_PROFILE)'
+  FlowBridgeExplicitBeta:
+    templates: [AppBase]
+    settings:
+      base:
+        PRODUCT_NAME: FlowBridgeExplicitBeta
+        PRODUCT_BUNDLE_IDENTIFIER: org.flowbridge.FlowBridgeExplicitBeta
+        MARKETING_VERSION: '$(FLOWBRIDGE_BETA_SHORT_VERSION)'
+        CURRENT_PROJECT_VERSION: '$(FLOWBRIDGE_BETA_BUILD_VERSION)'
+        CODE_SIGN_IDENTITY: '-'
+        CODE_SIGN_STYLE: Manual
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: '$(inherited) FLOWBRIDGE_EXPLICIT_BETA_ONLY'
+    info:
+      path: Generated/ExplicitBeta-Info.plist
+      properties:
+        CFBundleDisplayName: FlowBridge Explicit Beta
+        CFBundleShortVersionString: '$(MARKETING_VERSION)'
+        CFBundleVersion: '$(CURRENT_PROJECT_VERSION)'
+        FlowBridgeVersion: '$(FLOWBRIDGE_BETA_VERSION)'
+        LSMinimumSystemVersion: '13.0'
+        NSHighResolutionCapable: true
   FlowBridgeExtension:
     type: system-extension
     platform: macOS
@@ -84,6 +104,10 @@ targets:
             com.apple.networkextension.dns-proxy: $(PRODUCT_MODULE_NAME).DNSProxyProvider
           NEMachServiceName: '$(TeamIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)'
 schemes:
+  FlowBridgeExplicitBeta:
+    build:
+      targets:
+        FlowBridgeExplicitBeta: all
   FlowBridgeLocal:
     build:
       targets:

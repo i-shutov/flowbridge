@@ -307,3 +307,18 @@ jobs:
           path: build/g2-etw/sanitized.json
           if-no-files-found: error
           retention-days: 7
+      - name: Expose the actual G2 blocker without downgrading the failed gate
+        if: always()
+        shell: python
+        run: |
+          import json, os, pathlib
+          path = pathlib.Path('build/g2-etw/sanitized.json')
+          report = json.loads(path.read_text(encoding='utf-8')) if path.is_file() else {}
+          error = report.get('error_code', 'NO_SANITIZED_RESULT')
+          # Publish only the bounded diagnostic code; never raw trace fields.
+          if not isinstance(error, str) or not all(c.islower() or c.isdigit() or c == '_' for c in error):
+              error = 'unclassified_or_missing_result'
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
+              summary.write('## Native packet ownership G2\n\n')
+              summary.write('Observed diagnostic: `' + error + '`.\n\n')
+              summary.write('This job remains strict. Explicit SOCKS beta evidence does not grant G2 or FlowBridge 1.0 acceptance.\n')

@@ -1,12 +1,22 @@
 import SwiftUI
 import AppKit
 
+#if FLOWBRIDGE_EXPLICIT_BETA_ONLY
+private let productTitle = "FlowBridge Explicit Beta"
+private let productFooter = "v\(Bundle.main.object(forInfoDictionaryKey: "FlowBridgeVersion") as? String ?? "UNKNOWN") · explicit SOCKS beta"
+private let productTagline = "EXPLICIT SOCKS · NO SYSTEM CAPTURE"
+#else
+private let productTitle = "FlowBridge"
+private let productFooter = "v0.2.0"
+private let productTagline = "PRIVATE CONNECTION"
+#endif
+
 @main
 struct FlowBridgeApp: App {
     @StateObject private var desktop = DesktopController()
     @NSApplicationDelegateAdaptor(FlowBridgeDelegate.self) private var delegate
     var body: some Scene {
-        WindowGroup("FlowBridge") {
+        WindowGroup(productTitle) {
             Dashboard(desktop: desktop, engine: desktop.engine, native: desktop.native,
                       ssh: desktop.ssh, discovery: desktop.discovery).frame(minWidth: 1080, minHeight: 760)
                 .onAppear { delegate.desktop = desktop }
@@ -54,7 +64,7 @@ private struct Dashboard: View {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(spacing: 10) {
                     Image(systemName: "arrow.triangle.branch").font(.title).foregroundStyle(.cyan)
-                    VStack(alignment: .leading) { Text("FlowBridge").font(.title3.bold()); Text("PRIVATE CONNECTION").font(.system(size: 9, weight: .semibold)).tracking(1.4).foregroundStyle(.secondary) }
+                    VStack(alignment: .leading) { Text(productTitle).font(.title3.bold()); Text(productTagline).font(.system(size: 9, weight: .semibold)).tracking(1.4).foregroundStyle(.secondary) }
                 }.padding(.horizontal, 16).padding(.top, 20)
                 List(Page.allCases, selection: $page) { item in Label(item.rawValue, systemImage: item.icon).tag(item).padding(.vertical, 7) }.listStyle(.sidebar)
                 VStack(alignment: .leading, spacing: 6) {
@@ -86,7 +96,7 @@ private struct Dashboard: View {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "info.circle").foregroundStyle(.secondary)
                     Text(desktop.message).font(.caption).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-                    Text("v0.2.0").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    Text(productFooter).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 }.padding(14)
             }.background(Color(nsColor: .windowBackgroundColor))
         }.tint(.cyan)
@@ -145,9 +155,14 @@ private struct Dashboard: View {
                     }
                 } header: { Label("Подключение", systemImage: "server.rack") }
                 Section {
+                    #if FLOWBRIDGE_EXPLICIT_BETA_ONLY
+                    Label("Только локальный SOCKS5 — без Network Extension", systemImage: "lock.shield")
+                        .font(.callout)
+                    #else
                     Picker("Режим", selection: $desktop.settings.mode) {
                         Text("Локальный SOCKS5").tag(0); Text("Прозрачный TCP · Network Extension").tag(1)
                     }
+                    #endif
                     TextField("Локальный адрес FlowBridge", text: $engine.listen)
                         .onSubmit { engine.updateQuick() }
                     if desktop.settings.mode == 0 {

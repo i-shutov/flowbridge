@@ -57,6 +57,8 @@ def main():
     parser.add_argument('--sshd', type=Path, required=True)
     parser.add_argument('--keygen', type=Path, required=True)
     parser.add_argument('--library', type=Path, required=True)
+    parser.add_argument('--cli', type=Path, default=Path('target/debug/flowbridge.exe'),
+                        help='Exact CLI bytes to test; candidate workflow supplies packaged release CLI')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--churn', type=int, default=10000)
     parser.add_argument('--scenario', required=True, choices=('managed', 'raw'),
@@ -70,6 +72,9 @@ def main():
         value = getattr(args, name).resolve(strict=True)
         require(value.is_file(), 'Required executable/library missing')
         setattr(args, name, value)
+    if args.scenario == 'managed':
+        args.cli = args.cli.resolve(strict=True)
+        require(args.cli.is_file(), 'Exact managed-test CLI missing')
     args.output.mkdir(parents=True, exist_ok=True)
     report = {'passed': False, 'source_commit': os.environ.get('GITHUB_SHA'),
               'platform': platform.platform(), 'hosted_windows_runner': True,
@@ -79,7 +84,10 @@ def main():
               'scenario': args.scenario, 'managed_acceptance_proved': False,
               'raw_backend_512_stability_proved': False,
               'ssh_sha256': sha256(args.ssh), 'sshd_sha256': sha256(args.sshd),
-              'ffi_sha256': sha256(args.library)}
+              'ffi_sha256': sha256(args.library),
+              'workflow_run_id': os.environ.get('GITHUB_RUN_ID'),
+              'source_tree_sha': subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], text=True).strip(),
+              'cli_sha256': sha256(args.cli) if args.scenario == 'managed' else None}
     supervisor = engine = 0
     daemon = None
     abi = ABI(args.library)
@@ -136,11 +144,11 @@ def main():
                     if args.scenario == 'managed':
                         from ssh_banner_gate import real_authenticated_ssh
                         report['banner_first_real_ssh'] = real_authenticated_ssh(
-                            Path('target/debug/flowbridge.exe'), args.ssh, root / 'client_key',
+                            args.cli, args.ssh, root / 'client_key',
                             known, user, ssh_port, echo.server_address[1], free_port())
                         from ssh_banner_gate import real_supervised_banner_gate
                         report['supervised_banner_first_real_ssh'] = real_supervised_banner_gate(
-                            abi, Path('target/debug/flowbridge.exe'),
+                            abi, args.cli,
                             {'host':'127.0.0.1', 'port':ssh_port, 'user':user,
                              'ssh_executable':str(args.ssh),
                              'identity_file':str(root / 'client_key'),
@@ -180,7 +188,8 @@ def main():
                                 Path(os.environ['FLOWBRIDGE_CAPTURE_AGENT']),
                                 args.ssh, root / 'client_key', known, user,
                                 ssh_port, echo.server_address[1],
-                                args.output / 'rust-owned-ssh-control.json')
+                                args.output / 'rust-owned-ssh-control.json',
+                                source_banner_helper=args.cli)
                         if os.environ.get('FLOWBRIDGE_CAPTURE_AGENT'):
                             from capture_real_ssh import run as capture_relay
 

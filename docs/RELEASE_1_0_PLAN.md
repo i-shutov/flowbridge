@@ -1,4 +1,118 @@
-# FlowBridge — исполнимый план до 1.0
+# FlowBridge — текущий план выпуска 1.0
+
+**Актуализирован:** 13 ноября 2026. **Решение:** 1.0 **NO-GO**.
+**Рабочая ветка промежуточной поставки:** `release/explicit-socks-beta-20261111`,
+[PR #59](https://github.com/i-shutov/flowbridge/pull/59), поверх интеграционной
+ветки [PR #56](https://github.com/i-shutov/flowbridge/pull/56).
+`main` остаётся `5b5afc2feeda2195f302380e615ba003d4906e09`.
+
+**Проверенный кандидат:** `f5ecd48d8f81c594f755a55e7969b57d20903020`.
+[Контрольная точка, hashes, original evidence и готовая команда Win10](qa/FLOWBRIDGE_RELEASE_CHECKPOINT_20261113.md).
+Последующий документальный commit не меняет source привязку испытанных пакетов.
+
+## Область работы и действующее решение владельца
+
+Цель 1.0 сохраняется: прозрачный TCP IPv4/IPv6 по приложениям и правилам,
+управляемый SSH, DNS в подтверждённом объёме, отказ без незаявленного DIRECT,
+нативные Windows/macOS GUI и подписанные поставки. UDP/QUIC не объявляются
+проксированными через `ssh -D`; в protected mode необходима доказанная политика
+исключения/блокирования. Восстановление оборванных TCP-сессий не входит в 1.0.
+
+Промежуточная `0.3.0-beta.1` имеет явно ограниченную область: пользователь
+сам задаёт SOCKS5/5h в приложении. В её поставке нет прозрачного перехвата,
+WFP/NDISRD helper/driver, NE, общего DNS no-leak или системного kill switch.
+У неё отдельные имена установки, профили и регистрация. Присвоение номера
+кандидата не является разрешением публичного выпуска.
+
+Действующая репозиторная фиксация решения владельца:
+[issue #41, 7 ноября 2026](https://github.com/i-shutov/flowbridge/issues/41#issuecomment-6702417257).
+Она разрешает ограниченную SOCKS-бету и независимое исследование WFP/ALE.
+В интеграционной ветке сохраняется NDISRD-only граница; custom WFP driver
+не переносится в продукт на основании старого октябрьского плана.
+Исследование `research/windows-wfp-ale-attribution-20261107` не является
+принятой реализацией и не даёт разрешения на native запуск/интеграцию.
+
+## Проверенная исходная точка блока 13 ноября
+
+| Объект | Факт и предел доказательства |
+|---|---|
+| Beta source | `6f6f69ad7a567c47be9401330b95e358947c5be0` до текущих изменений |
+| Rust/native CI | [43388920324](https://github.com/i-shutov/flowbridge/actions/runs/43388920324), SUCCESS |
+| DNS loopback regression | [43388920372](https://github.com/i-shutov/flowbridge/actions/runs/43388920372), SUCCESS; не native DNS containment |
+| Managed Windows SSH | [43388914981](https://github.com/i-shutov/flowbridge/actions/runs/43388914981), 128 held / 1152 rejected / 10000 churn / 4 workers, SUCCESS на debug FFI этого source |
+| Explicit Windows package | [43022649018](https://github.com/i-shutov/flowbridge/actions/runs/43022649018), SUCCESS на старом `173d8bc5`; новая версия требует пересборки |
+| Explicit macOS package | [43387219678](https://github.com/i-shutov/flowbridge/actions/runs/43387219678), SUCCESS на старом `922a32df`; не owner-native A4 |
+| ETW G2 | [43388920330](https://github.com/i-shutov/flowbridge/actions/runs/43388920330), `kernel_connection_id_missing`; G2 остаётся NO-GO |
+| Win10 W0–W2b2 | Исторический owner PASS на `c339df2e`; не переносится на изменённый установщик |
+
+PR-проверки первого ряда использовали merge commit `632e231c`, а часть
+отчётов записывала head `6f6f69ad`. Деревья совпадали:
+`6c5f154b4f47c4390f9630036c45f2a927aa235e`. Новый процесс записывает
+реальные checkout/source SHA, tree SHA и workflow run ID и требует их совпадения.
+
+## Крупные блоки до релиза
+
+| Блок | Работа | Проверяемый выход | Состояние |
+|---|---|---|---|
+| **B0 — единый проверенный explicit-кандидат** | Единая версия, два изолированных пакета, locked dependencies/licenses, проверка поставляемых DLL/CLI и самостоятельный QA kit | `explicit-beta-candidate.yml`: packages, Rust/DNS на 3 ОС, 10k SSH на DLL/CLI из установщика, hosted operator QA, index и SHA256SUMS | **HOSTED PASS** на `f5ecd48`: [run 43407093536](https://github.com/i-shutov/flowbridge/actions/runs/43407093536), 11/11 jobs; owner A3/A4 и выпуск остаются открыты |
+| **B1 — техническая развилка прозрачного перехвата** | Сопоставить NDISRD PacketBound blocker и независимые WFP/ALE результаты; определить интегрируемый backend в разрешённой области; отдельно macOS NE | Доверенная цепь selected process → native flow → Rust → SSH на реальных Windows/macOS с native traces | BLOCKED: нет принятого packet/flow owner witness; WFP research не интегрирован; NE native acceptance отсутствует |
+| **B2 — интеграция и containment** | App/Host/CIDR/Port rules, IPv6, scoped DNS, UDP/QUIC, all-workers-down, Stop/crash/reboot | T01–T08 с независимыми packet/process evidence, без implicit DIRECT или local DNS fallback | OPEN, зависит от B1 |
+| **B3 — продуктовая приёмка** | Компактный GUI, доступность, install/upgrade/remove, нагрузка/soak, реальные ОС, подписи и secure storage | Windows 10/11 и macOS ARM64/Intel matrix; 0 открытых обязательных P0 | OPEN; прежние user-mode результаты только baseline |
+| **B4 — RC и 1.0** | Заморозка кода, независимое ревью, подписанные проверенные байты, notes и контроль опубликованных файлов | Один RC source и hashes; обязательные native/quality gates PASS; tag/release соответствует испытанным файлам | NOT_STARTED; не публиковать 1.0 до B1–B3 |
+
+В B0 устранён runtime дефект: Windows installer называет CLI
+`flowbridge-cli.exe`, а experimental SSH banner helper разрешал только
+`flowbridge.exe`. Теперь допустимы ровно два штатных имени при сохранении
+проверок абсолютного локального пути, consent, quoting и запретов shell/UNC.
+Managed SSH проверяет поставляемую release DLL и CLI; test-only capture
+fixture собирается отдельно и не включается в installer.
+
+## Однозначные обозначения gates
+
+| Пространство | Значение |
+|---|---|
+| **B0–B4** | Крупные блоки этого плана |
+| **A0–A7** | Приёмка explicit beta из [beta contract](qa/EXPLICIT_SOCKS_BETA_CUT_20261111.md) |
+| **native G0–G6** | [NDISRD/capture matrix](qa/RUST_CAPTURE_INTEGRATION_CANDIDATE.md); G1 — исторические 10/10, G2 — packet→PID/epoch, G3 — crash fail-closed, G4 — containment |
+| **W0–W3** | Этапы owner Windows проверки; W2b2 не доказывает W3/native interception |
+| **R00–R10/T01–T10** | Детальные требования/сценарии исторического плана ниже; требования сохраняются, старые статусы и выбор custom WFP backend не действуют |
+
+**Не смешивать G1/G2 октябрьского UI-плана с native G1/G2.** Историческая
+таблица ниже описывает старую навигацию, а не сегодняшнюю приёмку.
+
+## Что остаётся вне hosted сборки
+
+1. **Windows B1:** связывание конкретного native потока/доставки с процессом
+   и его временем жизни. Нулевой `connid` нельзя принять как доказательство;
+   ненулевой ETW `connid` сам по себе не прикрепляет identity к NDISRD buffer.
+2. **macOS B1:** действительное sign/install/approve/activate NE и native traffic.
+   Universal `.app/.pkg` explicit beta этого не проверяет.
+3. **Owner A3/A4:** на новом пакете install/launch/upgrade/remove, затем
+   visual/keyboard и SSH/SOCKS5h/host-key/Stop проверки. Готовый
+   [operator runner](qa/EXPLICIT_BETA_NATIVE_ACCEPTANCE.md) сначала проверяет
+   pins, при `--execute` запускает только beta lifecycle. Hosted PASS не
+   превращается в owner-native PASS.
+4. **Подписи и выпуск:** publisher identities/certificates и signing/notarization
+   evidence должны быть доступны в соответствующем контуре. Секреты не
+   передаются через git или отчёт. Unsigned candidate не является публичной 1.0.
+
+## Сохранение результата
+
+Кандидат содержит source SHA, tree, run ID, hashes пакетов и проверяемых
+DLL/CLI, SBOM/metadata/notices и QA kit. Смешанные источники/runs, лишние
+файлы, несовпавшие CLI/FFI и неполные проверки останавливают сборщик.
+Native G2 остаётся строгой отдельной проверкой; её ошибка видна в GitHub
+summary без ETL, PID, пользовательских путей и ключей.
+
+Результаты фиксируются в commit/PR и Actions artifacts. Checkpoint указывает
+проверенный candidate source; последующий документальный commit не является
+новой принятой бинарной сборкой.
+
+---
+
+# Исторический план 30 октября 2026 — трассировка требований
+
+**Статусы и разрешения этой секции заменены текущей секцией выше.**
 
 **Срез:** 30 октября 2026. **Исходная база:** `main` @ `6401b40b02fa00d5ae3f84aec2ac1916c266e6ea`.
 **Текущий подтверждённый уровень:** локальная SOCKS5-бета, Windows x64 + macOS universal, собственные GUI, управляемый SSH-пул 1–4 процесса; проверенные 5/5 native/Rust jobs и 3/3 DNS jobs на exact PR head `a38fd84e`. [Checkpoint](qa/NATIVE_BETA_CHECKPOINT_20261030.md), [CI](https://github.com/i-shutov/flowbridge/actions/runs/41005277502), [DNS](https://github.com/i-shutov/flowbridge/actions/runs/41005277446).

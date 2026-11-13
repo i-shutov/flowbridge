@@ -236,10 +236,12 @@ impl Config {
                     return Err(TunnelError("Banner gate host IP is invalid".into()));
                 }
                 let file = std::path::Path::new(path);
-                let basename = if cfg!(windows) {
-                    "flowbridge.exe"
+                let basenames: &[&str] = if cfg!(windows) {
+                    // The native GUI owns FlowBridge.exe in installed Windows
+                    // packages. The same Rust CLI is shipped as flowbridge-cli.exe.
+                    &["flowbridge.exe", "flowbridge-cli.exe"]
                 } else {
-                    "flowbridge"
+                    &["flowbridge"]
                 };
                 if path.is_empty()
                     || path.len() > 4096
@@ -269,7 +271,7 @@ impl Config {
                     || !file
                         .file_name()
                         .and_then(|n| n.to_str())
-                        .is_some_and(|n| n.eq_ignore_ascii_case(basename))
+                        .is_some_and(|n| basenames.iter().any(|name| n.eq_ignore_ascii_case(name)))
                 {
                     return Err(TunnelError(
                         "Banner gate requires shell-inert absolute local FlowBridge CLI path"
@@ -1895,6 +1897,12 @@ mod tests {
                     "ProxyCommand=\"C:/Program Files/FlowBridge/flowbridge.exe\" ssh-banner-gate",
                 )
             }));
+            cfg.banner_gate_executable =
+                Some("C:/Program Files/FlowBridgeExplicitBeta/flowbridge-cli.exe".into());
+            cfg.validate().unwrap();
+            assert!(cfg.arguments().iter().any(|arg| arg.contains(
+                "ProxyCommand=\"C:/Program Files/FlowBridgeExplicitBeta/flowbridge-cli.exe\" ssh-banner-gate"
+            )));
         }
         for bad in [
             "/tmp/a & b/flowbridge",
@@ -1911,6 +1919,9 @@ mod tests {
             "C:/FlowBridge//bin/flowbridge.exe",
             "C:/FlowBridge/NUL/flowbridge.exe",
             "C:/FlowBridge/bin/flowbridge.exe:ads",
+            "C:/FlowBridge/bin/flowbridge-cli.exe:ads",
+            "C:/FlowBridge/bin/unreviewed-cli.exe",
+            "C:/FlowBridge/bin/flowbridge-cli.exe.cmd",
         ] {
             cfg.banner_gate_executable = Some(bad.into());
             assert!(cfg.validate().is_err(), "dangerous path: {bad}");

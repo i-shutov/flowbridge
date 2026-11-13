@@ -440,10 +440,16 @@ void enableControls() {
     for(int id:{Start,Stop,StartCapture,StopCapture,Apply,Open,Save,Proxy,Host,Port,Protocol,Config,Discover,ExportNative,ManagedMode,SshHost,SshPort,SshUser,KeyPath,KnownHosts,LocalPort,Compression,Keepalive,KeepaliveCount,SaveDesktop,BrowseKey,BrowseKnown,BrowseApp,RetryInitial,RetryMax,PresetAI,PresetWeb,PresetBoth,BlockOthers,RemoteDns,SshExecutable,BrowseSsh,SshPoolWorkers,VisualRules})EnableWindow(GetDlgItem(window,id),!busy&&!closing&&(!pendingStart||id==Stop||id==Discover||id==BrowseApp||id==PresetAI||id==PresetWeb||id==PresetBoth||id==BlockOthers));
     EnableWindow(GetDlgItem(window,Start),!busy&&!closing&&!engineRunning&&!pendingStart&&!nativeCapture.active());
     const bool managed=SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1;
+#ifdef FLOWBRIDGE_EXPLICIT_BETA_ONLY
+    // Beta never activates privileged capture; keep these controls inert.
+    for(int id:{StartCapture,StopCapture,ExportNative,BlockOthers})
+        EnableWindow(GetDlgItem(window,id),FALSE);
+#else
     EnableWindow(GetDlgItem(window,StartCapture),ssh_pool_policy::captureAvailable(
         managed,engineRunning,pendingStart,tunnelReady,busy,closing,
         nativeCapture.active(),nativeCapture.stopping()));
     EnableWindow(GetDlgItem(window,StopCapture),!closing&&nativeCapture.active());
+#endif
     setText(GetDlgItem(window,Start),pendingStart?"Подключаем…":engineRunning?"Подключено":"Подключить");
 }
 void dispatch(int action,std::string text={},Json options=Json::object()){busy=true;if(action!=PollCommand)enableControls();worker.submit(action,std::move(text),std::move(options));}
@@ -555,6 +561,9 @@ void browseApplication(){auto path=chooseFile(L"Приложения Windows\0*.
     auto text=discovery::utf8(path.wstring());auto found=std::find_if(discovered.begin(),discovered.end(),[&](const discovery::App& a){return a.path==text;});if(found==discovered.end())discovered.push_back({"manual",discovery::utf8(path.stem().wstring()),text,"Выбрано вручную",100});selectedApps.insert(text);refreshApps();saveDesktop();
 }
 void startNativeCapture(){
+#ifdef FLOWBRIDGE_EXPLICIT_BETA_ONLY
+    throw std::runtime_error("SOCKS-only beta: WFP/NDISRD недоступны; настройте SOCKS5h непосредственно в приложении.");
+#else
     captureSelections();
     if(nativeCapture.active()||nativeCapture.stopping())
         throw std::runtime_error("Дождитесь завершения предыдущего нативного перехвата.");
@@ -630,21 +639,44 @@ void startNativeCapture(){
     note("Нативный helper запрошен для "+std::to_string(apps.size())+
          " EXE; маршрут: "+(managed?"пользовательский SSH через локальный SOCKS":"внешний прокси")+
          ". Драйвер/реальное перенаправление требуют отдельной проверки.");
+#endif
 }
 void stopNativeCapture(){
+#ifdef FLOWBRIDGE_EXPLICIT_BETA_ONLY
+    throw std::runtime_error("SOCKS-only beta: нативный перехват отсутствует.");
+#else
     if(!nativeCapture.active()) {note("Нативный helper уже остановлен.");return;}
     nativeCapture.stop();
     setText(GetDlgItem(window,CaptureStatus),"Останавливаем helper: снимаются WFP-фильтры и закрываются соединения.");
     note("Запрошена остановка нативного перехвата.");
+#endif
 }
-void exportNative(){captureSelections();if(selectedApps.empty())throw std::runtime_error("Сначала отметьте приложения для экспорта.");auto config=Json::parse(commandConfiguration());
+void exportNative(){
+#ifdef FLOWBRIDGE_EXPLICIT_BETA_ONLY
+    throw std::runtime_error("SOCKS-only beta не применяет правила EXE; настройте SOCKS5h.");
+#else
+    captureSelections();if(selectedApps.empty())throw std::runtime_error("Сначала отметьте приложения для экспорта.");auto config=Json::parse(commandConfiguration());
     std::string target=SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1?"managed-ssh":selectedProxyId;if(target.empty())throw std::runtime_error("Добавьте и выберите upstream-прокси в разделе подключения.");
     config=native_profile::build(std::move(config),std::vector<std::string>(selectedApps.begin(),selectedApps.end()),target,SendMessageW(GetDlgItem(window,BlockOthers),BM_GETCHECK,0,0)==BST_CHECKED);
     response(fb_validate_json(config.dump().c_str()));auto path=chooseFile(L"Нативный профиль JSON\0*.json\0",true);if(path.empty())return;writeFile(path,config.dump(2));saveDesktop();note("Нативный профиль экспортирован; запуск перехвата производится отдельной кнопкой при доступном подписанном WFP-драйвере.");
+#endif
+}
+void refreshConnectionModeSummary(){
+    // A mode edit changes presentation only; the accepted route changes on reconnect.
+    const bool managed=SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1;
+    if(latestSshSnapshot.is_object()&&latestSshSnapshot.contains("status")){
+        setText(GetDlgItem(window,SshSummary),managed?utf8(GetDlgItem(window,SshHealth)):
+            "Выбран внешний прокси. Для смены текущего маршрута переподключитесь.");
+        return;
+    }
+    setText(GetDlgItem(window,SshHealth),managed?"Управляемый SSH не запущен":"SSH: используется внешний прокси");
+    setText(GetDlgItem(window,SshSummary),managed?
+        "SSH запустится по кнопке «Подключить». Проверьте ключ в known_hosts.":
+        "Внешний прокси управляется отдельно от FlowBridge.");
 }
 void showSsh(const Json& ssh,bool waiting){
     latestSshSnapshot=ssh;
-    if(ssh.is_null()){bool managed=SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1;tunnelReady=!managed;setText(GetDlgItem(window,SshHealth),managed?"Управляемый SSH не запущен":"SSH: используется внешний прокси");setText(GetDlgItem(window,SshSummary),managed?"SSH запустится после нажатия «Подключить». Ключ сервера должен быть заранее проверен.":"Внешний прокси управляется отдельно от FlowBridge.");return;}
+    if(ssh.is_null()){bool managed=SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1;tunnelReady=!managed;refreshConnectionModeSummary();return;}
     auto status=ssh.at("status");auto state=status.value("state",std::string("stopped"));tunnelReady=state=="ready";std::string label=state=="ready"?"Готов":state=="starting"?"Запускается":state=="reconnecting"?"Восстанавливается":state=="degraded"?"Перегрузка / диагностика":state=="failed"?"Требуется внимание":"Остановлен";
     const int workers=status.value("worker_count",1);
     const int ready=status.value("ready_workers",state=="ready"?1:0);
@@ -677,7 +709,7 @@ void showSsh(const Json& ssh,bool waiting){
             " · очередь: "+std::to_string(queued)+
             " · отказов: "+std::to_string(rejected);
     }
-    setText(GetDlgItem(window,SshHealth),text);setText(GetDlgItem(window,SshSummary),text);
+    setText(GetDlgItem(window,SshHealth),text);refreshConnectionModeSummary();
     if(waiting){setText(GetDlgItem(window,Badge),"●  Ожидание готовности SSH");setText(GetDlgItem(window,Status),"Сначала проверяется SSH/SOCKS5. Локальный движок запустится после подтверждения готовности.");}
     if(engineRunning&&!tunnelReady){setText(GetDlgItem(window,Badge),state=="degraded"?"●  SSH перегружен / проверяется · новые соединения ждут":"●  SSH восстанавливается · SOCKS ждёт upstream");}
     std::string events=utf8(logEdit);for(const auto& event:ssh.value("events",Json::array()))events+="\r\n[SSH / "+event.value("level",std::string("info"))+"] "+event.value("message",std::string());if(events.size()>60000)events.erase(0,events.size()-60000);while(!events.empty()&&(static_cast<unsigned char>(events[0])&0xc0)==0x80)events.erase(0,1);setText(logEdit,events);
@@ -703,7 +735,7 @@ void layout() {
     move(Start,width-322,24,160,40);move(Stop,width-150,24,122,40);
     // Dashboard: the connection list and help must remain visible at 1280x720.
     move(Badge,x+24,143,w-48,30);move(Status,x+24,185,w-48,28);
-    move(Mode,x+24,224,w-48,30);move(Metrics,x+24,280,w-48,24);
+    move(Mode,x+24,220,w-48,40);move(Metrics,x+24,280,w-48,24);
     move(SshTitle,x+24,319,w-48,22);move(SshHealth,x+24,347,w-48,46);
     move(ConnectionsLabel,x,411,w,24);
     move(Connections,x,441,w,std::max(80,height-486));
@@ -738,7 +770,7 @@ void layout() {
         move(labels[i],x+24+i*(unit+24),482,unit,18);
         move(fields[i],x+24+i*(unit+24),504,unit,28);
     }
-    move(SshHelp,x+24,540,w-48,34);
+    move(SshHelp,x+24,538,w-48,40);
     // DNS scope is deliberately limited to explicit SOCKS hostname input.
     // Keep the toggle and Save button horizontally separate at 980x680.
     move(RemoteDns,x+24,height-58,w-290,26);
@@ -764,7 +796,7 @@ void layout() {
     move(ExportNative,x+2*(buttonWidth+12),height-86,w-2*(buttonWidth+12),40);
     // Advanced JSON/log split is derived from the actual available height.
     move(Apply,x,132,160,38);move(VisualRules,x+170,132,170,38);
-    move(Open,x+350,132,160,38);move(Save,x+520,132,160,38);move(ConfigLabel,x,190,w,30);
+    move(Open,x+350,132,160,38);move(Save,x+520,132,160,38);move(ConfigLabel,x,180,w,40);
     const int editor=std::max(150,(height-330)*3/5);
     move(Config,x,226,w,editor);move(LogLabel,x,240+editor,w,24);
     move(Log,x,272+editor,w,std::max(100,height-editor-302));
@@ -781,7 +813,11 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         add(L"BUTTON",L"Подключить",WS_TABSTOP,Start,-1);add(L"BUTTON",L"Остановить",WS_TABSTOP,Stop,-1);
         label(L"●  Не подключено",Badge,0);SendMessageW(GetDlgItem(h,Badge),WM_SETFONT,reinterpret_cast<WPARAM>(headingFont),TRUE);
         label(L"Остановлено. Выберите подключение и нажмите «Подключить».",Status,0);
+        #ifdef FLOWBRIDGE_EXPLICIT_BETA_ONLY
+        label(L"SOCKS-only beta: настройте SOCKS5h в самом приложении.\r\nПрозрачного перехвата и системного kill switch нет.",Mode,0);
+        #else
         label(L"Локальный SOCKS5 работает отдельно. Нативный перехват выбранных EXE доступен через UAC при установленном WFP-драйвере.",Mode,0);
+        #endif
         label(L"АКТИВНЫЕ СОЕДИНЕНИЯ     0       ПРИНЯТО     0       ТРАФИК ↑ / ↓     0 / 0 Б",Metrics,0);
         label(L"Состояние SSH",SshTitle,0);label(L"SSH: используется внешний прокси",SshHealth,0);
         label(L"Текущие и недавние соединения",ConnectionsLabel,0);
@@ -808,28 +844,56 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
                      reinterpret_cast<LPARAM>(L"Путь ssh.exe · пусто = PATH"));
         add(L"BUTTON",L"Выбрать…",WS_TABSTOP,BrowseKey,12);add(L"BUTTON",L"Выбрать…",WS_TABSTOP,BrowseKnown,12);
         add(L"BUTTON",L"SSH exe…",WS_TABSTOP,BrowseSsh,12);
-        label(L"SSH: ключ сервера проверьте в known_hosts. DNS: только hostname в явном SOCKS5; без галочки имена блокируются, локального обхода нет. Прозрачный WFP DNS не защищён.",SshHelp,12);
+        label(L"SSH: проверьте ключ в known_hosts. DNS — только имена через SOCKS5h.\r\nБез галочки — только IP, без локального DNS fallback. DNS ОС не защищён.",SshHelp,12);
         label(L"Внешний прокси управляется отдельно от FlowBridge.",SshSummary,1);
         add(L"BUTTON",L"Сохранить подключение",WS_TABSTOP,SaveDesktop,1);
+        #ifdef FLOWBRIDGE_EXPLICIT_BETA_ONLY
+        label(L"SOCKS-only beta: список EXE справочный. Перехват недоступен; настройте SOCKS5h 127.0.0.1:1081 в самом приложении.",AppsHelp,2);
+        #else
         label(L"Для SSH: сначала «Подключить» и дождитесь готовности, затем выберите EXE и «Нативный перехват». SSH остаётся без UAC. WFP-драйвер должен быть установлен отдельно.",AppsHelp,2);
+        #endif
         add(L"BUTTON",L"AI-приложения",WS_TABSTOP,PresetAI,2);add(L"BUTTON",L"Веб-браузеры",WS_TABSTOP,PresetWeb,2);add(L"BUTTON",L"AI + веб",WS_TABSTOP,PresetBoth,2);
         add(L"BUTTON",L"Найти приложения",WS_TABSTOP,Discover,2);add(L"BUTTON",L"Добавить EXE…",WS_TABSTOP,BrowseApp,2);
         label(L"Поиск локальный: App Paths, список установки, известные ярлыки и запущенные процессы.",ScanStatus,2);label(L"Найдено: 0 • Выбрано: 0",AppsSummary,2);
         HWND apps=add(WC_LISTVIEWW,L"",WS_BORDER|LVS_REPORT|LVS_SINGLESEL|WS_TABSTOP,AppsTable,2);ListView_SetExtendedListViewStyle(apps,LVS_EX_FULLROWSELECT|LVS_EX_CHECKBOXES|LVS_EX_DOUBLEBUFFER);
         const wchar_t* appTitles[]={L"Приложение",L"Обнаруженный путь",L"Источник",L"Уверенность"};int appWidths[]={160,420,150,160};for(int i=0;i<4;++i){LVCOLUMNW col{};col.mask=LVCF_TEXT|LVCF_WIDTH;col.pszText=const_cast<wchar_t*>(appTitles[i]);col.cx=appWidths[i];ListView_InsertColumn(apps,i,&col);}
+        #ifdef FLOWBRIDGE_EXPLICIT_BETA_ONLY
+        label(L"Выбранные здесь EXE НЕ перенаправляются. Остальные приложения идут через сеть ОС.",2018,2);
+        #else
         label(L"В нативном профиле выбранные EXE идут через прокси; остальные — напрямую. Имена EXE не подтверждают издателя.",2018,2);
+        #endif
         add(L"BUTTON",L"Блокировать остальные приложения вместо Direct",BS_AUTOCHECKBOX|WS_TABSTOP,BlockOthers,2);add(L"BUTTON",L"Экспорт профиля…",WS_TABSTOP,ExportNative,2);
+        #ifdef FLOWBRIDGE_EXPLICIT_BETA_ONLY
+        add(L"BUTTON",L"WFP недоступен",WS_TABSTOP,StartCapture,2);
+        #else
         add(L"BUTTON",L"Нативный перехват…",WS_TABSTOP,StartCapture,2);
+        #endif
         add(L"BUTTON",L"Остановить перехват",WS_TABSTOP,StopCapture,2);
+        #ifdef FLOWBRIDGE_EXPLICIT_BETA_ONLY
+        label(L"Только SOCKS5h; ни драйвер WFP, ни защищённая маршрутизация не включены.",CaptureStatus,2);
+        #else
         label(L"Нативный helper остановлен. Веб/AI-приложения идут напрямую, если не настроен их собственный прокси.",CaptureStatus,2);
+        #endif
         add(L"BUTTON",L"Применить профиль",WS_TABSTOP,Apply,3);add(L"BUTTON",L"Правила…",WS_TABSTOP,VisualRules,3);add(L"BUTTON",L"Открыть JSON…",WS_TABSTOP,Open,3);add(L"BUTTON",L"Экспорт JSON…",WS_TABSTOP,Save,3);
-        label(L"Полный профиль • правила / цепочки / listener. Критерии приложений неприменимы в локальном SOCKS-режиме.",ConfigLabel,3);
+        label(L"Полный профиль: правила, цепочки и listener.\r\nКритерии приложений не работают в локальном SOCKS-режиме.",ConfigLabel,3);
         configEdit=add(L"EDIT",L"",WS_BORDER|WS_VSCROLL|WS_HSCROLL|ES_MULTILINE|ES_AUTOVSCROLL|ES_AUTOHSCROLL|ES_WANTRETURN|WS_TABSTOP,Config,3);SendMessageW(configEdit,EM_SETLIMITTEXT,MaxBytes,0);
         label(L"Журнал движка и SSH • последние события",LogLabel,3);logEdit=add(L"EDIT",L"",WS_BORDER|WS_VSCROLL|ES_MULTILINE|ES_AUTOVSCROLL|ES_READONLY,Log,3);SendMessageW(logEdit,EM_SETLIMITTEXT,65536,0);
         table=add(WC_LISTVIEWW,L"",WS_BORDER|LVS_REPORT|LVS_SINGLESEL|WS_TABSTOP,Connections,0);ListView_SetExtendedListViewStyle(table,LVS_EX_FULLROWSELECT|LVS_EX_DOUBLEBUFFER);
         const wchar_t* titles[]={L"ID",L"Назначение",L"Правило",L"Маршрут",L"Состояние",L"↑ / ↓, байт",L"Ошибка"};int widths[]={48,190,145,130,130,135,180};for(int i=0;i<7;++i){LVCOLUMNW col{};col.mask=LVCF_TEXT|LVCF_WIDTH;col.pszText=const_cast<wchar_t*>(titles[i]);col.cx=widths[i];ListView_InsertColumn(table,i,&col);}
         std::string value=initialConfig;
-        try{PWSTR path=nullptr;if(FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_CREATE,nullptr,&path)))throw std::runtime_error("Не удалось найти Local AppData.");profile=std::filesystem::path(path)/L"FlowBridge"/L"profile.json";CoTaskMemFree(path);desktopPath=profile.parent_path()/L"desktop-settings.json";if(std::filesystem::exists(profile))value=readFile(profile);if(std::filesystem::exists(desktopPath))desktop=Json::parse(readFile(desktopPath));}catch(const std::exception& e){note(std::string("Не удалось загрузить настройки: ")+e.what());}
+        try{
+            PWSTR path=nullptr;
+            if(FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_CREATE,nullptr,&path)))throw std::runtime_error("Не удалось найти Local AppData.");
+        #ifdef FLOWBRIDGE_EXPLICIT_BETA_ONLY
+            profile=std::filesystem::path(path)/L"FlowBridgeExplicitBeta"/L"profile.json";
+        #else
+            profile=std::filesystem::path(path)/L"FlowBridge"/L"profile.json";
+        #endif
+            CoTaskMemFree(path);
+            desktopPath=profile.parent_path()/L"desktop-settings.json";
+            if(std::filesystem::exists(profile))value=readFile(profile);
+            if(std::filesystem::exists(desktopPath))desktop=Json::parse(readFile(desktopPath));
+        }catch(const std::exception& e){note(std::string("Не удалось загрузить настройки: ")+e.what());}
         if(!desktop.is_object())desktop=Json::object();
         auto settings=desktop.value("ssh",Json::object());if(!settings.is_object())settings=Json::object();auto setSetting=[&](int id,const char* key,const Json& fallback){auto field=settings.value(key,fallback);setText(GetDlgItem(window,id),field.is_string()?field.get<std::string>():field.is_null()?std::string():field.dump());};
         setSetting(SshHost,"host","");setSetting(SshPort,"port",22);setSetting(SshUser,"user","");setSetting(KeyPath,"identity_file",nullptr);setSetting(KnownHosts,"known_hosts_file",nullptr);setSetting(SshExecutable,"ssh_executable",nullptr);setSetting(LocalPort,"local_port",1080);setSetting(Keepalive,"server_alive_interval_secs",15);setSetting(KeepaliveCount,"server_alive_count_max",3);setSetting(RetryInitial,"restart_initial_delay_ms",1000);setSetting(RetryMax,"restart_max_delay_ms",30000);SendMessageW(GetDlgItem(window,Compression),BM_SETCHECK,settings.value("compression",false)?BST_CHECKED:BST_UNCHECKED,0);
@@ -843,7 +907,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         if(!savedRemoteDns.is_boolean())note("Некорректная настройка DNS: включён безопасный режим по умолчанию.");
         SendMessageW(mode,CB_SETCURSEL,desktop.value("managed_ssh",false)?1:0,0);SendMessageW(GetDlgItem(window,BlockOthers),BM_SETCHECK,desktop.value("block_other_applications",false)?BST_CHECKED:BST_UNCHECKED,0);selectedPreset=desktop.value("preset",std::string("ai_web"));for(const auto& selected:desktop.value("selected_applications",std::vector<std::string>{}))selectedApps.insert(selected);dark=desktop.value("dark",false);
         try{wchar_t exe[32768]{};GetModuleFileNameW(nullptr,exe,32768);auto resource=std::filesystem::path(exe).parent_path()/L"resources"/L"presets.json";if(!std::filesystem::exists(resource))resource=std::filesystem::path(__FILE__).parent_path().parent_path().parent_path()/"resources"/"presets.json";catalog=Json::parse(readFile(resource));}catch(const std::exception& e){catalog=Json::object();note(std::string("Каталог шаблонов недоступен: ")+e.what());}
-        setText(configEdit,value);fillQuick();applyTheme();switchPage(0);worker.start();SetTimer(h,1,1000,nullptr);return 0;
+        setText(configEdit,value);fillQuick();refreshConnectionModeSummary();applyTheme();switchPage(0);worker.start();SetTimer(h,1,1000,nullptr);return 0;
     }
     case WM_SIZE: layout(); return 0;
     case WM_GETMINMAXINFO: reinterpret_cast<MINMAXINFO*>(l)->ptMinTrackSize={980,680}; return 0;
@@ -853,7 +917,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
             if((id==Host||id==Port)&&event==EN_CHANGE&&!filling)quickDirty=true;
             if(id==Protocol&&event==CBN_SELCHANGE&&!filling)quickDirty=true;
             if(id==Proxy&&event==CBN_SELCHANGE)selectedProxy();
-            if(id==ManagedMode&&event==CBN_SELCHANGE){updateVisibility();layout();enableControls();InvalidateRect(h,nullptr,TRUE);}
+            if(id==ManagedMode&&event==CBN_SELCHANGE){refreshConnectionModeSummary();updateVisibility();layout();enableControls();InvalidateRect(h,nullptr,TRUE);}
             if(event==BN_CLICKED&&!closing){
                 if(id>=NavDashboard&&id<=NavAdvanced)switchPage(id-NavDashboard);
                 else if(id==Theme){dark=!dark;applyTheme();try{saveDesktop();}catch(const std::exception& e){note(e.what());}}
@@ -958,7 +1022,13 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         return 0;
     case WM_ERASEBKGND:return 1;
     case WM_PAINT:{PAINTSTRUCT ps{};HDC dc=BeginPaint(h,&ps);RECT r{};GetClientRect(h,&r);FillRect(dc,&r,backgroundBrush);RECT side{0,0,212,r.bottom};FillRect(dc,&side,sidebarBrush);
-        SetBkMode(dc,TRANSPARENT);SetTextColor(dc,RGB(237,243,255));SelectObject(dc,headingFont);RECT brand{27,36,197,70};DrawTextW(dc,L"FlowBridge",-1,&brand,DT_LEFT|DT_SINGLELINE);SelectObject(dc,smallFont);SetTextColor(dc,RGB(143,164,195));RECT tag{28,79,194,117};DrawTextW(dc,L"ЛИЧНЫЙ МАРШРУТ\nSSH / SOCKS5",-1,&tag,DT_LEFT);RECT version{28,r.bottom-203,195,r.bottom-158};DrawTextW(dc,L"v0.2.0\nЛокальный режим",-1,&version,DT_LEFT);
+        SetBkMode(dc,TRANSPARENT);SetTextColor(dc,RGB(237,243,255));SelectObject(dc,headingFont);RECT brand{27,36,197,70};DrawTextW(dc,L"FlowBridge",-1,&brand,DT_LEFT|DT_SINGLELINE);SelectObject(dc,smallFont);SetTextColor(dc,RGB(143,164,195));RECT tag{28,79,194,117};DrawTextW(dc,L"ЛИЧНЫЙ МАРШРУТ\nSSH / SOCKS5",-1,&tag,DT_LEFT);RECT version{28,r.bottom-203,195,r.bottom-158};
+#ifdef FLOWBRIDGE_EXPLICIT_BETA_ONLY
+        const auto versionLabel=wide(std::string("v")+FLOWBRIDGE_BETA_VERSION+"\nЛокальный SOCKS");
+        DrawTextW(dc,versionLabel.c_str(),-1,&version,DT_LEFT);
+#else
+        DrawTextW(dc,L"v0.2.0\nЛокальный режим",-1,&version,DT_LEFT);
+#endif
         auto panel=[&](int top,int bottom){HPEN pen=CreatePen(PS_SOLID,1,dark?RGB(45,61,83):RGB(225,232,242));auto oldPen=SelectObject(dc,pen);auto oldBrush=SelectObject(dc,cardBrush);RoundRect(dc,236,top,r.right-28,bottom,18,18);SelectObject(dc,oldPen);SelectObject(dc,oldBrush);DeleteObject(pen);};
         if(activePage==0){panel(132,266);panel(274,308);panel(313,400);}else if(activePage==1){panel(124,208);bool managed=SendMessageW(GetDlgItem(h,ManagedMode),CB_GETCURSEL,0,0)==1;panel(212,managed?586:435);}else if(activePage==2)panel(124,201);
         EndPaint(h,&ps);return 0;}
@@ -975,7 +1045,16 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
 }
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show) {
     // Shared with installer: an existing process must exit before replacement or uninstall.
-    HANDLE guard=CreateMutexW(nullptr,FALSE,L"Local\\FlowBridge.NativeUI.v02");
+#ifdef FLOWBRIDGE_EXPLICIT_BETA_ONLY
+    const wchar_t* mutexName=L"Local\\FlowBridge.ExplicitBeta.NativeUI";
+    const wchar_t* windowClass=L"FlowBridgeExplicitBeta";
+    const auto windowTitle=wide(std::string("FlowBridge Explicit Beta ")+FLOWBRIDGE_BETA_VERSION+" — локальный SOCKS");
+#else
+    const wchar_t* mutexName=L"Local\\FlowBridge.NativeUI.v02";
+    const wchar_t* windowClass=L"FlowBridgeNativeV02";
+    const std::wstring windowTitle=L"FlowBridge 0.2 — личный маршрут";
+#endif
+    HANDLE guard=CreateMutexW(nullptr,FALSE,mutexName);
     if(!guard || GetLastError()==ERROR_ALREADY_EXISTS) { if(guard) CloseHandle(guard); MessageBoxW(nullptr,L"FlowBridge is already running in this session.",L"FlowBridge",MB_OK|MB_ICONINFORMATION); return 1; }
     INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_LISTVIEW_CLASSES}; InitCommonControlsEx(&controls);
     SetProcessDPIAware();
@@ -983,13 +1062,13 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show) {
     titleFont=CreateFontW(-28,0,0,0,FW_SEMIBOLD,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
     headingFont=CreateFontW(-21,0,0,0,FW_SEMIBOLD,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
     smallFont=CreateFontW(-13,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
-    WNDCLASSW cls{}; cls.lpfnWndProc=windowProc; cls.hInstance=instance; cls.lpszClassName=L"FlowBridgeNativeV02"; cls.hCursor=LoadCursorW(nullptr,IDC_ARROW); cls.hbrBackground=reinterpret_cast<HBRUSH>(COLOR_WINDOW+1);
+    WNDCLASSW cls{}; cls.lpfnWndProc=windowProc; cls.hInstance=instance; cls.lpszClassName=windowClass; cls.hCursor=LoadCursorW(nullptr,IDC_ARROW); cls.hbrBackground=reinterpret_cast<HBRUSH>(COLOR_WINDOW+1);
     if(!RegisterClassW(&cls)) { CloseHandle(guard); return 1; }
     RECT workArea{};SystemParametersInfoW(SPI_GETWORKAREA,0,&workArea,0);
     const int availableW=workArea.right-workArea.left,availableH=workArea.bottom-workArea.top;
     const int initialW=std::min(1180,std::max(980,availableW));
     const int initialH=std::min(760,std::max(680,availableH));
-    HWND h=CreateWindowW(cls.lpszClassName,L"FlowBridge 0.2 — личный маршрут",WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN,
+    HWND h=CreateWindowW(cls.lpszClassName,windowTitle.c_str(),WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN,
                          workArea.left,workArea.top,initialW,initialH,nullptr,nullptr,instance,nullptr);
     if(!h) { CloseHandle(guard); return 1; } ShowWindow(h,show); MSG msg{}; BOOL status;
     while((status=GetMessageW(&msg,nullptr,0,0))>0) { if(!IsDialogMessageW(h,&msg)) { TranslateMessage(&msg); DispatchMessageW(&msg); } }
