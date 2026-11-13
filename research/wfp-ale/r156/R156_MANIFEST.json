@@ -1,0 +1,39 @@
+{
+  "kind": "R156_SOURCE_LEVEL_OFFLINE_QA",
+  "base_sha": "0b9a0d720d68fc160d1a08c089fbf03ce86cd80e",
+  "main_sha": "5b5afc2feeda2195f302380e615ba003d4906e09",
+  "source_root_local_run": false,
+  "github_source_blobs_read": true,
+  "native_wfp_executed": false,
+  "release_accepted": false,
+  "test_modes": [
+    "normal",
+    "-O",
+    "-OO"
+  ],
+  "test_count_per_mode": 16,
+  "r155_test_count_per_mode": 11,
+  "matrix": {
+    "cases": 224,
+    "changed_r155_action_rows": 12,
+    "counts": {
+      "BLOCK_WITH_WRITE": 80,
+      "OUTER_CONTINUE": 32,
+      "PRESERVED_NO_WRITE": 92,
+      "VETO_PERMIT_NO_WRITE": 20
+    },
+    "kernel_executed": false,
+    "model_only": true,
+    "no_direct_proved": false,
+    "release_accepted": false,
+    "sha256": "cb05f79b8587c56b01e0e285b4264294fdf29e9635f726297854e2898499d933"
+  },
+  "sha256_files": {
+    "r156_callback_composition.py": "c6a8479f5aa6b6d21ee40dba14a2e64363435b483e12ee20bce0872f6b459b17",
+    "r156_independent.mjs": "3ae0c62d25339f6f05d58db3ea4732a7243d4958c7709298b5ed863e887548ad",
+    "test_r156.py": "937010c1fcb25d9cd64deaf3e4f83f780eef16b35bfee4d91e97c12bace13dc1",
+    "R156_WRAPPER_ACTION_CORRECTION.md": "c3f890f04ff0d1b5e536b98273883b31ebcc22cc678cad094d9595aeaec0d381"
+  },
+  "python": "3.13.5",
+  "node": "v22.16.0"
+}
