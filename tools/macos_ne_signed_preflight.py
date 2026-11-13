@@ -84,7 +84,8 @@ def allowed_app_path(app: Path, allowed_roots: tuple[Path, ...]) -> None:
     require(app.suffix == ".app" and app.is_dir() and not app.is_symlink(),
             "not_an_installed_app")
     # Reject symlinks that relocate the installed bundle outside Applications.
-    require(app.parent in allowed_roots and app.resolve(strict=True) == app,
+    require(app.parent in allowed_roots and
+            app.resolve(strict=True) == app.parent.resolve(strict=True) / app.name,
             "app_not_in_applications")
 
 
@@ -122,8 +123,11 @@ def preflight(app: Path, bundle_id: str, team_id: str, *,
     ext_info = read_plist(extension / "Contents/Info.plist", "extension")
     require(ext_info.get("CFBundleIdentifier") == extension_id,
             "extension_bundle_id_mismatch")
-    provider_classes = ext_info.get("NetworkExtension", {}).get("NEProviderClasses", {})
-    require(provider_classes == NE_PROVIDER_CLASSES, "provider_class_registration_mismatch")
+    registration = ext_info.get("NetworkExtension")
+    require(type(registration) is dict, "provider_class_registration_mismatch")
+    provider_classes = registration.get("NEProviderClasses")
+    require(type(provider_classes) is dict and provider_classes == NE_PROVIDER_CLASSES,
+            "provider_class_registration_mismatch")
     ext_bin = extension / "Contents/MacOS" / str(ext_info.get("CFBundleExecutable", ""))
     require(ext_bin.is_file() and not ext_bin.is_symlink(), "extension_executable_missing")
 
