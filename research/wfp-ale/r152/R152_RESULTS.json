@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "date": "2026-11-13",
+  "branch": "research/windows-wfp-ale-attribution-20261107",
+  "base_research_sha": "007c7e82492a0411900e4cf77ab673e545bcc6cb",
+  "main_sha_observed": "5b5afc2feeda2195f302380e615ba003d4906e09",
+  "files": [
+    {
+      "path": "r152_aba_negative.py",
+      "git_blob": "ab703d06ab07ac003b0ea3c4aded0ab02a0e2b68",
+      "sha256": "54d5989b5eac1622dd2ac7514e3d12d96083436bea5f57f3c7be55f42581a715"
+    },
+    {
+      "path": "r152_independent.mjs",
+      "git_blob": "3360393f84d183f4aad18075fad494ac15c75f91",
+      "sha256": "c19ea686afaeda5c55721fddb4376452986fcbdd5b10947190bd44ad4a8f9cd6"
+    }
+  ],
+  "python_version": "3.13.5",
+  "node_version": "22.16.0",
+  "model_cases_each": 128,
+  "modes": [
+    "python",
+    "python -O",
+    "python -OO",
+    "node"
+  ],
+  "matrix_sha256": "7a93d41d8ce5a37056d269415e9f5a9aa1d746c34c80f1440814986474ef81c4",
+  "stale_auth_alias_with_full_visible_fields": 2,
+  "stale_auth_alias_with_r19_book_shape": 4,
+  "source_pins_local": {
+    "r150": true,
+    "r151": true,
+    "r19": false
+  },
+  "r19_source_inspected_via_github": true,
+  "source_mutation_negative_test": "REJECT under -O",
+  "native_wfp_executed": false,
+  "rust_compiled": false,
+  "release_accepted": false,
+  "no_direct_proved": false,
+  "packetbound_g2_pass": false
+}
