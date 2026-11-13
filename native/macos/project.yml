@@ -74,6 +74,8 @@ targets:
       path: Generated/ExplicitBeta-Info.plist
       properties:
         CFBundleDisplayName: FlowBridge Explicit Beta
+        CFBundleShortVersionString: '$(MARKETING_VERSION)'
+        CFBundleVersion: '$(CURRENT_PROJECT_VERSION)'
         FlowBridgeVersion: '$(FLOWBRIDGE_BETA_VERSION)'
         LSMinimumSystemVersion: '13.0'
         NSHighResolutionCapable: true

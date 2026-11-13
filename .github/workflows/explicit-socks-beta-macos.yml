@@ -79,5 +79,7 @@ jobs:
           name: FlowBridge-ExplicitBeta-macOS-Failure-${{ github.run_id }}
           path: |
             build/verification/explicit-macos/
+            native/macos/Generated/ExplicitBeta-Info.plist
+            build/macos/explicit-beta/Build/Products/Release/FlowBridgeExplicitBeta.app/Contents/Info.plist
           retention-days: 14
           if-no-files-found: warn

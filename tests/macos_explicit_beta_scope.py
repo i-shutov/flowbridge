@@ -111,9 +111,12 @@ def package_gate(app:Path,pkg:Path)->dict:
     from explicit_beta_metadata import read_contract
     from explicit_beta_candidate import validate_inventory
     version = read_contract()
-    require(info.get("CFBundleShortVersionString") == version["macos_short_version"] and
-            info.get("CFBundleVersion") == version["macos_bundle_version"] and
-            info.get("FlowBridgeVersion") == version["version"], "Beta app version mismatch")
+    expected_versions = {"CFBundleShortVersionString": version["macos_short_version"],
+                         "CFBundleVersion": version["macos_bundle_version"],
+                         "FlowBridgeVersion": version["version"]}
+    actual_versions = {key: info.get(key) for key in expected_versions}
+    require(actual_versions == expected_versions,
+            f"Beta app version mismatch: actual={actual_versions}; expected={expected_versions}")
     source = subprocess_text(["git", "rev-parse", "HEAD"]).strip()
     validate_inventory(app / "Contents/Resources", source, version["version"], "macos")
     require(not (app/"Contents/Library/SystemExtensions").exists(),"System extension present in beta app")
