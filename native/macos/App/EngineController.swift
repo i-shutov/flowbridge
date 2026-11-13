@@ -20,8 +20,13 @@ final class EngineController: ObservableObject {
     private let profile: URL
 
     init(profileURL: URL? = nil) {
+        #if FLOWBRIDGE_EXPLICIT_BETA_ONLY
+        profile = profileURL ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("FlowBridgeExplicitBeta/profile.json")
+        #else
         profile = profileURL ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("FlowBridge/profile.json")
+        #endif
         if let text = try? Self.read(profile) { config = text }
         syncQuick()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.poll() }

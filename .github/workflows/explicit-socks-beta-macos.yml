@@ -1,0 +1,88 @@
+name: Explicit SOCKS-only macOS beta — independent local package
+on:
+  push:
+    branches: [release/explicit-socks-beta-20261111]
+    paths:
+      - native/macos/**
+      - packaging/macos/**
+      - crates/**
+      - Cargo.toml
+      - Cargo.lock
+      - tests/macos_explicit_beta_scope.py
+      - .github/workflows/explicit-socks-beta-macos.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: explicit-beta-mac-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  static-scope:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Validate separated beta target
+        run: |
+          python -m pip install 'PyYAML==6.0.2'
+          python tests/macos_explicit_beta_scope.py --out build/verification/explicit-macos/static.json
+  universal-package:
+    needs: [static-scope]
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Xcode and XcodeGen availability (no Apple signing credentials)
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          if ! command -v xcodegen >/dev/null; then
+            brew install xcodegen
+          fi
+          xcodegen --version
+          python -m pip install 'PyYAML==6.0.2'
+      - name: Build isolated ad-hoc signed universal explicit-only app and unsigned pkg
+        run: |
+          set -euo pipefail
+          bash packaging/macos/build-pkg.sh explicit-beta
+      - name: Inspect actual app architecture/identity and pkg payload
+        run: |
+          set -euo pipefail
+          app=build/macos/explicit-beta/Build/Products/Release/FlowBridgeExplicitBeta.app
+          pkg=build/macos/explicit-beta/packages/FlowBridge-0.2.0-explicit-candidate-macOS-universal.pkg
+          python tests/macos_explicit_beta_scope.py --app "$app" --pkg "$pkg" \
+            --out build/verification/explicit-macos/native-package.json
+          shasum -a 256 "$pkg" > "$pkg.sha256"
+          echo "EXPLICIT_MAC_PACKAGE_QA_PASS_HOSTED_ONLY; WFP/NE release NO_GO"
+      - name: Preserve exact hosted beta package for independent review
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-Explicit-SOCKS-EngineeringCandidate-macOS-${{ github.run_id }}
+          path: |
+            build/macos/explicit-beta/packages/FlowBridge-0.2.0-explicit-candidate-macOS-universal.pkg
+            build/macos/explicit-beta/packages/FlowBridge-0.2.0-explicit-candidate-macOS-universal.pkg.sha256
+            build/verification/explicit-macos/native-package.json
+          retention-days: 30
+          if-no-files-found: error
+      - name: Capture diagnostics without claiming a release
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-ExplicitBeta-macOS-Failure-${{ github.run_id }}
+          path: |
+            build/verification/explicit-macos/
+          retention-days: 14
+          if-no-files-found: warn

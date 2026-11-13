@@ -93,3 +93,10 @@ uninstaller are independently green.
 **GO/NO-GO:** still NO-GO for `v0.3.0-beta.1`, regardless of previous
 Win10 W2b2 PASS, until the scope-separated package and remaining A1–A6
 are independently accepted.
+
+## A4 macOS explicit-only candidate work
+
+Dedicated Xcode scheme, separate bundle/profile identity and no-NE package path
+are staged in this beta branch. See
+[EXPLICIT_SOCKS_BETA_MACOS_A4.md](EXPLICIT_SOCKS_BETA_MACOS_A4.md).
+Hosted build and original package checks do NOT replace native Mac acceptance.

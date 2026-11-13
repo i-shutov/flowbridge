@@ -18,16 +18,27 @@ final class DesktopController: ObservableObject {
     private var previousWorkerRevision: UInt64 = 0
     private var livePoolWorkers = 1
     private var activeSshBasePort = 1080
+    #if FLOWBRIDGE_EXPLICIT_BETA_ONLY
+    private let file = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("FlowBridgeExplicitBeta/desktop.json")
+    #else
     private let file = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("FlowBridge/desktop.json")
+    #endif
     init() {
         if let text = try? EngineController.read(file), let saved = try? JSONDecoder().decode(DesktopSettings.self, from: Data(text.utf8)) { settings = saved }
+        #if FLOWBRIDGE_EXPLICIT_BETA_ONLY
+        settings.mode = 0 // Ignore legacy/forged native-mode preference.
+        #endif
         native.ports = settings.capturePorts
         monitor = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.tick() }
         discovery.scan()
     }
     deinit { monitor?.invalidate() }
     @discardableResult func saveSettings() -> Bool {
+        #if FLOWBRIDGE_EXPLICIT_BETA_ONLY
+        guard settings.mode == 0 else { message = "Explicit beta: прозрачный режим недоступен."; return false }
+        #endif
         do {
             try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
             try JSONEncoder().encode(settings).write(to: file, options: .atomic)
@@ -36,6 +47,9 @@ final class DesktopController: ObservableObject {
         } catch { message = "Не удалось сохранить настройки: " + error.localizedDescription; return false }
     }
     private func configuredProfile() throws -> String {
+        #if FLOWBRIDGE_EXPLICIT_BETA_ONLY
+        guard settings.mode == 0 else { throw Bridge.error("Explicit beta: только локальный SOCKS5.") }
+        #endif
         guard var object = try JSONSerialization.jsonObject(with: Data(engine.config.utf8)) as? [String: Any] else { throw Bridge.error("Некорректный профиль") }
         if let generated = (object["rules"] as? [[String: Any]])?.first(where: { $0["id"] as? String == "desktop-app-selection" }),
            let route = generated["action"] as? [String: Any] {
@@ -92,6 +106,9 @@ final class DesktopController: ObservableObject {
     }
     func start() {
         guard !busy, !engine.running, !native.active else { return }
+        #if FLOWBRIDGE_EXPLICIT_BETA_ONLY
+        guard settings.mode == 0 else { message = "Explicit beta: Network Extension заблокирован."; return }
+        #endif
         do {
             let count = settings.sshWorkers ?? 1
             guard (1...4).contains(count) else {
@@ -242,6 +259,9 @@ final class DesktopController: ObservableObject {
     }
     func apply() {
         guard !busy, !engine.busy, !native.busy else { return }
+        #if FLOWBRIDGE_EXPLICIT_BETA_ONLY
+        guard settings.mode == 0 else { message = "Explicit beta: нативные правила недоступны."; return }
+        #endif
         guard saveSettings() else { return }
         do {
             if engine.running && settings.integratedSSH &&
