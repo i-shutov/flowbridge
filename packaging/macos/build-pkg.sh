@@ -38,6 +38,7 @@ if [[ "$mode" == explicit-beta ]]; then
   [[ "$listing" == *"FlowBridgeExplicitBeta.app/"* ]] || { echo 'Beta app missing from package' >&2; exit 1; }
   if [[ "$listing" == *"FlowBridge.app/"* ||
         "$listing" == *".systemextension"* ||
+        "$listing" == *"SystemExtensions"* ||
         "$listing" == *"Library/LaunchDaemons"* ||
         "$listing" == *"Library/PrivilegedHelperTools"* ]]; then
     echo 'Explicit beta package includes forbidden native/system payload' >&2
