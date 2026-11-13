@@ -1,0 +1,99 @@
+name: R39 exact driver test-signing rehearsal (ephemeral Windows, no kernel load)
+on:
+  push:
+    branches: [feat/r39-win11-dev-lab-20261108]
+    paths:
+      - .github/workflows/research-r39-ephemeral-signing.yml
+      - research/wfp-ale/lab-win11/ci-sign-rehearsal-r39.ps1
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: r39-ephemeral-signing-no-driver-load
+  cancel-in-progress: false
+jobs:
+  lab-test-signing-no-install:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: FlowBridge-R24-kernel-broker-42465140005
+          run-id: 42465140005
+          github-token: ${{ github.token }}
+          path: build/r39-ephemeral-input
+      - name: Acquire pinned Microsoft WDK x86 tool package into job workspace only
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $nuget=(Get-Command nuget.exe -ErrorAction Stop).Source
+          $dest='build/r39-ephemeral-tools/wdk'
+          & $nuget install Microsoft.Windows.WDK.x86 -Version 10.0.26100.6584 -OutputDirectory $dest -Source https://api.nuget.org/v3/index.json -DirectDownload -NonInteractive | Out-Null
+          if($LASTEXITCODE -ne 0){throw 'Official WDK x86 package download failed'}
+          $inf=@(Get-ChildItem -LiteralPath $dest -Filter inf2cat.exe -Recurse -File -ErrorAction SilentlyContinue)
+          if($inf.Count -lt 1){throw 'Official WDK x86 package did not include Inf2Cat'}
+          $resolved=$inf|Sort-Object FullName -Descending|Select-Object -First 1 -ExpandProperty FullName
+          "FB_INF2CAT_EXE=$resolved" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Output "Pinned official WDK Inf2Cat found; no host installation performed"
+
+      - name: Sign only pinned staged copy with temporary CurrentUser cert, then delete cert
+        shell: pwsh
+        run: |
+          & research/wfp-ale/lab-win11/ci-sign-rehearsal-r39.ps1 -CandidateDir build/r39-ephemeral-input -OutputDir build/r39-ephemeral-result
+          if($LASTEXITCODE -ne 0){throw 'Test-signing rehearsal failed, inspect JSON; NO LOAD'}
+      - name: Independently check cleanup, trust stores and exact fail-closed mutation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $path='build/r39-ephemeral-result/signing-rehearsal-report.json'
+          $proof=Get-Content -LiteralPath $path -Raw|ConvertFrom-Json -AsHashtable
+          $cleanProof=(
+            $proof.status -eq 'SIGNING_REHEARSAL_PASS_NOT_TRUSTED_NOT_LOADABLE_EVIDENCE' -and
+            $proof.current_user_certificate_removed -eq $true -and
+            $proof.host_admitted -eq $false -and
+            $proof.signed_pe_sections_identical -eq $true -and
+            $proof.signed_sys_test_signature_present -eq $true -and
+            $proof.signed_cat_test_signature_present -eq $true -and
+            $proof.kernel_driver_loaded -eq $false
+          )
+          if(-not $cleanProof){throw 'Unexpected signing/cleanup evidence'}
+          foreach($store in @('Cert:\CurrentUser\My','Cert:\CurrentUser\Root','Cert:\CurrentUser\TrustedPublisher',
+                               'Cert:\LocalMachine\Root','Cert:\LocalMachine\TrustedPublisher')){
+            if(@(Get-ChildItem -Path $store -ErrorAction Stop|
+              Where-Object Thumbprint -eq $proof.ephemeral_signer_thumbprint).Count -ne 0){
+              throw "Ephemeral test signer unexpectedly remains in $store"
+            }
+          }
+          $input='build/r39-ephemeral-input'
+          $tampered='build/r39-ephemeral-tampered'
+          New-Item -ItemType Directory -Path (Join-Path $tampered 'signing-r38/FlowBridgeG2R38') -Force|Out-Null
+          Copy-Item (Join-Path $input 'flowbridge_g2_witness.sys') (Join-Path $tampered 'flowbridge_g2_witness.sys')
+          Copy-Item (Join-Path $input 'flowbridge-redirect-broker.exe') (Join-Path $tampered 'flowbridge-redirect-broker.exe')
+          Copy-Item (Join-Path $input 'signing-r38/FlowBridgeG2R38/flowbridge_g2_r38.inf') (Join-Path $tampered 'signing-r38/FlowBridgeG2R38/flowbridge_g2_r38.inf')
+          $file=(Resolve-Path (Join-Path $tampered 'flowbridge_g2_witness.sys')).Path
+          $data=[IO.File]::ReadAllBytes($file);$data[2048]=$data[2048] -bxor 1
+          [IO.File]::WriteAllBytes($file,$data)
+          & pwsh -NoProfile -File research/wfp-ale/lab-win11/ci-sign-rehearsal-r39.ps1 -CandidateDir $tampered -OutputDir build/r39-ephemeral-negative | Out-Null
+          $expectedFailureCode=$LASTEXITCODE
+          $global:LASTEXITCODE=0
+          if($expectedFailureCode -ne 2){throw 'Tampered SYS was not denied'}
+          $bad=Get-Content 'build/r39-ephemeral-negative/signing-rehearsal-report.json' -Raw|ConvertFrom-Json -AsHashtable
+          if($bad.status -ne 'SIGNING_REHEARSAL_FAILED' -or $bad.signed_sys_test_signature_present -or $bad.inf2cat_generated_catalog){
+            throw 'Mutated source got signing permission'
+          }
+          [ordered]@{source_artifact_verified=$true;temporary_certificate_removed=$true;
+             system_trust_unchanged=$true;tampered_driver_blocked=$true;
+             driver_loaded=$false;g2_pass=$false}|
+             ConvertTo-Json|Set-Content -LiteralPath 'build/r39-ephemeral-result/independent-qa.json' -Encoding utf8
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: FlowBridge-R39-test-signing-rehearsal-readonly-${{ github.run_id }}
+          path: |
+            build/r39-ephemeral-result/signing-rehearsal-report.json
+            build/r39-ephemeral-result/independent-qa.json
+          if-no-files-found: warn
+          retention-days: 14
