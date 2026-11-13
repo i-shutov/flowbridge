@@ -1,0 +1,2 @@
+# Keep source-byte hashes identical on all build hosts; retain binary autodetection.
+* text=auto eol=lf

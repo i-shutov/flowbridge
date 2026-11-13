@@ -13,5 +13,9 @@ native/**/.build/
 native/**/DerivedData/
 native/macos/lib/
 native/macos/*.xcodeproj/
+# XcodeGen writes these declared Info.plist outputs before metadata generation.
+/native/macos/Generated/App-Info.plist
+/native/macos/Generated/ExplicitBeta-Info.plist
+/native/macos/Generated/Extension-Info.plist
 native/windows/wfp/driver/packages/
 native/windows/wfp/driver/x64/
