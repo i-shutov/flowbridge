@@ -16,12 +16,13 @@ def source_gate():
         if sha!=pin: raise AssertionError((name,sha,pin))
         src[name]=subprocess.check_output(['git','show','HEAD:'+path]).decode()
     b,p,w=src['broker.rs'],src['policy_windows.rs'],src['broker_windows.rs']
-    assert b.index('policy_windows::Installed::activate_admitted(&plan)')<b.index('device.arm(&selection,&plan,ports[0],ports[1])')<b.index('let heartbeat=')
+    if not b.index('policy_windows::Installed::activate_admitted(&plan)')<b.index('device.arm(&selection,&plan,ports[0],ports[1])')<b.index('let heartbeat='):
+        raise ValueError('BFE ARM heartbeat ordering changed')
     heartbeat=b.split('let heartbeat=',1)[1].split('// Native lab admission',1)[0]
-    assert 'd.command(handoff::PING,&[])' in heartbeat
-    assert 'FwpmFilterGetByKey0' not in heartbeat and 'policy.' not in heartbeat
-    assert 'FWPM_SESSION_FLAG_DYNAMIC' in p and 'FwpmFilterGetByKey0' in p
-    assert 'plan.arm_matches(image.wfp_appid(),[port4,port6])' in w
+    if 'd.command(handoff::PING,&[])' not in heartbeat: raise ValueError('kernel heartbeat missing')
+    if 'FwpmFilterGetByKey0' in heartbeat or 'policy.' in heartbeat: raise ValueError('BFE heartbeat architecture changed')
+    if 'FWPM_SESSION_FLAG_DYNAMIC' not in p or 'FwpmFilterGetByKey0' not in p: raise ValueError('policy lifetime/readback changed')
+    if 'plan.arm_matches(image.wfp_appid(),[port4,port6])' not in w: raise ValueError('ARM guard missing')
     return True
 
 def simulate(events):
@@ -75,6 +76,9 @@ class Negative(unittest.TestCase):
     def test_scope_not_wire_observation(self):
         self.assertNotIn('leak_proven',simulate(('BFE_SESSION_LOST','SELECTED_V4')))
     def test_bounded_total(self):self.assertEqual(matrix()['traces'],4681)
+    def test_source_gate_must_not_vanish_under_optimization(self):
+        import inspect
+        self.assertNotIn('assert ', inspect.getsource(source_gate))
 
 if __name__=='__main__':
     if sys.argv[1:]==['--matrix']:print(json.dumps(matrix(),sort_keys=True));sys.exit(0)
