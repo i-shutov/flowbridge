@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "track": "WFP/ALE independent R&D",
+  "branch": "research/windows-wfp-ale-attribution-20261107",
+  "base_head": "137eff7bd21bdb29b25ecce67559caa171febca3",
+  "main_observed": "5b5afc2feeda2195f302380e615ba003d4906e09",
+  "source_pins": {
+    "research/wfp-ale/kernel-r19/kernel/src/redirect.rs": "a093f049d162987981a957aac90db1014bc6ff09",
+    "research/wfp-ale/kernel-r19/policy_windows.rs": "acf60334320d970f58af3349ee75fbaa59826602"
+  },
+  "source_pin_verified_via_github": true,
+  "source_pinned_local_execution": false,
+  "model_only": true,
+  "tests": {
+    "python_unittest_normal": 11,
+    "python_unittest_O": 11,
+    "python_unittest_OO": 11,
+    "rows_per_python_mode": 32,
+    "node_independent_rows": 32,
+    "disagreements": 0,
+    "matrix_sha256": "5f6e12df8c6a3b582ed50e57de2a75251f4369e269febd9db92e13b74d4d823f",
+    "inherited_block": 8,
+    "inherited_permit": 8,
+    "inherited_continue": 8,
+    "unspecified": 8
+  },
+  "native_windows": false,
+  "native_wfp": false,
+  "native_rust": false,
+  "packetbound_g2_pass": false,
+  "no_direct_proven": false,
+  "release_accepted": false,
+  "next_gate": "source-pin exact checkout then read-only action/rights inventory; separately gated native trace required"
+}
