@@ -25,6 +25,10 @@
 
 Проверяемый пакет, хеши и готовая Windows-команда: [checkpoint PR #59](https://github.com/i-shutov/flowbridge/blob/5dd6ca35d975e536cd8901ebd9cae158aef02797/docs/qa/FLOWBRIDGE_RELEASE_CHECKPOINT_20261113.md). Машинный обновлённый реестр всех 19 gates: [`gate_status_20261113.json`](release-1.0/gate_status_20261113.json). Значение `pr58` в JSON — предшествующий SHA ветки перед записью checkpoint, а не само-ссылка на коммит с JSON.
 
+### Архитектурное решение Windows G2 (отдельный checkpoint)
+
+Подробные варианты A/B/C, границы текущего разрешения NDISRD-only, перечень source blockers R158/R160–R162 и условия первого настоящего G2.1–G2.6 испытания оформлены в [WINDOWS_G2_BACKEND_DECISION_20261113.md](WINDOWS_G2_BACKEND_DECISION_20261113.md). Это **P0 decision packet**, а не разрешение на смену backend или driver load.
+
 ### Architecture blocker, который нельзя замаскировать новым CI
 
 [Issue #41](https://github.com/i-shutov/flowbridge/issues/41#issuecomment-6702417257) сохраняет разрешённую NDISRD-only архитектуру продукта, тогда как R01 WFP/ALE остаётся **отдельной исследовательской альтернативой**. Нужен независимый kernel-owned packet→PID+epoch trust witness в рамках NDISRD либо отдельное явное решение о переходе на иной подписанный backend. Нельзя автоматически включить WFP в 1.0 лишь потому, что research прошёл source tests. На целевой Win10/11 запрещены незапрошенные driver/filter/BCD/Firewall/Defender изменения.
