@@ -185,7 +185,7 @@ def audit_kit(data: bytes, source_license: bytes) -> dict:
                   gates.get("native_G2_packet_ownership")=="NO_GO",
                   "candidate_index_claim_mismatch")
             records=index.get("files")
-            check(type(records) is list and len(records)==23,"candidate_file_count")
+            check(type(records) is list and len(records)==21,"candidate_file_count")
             expected={"candidate-index.json","SHA256SUMS.txt"}
             examined={}
             for entry in records:
@@ -205,7 +205,7 @@ def audit_kit(data: bytes, source_license: bytes) -> dict:
             sums=kit.read("SHA256SUMS.txt").decode("ascii").splitlines()
             digest_lines={f"{entry['sha256']}  {entry['path']}" for entry in records}
             digest_lines.add(f"{sha(index_data)}  candidate-index.json")
-            check(len(sums)==24 and set(sums)==digest_lines,"kit_sha256sums_mismatch")
+            check(len(sums)==22 and set(sums)==digest_lines,"kit_sha256sums_mismatch")
             for path,digest in INSTALLERS.items():
                 check(path in examined and sha(examined[path])==digest,
                       "published_installer_digest_mismatch")
@@ -221,7 +221,8 @@ def audit_kit(data: bytes, source_license: bytes) -> dict:
         "schema":"flowbridge-frozen-a5-independent-audit-v1",
         "candidate_source_sha":SOURCE,"candidate_run_id":RUN,
         "frozen_kit_sha256":KIT_SHA256,
-        "kit_declared_payloads_verified":23,
+        "kit_declared_payloads_verified":21,
+        "kit_total_files_verified":23,
         "exact_signed_installer_claim":False,
         "windows":win,"macos":mac,
         "technical_inventory_and_hashes":"PASS",
