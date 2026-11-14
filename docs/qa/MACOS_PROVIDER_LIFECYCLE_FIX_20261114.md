@@ -99,3 +99,47 @@ explicit-beta packages, signatures, user machines, firewall or routing.
 Primary Apple contracts:
 - https://developer.apple.com/documentation/networkextension/netunnelprovider/settunnelnetworksettings(_:completionhandler:)
 - https://developer.apple.com/documentation/networkextension/neappproxyprovider/stopproxy(with:completionhandler:)
+
+
+## R06 P0 follow-up — transactional boundary for Apply rules (2026-11-14)
+
+The R02 lifecycle repair alone did **not** close the user-mode Apply race.
+The provider previously committed new Rust rules using `fb_native_reload_json`
+and only later updated its Swift `profile`. A flow evaluated from the old
+Swift profile could return DIRECT/Proxy during that split state. This is a
+deterministic source-level mismatch, **not** a proven physical traffic leak.
+
+**Actual product fix:**
+
+1. Verify the current session and install `applyingRules` admission barrier
+   under the provider lock **before** Rust reload starts.
+2. Increment `policyRevision` to invalidate evaluations captured before Apply,
+   even if Rust rejects the update.
+3. Reject new flows and stale DIRECT/Proxy evaluations while Apply is running.
+   Final Proxy admission also validates generation, revision, profile and handle.
+4. On a rejected Rust reload, keep the prior Swift profile and unblock it.
+   On Stop, invalidate the barrier; late FFI completion cannot revive state.
+5. Rust `fb_native_reload_json` itself already validates schema/transports
+   before committing; the Swift fence covers the cross-language admission
+   window, not an atomic WFP or NetworkExtension security barrier.
+
+**Exact-source hosted evidence:**
+
+- [Focused macOS run #43635270498](https://github.com/i-shutov/flowbridge/actions/runs/43635270498):
+  **23/23** actual-provider-method-body tests PASS on Apple Silicon;
+  **4/4** historical baseline failures reproduced, **3/3** deliberate
+  mutants rejected, including one removing the new Apply admission barrier.
+- New deterministic tests: old DIRECT evaluation during reload, arriving
+  DIRECT flow during reload, rejection and retry after invalid Rust update,
+  Stop while Rust reload is still executing.
+- Functional code commit `5a3f14e32ffa72daf84fd9d72c06b8f9b7dfdd18`
+  followed by focused tests and mutation source through `748e625a86a1`.
+- Separate general Rust/native and DNS workflows must be independently
+  inspected after completion before receiving PASS on the tested tree.
+
+**Still OPEN:** real signed Apple Silicon/Intel NetworkExtension activation,
+selected/unselected TCP IPv4/v6 over actual SSH, physical no-DIRECT/DNS/UDP/
+QUIC observations, rule Apply/Stop during outages and user-machine rollback.
+The tests use Apple NE and Rust FFI substitutes, not live kernel redirection.
+`native_ne_activated=false`, `physical_no_direct_proved=false`,
+`release_accepted=false`. Frozen explicit SOCKS beta remains unchanged.
