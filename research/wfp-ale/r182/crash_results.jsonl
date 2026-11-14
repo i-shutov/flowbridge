@@ -1,0 +1,7 @@
+{"events":["grant"],"length":124,"naive":true,"reason":"ok","scenario":"pre_ack","sha256":"eef5ed33c3bec780a04f0cb091b1f68727edfddfbb4ebdc389a769983bde82fd","strict":false,"valid":true}
+{"events":["ack","claim","grant"],"length":268,"naive":true,"reason":"ok","scenario":"post_claim","sha256":"e7c0008c958266cc5e6bcaf5c933cc2f67939fc09b6ab5351f2cff3c19817f4b","strict":false,"valid":true}
+{"events":["ack","claim","grant"],"length":268,"naive":true,"reason":"ok","scenario":"unobserved_revoke","sha256":"e7c0008c958266cc5e6bcaf5c933cc2f67939fc09b6ab5351f2cff3c19817f4b","strict":false,"valid":true}
+{"events":["ack","claim","grant","revoke"],"length":342,"naive":false,"reason":"ok","scenario":"durable_revoke","sha256":"1cd6120297f5bb47797315f547668f1e0720948d7837f22781ae1a846a60c954","strict":false,"valid":true}
+{"events":["ack","claim","grant"],"length":392,"naive":true,"reason":"ok","scenario":"duplicate","sha256":"8b55d68094281fa3fc5c71e25ee2f8e917573bcfcaecb14cbf3755e341cf29b1","strict":false,"valid":true}
+{"length":396,"naive":false,"reason":"conflicting_duplicate","scenario":"conflicting_duplicate","sha256":"b83c0edda10b7101468f815a594536cdfe0f74b15578181d5f92daaf24a1d036","strict":false,"valid":false}
+{"naive":false,"reason":"invalid_length","scenario":"truncated","strict":false,"valid":false}
