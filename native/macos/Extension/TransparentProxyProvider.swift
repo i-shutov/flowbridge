@@ -12,6 +12,10 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
     private var ready = false
     private var generation = UUID()
     private var stopping = false
+    // Rule updates have two engines (Rust and Swift). Refuse flow admission
+    // while either side is being changed; revisions invalidate in-flight policy results.
+    private var applyingRules = false
+    private var policyRevision: UInt64 = 0
     private var cleanupFailed = false
     private var stopWaiters: [() -> Void] = []
     private let lifecycleQueue = ProviderLifecycleQueue()
@@ -41,7 +45,8 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
             lock.unlock(); completionHandler(Bridge.error("Provider already starting, active, stopping or cleanup incomplete")); return
         }
         generation = UUID(); let revision = generation
-        sessionID = revision.uuidString; ready = false
+        sessionID = revision.uuidString; ready = false; applyingRules = false
+        policyRevision &+= 1
         lock.unlock()
         lifecycleQueue.enqueue { [weak self] finished in
             guard let self else { completionHandler(Bridge.error("Provider released")); finished(); return }
@@ -132,6 +137,7 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
         stopWaiters.append(completionHandler)
         guard !stopping else { lock.unlock(); return }
         stopping = true; ready = false; sessionID = nil; generation = UUID()
+        applyingRules = false; policyRevision &+= 1
         let all = Array(sessions.values); sessions.removeAll()
         let native = coreSession; coreSession = 0
         lock.unlock()
@@ -153,16 +159,17 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
             }
         }
     }
-    private func matchesFlowSnapshot(source: String, native: UInt64, revision: UUID) -> Bool {
+    private func matchesFlowSnapshot(source: String, native: UInt64, revision: UUID, policy: UInt64) -> Bool {
         lock.lock(); defer { lock.unlock() }
-        return ready && !stopping && native != 0 && coreSession == native && generation == revision && profile == source
+        return ready && !stopping && !applyingRules && native != 0 && coreSession == native
+            && generation == revision && profile == source && policyRevision == policy
     }
     override func handleNewFlow(_ flow: NEAppProxyFlow) -> Bool {
         guard let tcp = flow as? NEAppProxyTCPFlow else { return false } // UDP explicitly direct
-        lock.lock(); let source = profile; let isReady = ready
+        lock.lock(); let source = profile; let isReady = ready && !applyingRules
         let timeout = idleSeconds; let bypass = bypassSigningIDs; let native = coreSession
-        let revision = generation; lock.unlock()
-        guard isReady else { reject(flow, "Provider not ready"); return true }
+        let revision = generation; let policy = policyRevision; lock.unlock()
+        guard isReady else { reject(flow, "Provider not ready or applying rules"); return true }
         guard let endpoint = tcp.remoteEndpoint as? NWHostEndpoint, let port = Int(endpoint.port) else {
             reject(flow, "Unknown TCP destination"); return true
         }
@@ -172,7 +179,7 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
         // Managed OpenSSH transport must never re-enter its own local SOCKS.
         // IDs come from inspecting the actual /usr/bin/ssh code signature.
         if bypass.contains(signingID) {
-            guard matchesFlowSnapshot(source: source, native: native, revision: revision) else {
+            guard matchesFlowSnapshot(source: source, native: native, revision: revision, policy: policy) else {
                 reject(flow, "Provider changed during transport exclusion"); return true
             }
             return false
@@ -185,7 +192,7 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
             guard let decision = evaluation["decision"] as? [String: Any], let action = decision["action"] as? [String: Any],
                   let type = action["type"] as? String else { throw Bridge.error("No policy decision") }
             if type == "direct" {
-                guard matchesFlowSnapshot(source: source, native: native, revision: revision) else {
+                guard matchesFlowSnapshot(source: source, native: native, revision: revision, policy: policy) else {
                     reject(flow, "Provider or policy changed during evaluation"); return true
                 }
                 record("Direct: \(endpoint.hostname):\(port)"); return false
@@ -205,8 +212,9 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
                 self.lock.unlock()
             }
             lock.lock()
-            guard ready, !stopping, native != 0, coreSession == native,
-                  generation == revision, profile == source, sessions.count < limit else {
+            guard ready, !stopping, !applyingRules, native != 0, coreSession == native,
+                  generation == revision, policyRevision == policy, profile == source,
+                  sessions.count < limit else {
                 lock.unlock(); reject(flow, "Provider or policy changed, stopping or full"); return true
             }
             sessions[id] = relay; lock.unlock(); relay.start(); return true
@@ -250,12 +258,38 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
                     _ = try gate.withCString { try Bridge.consume(fb_native_set_gate_json(native, $0)) }
                     completionHandler?(try self.snapshotData())
                 } else if command == "apply_rules", let updated = request["profile"] as? String {
-                    _ = try updated.withCString { try Bridge.consume(fb_native_reload_json(native, $0)) }
+                    // Establish the admission barrier BEFORE the Rust reload. A flow
+                    // already evaluating an old decision must not return DIRECT while
+                    // Rust has the new policy and Swift still has the old profile.
                     self.lock.lock()
-                    guard self.ready, self.sessionID == expected, self.coreSession == native else {
+                    guard self.ready, !self.stopping, !self.applyingRules,
+                          self.sessionID == expected, self.coreSession == native else {
                         self.lock.unlock(); throw Bridge.error("Provider state changed")
                     }
-                    self.profile = updated; self.recordLocked("Application policy applied to new TCP flows")
+                    self.applyingRules = true; self.policyRevision &+= 1
+                    let revision = self.generation
+                    self.lock.unlock()
+                    do {
+                        _ = try updated.withCString { try Bridge.consume(fb_native_reload_json(native, $0)) }
+                    } catch {
+                        // Rust rejected the reload without committing a new Config.
+                        // Retain the old Swift policy, but keep the revision bump so
+                        // evaluations captured before Apply cannot be resurrected.
+                        self.lock.lock()
+                        if self.generation == revision && self.sessionID == expected && self.coreSession == native {
+                            self.applyingRules = false
+                        }
+                        self.lock.unlock()
+                        throw error
+                    }
+                    self.lock.lock()
+                    guard self.ready, !self.stopping, self.applyingRules,
+                          self.generation == revision, self.sessionID == expected,
+                          self.coreSession == native else {
+                        self.lock.unlock(); throw Bridge.error("Provider state changed")
+                    }
+                    self.profile = updated; self.applyingRules = false
+                    self.recordLocked("Application policy applied to new TCP flows")
                     self.lock.unlock()
                     completionHandler?(try JSONSerialization.data(withJSONObject:["ok":true,"session_id":expected]))
                 } else { throw Bridge.error("Unsupported provider command") }
