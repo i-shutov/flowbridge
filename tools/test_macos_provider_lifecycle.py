@@ -91,7 +91,7 @@ def main() -> int:
             (output / "current-tests.log").write_text(result.stdout + result.stderr, encoding="utf-8")
             require(result.returncode == 0, "Provider regressions failed:\n" + result.stdout + result.stderr)
             match = re.search(r"TESTS=(\d+) FAILED=(\d+) NATIVE_NE_ACTIVATION=false", result.stdout)
-            require(match is not None and int(match[1]) == 20 and int(match[2]) == 0,
+            require(match is not None and int(match[1]) == 23 and int(match[2]) == 0,
                     "Unexpected suite count / failed tests")
             report["tests_passed"] = int(match[1])
             if args.negative_controls:
@@ -117,7 +117,7 @@ def main() -> int:
                 # Remove one fix at a time. The real provider body must fail its
                 # corresponding regression rather than merely compile successfully.
                 text = source.decode("utf-8")
-                anchor1 = 'guard matchesFlowSnapshot(source: source, native: native, revision: revision) else {'
+                anchor1 = 'guard matchesFlowSnapshot(source: source, native: native, revision: revision, policy: policy) else {'
                 anchor2 = '                    finished()\n                }\n            } catch {'
                 mutations = [
                     ("stale_direct", text.replace(anchor1, 'guard true else {'), "stale_direct_after_stop",
