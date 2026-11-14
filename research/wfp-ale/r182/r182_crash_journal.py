@@ -38,12 +38,16 @@ def worker(filename, scenario):
         'duplicate': ('grant', 'ack', 'claim', 'grant'),
         'conflicting_duplicate': ('grant', 'ack', 'claim', 'conflict'),
     }[scenario]
+    volatile_state = {'revoked': False}
     with open(filename, 'wb', buffering=0) as f:
         for stage in stages:
             rec = dict(RECORDS['grant'], token='forged-other-flow') if stage == 'conflict' else RECORDS[stage]
             f.write(encoded(rec))
             f.flush()
             os.fsync(f.fileno())
+        if scenario == 'unobserved_revoke':
+            volatile_state['revoked'] = True  # Model a real in-process revoke event.
+            assert volatile_state['revoked']  # Never written to the journal.
         # Deliberately exit without Python cleanup. Volatile revocation is not journalled.
         os._exit(61)
 

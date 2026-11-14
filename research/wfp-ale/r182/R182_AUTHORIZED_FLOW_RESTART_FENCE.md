@@ -8,7 +8,7 @@ R181 showed the current one-shot FBR3 `Book` cannot attest an ALE reauthorizatio
 
 A reauthorization may have `FWP_EMPTY` fields and the reverse packet direction. Under a trusted, separately preserved flow binding, those facts must not *alone* invalidate the correct flow. Without such proof, a tuple/AppId cache cannot distinguish the selected flow from a reused PID/endpoint/5-tuple, physical proxy socket or changed compartment.
 
-A second, executable test addresses recovery: **persisted grant+ACK+CLAIM bytes do not prove no unjournalled revocation occurred before worker death**. A clean restart and a crash after volatile revocation have byte-for-byte identical journal images. A policy that reloads those records as an active authorization can permit the revoked flow. A strict recovery that advances the broker/kernel session epoch and denies ALL old-session grants avoids this *modelled* resurrection, but does not prove live WFP blocking or a rollback-safe kernel epoch.
+A second, executable test addresses recovery: **persisted grant+ACK+CLAIM bytes do not prove no unjournalled revocation occurred before worker death**. A process crash without a revoke and a crash after a volatile in-memory revoke have byte-for-byte identical journal images. A policy that reloads those records as an active authorization can permit the revoked flow. A strict recovery that advances the broker/kernel session epoch and denies ALL old-session grants avoids this *modelled* resurrection, but does not prove live WFP blocking or a rollback-safe kernel epoch.
 
 ## Exact source gates (frozen at baseline)
 
