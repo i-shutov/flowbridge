@@ -83,6 +83,8 @@ def load_json(data: bytes, code: str) -> dict:
 
 def verify_bom(platform: str, files: dict[str, bytes]) -> dict:
     base = platform + "/"
+    check(all(base + leaf in files for leaf in ("BUILD-METADATA.json", "SBOM.cdx.json", "THIRD_PARTY_NOTICES.txt")),
+          platform + "_inventory_component_missing")
     meta = load_json(files[base + "BUILD-METADATA.json"], platform + "_metadata")
     bom = load_json(files[base + "SBOM.cdx.json"], platform + "_sbom")
     notices = files[base + "THIRD_PARTY_NOTICES.txt"]
