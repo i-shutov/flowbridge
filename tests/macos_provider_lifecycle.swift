@@ -276,6 +276,118 @@ func repeatedLifecycleNoOwnershipLeak() throws {
     }
 }
 
+
+func applyBarrierRejectsCapturedAndArrivingDirect() throws {
+    let probe = SettingsProbe(); let p = try provider(probe)
+    _ = try start(p, probe)
+    TestRuntime.shared.action = "direct"
+    let token = try snapshot(p)["session_id"] as! String
+    let updated = try Bridge.text(["proxies": [], "max_connections": 128, "default_action": ["type": "block"]])
+    let command = try JSONSerialization.data(withJSONObject:
+        ["command": "apply_rules", "session_id": token, "profile": updated])
+    let entered = DispatchSemaphore(value: 0)
+    let release = DispatchSemaphore(value: 0)
+    let completed = DispatchSemaphore(value: 0)
+    var response: [String: Any] = [:]
+    TestRuntime.shared.beforeReload = {
+        entered.signal()
+        _ = release.wait(timeout: .now() + 5)
+    }
+    // This evaluates the old DIRECT policy while a competing Apply is
+    // deliberately blocked inside the native reload, after its admission
+    // barrier must already have been installed in the provider.
+    TestRuntime.shared.beforeEvaluate = {
+        p.handleAppMessage(command) { data in
+            if let data, let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                response = value
+            }
+            completed.signal()
+        }
+        _ = entered.wait(timeout: .now() + 5)
+    }
+    let captured = NEAppProxyTCPFlow()
+    let handled = p.handleNewFlow(captured)
+    TestRuntime.shared.beforeEvaluate = nil
+    try expect(handled && captured.readError != nil,
+               "in-flight old DIRECT decision escaped during Apply")
+    let arriving = NEAppProxyTCPFlow()
+    try expect(p.handleNewFlow(arriving) && arriving.readError != nil,
+               "new DIRECT flow escaped during pending Apply")
+    release.signal()
+    try wait(completed, "native Apply never completed")
+    TestRuntime.shared.beforeReload = nil
+    try expect(response["ok"] as? Bool == true, "valid rule update was not committed")
+    try expect((try snapshot(p))["ready"] as? Bool == true, "rule update damaged provider readiness")
+    try stop(p, probe)
+}
+
+func rejectedApplyRestoresOldPolicyAdmission() throws {
+    let probe = SettingsProbe(); let p = try provider(probe)
+    _ = try start(p, probe)
+    TestRuntime.shared.action = "direct"
+    TestRuntime.shared.rejectReload = true
+    let token = try snapshot(p)["session_id"] as! String
+    let updated = try Bridge.text(["proxies": [], "max_connections": 128, "default_action": ["type": "block"]])
+    let command = try JSONSerialization.data(withJSONObject:
+        ["command": "apply_rules", "session_id": token, "profile": updated])
+    let failed = DispatchSemaphore(value: 0)
+    var reply: [String: Any] = [:]
+    p.handleAppMessage(command) { data in
+        if let data, let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            reply = value
+        }
+        failed.signal()
+    }
+    try wait(failed, "failed reload completion missing")
+    try expect(reply["ok"] as? Bool == false, "rejected native rule change was accepted")
+    TestRuntime.shared.rejectReload = false
+    let direct = NEAppProxyTCPFlow()
+    try expect(p.handleNewFlow(direct) == false && direct.readError == nil,
+               "rejected Apply left provider locked or modified old direct decision")
+    let succeeded = DispatchSemaphore(value: 0)
+    p.handleAppMessage(command) { data in
+        if let data, let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            reply = value
+        }
+        succeeded.signal()
+    }
+    try wait(succeeded, "rule retry completion missing")
+    try expect(reply["ok"] as? Bool == true, "valid retry did not recover after failure")
+    try stop(p, probe)
+}
+
+func stopDuringNativeRuleReloadCannotReopenProvider() throws {
+    let probe = SettingsProbe(); let p = try provider(probe)
+    _ = try start(p, probe)
+    let token = try snapshot(p)["session_id"] as! String
+    let updated = try Bridge.text(["proxies": [], "max_connections": 128, "default_action": ["type": "block"]])
+    let command = try JSONSerialization.data(withJSONObject:
+        ["command": "apply_rules", "session_id": token, "profile": updated])
+    let stopComplete = DispatchSemaphore(value: 0)
+    let applyComplete = DispatchSemaphore(value: 0)
+    var response: [String: Any] = [:]
+    TestRuntime.shared.beforeReload = {
+        p.stopProxy(with: .userInitiated) { stopComplete.signal() }
+    }
+    p.handleAppMessage(command) { data in
+        if let data, let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            response = value
+        }
+        applyComplete.signal()
+    }
+    try wait(applyComplete, "stopped Apply completion missing")
+    TestRuntime.shared.beforeReload = nil
+    try expect(response["ok"] as? Bool == false,
+               "native Apply response was acknowledged after Stop")
+    let (isApply, clear) = try probe.next()
+    try expect(!isApply, "Stop during Apply must clear settings")
+    clear(nil); try wait(stopComplete, "Stop cleanup completion missing")
+    let flow = NEAppProxyTCPFlow()
+    try expect(p.handleNewFlow(flow) && flow.readError != nil,
+               "stopped provider accepted a flow after Apply returned")
+    try expect((try snapshot(p))["ready"] as? Bool == false, "Apply resurrected readiness")
+}
+
 @main enum Runner {
     static func main() {
         let selected = CommandLine.arguments.dropFirst().first
@@ -299,7 +411,10 @@ func repeatedLifecycleNoOwnershipLeak() throws {
             ("zero_native_handle", zeroHandleCannotStart),
             ("invalid_configuration_retry", invalidConfigurationCanBeRetried),
             ("stopped_provider_denies", stoppedProviderDeniesFlow),
-            ("fifty_lifecycles", repeatedLifecycleNoOwnershipLeak)
+            ("fifty_lifecycles", repeatedLifecycleNoOwnershipLeak),
+            ("apply_barrier_direct", applyBarrierRejectsCapturedAndArrivingDirect),
+            ("apply_reject_restore", rejectedApplyRestoresOldPolicyAdmission),
+            ("apply_stop_race", stopDuringNativeRuleReloadCannotReopenProvider)
         ]
         var failed = 0; var count = 0
         for (name, test) in tests where selected == nil || selected == name {
