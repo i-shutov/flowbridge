@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "as_of": "2026-11-13",
+  "as_of": "2026-11-14",
   "project": "i-shutov/flowbridge",
   "source": {
     "main": "5b5afc2feeda2195f302380e615ba003d4906e09",
@@ -190,6 +190,15 @@
         "full_regression": "https://github.com/i-shutov/flowbridge/actions/runs/43446330542",
         "full_regression_jobs": "5/5 SUCCESS",
         "native_activation_accepted": false
+      },
+      "provider_lifecycle_fix": {
+        "pull_request": "https://github.com/i-shutov/flowbridge/pull/63",
+        "code_source": "5a3f14e32ffa72daf84fd9d72c06b8f9b7dfdd18",
+        "focused_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43635270498",
+        "scoped_result": "CODE_LEVEL_APP_PROVIDER_PASS_WITH_SHIMS",
+        "physical_mac_signed_ne": false,
+        "physical_dns_no_leak": false,
+        "native_r02_accepted": false
       }
     },
     {
@@ -228,13 +237,26 @@
     {
       "id": "R06",
       "track": "1.0",
-      "status": "PARTIAL",
+      "status": "HOSTED_CODE_PARTIAL_NATIVE_BLOCKED",
       "depends_on": [
         "R00"
       ],
       "exit_criterion": "Rule editor app×host/CIDR×port first-match Proxy/Chain/Direct/Block, explain, atomic Apply/Stop",
       "accepted": false,
-      "proof": "NOT_ACCEPTED"
+      "proof": "PR63 product-provider Apply admission barrier: 23/23 hosted Swift tests PASS; 4 historical cases reproduced, 3 mutations rejected. Mac signed NE physical Apply/Stop/no-DIRECT still NOT_RUN. No release acceptance.",
+      "code_correction": {
+        "pull_request": "https://github.com/i-shutov/flowbridge/pull/63",
+        "code_sha": "5a3f14e32ffa72daf84fd9d72c06b8f9b7dfdd18",
+        "test_sha": "748e625a86a1e566f5c896190a11e62412a2e431",
+        "docs_head": "7aade6a3a496306fa069e607cdb6e28ef859abdb",
+        "focused_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43635270498",
+        "provider_tests_passed": 23,
+        "historical_failures_reproduced": 4,
+        "negative_mutants_rejected": 3,
+        "corrected": "Apply rules Swift/Rust policy split and stale DIRECT/Proxy in-flight decisions; admission fenced before Rust reload",
+        "exact_native_traffic_proof": false,
+        "review_status": "INDEPENDENT_CODE_REVIEW_OPEN"
+      }
     },
     {
       "id": "R07",
@@ -309,6 +331,8 @@
     "updated_as_of": "2026-11-14",
     "blocker_checkpoint": "docs/qa/FLOWBRIDGE_RELEASE_BLOCKER_PROGRESS_20261114.md",
     "product_main_unchanged": true,
-    "original_binary_candidate_source": "f5ecd48d8f81c594f755a55e7969b57d20903020"
+    "original_binary_candidate_source": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+    "new_r06_mac_policy_apply": "PR63_CODE_LEVEL_PASS; live NE NOT_ACCEPTED",
+    "flowbridge_1_0": "NO_GO"
   }
 }
