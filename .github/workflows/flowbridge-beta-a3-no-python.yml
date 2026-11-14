@@ -1,0 +1,91 @@
+name: Windows A3 frozen beta no-Python owner-style QA
+on:
+  pull_request:
+    paths:
+      - 'tools/windows/FlowBridge-ExplicitBeta-A3-NoPython.ps1'
+      - 'docs/qa/FLOWBRIDGE_A3_NO_PYTHON_20261114.md'
+      - '.github/workflows/flowbridge-beta-a3-no-python.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  static-negative:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: PowerShell 5.1 and 7 AST plus dangerous-command scope check
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $script='tools/windows/FlowBridge-ExplicitBeta-A3-NoPython.ps1'
+          $tokens=$null; $errors=$null
+          [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script),[ref]$tokens,[ref]$errors)
+          if ($errors.Count -gt 0) { throw 'PWSH51_PARSE_FAILED' }
+          $content=Get-Content -LiteralPath $script -Raw
+          foreach($bad in @('New-NetFirewallRule','Set-NetFirewallRule','Set-MpPreference','bcdedit','Set-DnsClientServerAddress','Install-WindowsFeature','Restart-Computer')) {
+            if($content.Contains($bad)) { throw 'UNEXPECTED_MUTATION_COMMAND' }
+          }
+          foreach($pin in @('4b51d4136878476b48946361ce1635cb6d630e62b50ca82c73df28a5902ed8b8','f5ecd48d8f81c594f755a55e7969b57d20903020','REFUSE_EXISTING_BETA')) {
+            if($pin -eq 'REFUSE_EXISTING_BETA') { if(-not $content.Contains('EXISTING_BETA_REFUSED')) { throw 'NO_OLD_PROFILE_GUARD' } }
+            elseif(-not $content.Contains($pin)) { throw 'SOURCE_PIN_MISSING' }
+          }
+          Write-Host 'PASS Windows PowerShell 5.1 AST and safe-scope';
+      - name: Also parse in PowerShell 7
+        shell: pwsh
+        run: |
+          $tokens=$null; $errors=$null
+          [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'tools/windows/FlowBridge-ExplicitBeta-A3-NoPython.ps1'),[ref]$tokens,[ref]$errors)
+          if($errors.Count -gt 0){throw 'PWSH7_PARSE_FAILED'}
+  exact-original-hosted:
+    needs: static-negative
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Obtain exact prebuilt 0.3.0-beta.1 kit from original Actions run
+        uses: actions/download-artifact@v4
+        with:
+          name: FlowBridge-ExplicitBeta-VerifiedCandidate-43407093536
+          run-id: 43407093536
+          github-token: ${{ github.token }}
+          path: build/frozen-original
+      - name: Execute pinned preflight and lifecycle without Python or custom driver
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $script=(Resolve-Path 'tools/windows/FlowBridge-ExplicitBeta-A3-NoPython.ps1').Path
+          $matches=@(Get-ChildItem 'build/frozen-original' -Recurse -File -Filter 'FlowBridge-0.3.0-beta.1-candidate-f5ecd48d8f81.zip')
+          if($matches.Count -ne 1){throw 'ORIGINAL_KIT_MISSING_OR_AMBIGUOUS'}
+          $zip=$matches[0].FullName
+          $base=(Join-Path (Resolve-Path '.').Path 'build/a3-nopython-evidence')
+          [void](New-Item -ItemType Directory -Path $base -Force)
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script -KitZip $zip -ExpectedComputerName $env:COMPUTERNAME -OutputRoot $base -AllowHostedCI
+          if($LASTEXITCODE -ne 0){throw 'PRE_FLIGHT_FAILED'}
+          $pre=@(Get-ChildItem $base -Recurse -Filter native-acceptance.json -File | ForEach-Object {Get-Content $_.FullName -Raw | ConvertFrom-Json})
+          if($pre.Count -ne 1 -or $pre[0].status -ne 'VERIFIED_BYTES_NATIVE_NOT_RUN'){throw 'FALSE_PREFLIGHT_ACCEPTANCE'}
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script -KitZip $zip -ExpectedComputerName $env:COMPUTERNAME -OutputRoot $base -AllowHostedCI -Execute
+          if($LASTEXITCODE -ne 0){throw 'POSITIVE_LIFECYCLE_FAILED'}
+          $reports=@(Get-ChildItem $base -Recurse -Filter native-acceptance.json -File | ForEach-Object {Get-Content $_.FullName -Raw | ConvertFrom-Json})
+          if($reports.Count -ne 2){throw 'REPORT_COUNT_MISMATCH'}
+          $r=@($reports | Where-Object {$_.status -eq 'CI_AUTOMATED_CHECKS_PASS'})
+          if($r.Count -ne 1){throw 'LIFECYCLE_NOT_COMPLETE'}
+          foreach($key in @('install','payload','launch','upgrade','uninstall','stable_preserved')) {if($r[0].checks.$key -ne 'PASS'){throw ('MISSING_PHASE_'+$key)}}
+          if($r[0].release_accepted -or $r[0].a3_full_acceptance -or $r[0].wfp_g2_accepted){throw 'UNSUPPORTED_RELEASE_GO'}
+          if($r[0].screenshots.Count -ne 5){throw 'ORIGINAL_GUI_EVIDENCE_MISSING'}
+          Write-Host 'HOSTED_A3_AUTOMATED_6_6_PASS; OWNER_WIN10_NOT_RUN'
+      - name: Retain original-scope evidence (no private profile contents)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-A3-NoPython-Hosted-${{ github.run_id }}
+          path: |
+            build/a3-nopython-evidence/**/native-acceptance.json
+            build/a3-nopython-evidence/**/*.bmp
+          retention-days: 30
+          if-no-files-found: warn
