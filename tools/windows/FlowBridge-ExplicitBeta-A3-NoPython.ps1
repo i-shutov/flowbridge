@@ -212,7 +212,9 @@ try {
              $manifest.capture_helper_included -eq $false -and
              $manifest.gui_protected_ui_compiled_disabled -eq $true) 'BETA_SCOPE_NOT_PINNED'
     Require (@($manifest.payload).Count -eq 13) 'PAYLOAD_COUNT_MISMATCH'
-    Require ($manifest.qa_harness.path -ceq 'FlowBridgeNativeSmoke.exe') 'QA_HARNESS_SCOPE_MISMATCH'
+    # The original build manifest can retain a CI-host absolute harness path.
+    # The frozen ZIP and independent harness SHA/size are the trusted locators;
+    # never use a build-host pathname to select an executable on this machine.
     Pinned $harness ([string]$manifest.qa_harness.sha256) ([long]$manifest.qa_harness.bytes)
     $indexPath=Join-Path $stage 'candidate-index.json'
     $index=Get-Content -LiteralPath $indexPath -Raw | ConvertFrom-Json
