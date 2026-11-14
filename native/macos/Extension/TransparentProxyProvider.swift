@@ -10,7 +10,11 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
     private var profile = ""
     private var coreSession: UInt64 = 0
     private var ready = false
-    private var generation: UInt64 = 0
+    private var generation = UUID()
+    private var stopping = false
+    private var cleanupFailed = false
+    private var stopWaiters: [() -> Void] = []
+    private let lifecycleQueue = ProviderLifecycleQueue()
     private var sessionID: String?
     private var limit = 128
     private var idleSeconds: Double = 300
@@ -32,10 +36,20 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
                       localNetwork: nil, localPrefix: 0, protocol: .TCP, direction: .outbound)
     }
     override func startProxy(options: [String: Any]?, completionHandler: @escaping (Error?) -> Void) {
-        lock.lock(); generation += 1; let revision = generation; sessionID = UUID().uuidString; ready = false; lock.unlock()
-        setupQueue.async { [weak self] in
-            guard let self else { completionHandler(Bridge.error("Provider released")); return }
+        lock.lock()
+        guard sessionID == nil, coreSession == 0, !stopping, !cleanupFailed else {
+            lock.unlock(); completionHandler(Bridge.error("Provider already starting, active, stopping or cleanup incomplete")); return
+        }
+        generation = UUID(); let revision = generation
+        sessionID = revision.uuidString; ready = false
+        lock.unlock()
+        lifecycleQueue.enqueue { [weak self] finished in
+            guard let self else { completionHandler(Bridge.error("Provider released")); finished(); return }
             do {
+                self.lock.lock()
+                let current = self.generation == revision && !self.stopping
+                self.lock.unlock()
+                guard current else { throw Bridge.error("Start cancelled") }
                 guard let proto = self.protocolConfiguration as? NETunnelProviderProtocol,
                       let source = proto.providerConfiguration?["profile"] as? String,
                       let ports = proto.providerConfiguration?["capturePorts"] as? [Int],
@@ -70,7 +84,7 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
                 let optionsJSON = try Bridge.text(nativeOptions)
                 let created = try source.withCString { c in try optionsJSON.withCString { o in
                     try Bridge.consume(fb_native_create_json(c, o)) } }
-                guard let id = created["session_id"] as? NSNumber else { throw Bridge.error("Missing native session") }
+                guard let id = created["session_id"] as? NSNumber, id.uint64Value != 0 else { throw Bridge.error("Missing native session") }
                 self.lock.lock()
                 guard self.generation == revision else { self.lock.unlock(); fb_native_destroy(id.uint64Value); throw Bridge.error("Start cancelled") }
                 self.coreSession = id.uint64Value
@@ -79,35 +93,75 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
                 self.lock.unlock()
                 self.setTunnelNetworkSettings(settings) { error in
                     self.lock.lock()
-                    let cancelled = self.generation != revision
-                    self.ready = error == nil && !cancelled
-                    if self.ready, let sessionID = self.sessionID {
+                    let current = self.generation == revision && self.coreSession == id.uint64Value && !self.stopping
+                    // A cancelled callback owns neither the current state nor
+                    // the old handle: shutdown already consumed that ownership.
+                    if current && error == nil, let sessionID = self.sessionID {
+                        self.ready = true
                         SharedNativeSession.shared.publish(id:sessionID,handle:id.uint64Value,
                             dns:proto.providerConfiguration?["remoteDNS"] != nil)
                         self.recordLocked("TCP capture ready; DNS activation is confirmed separately.")
                     }
-                    if error != nil && self.coreSession == id.uint64Value { self.coreSession = 0 }
                     self.lock.unlock()
-                    if error != nil || cancelled { fb_native_destroy(id.uint64Value) }
-                    completionHandler(error ?? (cancelled ? Bridge.error("Start cancelled") : nil))
+                    if current, let error {
+                        // An unsuccessful apply may leave settings to clear.
+                        // Do not expose restart until that asynchronous clear ends.
+                        self.shutdown { completionHandler(error) }
+                    } else {
+                        completionHandler(error ?? (current ? nil : Bridge.error("Start cancelled")))
+                    }
+                    finished()
                 }
-            } catch { completionHandler(error) }
+            } catch {
+                self.lock.lock()
+                // Failure before submitting settings owns no published handle.
+                // Cancellation must not reset the newer shutdown/start state.
+                if self.generation == revision && !self.stopping && self.coreSession == 0 {
+                    self.sessionID = nil; self.ready = false
+                }
+                self.lock.unlock()
+                completionHandler(error); finished()
+            }
         }
     }
     override func stopProxy(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
-        lock.lock(); ready = false; sessionID = nil; generation += 1; let all = Array(sessions.values)
-        let native = coreSession; coreSession = 0; lock.unlock()
+        shutdown(completionHandler: completionHandler)
+    }
+    private func shutdown(completionHandler: @escaping () -> Void) {
+        lock.lock()
+        stopWaiters.append(completionHandler)
+        guard !stopping else { lock.unlock(); return }
+        stopping = true; ready = false; sessionID = nil; generation = UUID()
+        let all = Array(sessions.values); sessions.removeAll()
+        let native = coreSession; coreSession = 0
+        lock.unlock()
+        // Ownership is removed under the same lock used by startup publication.
+        // Late startup callbacks cannot destroy this handle a second time.
         SharedNativeSession.shared.revoke(handle:native)
-        fb_native_destroy(native)
+        if native != 0 { fb_native_destroy(native) }
         all.forEach { $0.cancel(Bridge.error("Capture stopped")) }
-        // Cancellation marks all relays closed immediately; bounded Rust calls finish
-        // on their worker queues. In-flight opens close their handle on completion.
-        setTunnelNetworkSettings(nil) { _ in completionHandler() }
+        lifecycleQueue.enqueue { finished in
+            self.setTunnelNetworkSettings(nil) { error in
+                self.lock.lock()
+                self.cleanupFailed = error != nil
+                self.stopping = false
+                if error != nil { self.recordLocked("Network settings cleanup failed; restart remains disabled") }
+                let waiters = self.stopWaiters; self.stopWaiters.removeAll()
+                self.lock.unlock()
+                waiters.forEach { $0() }
+                finished()
+            }
+        }
+    }
+    private func matchesFlowSnapshot(source: String, native: UInt64, revision: UUID) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return ready && !stopping && native != 0 && coreSession == native && generation == revision && profile == source
     }
     override func handleNewFlow(_ flow: NEAppProxyFlow) -> Bool {
         guard let tcp = flow as? NEAppProxyTCPFlow else { return false } // UDP explicitly direct
         lock.lock(); let source = profile; let isReady = ready
-        let timeout = idleSeconds; let bypass = bypassSigningIDs; let native = coreSession; lock.unlock()
+        let timeout = idleSeconds; let bypass = bypassSigningIDs; let native = coreSession
+        let revision = generation; lock.unlock()
         guard isReady else { reject(flow, "Provider not ready"); return true }
         guard let endpoint = tcp.remoteEndpoint as? NWHostEndpoint, let port = Int(endpoint.port) else {
             reject(flow, "Unknown TCP destination"); return true
@@ -117,7 +171,12 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
         let signingID = flow.metaData.sourceAppSigningIdentifier
         // Managed OpenSSH transport must never re-enter its own local SOCKS.
         // IDs come from inspecting the actual /usr/bin/ssh code signature.
-        if bypass.contains(signingID) { return false }
+        if bypass.contains(signingID) {
+            guard matchesFlowSnapshot(source: source, native: native, revision: revision) else {
+                reject(flow, "Provider changed during transport exclusion"); return true
+            }
+            return false
+        }
         let object: [String: Any] = ["application": signingID.isEmpty ? NSNull() : signingID as Any,
                                     "destination": ["host": endpoint.hostname, "port": port], "resolved_ip": NSNull()]
         do {
@@ -125,7 +184,12 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
             let evaluation = try source.withCString { c in try flowJSON.withCString { f in try Bridge.consume(fb_evaluate_json(c, f)) } }
             guard let decision = evaluation["decision"] as? [String: Any], let action = decision["action"] as? [String: Any],
                   let type = action["type"] as? String else { throw Bridge.error("No policy decision") }
-            if type == "direct" { record("Direct: \(endpoint.hostname):\(port)"); return false }
+            if type == "direct" {
+                guard matchesFlowSnapshot(source: source, native: native, revision: revision) else {
+                    reject(flow, "Provider or policy changed during evaluation"); return true
+                }
+                record("Direct: \(endpoint.hostname):\(port)"); return false
+            }
             if type == "block" { reject(flow, "Blocked by policy"); return true }
             if !bypass.isEmpty && signingID.isEmpty {
                 reject(flow, "Unknown source identity cannot be proxied while SSH transport exclusion is required"); return true
@@ -141,7 +205,10 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
                 self.lock.unlock()
             }
             lock.lock()
-            guard ready, sessions.count < limit else { lock.unlock(); reject(flow, "Provider stopping or full"); return true }
+            guard ready, !stopping, native != 0, coreSession == native,
+                  generation == revision, profile == source, sessions.count < limit else {
+                lock.unlock(); reject(flow, "Provider or policy changed, stopping or full"); return true
+            }
             sessions[id] = relay; lock.unlock(); relay.start(); return true
         } catch { reject(flow, error.localizedDescription); return true }
     }
