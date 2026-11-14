@@ -1,0 +1,68 @@
+name: Frozen explicit beta A5 independent distribution audit
+on:
+  pull_request:
+    paths:
+      - 'tools/a5_beta_frozen_artifact_audit.py'
+      - 'tests/test_a5_beta_frozen_artifact_audit.py'
+      - 'docs/qa/EXPLICIT_BETA_A5_FROZEN_AUDIT.md'
+      - '.github/workflows/a5-frozen-beta-artifact-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  adversarial-tests:
+    name: Adversarial A5 audit tests / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Negative kit/license/ZIP fixtures (not a native test)
+        run: python -m unittest discover -s tests -p test_a5_beta_frozen_artifact_audit.py -v
+  frozen-original-a5:
+    needs: adversarial-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Download immutable original 11/11 candidate artifact (never rebuild)
+        uses: actions/download-artifact@v4
+        with:
+          name: FlowBridge-ExplicitBeta-VerifiedCandidate-43407093536
+          run-id: 43407093536
+          github-token: ${{ github.token }}
+          path: build/frozen-artifact
+      - name: Independently validate original frozen package bytes and metadata
+        run: python tools/a5_beta_frozen_artifact_audit.py --original-artifact-dir build/frozen-artifact --report build/a5/a5-verdict.json
+      - name: Enforce no release/owner/legal approval in technical result
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+          r=json.loads(Path('build/a5/a5-verdict.json').read_text())
+          assert r['result']=='TECHNICAL_A5_INVENTORY_PASS_LEGAL_AND_NATIVE_REVIEW_OPEN'
+          assert r['technical_inventory_and_hashes']=='PASS'
+          assert r['a5_accepted'] is False and r['release_accepted'] is False
+          assert r['project_license_selected'] is False
+      - name: Retain sanitized original-byte A5 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-A5-FrozenKit-Audit-${{ github.run_id }}
+          path: build/a5/a5-verdict.json
+          if-no-files-found: warn
+          retention-days: 30
