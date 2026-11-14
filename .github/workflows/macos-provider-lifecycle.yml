@@ -1,0 +1,37 @@
+name: macOS production provider lifecycle regressions
+on:
+  pull_request:
+    paths:
+      - 'native/macos/Extension/**'
+      - 'tests/macos_provider_lifecycle.swift'
+      - 'tests/macos_provider_test_shims.swift'
+      - 'tools/test_macos_provider_lifecycle.py'
+      - '.github/workflows/macos-provider-lifecycle.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  actual-provider-body:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Actual Swift provider body, pinned baseline and mutation controls
+        run: python tools/test_macos_provider_lifecycle.py --negative-controls --output build/verification/provider-lifecycle
+      - name: Preserve source hashes and scoped regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-provider-lifecycle-${{ github.run_id }}
+          path: build/verification/provider-lifecycle/
+          if-no-files-found: error
+          retention-days: 30
+  # The normal rust-and-native-applications workflow also builds the real
+  # NetworkExtension target with Apple's SDK and CODE_SIGNING_ALLOWED=NO.
+  # Neither test suite installs or activates the native system extension.
