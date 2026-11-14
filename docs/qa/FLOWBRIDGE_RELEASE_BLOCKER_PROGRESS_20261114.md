@@ -118,3 +118,26 @@ Machine-readable current gate register:
 **Invariant:** all 19 release gate accepted flags remain false until
 original native/legal evidence is independently accepted on the exact
 built source. Release 1.0, physical no-DIRECT and packet ownership = NO-GO.
+
+
+## Дополнение 14 ноября — R06: устранено расхождение Apply между Rust и Swift
+
+В продуктовой macOS-ветке [Draft PR #63](https://github.com/i-shutov/flowbridge/pull/63)
+реализован барьер `applyingRules` и монотонная версия `policyRevision`:
+выпуск новых потоков и старых DIRECT/Proxy решений закрывается **до** вызова
+`fb_native_reload_json`; после успешного обновления профили Swift/Rust
+согласованно возобновляют приём потоков. При отказе Rust остаётся старый
+профиль; Stop не допускает возобновления от запоздалого ответа Apply.
+
+- Функциональный продуктовый коммит `5a3f14e32ffa72daf84fd9d72c06b8f9b7dfdd18`.
+- Испытания до `748e625a86a1e566f5c896190a11e62412a2e431`, документационный
+  контрольный коммит `7aade6a3a496306fa069e607cdb6e28ef859abdb`.
+- [Фокусный macOS CI #43635270498](https://github.com/i-shutov/flowbridge/actions/runs/43635270498):
+  **23/23 PASS**, четыре воспроизведённых неисправности исходной версии,
+  **3/3 отклонённых deliberate mutants**, включая отмену нового барьера Apply.
+- Реальный NetworkExtension, физические пакеты, DNS/QUIC и подпись не
+  испытывались в этой проверке. Общий CI на финальном SHA фиксируется
+  отдельно; `R06.accepted=false`, `R02.accepted=false`.
+
+Это настоящая правка продуктового кода, но она не решает Windows G2 и не
+заменяет системный no-DIRECT. Прежний комплект beta и `main` неизменны.
