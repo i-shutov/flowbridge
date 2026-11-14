@@ -85,3 +85,39 @@ The JSON always retains `release_accepted=false`,
 `a3_full_acceptance=false`, `wfp_g2_accepted=false` and
 `transparent_interception_accepted=false`. R01 Windows kernel G2,
 R02 signed macOS NE and A4/A5/A6/A7 remain separately open.
+
+
+## Проверенная контрольная точка 14 ноября 2026
+
+**Причина двух первоначальных hosted failures:** PowerShell function
+`RunBounded` использовала параметр с именем `$args`. Это автоматическая
+переменная PowerShell, из-за конфликта команда NSIS получала неправильные
+параметры, и установщик не завершался в silent режиме. Первый прогон
+ошибочно сравнивал также `qa_harness.path` (в исходном manifest это путь
+сборочного CI, а не рабочая локальная ссылка), что устранено без
+ослабления SHA256/size pins. Перемещение рабочего каталога в TEMP сохранено
+для более безопасного и короткого пути, но само по себе timeout не исправило.
+
+Функциональный фикс передачи аргументов:
+`9d4bf34cee61b8446c33a6210ed59adeb6949e1d`.
+
+- [Exact original kit CI #43637228155](https://github.com/i-shutov/flowbridge/actions/runs/43637228155)
+  **2/2 jobs SUCCESS**: Windows PowerShell 5.1/7 AST, 0-driver frozen
+  preflight, затем полный hosted NSIS install, payload, GUI/FFI,
+  upgrade, uninstall, stable state preserved: **6/6 PASS**.
+- Оригинал [artifact 14130800650](https://github.com/i-shutov/flowbridge/actions/runs/43637228155/artifacts/14130800650)
+  скачан и независимо проверен: ZIP CRC PASS, девять файлов,
+  SHA256 `ea2787f50870b7779529a04ed12dc219a90d4b9338cf63f53fff44b4ecb89a18`.
+- Внутри два отчёта: `VERIFIED_BYTES_NATIVE_NOT_RUN` (только байты)
+  и `CI_AUTOMATED_CHECKS_PASS` (все шесть проверок PASS).
+- Пять самостоятельных BMP страниц (Dashboard, SSH, Proxy, Apps, Advanced)
+  по 964×641 пиксель, уникальные SHA256 и визуально различимое содержание.
+  Отдельные desktop/keyboard/SSH/operator tests ещё необходимы.
+- В JSON: `python_required=false`, `cleanup_required=false`,
+  `owner_native=false`, `a3_full_acceptance=false`,
+  `release_accepted=false`, `wfp_g2_accepted=false`.
+
+**A3 owner native остаётся NOT_RUN** на VM-910136 и отдельной Win11 Pro.
+До проверки на реальной Win10 ссылаться на текущий QA как на hosted
+и применять только закреплённый исходный ZIP. При ошибке скрипт сохраняет
+отчёт и не удаляет существующие пользовательские установки.
