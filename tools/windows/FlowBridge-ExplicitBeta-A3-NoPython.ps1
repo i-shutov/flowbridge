@@ -238,8 +238,12 @@ try {
     } else {
         RefuseExistingBeta
         $stable=StableSnapshot
-        $install=Join-Path $run 'Beta QA With Spaces'
-        $other=Join-Path $run 'Must Not Relocate'
+        # Match the already-accepted Python operator's bounded TEMP install
+        # workspace, not the (potentially very long) checkout/evidence path.
+        $work=Join-Path $env:TEMP ('flowbridge-a3-'+[guid]::NewGuid().ToString('N').Substring(0,8))
+        [void](New-Item -ItemType Directory -Path $work -ErrorAction Stop)
+        $install=Join-Path $work 'Beta QA With Spaces'
+        $other=Join-Path $work 'Must Not Relocate'
         $profile=Join-Path $env:LOCALAPPDATA $Name
         $shortcuts=Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\FlowBridge Explicit Beta'
         $settingKey='HKCU:\Software\FlowBridgeExplicitBeta'
@@ -258,7 +262,7 @@ try {
                  $caps.system_kill_switch -eq $false -and
                  $caps.udp -eq $false) 'FALSE_CAPABILITY_CLAIM'
         $report.checks.payload='PASS'
-        $qa=Join-Path $run 'qa-harness'
+        $qa=Join-Path $work 'qa-harness'
         [void](New-Item -ItemType Directory -Path $qa -ErrorAction Stop)
         Copy-Item -LiteralPath $harness -Destination (Join-Path $qa 'FlowBridgeNativeSmoke.exe')
         Copy-Item -LiteralPath (Join-Path $install 'flowbridge_ffi.dll') -Destination (Join-Path $qa 'flowbridge_ffi.dll')
