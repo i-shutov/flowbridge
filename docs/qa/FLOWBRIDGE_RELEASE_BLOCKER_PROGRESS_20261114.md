@@ -141,3 +141,34 @@ built source. Release 1.0, physical no-DIRECT and packet ownership = NO-GO.
 
 Это настоящая правка продуктового кода, но она не решает Windows G2 и не
 заменяет системный no-DIRECT. Прежний комплект beta и `main` неизменны.
+
+
+## 14 ноября — Windows A3 больше не зависит от Python
+
+Создан [Draft PR #64](https://github.com/i-shutov/flowbridge/pull/64)
+со строго закреплённым PowerShell 5.1/.NET операторским
+`FlowBridge-ExplicitBeta-A3-NoPython.ps1`, не меняющим исходный
+установочный комплект beta SHA `f5ecd48d8f81c594f755a55e7969b57d20903020`.
+
+**Функциональный RCA:** первоначально использовано имя параметра `$args`,
+конфликтующее с автоматической переменной PowerShell. Тихие `/S` параметры
+установщика не передавались корректно, NSIS ожидал ввод; два исходных
+hosted прогона завершились `PROCESS_TIMEOUT`. После переименования
+параметра в `$arguments` зафиксирована успешная точная проверка.
+
+- [CI #43637228155](https://github.com/i-shutov/flowbridge/actions/runs/43637228155):
+  static/negative PASS, повторное использование исходного
+  B0-архива, *hosted* NSIS install/payload/GUI/FFI/upgrade/uninstall и
+  неизменность stable profile — **6/6 PASS без Python**.
+- [Original evidence artifact #14130800650](https://github.com/i-shutov/flowbridge/actions/runs/43637228155/artifacts/14130800650),
+  ZIP SHA256 `ea2787f50870b7779529a04ed12dc219a90d4b9338cf63f53fff44b4ecb89a18`,
+  ZIP CRC PASS, 9 файлов, исходные JSON и пять уникальных GUI BMP.
+- Не менялись исходные байты beta, `main`, драйверы, пользовательские
+  Windows/Mac, firewall/DNS, release/tag.
+
+**Результат ограничен:** `CI_AUTOMATED_CHECKS_PASS`,
+`owner_native=false`, `release_accepted=false`.
+Нужны отдельные реальные Win10 VM-910136 и Win11 Pro запуски,
+интерактивная клавиатурная/визуальная QA, реальный SSH-host-key и
+независимая проверка оригинальных отчётов. A3 ещё **не принят**;
+R01 G2 и R02 NE остаются P0 NO-GO.
