@@ -55,9 +55,9 @@ class Fixture:
             self.files[platform+"/SBOM.cdx.json"]=dump(bom)
             self.files[platform+"/BUILD-METADATA.json"]=dump(meta)
             self.files[platform+"/THIRD_PARTY_NOTICES.txt"]=notice
-        for n in range(15):
+        for n in range(13):
             self.files["evidence/f"+str(n)+".json"]=dump({"i":n})
-        assert len(self.files)==23
+        assert len(self.files)==21
         self.license=b"FlowBridge\nNo separate open-source license has been selected for the FlowBridge-specific source code."
         self.index={"schema":"flowbridge-explicit-beta-candidate-v1",
                     "source_sha":a5.SOURCE,"workflow_run_id":a5.RUN,
