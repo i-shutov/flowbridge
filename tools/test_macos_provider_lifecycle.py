@@ -119,12 +119,24 @@ def main() -> int:
                 text = source.decode("utf-8")
                 anchor1 = 'guard matchesFlowSnapshot(source: source, native: native, revision: revision, policy: policy) else {'
                 anchor2 = '                    finished()\n                }\n            } catch {'
+                # This exact mutant removes the new Apply admission barrier but
+                # retains revision checks. A *new* flow arriving during the
+                # in-progress Rust reload would then escape DIRECT.
+                barrier_snapshot = 'let isReady = ready && !applyingRules'
+                barrier_recheck = 'return ready && !stopping && !applyingRules && native != 0 && coreSession == native'
+                require(text.count(barrier_snapshot) == 1 and text.count(barrier_recheck) == 1,
+                        "Apply barrier mutation anchors drifted")
+                broken_apply = text.replace(barrier_snapshot, 'let isReady = ready').replace(
+                    barrier_recheck,
+                    'return ready && !stopping && native != 0 && coreSession == native')
                 mutations = [
                     ("stale_direct", text.replace(anchor1, 'guard true else {'), "stale_direct_after_stop",
                      "stale decision released flow DIRECT after stop"),
                     ("double_destroy", text.replace(anchor2,
                      '                    if !current { fb_native_destroy(id.uint64Value) }\n' + anchor2),
                      "cancel_pending_start", "native handle destroyed more than once"),
+                    ("apply_barrier_removed", broken_apply, "apply_barrier_direct",
+                     "new DIRECT flow escaped during pending Apply"),
                 ]
                 require(text.count(anchor1) == 2 and text.count(anchor2) == 1, "Mutation anchors drifted")
                 # 'guard true else' is deliberately unreachable and may be rejected
