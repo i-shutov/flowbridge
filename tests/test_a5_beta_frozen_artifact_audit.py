@@ -133,7 +133,7 @@ class A5AuditTests(unittest.TestCase):
     def test_missing_sbom_rejected_even_if_index_matches(self):
         f=Fixture();del f.files["windows/SBOM.cdx.json"]
         f.files["evidence/replacement.json"]=b"{}"
-        f.refuse("windows_SBOM" if False else "candidate_index_file_count")
+        f.refuse("windows_inventory_component_missing")
 
     def test_duplicate_casefold_zip_member_rejected(self):
         f=Fixture();blob=f.archive(duplicate=True)
@@ -148,7 +148,7 @@ class A5AuditTests(unittest.TestCase):
             a5.audit_kit(blob,f.license)
 
     def test_undeclared_zip_file_rejected(self):
-        f=Fixture();f.refuse("candidate_index_file_missing_or_duplicate") if False else None
+        f=Fixture()
         blob=f.archive(extra="secret.txt")
         with mock.patch.object(a5,"KIT_SHA256",a5.sha(blob)),self.assertRaisesRegex(
                 a5.AuditError,"candidate_undeclared_file"):
