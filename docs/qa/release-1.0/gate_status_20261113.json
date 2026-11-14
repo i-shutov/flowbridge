@@ -51,13 +51,13 @@
     {
       "id": "A3",
       "track": "beta",
-      "status": "OWNER_NATIVE_NOT_RUN_RUNNER_STATIC_CI_PASS",
+      "status": "HOSTED_NO_PYTHON_6_6_PASS_OWNER_NOT_RUN",
       "depends_on": [
         "A1"
       ],
       "exit_criterion": "Win10 W0-W2b2 owner console PASS on prior c339df2e bytes only; new PR59 exact-package native QA due",
       "accepted": false,
-      "proof": "Historical W0-W2b2 PASS only on c339df2e. New source f5ecd48d8f81c594f755a55e7969b57d20903020 owner Windows 10/11 lifecycle/GUI/SSH NOT_RUN.",
+      "proof": "Hosted no-Python PowerShell 5.1 runner executes frozen original 0.3.0-beta.1 install/payload/GUI/upgrade/uninstall/stable preservation 6/6 PASS, run 43637228155. Owner Win10/11 A3 still NOT_RUN.",
       "operator_runner": {
         "source": "tools/windows/FlowBridge-ExplicitBeta-A3-Frozen.ps1",
         "runner_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43570996811",
@@ -66,6 +66,21 @@
         "owner_new_bytes": "NOT_RUN",
         "safe_default": "PINNED_BYTES_PREFLIGHT_ONLY",
         "requires_explicit_execute": true
+      },
+      "python_free_operator": {
+        "pull_request": "https://github.com/i-shutov/flowbridge/pull/64",
+        "functional_script_sha": "9d4bf34cee61b8446c33a6210ed59adeb6949e1d",
+        "original_frozen_beta_source": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+        "exact_frozen_inner_kit_sha256": "4b51d4136878476b48946361ce1635cb6d630e62b50ca82c73df28a5902ed8b8",
+        "github_hosted_validation": "https://github.com/i-shutov/flowbridge/actions/runs/43637228155",
+        "hosted_steps": "6/6 PASS",
+        "python_required": false,
+        "original_artifact_id": 14130800650,
+        "original_evidence_sha256": "ea2787f50870b7779529a04ed12dc219a90d4b9338cf63f53fff44b4ecb89a18",
+        "owner_windows_10_tested": false,
+        "owner_windows_11_tested": false,
+        "independent_gui_keyboard_review": false,
+        "real_owner_ssh_checked": false
       }
     },
     {
@@ -333,6 +348,8 @@
     "product_main_unchanged": true,
     "original_binary_candidate_source": "f5ecd48d8f81c594f755a55e7969b57d20903020",
     "new_r06_mac_policy_apply": "PR63_CODE_LEVEL_PASS; live NE NOT_ACCEPTED",
-    "flowbridge_1_0": "NO_GO"
+    "flowbridge_1_0": "NO_GO",
+    "python_free_windows_a3": "HOSTED_6_6_PASS_OWNER_NATIVE_OPEN",
+    "original_beta_binaries_unchanged": true
   }
 }
