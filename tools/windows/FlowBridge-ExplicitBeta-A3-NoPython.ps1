@@ -90,6 +90,14 @@ function RunBounded([string]$binary,[string]$args,[int]$seconds=120) {
         $stderr=$proc.StandardError.ReadToEndAsync()
         $finished=$proc.WaitForExit($seconds*1000)
         if(-not $finished){
+            # Sanitized diagnostics for our own owned child only. In particular,
+            # distinguish an unexpected NSIS dialog from slow silent install.
+            $script:report.timeout_stage = [string]$script:phase
+            $script:report.timeout_process_name = [string]$proc.ProcessName
+            $script:report.timeout_window_present = ([int64]$proc.MainWindowHandle -ne 0)
+            $script:report.timeout_window_title = [string]$proc.MainWindowTitle
+            $script:report.timeout_responding = [bool]$proc.Responding
+            $script:report.timeout_exit_observed = [bool]$proc.HasExited
             try{$proc.Kill();[void]$proc.WaitForExit(4000)}catch{}
             throw 'PROCESS_TIMEOUT'
         }
@@ -180,6 +188,8 @@ $report=[ordered]@{
     owner_native=$false;host_identity_basis='operator_supplied_not_attested'
     checks=[ordered]@{install='NOT_RUN';payload='NOT_RUN';launch='NOT_RUN';upgrade='NOT_RUN';uninstall='NOT_RUN';stable_preserved='NOT_RUN'}
     initial_preflight='NOT_RUN';screenshots=@();cleanup_required=$false
+    timeout_stage=$null;timeout_process_name=$null;timeout_window_present=$null
+    timeout_window_title=$null;timeout_responding=$null;timeout_exit_observed=$null
     python_required=$false;driver_loaded=$false;system_dns_changed=$false
     wfp_g2_accepted=$false;transparent_interception_accepted=$false
     release_accepted=$false;a3_full_acceptance=$false
@@ -249,7 +259,9 @@ try {
         $settingKey='HKCU:\Software\FlowBridgeExplicitBeta'
         $uninstallKey='HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\FlowBridgeExplicitBeta'
         $report.cleanup_required=$true
-        [void](RunBounded $package ('/S /D='+$install))
+        $script:phase='nsis-install'
+        $installWait=if($hosted){60}else{120}
+        [void](RunBounded $package ('/S /D='+$install) $installWait)
         Until {Test-Path -LiteralPath (Join-Path $install 'Uninstall.exe') -PathType Leaf} 'INSTALL_DID_NOT_CONVERGE'
         Require ((RegVal $settingKey 'InstallDir') -ceq $install -and
                  (RegVal $uninstallKey 'InstallLocation') -ceq $install) 'INSTALL_REGISTRATION_MISMATCH'
@@ -272,6 +284,7 @@ try {
         Pinned (Join-Path $qa 'flowbridge_ffi.dll') ([string]$ffi[0].sha256) ([long]$ffi[0].bytes)
         $bmp=Join-Path $run 'installed-beta-ui.bmp'
         $gui=Join-Path $install 'FlowBridge.exe'
+        $script:phase='native-gui-harness'
         $result=RunBounded (Join-Path $qa 'FlowBridgeNativeSmoke.exe') ('"'+$gui+'" "'+$bmp+'"') 180
         foreach($marker in @('PASS Windows DLL','PASS Win32 GUI','PASS compact Windows GUI')){
             Require ($result.stdout.Contains($marker)) 'GUI_SMOKE_INCOMPLETE'
@@ -291,12 +304,14 @@ try {
         $markerPath=Join-Path $install 'native-qa-preserve-user-file.txt'
         [IO.File]::WriteAllText($markerPath,'Preserve this user-owned test file.',[Text.UTF8Encoding]::new($false))
         $markerHash=Digest $markerPath
-        [void](RunBounded $package ('/S /D='+$other))
+        $script:phase='nsis-upgrade'
+        [void](RunBounded $package ('/S /D='+$other) $installWait)
         InstalledPayload $install $manifest
         Require (-not (Test-Path -LiteralPath $other) -and
                  (Fingerprint $profile) -ceq $betaBefore -and
                  (Digest $markerPath) -ceq $markerHash) 'UPGRADE_CHANGED_USER_STATE'
         $report.checks.upgrade='PASS'
+        $script:phase='nsis-uninstall'
         [void](RunBounded (Join-Path $install 'Uninstall.exe') '/S')
         Until {
             -not (Test-Path -LiteralPath (Join-Path $install 'Uninstall.exe')) -and
