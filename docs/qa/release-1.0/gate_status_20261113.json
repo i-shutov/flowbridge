@@ -1,0 +1,362 @@
+{
+  "schema": 1,
+  "as_of": "2026-11-14",
+  "project": "i-shutov/flowbridge",
+  "source": {
+    "main": "5b5afc2feeda2195f302380e615ba003d4906e09",
+    "pr56": "c339df2e4d20edf1d11d45786581a68451a71929",
+    "pr58": "bab43129fcdc8ccac91e7a80ddf602fb4ca9fd7e",
+    "pr59": "5dd6ca35d975e536cd8901ebd9cae158aef02797",
+    "wfp_research": "ca72eee3d5dc422ad6894219f9b68e63cf731034"
+  },
+  "beta_release_accepted": false,
+  "version_1_0_accepted": false,
+  "native_wfp_accepted": false,
+  "macos_ne_accepted": false,
+  "no_direct_proved": false,
+  "packet_bound_g2_proved": false,
+  "evidence_policy": "Prior-SHA, model-only, host-only, owner-console-only and hosted-only PASS never transfer to new exact release bytes.",
+  "gates": [
+    {
+      "id": "A0",
+      "track": "beta",
+      "status": "HOSTED_PASS_OWNER_OPEN",
+      "depends_on": [],
+      "exit_criterion": "Scope isolated in draft PR59; verify disabled capture controls and zero driver/helper payload",
+      "accepted": false,
+      "proof": "Unified workflow 43407093536: Windows installer 13 allowed payloads, zero capture helper/driver; macOS pkg zero Network Extension; protected UI/handlers disabled. Independent owner review pending."
+    },
+    {
+      "id": "A1",
+      "track": "beta",
+      "status": "HOSTED_PASS_OWNER_OPEN",
+      "depends_on": [
+        "A0"
+      ],
+      "exit_criterion": "Freeze SHA, exact-source CI; PR59 package workflow PASS but G2 CI job FAIL",
+      "accepted": false,
+      "proof": "Unified workflow 43407093536: 11/11 SUCCESS on exact source f5ecd48d8f81c594f755a55e7969b57d20903020; tree ac47b5292ec90e13572e88e9133b12d4dc1f77ac; QA kit artifact 14028139291. Separate G2 capture workflow remains FAILURE and is not waived for 1.0."
+    },
+    {
+      "id": "A2",
+      "track": "beta",
+      "status": "HOSTED_PASS_LIMITED",
+      "depends_on": [
+        "A1"
+      ],
+      "exit_criterion": "Managed OpenSSH real authentication, loss/recovery, 251/252 exhaustion, bounded 10k churn/soak",
+      "accepted": false,
+      "proof": "Packaged DLL and CLI: 128 held, 1152 overload rejections, 10000 TCP churn, four SSH workers, strict host-key, half-close, recovery/shutdown PASS in 43407093536; raw 512 stability and owner real SSH soak unproven."
+    },
+    {
+      "id": "A3",
+      "track": "beta",
+      "status": "HOSTED_NO_PYTHON_6_6_PASS_OWNER_NOT_RUN",
+      "depends_on": [
+        "A1"
+      ],
+      "exit_criterion": "Win10 W0-W2b2 owner console PASS on prior c339df2e bytes only; new PR59 exact-package native QA due",
+      "accepted": false,
+      "proof": "PR64 final exact-head 17d72e7c no-Python frozen 0.3.0-beta.1 6/6 hosted Windows automated PASS, run 43637511888, original evidence artifact 14130805614 CRC/SHA verified. Owner Win10/11 A3 remains NOT_RUN.",
+      "operator_runner": {
+        "source": "tools/windows/FlowBridge-ExplicitBeta-A3-Frozen.ps1",
+        "runner_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43570996811",
+        "result": "WINDOWS_HOSTED_PS51_NEGATIVE_AND_PS7_AST_PASS_ONLY",
+        "actual_owner_host": "VM-910136",
+        "owner_new_bytes": "NOT_RUN",
+        "safe_default": "PINNED_BYTES_PREFLIGHT_ONLY",
+        "requires_explicit_execute": true
+      },
+      "python_free_operator": {
+        "pull_request": "https://github.com/i-shutov/flowbridge/pull/64",
+        "functional_script_sha": "9d4bf34cee61b8446c33a6210ed59adeb6949e1d",
+        "original_frozen_beta_source": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+        "exact_frozen_inner_kit_sha256": "4b51d4136878476b48946361ce1635cb6d630e62b50ca82c73df28a5902ed8b8",
+        "github_hosted_validation": "https://github.com/i-shutov/flowbridge/actions/runs/43637228155",
+        "hosted_steps": "6/6 PASS",
+        "python_required": false,
+        "original_artifact_id": 14130800650,
+        "original_evidence_sha256": "ea2787f50870b7779529a04ed12dc219a90d4b9338cf63f53fff44b4ecb89a18",
+        "owner_windows_10_tested": false,
+        "owner_windows_11_tested": false,
+        "independent_gui_keyboard_review": false,
+        "real_owner_ssh_checked": false,
+        "final_pr_head": "17d72e7cd304967713a60076f17e2138a29d006b",
+        "final_exact_head_workflow": "https://github.com/i-shutov/flowbridge/actions/runs/43637511888",
+        "final_qa_artifact_id": 14130805614,
+        "final_original_evidence_sha256": "4e7b9a9417a6e26c2be76e194de795e699bbde4801206cd9654e2e4270a8b2ff",
+        "final_original_evidence_crc": "PASS",
+        "final_qa_steps": "6/6 PASS",
+        "native_owner_acceptance": false
+      }
+    },
+    {
+      "id": "A4",
+      "track": "beta",
+      "status": "NOT_RUN_NEW_BYTES",
+      "depends_on": [
+        "A1"
+      ],
+      "exit_criterion": "macOS explicit-only package, ARM64/Intel GUI/SSH/native upgrade/remove, without NE",
+      "accepted": false,
+      "proof": "Hosted macOS arm64 package and six lifecycle checks PASS, but new-source owner Apple Silicon and Intel GUI/SSH NOT_RUN; a 4-second process launch is not a manual GUI acceptance."
+    },
+    {
+      "id": "A5",
+      "track": "beta",
+      "status": "TECHNICAL_A5_FROZEN_ORIGINAL_PASS_LEGAL_OPEN",
+      "depends_on": [
+        "A1"
+      ],
+      "exit_criterion": "Binary allowlist, version/signing scope, secrets, SBOM/licenses and safe rollback",
+      "accepted": false,
+      "proof": "Windows 71 and macOS 37 resolved inventory components, SBOM and notices embedded; independent license/security/distribution review OPEN, FlowBridge project license unselected, unsigned Windows/macOS packages.",
+      "independent_frozen_audit": {
+        "pull_request": "https://github.com/i-shutov/flowbridge/pull/62",
+        "head_sha": "78ebcb2bb14089ee96c2fa8c93f85acb7c1a4e25",
+        "ci": "https://github.com/i-shutov/flowbridge/actions/runs/43570582600",
+        "ci_jobs": "3/3 SUCCESS",
+        "kit_sha256": "4b51d4136878476b48946361ce1635cb6d630e62b50ca82c73df28a5902ed8b8",
+        "original_installers_verified": true,
+        "sbom_windows_components": 71,
+        "sbom_macos_components": 37,
+        "technical_verdict": "PASS",
+        "independent_legal_review": "OPEN",
+        "project_license_selection": "OPEN",
+        "native_distribution_license_review": "OPEN"
+      }
+    },
+    {
+      "id": "A6",
+      "track": "beta",
+      "status": "OPEN",
+      "depends_on": [
+        "A2",
+        "A3",
+        "A4",
+        "A5"
+      ],
+      "exit_criterion": "Independent evidence review from original ZIP/JSON, exact-SHA PASS for all beta P0",
+      "accepted": false,
+      "proof": "NOT_ACCEPTED"
+    },
+    {
+      "id": "A7",
+      "track": "beta",
+      "status": "NOT_RUN",
+      "depends_on": [
+        "A6"
+      ],
+      "exit_criterion": "Optional approved v0.3.0-beta.1 prerelease/tag; no automatic public release",
+      "accepted": false,
+      "proof": "NOT_ACCEPTED"
+    },
+    {
+      "id": "R00",
+      "track": "1.0",
+      "status": "PARTIAL",
+      "depends_on": [],
+      "exit_criterion": "Freeze 1.0 scope, QA matrix, exact-source provenance, authorized test environments",
+      "accepted": false,
+      "proof": "NOT_ACCEPTED"
+    },
+    {
+      "id": "R01",
+      "track": "1.0",
+      "status": "BLOCKED_ARCHITECTURE_AND_NATIVE",
+      "depends_on": [
+        "R00"
+      ],
+      "exit_criterion": "Owner-approved kernel identity architecture (NDISRD proof or separately authorized alternative), real Win10/11 trusted PID+epoch and selected v4/v6 flow→SSH with physical fail-closed evidence",
+      "accepted": false,
+      "proof": "Issue #41 retains NDISRD-only product authorization; NDISRD packet→PID/epoch native G2 NO-GO, run 43407099791 kernel_connection_id_missing. WFP/ALE branch research is not production authorization.",
+      "decision_checkpoint": "docs/qa/WINDOWS_G2_BACKEND_DECISION_20261113.md",
+      "architecture_status": "OWNER_NDISRD_ONLY_AUTHORIZATION_UNCHANGED",
+      "retained_auth_model": {
+        "pull_request": "https://github.com/i-shutov/flowbridge/pull/61",
+        "head_sha": "a738a125450defb6e675b1ff5dcb5a321665255e",
+        "model_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43569988661",
+        "model_ci_jobs": "3/3 SUCCESS",
+        "full_regression": "https://github.com/i-shutov/flowbridge/actions/runs/43569988653",
+        "model_test_cases_per_os": 26,
+        "release_scope": "USER_MODE_RESEARCH_ONLY",
+        "native_packet_owner_accepted": false,
+        "native_reauth_accepted": false,
+        "approved_production_backend": false
+      }
+    },
+    {
+      "id": "R02",
+      "track": "1.0",
+      "status": "BLOCKED_EXTERNAL",
+      "depends_on": [
+        "R00"
+      ],
+      "exit_criterion": "macOS signed+entitled NE activation v4/v6 on ARM/Intel, selected app, fail-closed/reboot/uninstall",
+      "accepted": false,
+      "proof": "Hosted unsigned macOS explicit beta contains no NE; real native sign/entitle/approve/activate and Apple Silicon+Intel per-app TCP evidence OPEN.",
+      "work_package": {
+        "pull_request": "https://github.com/i-shutov/flowbridge/pull/60",
+        "exact_head": "32f15c8131a90f34dee6a86527191c5242fc5576",
+        "synthetic_controls_run": "https://github.com/i-shutov/flowbridge/actions/runs/43446330496",
+        "synthetic_jobs_passed": 2,
+        "synthetic_jobs_total": 2,
+        "test_cases_per_os": 12,
+        "allowed_claim": "SIGNED_BUNDLE_PREREQUISITES_GATE_IMPLEMENTED; owner signed app inspection NOT_RUN",
+        "forbidden_claims": [
+          "NE activation",
+          "network packet interception",
+          "DNS containment",
+          "release acceptance"
+        ],
+        "full_regression": "https://github.com/i-shutov/flowbridge/actions/runs/43446330542",
+        "full_regression_jobs": "5/5 SUCCESS",
+        "native_activation_accepted": false
+      },
+      "provider_lifecycle_fix": {
+        "pull_request": "https://github.com/i-shutov/flowbridge/pull/63",
+        "code_source": "5a3f14e32ffa72daf84fd9d72c06b8f9b7dfdd18",
+        "focused_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43635270498",
+        "scoped_result": "CODE_LEVEL_APP_PROVIDER_PASS_WITH_SHIMS",
+        "physical_mac_signed_ne": false,
+        "physical_dns_no_leak": false,
+        "native_r02_accepted": false
+      }
+    },
+    {
+      "id": "R03",
+      "track": "1.0",
+      "status": "OPEN",
+      "depends_on": [
+        "R01"
+      ],
+      "exit_criterion": "Windows native per-app DNS, remote hostname, split LAN, DoH/DoT scope and packet evidence",
+      "accepted": false,
+      "proof": "NOT_ACCEPTED"
+    },
+    {
+      "id": "R04",
+      "track": "1.0",
+      "status": "OPEN",
+      "depends_on": [
+        "R02"
+      ],
+      "exit_criterion": "macOS native DNS/NE semantics, resolver/DoH/DoT/leak and sleep/wake QA",
+      "accepted": false,
+      "proof": "NOT_ACCEPTED"
+    },
+    {
+      "id": "R05",
+      "track": "1.0",
+      "status": "PARTIAL",
+      "depends_on": [
+        "R00"
+      ],
+      "exit_criterion": "OpenSSH 1-4 process pool, 251/252 controls, bounded 10k churn, 24h soak, failover no DIRECT",
+      "accepted": false,
+      "proof": "NOT_ACCEPTED"
+    },
+    {
+      "id": "R06",
+      "track": "1.0",
+      "status": "HOSTED_CODE_PARTIAL_NATIVE_BLOCKED",
+      "depends_on": [
+        "R00"
+      ],
+      "exit_criterion": "Rule editor app×host/CIDR×port first-match Proxy/Chain/Direct/Block, explain, atomic Apply/Stop",
+      "accepted": false,
+      "proof": "PR63 product-provider Apply admission barrier: 23/23 hosted Swift tests PASS; 4 historical cases reproduced, 3 mutations rejected. Mac signed NE physical Apply/Stop/no-DIRECT still NOT_RUN. No release acceptance.",
+      "code_correction": {
+        "pull_request": "https://github.com/i-shutov/flowbridge/pull/63",
+        "code_sha": "5a3f14e32ffa72daf84fd9d72c06b8f9b7dfdd18",
+        "test_sha": "748e625a86a1e566f5c896190a11e62412a2e431",
+        "docs_head": "7aade6a3a496306fa069e607cdb6e28ef859abdb",
+        "focused_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43635270498",
+        "provider_tests_passed": 23,
+        "historical_failures_reproduced": 4,
+        "negative_mutants_rejected": 3,
+        "corrected": "Apply rules Swift/Rust policy split and stale DIRECT/Proxy in-flight decisions; admission fenced before Rust reload",
+        "exact_native_traffic_proof": false,
+        "review_status": "INDEPENDENT_CODE_REVIEW_OPEN"
+      }
+    },
+    {
+      "id": "R07",
+      "track": "1.0",
+      "status": "OPEN",
+      "depends_on": [
+        "R06"
+      ],
+      "exit_criterion": "Windows 1366x768 DPI 100/125/150/200 and macOS Retina/VoiceOver accessibility",
+      "accepted": false,
+      "proof": "NOT_ACCEPTED"
+    },
+    {
+      "id": "R08",
+      "track": "1.0",
+      "status": "BLOCKED_EXTERNAL",
+      "depends_on": [
+        "R01",
+        "R02",
+        "R06"
+      ],
+      "exit_criterion": "Signed Windows driver/installer and macOS notarized NE app/pkg, ACL/secure store, upgrade rollback remove",
+      "accepted": false,
+      "proof": "Windows installer/macOS pkg unsigned, macOS app ad-hoc. Signed kernel/NE, notarization, license, rollback/OS secure storage acceptance pending."
+    },
+    {
+      "id": "R09",
+      "track": "1.0",
+      "status": "NOT_RUN",
+      "depends_on": [
+        "R01",
+        "R02",
+        "R03",
+        "R04",
+        "R05",
+        "R06",
+        "R07",
+        "R08"
+      ],
+      "exit_criterion": "Frozen RC SHA, zero P0 SKIP/FAIL/UNKNOWN, external traffic and outage matrix, 10k/24h",
+      "accepted": false,
+      "proof": "NOT_ACCEPTED"
+    },
+    {
+      "id": "R10",
+      "track": "1.0",
+      "status": "NOT_RUN",
+      "depends_on": [
+        "R09"
+      ],
+      "exit_criterion": "Independently accepted signed bytes, changelog/migration/SBOM/hashes, owner approval before tag",
+      "accepted": false,
+      "proof": "NOT_ACCEPTED"
+    }
+  ],
+  "evidence_snapshot": {
+    "state": "B0_HOSTED_VERIFIED_NOT_OWNER_ACCEPTED",
+    "validated_binary_source_sha": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+    "validated_binary_tree_sha": "ac47b5292ec90e13572e88e9133b12d4dc1f77ac",
+    "pr59_documentation_head": "5dd6ca35d975e536cd8901ebd9cae158aef02797",
+    "pr58_previous_head": "bab43129fcdc8ccac91e7a80ddf602fb4ca9fd7e",
+    "unified_run_id": 43407093536,
+    "unified_jobs": "11/11 SUCCESS",
+    "qa_kit_artifact_id": 14028139291,
+    "qa_kit_sha256": "4b51d4136878476b48946361ce1635cb6d630e62b50ca82c73df28a5902ed8b8",
+    "capture_g2_run_id": 43407099791,
+    "capture_g2": "FAIL kernel_connection_id_missing",
+    "raw_openssh_512_stability_proved": false,
+    "owner_windows_new_package": "NOT_RUN",
+    "owner_macos_new_package": "NOT_RUN",
+    "backend_decision": "Issue #41 NDISRD-only authorization still in force; WFP is separate research",
+    "updated_as_of": "2026-11-14",
+    "blocker_checkpoint": "docs/qa/FLOWBRIDGE_RELEASE_BLOCKER_PROGRESS_20261114.md",
+    "product_main_unchanged": true,
+    "original_binary_candidate_source": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+    "new_r06_mac_policy_apply": "PR63_CODE_LEVEL_PASS; live NE NOT_ACCEPTED",
+    "flowbridge_1_0": "NO_GO",
+    "python_free_windows_a3": "HOSTED_6_6_PASS_OWNER_NATIVE_OPEN",
+    "original_beta_binaries_unchanged": true
+  }
+}

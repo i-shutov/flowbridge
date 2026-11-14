@@ -1,0 +1,74 @@
+name: FlowBridge Win10 W2b0 managed SSH guard and GUI readiness (no service)
+on:
+  push:
+    branches:
+      - docs/release-win10-vm910136-20261110
+    paths:
+      - tools/windows/FlowBridge-Win10-W2B0-ManagedPreflight.ps1
+      - .github/workflows/flowbridge-win10-w2b0-ssh-readiness.yml
+permissions:
+  contents: read
+jobs:
+  windows-managed-no-driver:
+    runs-on: windows-2025
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Ensure both W2a and W2b0 scripts parse with native PowerShell 5.1
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          foreach($file in @('tools/windows/FlowBridge-Win10-W2A-SocksSmoke.ps1',
+                              'tools/windows/FlowBridge-Win10-W2B0-ManagedPreflight.ps1')){
+            $tok=$null;$err=$null
+            [void][Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file),[ref]$tok,[ref]$err)
+            if(@($err).Count){$err|ForEach-Object{Write-Output ($_.Extent.StartLineNumber.ToString()+': '+$_.Message)};throw ('PS5 parser rejected '+$file)}
+          }
+          $source=Get-Content 'tools/windows/FlowBridge-Win10-W2B0-ManagedPreflight.ps1' -Raw
+          foreach($guard in @('W3=''NO_GO''','G2=''NO_GO''','driver_loaded=$false',
+                             'service_installed=$false','ssh_network_connection_performed=$false')){
+            if(-not $source.Contains($guard)){throw ('Missing read-only guard '+$guard)}
+          }
+      - name: Build a real binary and prove loopback-only SOCKS in clean W2a evidence
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          & tools/windows/FlowBridge-Win10-W2A-SocksSmoke.ps1 -ExpectedComputerName 'THIS-IS-NOT-THE-WIN10-TARGET' -AllowHostedCI -ForcePowerShellSmoke -EvidenceRoot build/w2a-stage
+          $files=@(Get-ChildItem build/w2a-stage -Filter w2a-report.json -Recurse -File)
+          if($files.Count -ne 1){throw 'Missing exact W2a report'}
+          $r=Get-Content $files[0].FullName -Raw|ConvertFrom-Json
+          if($r.W2a -ne 'PASS_HOSTED_NON_TARGET_ONLY' -or $r.smoke_tests_run -ne 4 -or
+             -not $r.source_exact -or $r.driver_loaded -or $r.G2 -ne 'NO_GO'){
+             throw 'W2a did not produce the required exact source read-only binary'
+          }
+      - name: Run native managed SSH invalid-consent, no-DIRECT and identity-denial gates
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          & tools/windows/FlowBridge-Win10-W2B0-ManagedPreflight.ps1 -ExpectedComputerName 'THIS-IS-NOT-THE-WIN10-TARGET' -AllowHostedCI -W2aEvidenceRoot build/w2a-stage -ReportRoot build/w2b0-hosted
+          $reports=@(Get-ChildItem build/w2b0-hosted -Filter w2b0-report.json -Recurse -File)
+          if($reports.Count -ne 1){throw 'Expected exactly one W2b0 report'}
+          $r=Get-Content $reports[0].FullName -Raw|ConvertFrom-Json
+          $r.negative_managed_tests|ForEach-Object{Write-Output ("W2b0 scenario "+$_.name+" denied="+$_.denied)}
+          if($r.W2b0 -ne 'PASS_HOSTED_NON_TARGET_CONFIG_DENIAL_ONLY' -or
+             $r.target_admitted -or -not $r.cli_source_verified -or
+             $r.completed_guard_cases -ne 3 -or @($r.negative_managed_tests).Count -ne 3 -or
+             $r.driver_loaded -or $r.service_installed -or $r.bfe_or_wfp_modified -or
+             $r.ssh_network_connection_performed -or $r.G2 -ne 'NO_GO' -or
+             $r.release_accepted){
+            Write-Output ($r|ConvertTo-Json -Depth 8)
+            throw 'W2b0 native guard proof failed'
+          }
+      - name: Persist scoped W2b0 read-only evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-W2b0-ManagedGuard-Hosted-${{ github.run_id }}
+          path: |
+            build/w2b0-hosted/**/w2b0-report.json
+            build/w2b0-hosted/**/*.log
+          retention-days: 14
+          if-no-files-found: warn

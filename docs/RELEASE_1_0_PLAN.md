@@ -1,5 +1,17 @@
 # FlowBridge — исполнимый план до 1.0
 
+> **Актуальный срез на 13 ноября 2026:** [FlowBridge 1.0 — release rebaseline, beta/RC/G0–G6/R00–R10](qa/FLOWBRIDGE_RELEASE_REBASELINE_20261113.md).
+> [19 машиночитаемых gate-решений](qa/release-1.0/gate_status_20261113.json) — RELEASE NO-GO.
+> Следующий текст — **история и исходный контракт**, не текущая приёмка. Ветка main не меняется.
+
+> **Актуальная контрольная точка на 10 ноября 2026:**
+> [Единый план beta → WFP/ALE → 1.0 и новая целевая Win10 x64](qa/FLOWBRIDGE_RELEASE_ROUTE_20261110.md).
+> Ниже сохранена историческая последовательность прежних gate-решений;
+> статусы на старых source SHA не являются актуальной приёмкой.
+> Новый план отдельно выделяет ограниченную SOCKS-only beta, read-only
+> испытания реальной Win10 Pro и native kernel gates с обязательным rollback.
+
+
 **Срез:** 30 октября 2026. **Исходная база:** `main` @ `6401b40b02fa00d5ae3f84aec2ac1916c266e6ea`.
 **Текущий подтверждённый уровень:** локальная SOCKS5-бета, Windows x64 + macOS universal, собственные GUI, управляемый SSH-пул 1–4 процесса; проверенные 5/5 native/Rust jobs и 3/3 DNS jobs на exact PR head `a38fd84e`. [Checkpoint](qa/NATIVE_BETA_CHECKPOINT_20261030.md), [CI](https://github.com/i-shutov/flowbridge/actions/runs/41005277502), [DNS](https://github.com/i-shutov/flowbridge/actions/runs/41005277446).
 

@@ -1,0 +1,113 @@
+name: FlowBridge Win10 W2a CLI loopback smoke (hosted negative target)
+on:
+  push:
+    branches:
+      - docs/release-win10-vm910136-20261110
+    paths:
+      - tools/windows/FlowBridge-Win10-W2A-SocksSmoke.ps1
+      - .github/workflows/flowbridge-win10-w2a-cli-smoke.yml
+permissions:
+  contents: read
+jobs:
+  user-mode-cli-smoke:
+    runs-on: windows-2025
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Parse W2a script with Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $path='tools/windows/FlowBridge-Win10-W2A-SocksSmoke.ps1'
+          $tok=$null;$err=$null
+          [void][Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path),[ref]$tok,[ref]$err)
+          if(@($err).Count){
+            $err|ForEach-Object{Write-Output ("line "+$_.Extent.StartLineNumber+": "+$_.Message)}
+            throw 'W2a PowerShell 5.1 parse failed'
+          }
+          $src=Get-Content $path -Raw
+          foreach($required in @('W3=''NO_GO''','G2=''NO_GO''','driver_loaded=$false',
+                'wfp_filters_modified=$false','system_network_changed=$false')){
+            if(-not $src.Contains($required)){throw "Missing safety guard $required"}
+          }
+      - name: Verify Cargo is found in CARGO_HOME/bin when absent from PATH
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $originalPath=$env:PATH
+          $originalCargoHome=$env:CARGO_HOME
+          $cargoLocation=(Get-Command cargo.exe -CommandType Application -ErrorAction Stop).Source
+          $cargoBin=[IO.Path]::GetFullPath((Split-Path -Parent $cargoLocation))
+          $probeRoot=Join-Path $env:RUNNER_TEMP 'flowbridge-rust-discovery-test'
+          $probeBin=Join-Path $probeRoot 'bin'
+          New-Item -ItemType Directory -Path $probeBin -Force|Out-Null
+          $probeCargo=Join-Path $probeBin 'cargo.exe'
+          # Unexecuted marker file tests lookup only. Never use it for a build.
+          [IO.File]::WriteAllText($probeCargo,'unexecuted-cargo-tool-lookup-marker')
+          try{
+            $env:CARGO_HOME=$probeRoot
+            $env:PATH=(($originalPath -split ';'|Where-Object {
+              $part=$_.Trim('"')
+              if(-not $part){return $false}
+              try{([IO.Path]::GetFullPath($part)) -ine $cargoBin}catch{$true}
+            }) -join ';')
+            if(Get-Command cargo.exe -CommandType Application -ErrorAction SilentlyContinue){
+              throw 'Cargo unexpectedly remains on PATH; discovery test would be vacuous'
+            }
+            & tools/windows/FlowBridge-Win10-W2A-SocksSmoke.ps1 -ExpectedComputerName 'THIS-IS-NOT-THE-WIN10-VM' -AllowHostedCI -ToolDiscoveryOnly -EvidenceRoot build/w2a-discovery-probe
+            $items=@(Get-ChildItem build/w2a-discovery-probe -Filter w2a-report.json -Recurse -File)
+            if($items.Count -ne 1){throw 'Tool probe did not produce one report'}
+            $r=Get-Content -LiteralPath $items[0].FullName -Raw|ConvertFrom-Json
+            if($r.W2a -ne 'TOOLS_FOUND_ONLY_NOT_ACCEPTED' -or
+               $r.tools.cargo -ine $probeCargo -or
+               $r.source_exact -or $r.target_admitted -or
+               $r.driver_loaded -or $r.wfp_filters_modified){
+               Write-Output ($r|ConvertTo-Json -Depth 6)
+               throw 'Cargo fallback did not find CARGO_HOME/bin marker safely'
+            }
+            Write-Output 'Cargo out-of-PATH fallback: PASS, no executable invoked'
+          }finally{
+            $env:PATH=$originalPath
+            $env:CARGO_HOME=$originalCargoHome
+          }
+      - name: Execute real CLI and loopback SOCKS smoke, never accept hosted runner as Win10
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          & tools/windows/FlowBridge-Win10-W2A-SocksSmoke.ps1 -ExpectedComputerName 'THIS-IS-NOT-THE-WIN10-VM' -AllowHostedCI -ForcePowerShellSmoke -EvidenceRoot build/w2a-hosted
+          $items=@(Get-ChildItem build/w2a-hosted -Filter w2a-report.json -Recurse -File)
+          if($items.Count -ne 1){throw 'Expected exactly one W2a JSON'}
+          $r=Get-Content -LiteralPath $items[0].FullName -Raw | ConvertFrom-Json
+          $r.steps|ForEach-Object{Write-Output "W2a: $_"}
+          if($r.W2a -ne 'PASS_HOSTED_NON_TARGET_ONLY' -or
+             $r.target_admitted -or
+             $r.source_exact -ne $true -or
+             $r.capabilities_explicit -ne $true -or
+             $r.smoke_tests_run -ne 4 -or
+             $r.smoke_engine -ne 'powershell-native-dotnet' -or
+             $r.smoke_coverage -ne 'powershell_four_test_subset_not_python_nine_tests' -or
+             @($r.smoke_checks).Count -ne 4 -or
+             $r.G2 -ne 'NO_GO' -or
+             $r.W3 -ne 'NO_GO' -or
+             $r.driver_loaded -or
+             $r.system_network_changed -or
+             $r.release_accepted){
+             Write-Output ($r|ConvertTo-Json -Depth 8)
+             throw 'Hosted W2a non-target test failed'
+          }
+      - name: Preserve scoped W2a hosted report and log only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-W2a-Hosted-Windows-${{ github.run_id }}
+          path: |
+            build/w2a-hosted/**/w2a-report.json
+            build/w2a-hosted/**/*.log
+          retention-days: 14
+          if-no-files-found: warn
