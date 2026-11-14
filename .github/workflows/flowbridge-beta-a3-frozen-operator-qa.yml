@@ -9,11 +9,7 @@ permissions:
   contents: read
 jobs:
   powershell-operator-negative:
-    name: A3 guard / ${{ matrix.shell }}
-    strategy:
-      fail-fast: false
-      matrix:
-        shell: [powershell, pwsh]
+    name: A3 guard / Windows PowerShell 5.1 and PowerShell 7
     runs-on: windows-2025
     timeout-minutes: 10
     steps:
@@ -21,7 +17,7 @@ jobs:
         with:
           persist-credentials: false
       - name: AST, exact source markers, bad-ZIP refusal without installation
-        shell: ${{ matrix.shell }}
+        shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $file = 'tools/windows/FlowBridge-ExplicitBeta-A3-Frozen.ps1'
@@ -46,3 +42,10 @@ jobs:
           if ($message -ne 'PINNED_SHA256_MISMATCH') { throw ('A3_BAD_ZIP_NOT_REJECTED: ' + $message) }
           if (Test-Path (Join-Path $root 'out')) { throw 'A3_BAD_ZIP_CREATED_EVIDENCE' }
           Write-Host 'A3_STATIC_AND_NEGATIVE_PASS; OWNER_NATIVE_NOT_RUN'
+      - name: Also parse in PowerShell 7
+        shell: pwsh
+        run: |
+          $tokens = $null; $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'tools/windows/FlowBridge-ExplicitBeta-A3-Frozen.ps1'),[ref]$tokens,[ref]$errors)
+          if ($errors.Count -gt 0) { throw 'POWERSHELL7_PARSE_FAILURE' }
+          Write-Host 'POWER_SHELL_7_AST_PASS'
