@@ -236,9 +236,20 @@ def audit_kit(data: bytes, source_license: bytes) -> dict:
 def source_license_from_zip(data:bytes)->bytes:
     try:
         with zipfile.ZipFile(BytesIO(data)) as archive:
-            members=safe_members(archive,max_files=1000)
+            # git archive emits directory entries. Validate names, but unlike
+            # the inner candidate (files only), allow those directory nodes.
+            members=archive.infolist()
+            check(1<=len(members)<=2000,"source_zip_entry_count")
+            for item in members:
+                name=item.filename.rstrip("/")
+                pure=PurePosixPath(name)
+                check(name==pure.as_posix() and not name.startswith("/") and
+                      "\\" not in name and
+                      all(p not in ("", ".", "..") for p in name.split("/")),
+                      "source_zip_unsafe_path")
             path="flowbridge/LICENSE"
-            check(path in members,"source_license_missing")
+            check(path in archive.namelist(),"source_license_missing")
+            check(archive.getinfo(path).file_size < 8192,"source_license_too_large")
             return archive.read(path)
     except (zipfile.BadZipFile,KeyError,OSError) as exc:
         raise AuditError("source_zip_invalid") from exc
