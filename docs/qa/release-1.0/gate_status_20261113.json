@@ -57,7 +57,7 @@
       ],
       "exit_criterion": "Win10 W0-W2b2 owner console PASS on prior c339df2e bytes only; new PR59 exact-package native QA due",
       "accepted": false,
-      "proof": "Hosted no-Python PowerShell 5.1 runner executes frozen original 0.3.0-beta.1 install/payload/GUI/upgrade/uninstall/stable preservation 6/6 PASS, run 43637228155. Owner Win10/11 A3 still NOT_RUN.",
+      "proof": "PR64 final exact-head 17d72e7c no-Python frozen 0.3.0-beta.1 6/6 hosted Windows automated PASS, run 43637511888, original evidence artifact 14130805614 CRC/SHA verified. Owner Win10/11 A3 remains NOT_RUN.",
       "operator_runner": {
         "source": "tools/windows/FlowBridge-ExplicitBeta-A3-Frozen.ps1",
         "runner_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43570996811",
@@ -80,7 +80,14 @@
         "owner_windows_10_tested": false,
         "owner_windows_11_tested": false,
         "independent_gui_keyboard_review": false,
-        "real_owner_ssh_checked": false
+        "real_owner_ssh_checked": false,
+        "final_pr_head": "17d72e7cd304967713a60076f17e2138a29d006b",
+        "final_exact_head_workflow": "https://github.com/i-shutov/flowbridge/actions/runs/43637511888",
+        "final_qa_artifact_id": 14130805614,
+        "final_original_evidence_sha256": "4e7b9a9417a6e26c2be76e194de795e699bbde4801206cd9654e2e4270a8b2ff",
+        "final_original_evidence_crc": "PASS",
+        "final_qa_steps": "6/6 PASS",
+        "native_owner_acceptance": false
       }
     },
     {
