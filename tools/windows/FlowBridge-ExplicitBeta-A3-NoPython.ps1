@@ -74,11 +74,11 @@ function Fingerprint([string]$path) {
     try{return 'DIR:'+([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-','').ToLowerInvariant()}
     finally{$sha.Dispose()}
 }
-function RunBounded([string]$binary,[string]$args,[int]$seconds=120) {
+function RunBounded([string]$binary,[string]$arguments,[int]$seconds=120) {
     $proc=New-Object Diagnostics.Process
     $start=New-Object Diagnostics.ProcessStartInfo
     $start.FileName=$binary
-    $start.Arguments=$args
+    $start.Arguments=$arguments
     $start.UseShellExecute=$false
     $start.CreateNoWindow=$true
     $start.RedirectStandardOutput=$true
