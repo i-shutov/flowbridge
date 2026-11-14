@@ -25,6 +25,7 @@ def run():
         counts['unsafe_certificate']+=naive_green*(1-no_direct_certificate)
         matrix.update((','.join(map(str,(fam,proto,scope,grant,direction,queued,
            phase,loss,naive_green,stale_or_unknown,no_direct_certificate)))+'\n').encode())
-    assert counts==dict(rows=576,naive_green=72,stale_or_unknown=68,unsafe_certificate=72)
+    if counts!=dict(rows=576,naive_green=72,stale_or_unknown=68,unsafe_certificate=72):
+        raise RuntimeError("R189 invariant violation: unsafe continuity certificate")
     return dict(counts=counts,matrix_sha256=matrix.hexdigest(),native_windows=False)
 if __name__=='__main__': print(json.dumps(run(),sort_keys=True))

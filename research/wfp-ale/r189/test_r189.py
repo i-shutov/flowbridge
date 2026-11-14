@@ -18,7 +18,7 @@ class FenceTests(unittest.TestCase):
         self.assertNotEqual(mutant,source)
         globals_={'__name__':'r189_mutant'}
         exec(compile(mutant,'r189_mutant.py','exec'),globals_)
-        with self.assertRaises(AssertionError): globals_['run']()
+        with self.assertRaises(RuntimeError): globals_['run']()
     def test_all_selected_tcp_not_attested(self):
         x=run()
         self.assertEqual(x['counts']['naive_green'],x['counts']['unsafe_certificate'])
