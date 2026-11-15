@@ -135,7 +135,8 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
                 var validatedBypass: SSHTransportBypass?
                 if !ids.isEmpty || requestedTransport != nil ||
                    proto.providerConfiguration?["managedEndpoint"] != nil {
-                    guard ids.count == 1, let id = ids.first,
+                    guard proto.providerConfiguration?["managedEndpoint"] != nil,
+                          ids.count == 1, let id = ids.first,
                           id == Self.verifiedSystemSSHSigningID(),
                           let target = requestedTransport,
                           let host = target["host"] as? String,
@@ -244,6 +245,13 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
         // Only OS-observed signing identity. Never invent a path, PID, DNS name,
         // reverse-DNS result or resolved IP. Empty signing identity remains null.
         let signingID = flow.metaData.sourceAppSigningIdentifier
+        // Even a policy returning DIRECT cannot upgrade an unauthenticated
+        // application identity while the managed SSH bypass is active.
+        // This check must be BEFORE the policy decision's DIRECT return.
+        if bypass != nil && signingID.isEmpty {
+            reject(flow, "Unknown source identity cannot be proxied or sent DIRECT in managed SSH mode")
+            return true
+        }
         // Never exempt the whole /usr/bin/ssh signing identity: other SSH
         // connections must obey ordinary application rules. Only the exact
         // OS-observed carrier source AND literal remote server socket bypasses.
@@ -267,9 +275,6 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
                 record("Direct: \(endpoint.hostname):\(port)"); return false
             }
             if type == "block" { reject(flow, "Blocked by policy"); return true }
-            if bypass != nil && signingID.isEmpty {
-                reject(flow, "Unknown source identity cannot be proxied while SSH transport exclusion is required"); return true
-            }
             let id = UUID()
             let relay = TCPRelay(id: id, flow: tcp, nativeSession: native, flowJSON: flowJSON, idleSeconds: timeout,
                                  host: endpoint.hostname, port: port, application: signingID,
