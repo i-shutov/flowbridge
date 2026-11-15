@@ -1,9 +1,11 @@
 #include "capture.h"
+#include <ws2tcpip.h>
 #include <initguid.h>
 #include <fwpmu.h>
 #include <winioctl.h>
 #include <stdexcept>
 #include <memory>
+#include <cstring>
 #include "control.h"
 // MinGW ships management declarations but omits many SDK GUID declarations.
 // A Microsoft SDK build provides/defines these through fwpmu.h/initguid.h.
@@ -38,13 +40,52 @@ void verifyCallout(HANDLE engine, const GUID& key) {
 }
 }
 Capture::~Capture() { stop(); }
+void Capture::claim(SOCKET accepted, const FbRedirectContext& context) {
+    FbWfpClaim request{sizeof(FbWfpClaim),FB_WFP_ABI,context};
+    DWORD count=0;
+    // An accepted socket must first yield genuine WFP redirect records
+    // and context through WSAIoctl. The exclusive owner helper forwards
+    // that exact context to the kernel after initial ALE_AUTH_CONNECT.
+    // Any rejected/expired/replayed claim terminates the connection.
+    std::lock_guard<std::mutex> lock(ownerMutex_);
+    if (driver_==INVALID_HANDLE_VALUE)
+        throw std::runtime_error("WFP kernel claim refused: capture driver is stopped");
+    // Use real Winsock state from the SAME accepted socket whose context and
+    // records were just returned by OS WSAIoctl. A foreign listening socket
+    // cannot mint a claim for FlowBridge's broker loopback endpoint.
+    sockaddr_storage address{}; int length=sizeof(address);
+    if (accepted==INVALID_SOCKET ||
+        getsockname(accepted,reinterpret_cast<sockaddr*>(&address),&length)==SOCKET_ERROR)
+        throw std::runtime_error("WFP terminal claim: accepted socket has no OS local endpoint");
+    if (address.ss_family==AF_INET &&
+        context.address_family==AF_INET && length>=sizeof(sockaddr_in)) {
+        const auto* v4=reinterpret_cast<const sockaddr_in*>(&address);
+        if (!port4be_ || v4->sin_port!=port4be_ ||
+            v4->sin_addr.s_addr!=htonl(INADDR_LOOPBACK))
+            throw std::runtime_error("WFP terminal claim: wrong IPv4 broker socket");
+    } else if (address.ss_family==AF_INET6 &&
+               context.address_family==AF_INET6 && length>=sizeof(sockaddr_in6)) {
+        const auto* v6=reinterpret_cast<const sockaddr_in6*>(&address);
+        if (!port6be_ || v6->sin6_port!=port6be_ ||
+            v6->sin6_scope_id || std::memcmp(&v6->sin6_addr,&in6addr_loopback,sizeof(in6addr_loopback))!=0)
+            throw std::runtime_error("WFP terminal claim: wrong IPv6 broker socket");
+    } else {
+        throw std::runtime_error("WFP terminal claim: local socket and redirected family disagree");
+    }
+    if (!DeviceIoControl(driver_,FB_IOCTL_CLAIM,
+                         &request,sizeof(request),
+                         nullptr,0,&count,nullptr))
+        check(GetLastError(),"WFP kernel terminal AUTH claim");
+}
 void Capture::stop() noexcept {
+    std::lock_guard<std::mutex> lock(ownerMutex_);
     // Dynamic session close atomically removes admissions before listeners stop.
     if (engine_) { FwpmEngineClose0(engine_); engine_=nullptr; }
     if (driver_!=INVALID_HANDLE_VALUE) {
         DWORD count=0; DeviceIoControl(driver_,FB_IOCTL_DISABLE,nullptr,0,nullptr,0,&count,nullptr);
         CloseHandle(driver_); driver_=INVALID_HANDLE_VALUE;
     }
+    port4be_=port6be_=0;
 }
 void Capture::start(unsigned short p4, unsigned short p6, const std::vector<std::wstring>& bypass,
                     const std::vector<std::wstring>& paths) {
@@ -146,5 +187,6 @@ void Capture::start(unsigned short p4, unsigned short p6, const std::vector<std:
         FbWfpConfig config{sizeof(FbWfpConfig),FB_WFP_ABI,p4,p6,0};
         ioctl(driver_,FB_IOCTL_CONFIGURE,&config,sizeof(config));
         check(FwpmTransactionCommit0(engine_),"Commit capture filters");
+        port4be_=p4; port6be_=p6;
     } catch (...) { if (engine_) FwpmTransactionAbort0(engine_); stop(); throw; }
 }

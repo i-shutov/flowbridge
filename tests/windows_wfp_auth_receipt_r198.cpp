@@ -134,6 +134,65 @@ static void even_untrusted_unknown_process_cannot_mint_ticket() {
              "untrusted origin minted an authorization ticket");
     }
 }
+
+static void claim_requires_completed_os_auth_and_is_terminal() {
+    FbAuthBook book{};
+    const auto source=origin();
+    need(FbAuthIssue(&book,&source),"issue failed");
+    need(!FbAuthClaim(&book,&source),"claim preceded real OS AUTH");
+    need(consume(book,source),"genuine initial OS AUTH not consumed");
+    need(FbAuthClaim(&book,&source),"terminal claim of OS AUTH failed");
+    need(book.slots[0].state==3,"terminal claim did not retire record");
+    need(!FbAuthClaim(&book,&source),"replayed claim accepted");
+    need(!consume(book,source),"initial AUTH replayed after terminal claim");
+}
+static void claim_rejects_all_foreign_origin_fields_without_consuming_good() {
+    for (int which=0;which<9;++which) {
+        FbAuthBook book{};
+        const auto source=origin();
+        need(FbAuthIssue(&book,&source) && consume(book,source),"setup");
+        auto altered=source;
+        switch (which) {
+            case 0: altered.pid++;break;
+            case 1: altered.creation_100ns++;break;
+            case 2: altered.process_start_key++;break;
+            case 3: altered.endpoint++;break;
+            case 4: altered.flow_id++;break;
+            case 5: altered.broker_pid++;break;
+            case 6: altered.original_ip[2]++;break;
+            case 7: altered.port_be++;break;
+            default: altered.family=6;break;
+        }
+        need(!FbAuthClaim(&book,&altered),"foreign process/sibling/SSH claim accepted");
+        need(FbAuthClaim(&book,&source),"bad claim consumed legitimate OS ticket");
+    }
+}
+static void claim_denied_after_original_process_death_or_driver_loss() {
+    for (int which=0;which<2;++which) {
+        FbAuthBook book{};
+        const auto source=origin();
+        need(FbAuthIssue(&book,&source) && consume(book,source),"setup");
+        if(which==0)
+            need(FbAuthProcessExit(&book,source.pid,source.creation_100ns,
+                                   source.process_start_key),"exit");
+        else
+            book.lost=1; // terminal driver disarm under owner stop
+        need(!FbAuthClaim(&book,&source),"dead/disarmed flow admitted after AUTH");
+    }
+}
+static void empty_or_invalid_claim_cannot_mint_kernel_authorization() {
+    FbAuthBook book{};
+    const auto source=origin();
+    need(!FbAuthClaim(&book,&source),"unissued claim accepted");
+    need(FbAuthIssue(&book,&source) && consume(book,source),"setup");
+    auto bad=source;
+    bad.flow_id=0;
+    need(!FbAuthClaim(&book,&bad),"zero flow sequence accepted");
+    need(!FbAuthClaim(nullptr,&source),"null kernel book accepted");
+    need(!FbAuthClaim(&book,nullptr),"null process origin accepted");
+    need(FbAuthClaim(&book,&source),"invalid requests destroyed real receipt");
+}
+
 int main() {
     try {
         exact_kernel_receipt_single_use();
@@ -145,10 +204,14 @@ int main() {
         no_endpoint_reissue_and_duplicate_flow_id();
         bounded_capacity_latches_fail_closed();
         even_untrusted_unknown_process_cannot_mint_ticket();
+        claim_requires_completed_os_auth_and_is_terminal();
+        claim_rejects_all_foreign_origin_fields_without_consuming_good();
+        claim_denied_after_original_process_death_or_driver_loss();
+        empty_or_invalid_claim_cannot_mint_kernel_authorization();
         std::cout
           << "{\"schema\":\"flowbridge-wfp-r198-auth-receipt-source-v1\","
           << "\"status\":\"C_SOURCE_LOGIC_PASS_NATIVE_WFP_NOT_RUN\","
-          << "\"cases_pass\":9,\"kernel_callbacks_executed\":false,"
+          << "\"cases_pass\":13,\"kernel_callbacks_executed\":false,"
           << "\"physical_proxy_ssh_verified\":false,\"native_g2_accepted\":false,"
           << "\"release_accepted\":false}" << std::endl;
         return 0;

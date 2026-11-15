@@ -22,7 +22,7 @@ def require(ok: bool, why: str) -> None:
 
 
 def audit(driver: str, context: str, reader: str, control: str, table: str) -> None:
-    require("#define FB_WFP_ABI 3u" in control, "legacy driver ABI still allowed")
+    require("#define FB_WFP_ABI 4u" in control, "legacy driver ABI still allowed")
     require("#define FB_REDIRECT_VERSION 3u" in context and
             "#define FB_REDIRECT_CONTEXT_BYTES 2136u" in context,
             "legacy context layout accepted")
