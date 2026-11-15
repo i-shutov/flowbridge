@@ -1,0 +1,273 @@
+{
+  "schema": "flowbridge-windows-first-1.0-gates-v1",
+  "date": "2026-11-15",
+  "project": "i-shutov/flowbridge",
+  "release_id": "FlowBridge 1.0 Windows x64",
+  "scope_decision": "USER_CONFIRMED_WINDOWS_FIRST",
+  "scope_decision_is_not_release_acceptance": true,
+  "windows_1_0_accepted": false,
+  "publisher_release_approved": false,
+  "release_tag_created": false,
+  "product_main_sha_at_scope_change": "5b5afc2feeda2195f302380e615ba003d4906e09",
+  "original_explicit_beta_source_sha": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+  "targets": [
+    {
+      "platform": "windows",
+      "family": "Windows 10 Pro",
+      "build": "19045",
+      "release": "22H2",
+      "arch": "x86_64",
+      "native_owner_acceptance": false
+    },
+    {
+      "platform": "windows",
+      "family": "Windows 11 Pro",
+      "build": "owner-target",
+      "release": "x64",
+      "arch": "x86_64",
+      "native_owner_acceptance": false
+    }
+  ],
+  "release_scope": {
+    "protected_selected_app_tcp_required": true,
+    "manual_per_app_socks_configuration_not_required": true,
+    "selected_app_process_identity_kernel_origin_required": true,
+    "fail_closed_on_ambiguous_identity": true,
+    "fail_closed_on_ssh_failure": true,
+    "independent_ipv4_ipv6_packet_proof_required": true,
+    "dns_and_unsupported_udp_quic_policy_disclosed_and_verified": true,
+    "rust_core_must_remain_cross_platform": true,
+    "os_specific_drivers_in_shared_core_forbidden": true
+  },
+  "backend": {
+    "currently_authorized": "separately installed official signed NDISRD + clean-room Rust user mode",
+    "owner_authorization_source": "https://github.com/i-shutov/flowbridge/issues/41",
+    "observed_gap": "NDISRD packet buffers do not contain a kernel-origin per-packet owner PID + creation epoch; IP Helper or ETW tuple/time correlation is not an authenticated witness",
+    "current_g2": "NO_GO",
+    "wfp_ale_alternative_approved": false,
+    "third_party_connection_aware_alternative_approved": false,
+    "backend_change_requires_explicit_owner_decision": true,
+    "native_kernel_acceptance": false
+  },
+  "windows_beta_0_3_0": {
+    "scope": "Windows only optional prerelease preceding Windows 1.0; preserve unchanged original cross-platform candidate",
+    "original_immutable_kit_sha256": "4b51d4136878476b48946361ce1635cb6d630e62b50ca82c73df28a5902ed8b8",
+    "hosted_windows_6_of_6": true,
+    "owner_win10_exact_kit_accepted": false,
+    "owner_win11_exact_kit_accepted": false,
+    "required_legacy_gates": [
+      "A0",
+      "A1",
+      "A2",
+      "A3",
+      "A5",
+      "A6",
+      "A7"
+    ],
+    "macos_A4_deferred_not_passed": true,
+    "release_accepted": false
+  },
+  "windows_1_0": {
+    "required_gate_ids": [
+      "WIN-00",
+      "WIN-01",
+      "WIN-02",
+      "WIN-03",
+      "WIN-04",
+      "WIN-05",
+      "WIN-06",
+      "WIN-07",
+      "WIN-08",
+      "WIN-09"
+    ],
+    "physical_owner_acceptance_required": true,
+    "all_gates_required": true,
+    "gates": [
+      {
+        "id": "WIN-00",
+        "key": "WINDOWS_ONLY_SCOPE",
+        "legacy_gate_mapping": [
+          "R00"
+        ],
+        "exit_criterion": "Decision confirmed: Windows 10 Pro 22H2 x64 + Windows 11 Pro x64 first; Rust core cross-platform",
+        "depends_on": [],
+        "status": "SCOPE_DEFINED_EXECUTION_OPEN",
+        "accepted": false,
+        "evidence": [],
+        "required_native_windows": true
+      },
+      {
+        "id": "WIN-01",
+        "key": "KERNEL_PROCESS_CONNECTION_PROVENANCE",
+        "legacy_gate_mapping": [
+          "R01"
+        ],
+        "exit_criterion": "Trusted kernel-origin per connection process epoch, signed backend and original endpoint; no ETW/NDISRD tuple guesses",
+        "depends_on": [
+          "WIN-00"
+        ],
+        "status": "BLOCKED_KERNEL_ORIGIN_TRUST",
+        "accepted": false,
+        "evidence": [],
+        "required_native_windows": true
+      },
+      {
+        "id": "WIN-02",
+        "key": "SELECTED_TCP_END_TO_END",
+        "legacy_gate_mapping": [
+          "R01"
+        ],
+        "exit_criterion": "Native Win10 and Win11 selected vs unselected EXE IPv4/v6 through actual approved backend/Rust/SSH with original packet and byte parity",
+        "depends_on": [
+          "WIN-01"
+        ],
+        "status": "NOT_ACCEPTED",
+        "accepted": false,
+        "evidence": [],
+        "required_native_windows": true
+      },
+      {
+        "id": "WIN-03",
+        "key": "FAIL_CLOSED_PROTECTED_EGRESS",
+        "legacy_gate_mapping": [
+          "R01"
+        ],
+        "exit_criterion": "No selected-app DIRECT on SSH/BFE/driver/reauthorization/Stop failure, proven independently by physical packet capture",
+        "depends_on": [
+          "WIN-01",
+          "WIN-02"
+        ],
+        "status": "NOT_ACCEPTED",
+        "accepted": false,
+        "evidence": [],
+        "required_native_windows": true
+      },
+      {
+        "id": "WIN-04",
+        "key": "WINDOWS_DNS_UDP_IPV6",
+        "legacy_gate_mapping": [
+          "R03"
+        ],
+        "exit_criterion": "Uncached remote-only DNS / split LAN and selected IPv4/v6 with explicit UDP/QUIC/DoH/DoT policy and negative evidence",
+        "depends_on": [
+          "WIN-02",
+          "WIN-03"
+        ],
+        "status": "NOT_ACCEPTED",
+        "accepted": false,
+        "evidence": [],
+        "required_native_windows": true
+      },
+      {
+        "id": "WIN-05",
+        "key": "WINDOWS_OPENSSH_SOAK",
+        "legacy_gate_mapping": [
+          "R05"
+        ],
+        "exit_criterion": "Real owned SSH 1–4 workers, 251/252 limits, strict host-key, 128/1152, 10k churn and 24h soak; no unproven raw512 claim",
+        "depends_on": [
+          "WIN-02"
+        ],
+        "status": "NOT_ACCEPTED",
+        "accepted": false,
+        "evidence": [],
+        "required_native_windows": true
+      },
+      {
+        "id": "WIN-06",
+        "key": "WINDOWS_GUI_RULES",
+        "legacy_gate_mapping": [
+          "R06",
+          "R07"
+        ],
+        "exit_criterion": "Win32 App/Host/CIDR/Port first-match UI, Explain, atomic Apply/Stop, keyboard, 1366x768 DPI 100/125/150/200",
+        "depends_on": [
+          "WIN-02",
+          "WIN-03"
+        ],
+        "status": "NOT_ACCEPTED",
+        "accepted": false,
+        "evidence": [],
+        "required_native_windows": true
+      },
+      {
+        "id": "WIN-07",
+        "key": "WINDOWS_SIGNED_INSTALL_UPGRADE",
+        "legacy_gate_mapping": [
+          "R08"
+        ],
+        "exit_criterion": "Signed vendor/kernel provenance and app release, legal/security, secrets, ACL, install/upgrade/rollback/uninstall",
+        "depends_on": [
+          "WIN-01",
+          "WIN-02"
+        ],
+        "status": "NOT_ACCEPTED",
+        "accepted": false,
+        "evidence": [],
+        "required_native_windows": true
+      },
+      {
+        "id": "WIN-08",
+        "key": "FROZEN_WIN10_WIN11_RC",
+        "legacy_gate_mapping": [
+          "R09"
+        ],
+        "exit_criterion": "Same exact signed bits source SHA on native owner Win10 and Win11, original JSON/PCAP/BMP, physical fail-closed, no P0 SKIP",
+        "depends_on": [
+          "WIN-03",
+          "WIN-04",
+          "WIN-05",
+          "WIN-06",
+          "WIN-07"
+        ],
+        "status": "NOT_ACCEPTED",
+        "accepted": false,
+        "evidence": [],
+        "required_native_windows": true
+      },
+      {
+        "id": "WIN-09",
+        "key": "INDEPENDENT_RELEASE_GO",
+        "legacy_gate_mapping": [
+          "R10"
+        ],
+        "exit_criterion": "Independent legal, security, native operator acceptance + explicit owner sign-off before Windows 1.0 tag",
+        "depends_on": [
+          "WIN-08"
+        ],
+        "status": "NOT_ACCEPTED",
+        "accepted": false,
+        "evidence": [],
+        "required_native_windows": true
+      }
+    ]
+  },
+  "macos_after_windows_first": {
+    "deferred_not_accepted": true,
+    "macos_ne_R02_accepted": false,
+    "macos_dns_R04_accepted": false,
+    "legacy_mac_A4_owner_accepted": false,
+    "existing_mac_PRs_to_preserve": [
+      60,
+      63,
+      65,
+      66
+    ],
+    "no_new_native_mac_release_gate_in_windows_1_0": true,
+    "maintain_portable_rust_core_CI": true,
+    "post_windows_1_0_platform_release_separate": true
+  },
+  "go_policy": {
+    "deny_if_any_gate_false": true,
+    "deny_if_native_packet_origin_missing": true,
+    "deny_if_native_win10_or_win11_missing": true,
+    "deny_if_unsigned_or_unaccepted_kernel_backend": true,
+    "deny_if_selected_direct_evidence_missing": true,
+    "deny_if_independent_evidence_missing": true,
+    "deny_if_exact_binary_sha_and_test_source_sha_disagree": true,
+    "hosted_only_is_not_native_pass": true,
+    "model_only_is_not_driver_pass": true,
+    "legacy_macos_R02_R04_not_required_for_windows_1_0_but_still_unaccepted": true
+  },
+  "checkpoint_path": "docs/qa/release-1.0/WINDOWS_FIRST_1_0_ROADMAP_20261115.md"
+}
