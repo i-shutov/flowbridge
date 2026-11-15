@@ -39,7 +39,7 @@ void verifyCallout(HANDLE engine, const GUID& key) {
 }
 Capture::~Capture() { stop(); }
 void Capture::claim(const FbRedirectContext& context) {
-    const FbWfpClaim request{sizeof(FbWfpClaim),FB_WFP_ABI,context};
+    FbWfpClaim request{sizeof(FbWfpClaim),FB_WFP_ABI,context};
     DWORD count=0;
     // An accepted socket must first yield genuine WFP redirect records
     // and context through WSAIoctl. The exclusive owner helper forwards
@@ -49,7 +49,7 @@ void Capture::claim(const FbRedirectContext& context) {
     if (driver_==INVALID_HANDLE_VALUE)
         throw std::runtime_error("WFP kernel claim refused: capture driver is stopped");
     if (!DeviceIoControl(driver_,FB_IOCTL_CLAIM,
-                         const_cast<FbWfpClaim*>(&request),sizeof(request),
+                         &request,sizeof(request),
                          nullptr,0,&count,nullptr))
         check(GetLastError(),"WFP kernel terminal AUTH claim");
 }
