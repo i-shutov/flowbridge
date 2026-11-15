@@ -1,0 +1,57 @@
+name: Windows G2 boundary - real GUI owner process incarnation
+on:
+  pull_request:
+    paths:
+      - 'native/windows/gui_owner_epoch.hpp'
+      - 'native/windows/capture_launcher.hpp'
+      - 'native/windows/wfp/service.cpp'
+      - 'tests/windows_native_smoke.cpp'
+      - 'tests/windows_owner_epoch/**'
+      - 'tests/windows_gui_owner_epoch_runtime.cpp'
+      - 'tests/windows_owner_epoch.py'
+      - 'tests/windows_wfp_redirect_runtime.py'
+      - 'tests/windows_wfp_userchain_runtime.py'
+      - 'tools/test_windows_gui_owner_epoch.py'
+      - '.github/workflows/windows-g2-gui-owner-epoch.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-win32-owner-lifetime:
+    name: Real Windows owner PID and creation time, negative mutants
+    runs-on: windows-2025
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Actual Win32 process handles with three deliberate source mutations
+        shell: pwsh
+        run: |
+          python tools/test_windows_gui_owner_epoch.py --output build/verification/windows-owner-epoch
+          if ($LASTEXITCODE -ne 0) { throw 'OWNER_EPOCH_REAL_WIN32_FAIL' }
+      - name: VM-only scripts import the same Win32 FILETIME reader
+        run: python -m py_compile tests/windows_owner_epoch.py tests/windows_wfp_redirect_runtime.py tests/windows_wfp_userchain_runtime.py
+      - name: Refuse false driver or kernel G2 acceptance from GUI-only evidence
+        shell: pwsh
+        run: |
+          $report=Get-Content build/verification/windows-owner-epoch/owner-epoch-report.json -Raw | ConvertFrom-Json
+          if ($report.status -ne 'PASS_REAL_WIN32_GUI_OWNER_ONLY' -or $report.mutants_rejected -ne 3 -or
+              $report.driver_loaded -ne $false -or $report.wfp_changed -ne $false -or
+              $report.g2_packet_bound_proved -ne $false -or $report.release_accepted -ne $false) {
+              throw 'GUI_OWNER_REPORT_UNSAFE_GO_CLAIM'
+          }
+          Write-Host 'PASS real Win32 helper owner incarnation; native PacketBound G2 remains NO_GO'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: FlowBridge-Win32-OwnerIncarnation-${{ github.run_id }}
+          path: |
+            build/verification/windows-owner-epoch/actual-process.log
+            build/verification/windows-owner-epoch/mutation-*.log
+            build/verification/windows-owner-epoch/owner-epoch-report.json
+          retention-days: 30
+          if-no-files-found: warn
