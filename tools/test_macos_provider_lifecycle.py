@@ -49,6 +49,7 @@ def compile_provider(source: bytes, folder: Path, swift: str) -> Path:
     result = run([swift, "-swift-version", "5", "-D", "FLOWBRIDGE_PROVIDER_TEST", "-warnings-as-errors", "-O",
                   str(ROOT / "tests/macos_provider_test_shims.swift"),
                   str(ROOT / "native/macos/Extension/SharedNativeSession.swift"),
+                  str(ROOT / "native/macos/Shared/SystemSSHCarrierIdentity.swift"),
                   str(ROOT / "native/macos/Extension/ProviderLifecycleQueue.swift"),
                   str(transformed), str(ROOT / "tests/macos_provider_lifecycle.swift"),
                   "-o", str(binary)])
@@ -78,7 +79,9 @@ def main() -> int:
         report["swift_version"] = run([swift, "--version"]).stdout.strip()
         source = (ROOT / PROVIDER).read_bytes()
         report["production_provider_sha256"] = hashlib.sha256(source).hexdigest()
-        tracked = [PROVIDER, "native/macos/App/DesktopController.swift",
+        tracked = [PROVIDER, "native/macos/Shared/SystemSSHCarrierIdentity.swift",
+                   "native/macos/App/AppDiscovery.swift",
+                   "native/macos/App/DesktopController.swift",
                    "native/macos/App/NativeController.swift",
                    "native/macos/Extension/ProviderLifecycleQueue.swift",
                    "native/macos/Extension/SharedNativeSession.swift",
