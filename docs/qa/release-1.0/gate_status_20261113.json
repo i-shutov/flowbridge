@@ -474,9 +474,9 @@
     "windows_win01_gui_owner_epoch_subgate": "HOSTED_WIN32_PASS_KERNEL_PACKET_G2_NO_GO",
     "windows_win01_gui_owner_epoch_checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_GUI_OWNER_EPOCH_20261115.json",
     "windows_1_0_release": "NO_GO",
-    "ndsrd_win01_driver_provenance": "HOSTED_TCPIP_POSITIVE_NDISRD_MISSING_OWNER_NOT_RUN",
     "ndisrd_driver_provenance_checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_NDISRD_DRIVER_PROVENANCE_20261115.md",
-    "win01_packet_bound": "G2_NO_GO"
+    "win01_packet_bound": "G2_NO_GO",
+    "ndisrd_win01_driver_provenance": "HOSTED_TCPIP_POSITIVE_NDISRD_MISSING_OWNER_NOT_RUN"
   },
   "windows_first_release": {
     "decision_date": "2026-11-15",
