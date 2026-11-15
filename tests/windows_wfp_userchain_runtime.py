@@ -24,6 +24,7 @@ import tempfile
 import threading
 import time
 import uuid
+from windows_owner_epoch import creation_filetime
 
 from ssh_real_integration import ABI, free_port, require, until
 from windows_wfp_redirect_runtime import (
@@ -166,6 +167,7 @@ def main():
                 command = [
                     str(helper), '--console', '--profile', str(path),
                     '--capture-app', str(selected), '--gui-owner', str(os.getpid()),
+                    '--gui-owner-epoch', str(creation_filetime(os.getpid())),
                     '--stop-event', event_name, '--profile-sha256', pinned_sha,
                 ]
                 process = subprocess.Popen(
