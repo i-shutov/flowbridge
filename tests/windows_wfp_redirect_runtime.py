@@ -23,6 +23,7 @@ import tempfile
 import threading
 import time
 import uuid
+from windows_owner_epoch import creation_filetime
 
 
 def sha256_file(path):
@@ -251,6 +252,7 @@ def main():
         socks = Server(('127.0.0.1', 0), Socks)
         socks.echo_ports = targets
         server_threads.append((socks, start(socks)))
+        owner_epoch = creation_filetime(os.getpid())
         event_name = 'Local\\FlowBridgeCaptureStop-' + str(uuid.uuid4())
         event = kernel.CreateEventW(None, True, False, event_name)
         require(event, f'Could not create owned stop event: {ctypes.get_last_error()}')
@@ -279,7 +281,7 @@ def main():
             mismatch = subprocess.run(
                 [str(helper), '--console', '--profile', str(profile),
                  '--capture-app', str(selected), '--gui-owner', str(os.getpid()),
-                 '--stop-event', event_name, '--profile-sha256', '0' * 64],
+                 '--gui-owner-epoch', str(owner_epoch), '--stop-event', event_name, '--profile-sha256', '0' * 64],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                 timeout=10, creationflags=subprocess.CREATE_NO_WINDOW)
             require(mismatch.returncode != 0 and
@@ -295,7 +297,8 @@ def main():
             report['checks'].append('IPv4/IPv6 TCP and UDP work before WFP capture')
             process = subprocess.Popen([str(helper), '--console', '--profile', str(profile),
                                         '--capture-app', str(selected),
-                                        '--gui-owner', str(os.getpid()), '--stop-event', event_name,
+                                        '--gui-owner', str(os.getpid()), '--gui-owner-epoch', str(owner_epoch),
+                                        '--stop-event', event_name,
                                          '--profile-sha256', profile_sha256],
                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                        text=True, creationflags=subprocess.CREATE_NO_WINDOW)
@@ -351,6 +354,7 @@ def main():
             process = subprocess.Popen(
                 [str(helper), '--console', '--profile', str(profile),
                  '--capture-app', str(selected), '--gui-owner', str(owner.pid),
+                 '--gui-owner-epoch', str(creation_filetime(owner.pid)),
                  '--stop-event', event_name, '--profile-sha256', profile_sha256],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                 creationflags=subprocess.CREATE_NO_WINDOW)
