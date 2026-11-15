@@ -163,12 +163,18 @@ void relay(SOCKET socket,uint64_t id,uint64_t idleMs) {
     // Preserve upload after upstream half-close until its EOF/idle deadline.
     upload.join();
 }
-void handle(SOCKET raw,uint64_t nativeSession,uint64_t idleMs) noexcept {
+void handle(SOCKET raw,uint64_t nativeSession,uint64_t idleMs,Capture& capture) noexcept {
     Socket socket(raw); FbRedirectContext context{};
     try {
         std::array<uint8_t,65536> records{}; uint32_t length=0;
         int error=fb_wfp_query(raw,&context,records.data(),static_cast<uint32_t>(records.size()),&length);
         if(error) throw std::runtime_error("Missing/invalid WFP context or records: "+std::to_string(error));
+        // This is an actual driver IOCTL, not a JSON/source-level permit.
+        // A previously AUTH-consumed ticket MUST be claimed terminally before
+        // application policy can cause any outbound TCP socket to be created.
+        // Failure throws and closes the accepted socket: no DIRECT fallback.
+        if(stopping) throw std::runtime_error("WFP capture stopped before terminal claim");
+        capture.claim(context);
         if(context.ipv6_scope_id) throw std::runtime_error("Scoped IPv6 destinations are not supported by the core endpoint ABI");
         auto path=utf8(context.process_path,context.process_path_chars);
         auto split=path.find_last_of("\\/"); auto application=path.substr(split==std::string::npos?0:split+1);
@@ -288,7 +294,7 @@ void run() {
         for(size_t i=0;i<max;++i) workers.emplace_back([&]{
             for(;;) {SOCKET socket;
                 {std::unique_lock<std::mutex> guard(lock); cv.wait(guard,[&]{return ending || !queue.empty();}); if(ending) return; socket=queue.front();queue.pop_front();}
-                handle(socket,native.id,idleMs);
+                handle(socket,native.id,idleMs,capture);
                 {std::lock_guard<std::mutex> guard(lock); --admitted;}
             }
         });
