@@ -87,22 +87,6 @@ static int FbAuthIssue(FbAuthBook* book, const FbAuthOrigin* item) {
     ++book->count;
     return 1;
 }
-static int FbAuthConsumeInitial(FbAuthBook* book, const FbAuthOrigin* exact) {
-    unsigned i, seen = 0, matchIndex = 0;
-    if (!book || book->lost || !FbAuthOriginValid(exact)) return 0;
-    for (i = 0; i < book->count; ++i) {
-        if (book->slots[i].state != 1 ||
-            !FbAuthEqual(&book->slots[i].origin, exact)) continue;
-        ++seen;
-        matchIndex = i;
-    }
-    if (seen != 1) {
-        if (seen > 1) book->lost = 1;
-        return 0;
-    }
-    book->slots[matchIndex].state = 2;
-    return 1;
-}
 /* AUTH receives OS origin PID, endpoint, broker and original SOCKADDR, but
  * NOT the secret flow sequence. The sequence is only generated in our
  * CONNECT_REDIRECT path; the kernel's exact match is unique within this book.
