@@ -1,10 +1,24 @@
 import Foundation
 import NetworkExtension
 import Darwin
+#if !FLOWBRIDGE_PROVIDER_TEST
+import Security
+#endif
 
 /// TCP-only transparent adapter. A false return means DIRECT, never BLOCK.
 /// Socket I/O is confined to per-flow queues. Each direction holds at most one
 /// NE buffer and one 64-KiB Rust buffer; the next read waits for the write callback.
+private struct SSHTransportBypass {
+    let signingID: String
+    let addressKey: [UInt8]
+    let port: Int
+
+    func matches(signingID: String, host: String, port: Int) -> Bool {
+        signingID == self.signingID && port == self.port &&
+            TransparentProxyProvider.ipAddressKey(host) == addressKey
+    }
+}
+
 final class TransparentProxyProvider: NETransparentProxyProvider {
     private let lock = NSLock()
     private var profile = ""
@@ -22,7 +36,9 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
     private var sessionID: String?
     private var limit = 128
     private var idleSeconds: Double = 300
-    private var bypassSigningIDs: Set<String> = []
+    // Only the verified Apple /usr/bin/ssh carrier to its EXACT literal server IP:port.
+    // Never bypass by app signing identifier alone: other SSH connections must be evaluated.
+    private var sshTransportBypass: SSHTransportBypass?
     private var sessions: [UUID: TCPRelay] = [:]
     private var recent: [[String: Any]] = []
     private var events: [[String: Any]] = []
@@ -34,6 +50,40 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
         if host.withCString({ inet_pton(AF_INET, $0, &v4) }) == 1 { return 32 }
         if host.withCString({ inet_pton(AF_INET6, $0, &v6) }) == 1 { return 128 }
         return nil
+    }
+    // Byte-level canonical IP comparison: 127.0.0.1 is not a textual prefix
+    // of another address, and expanded/compressed IPv6 forms compare equally.
+    static func ipAddressKey(_ host: String) -> [UInt8]? {
+        var v4 = in_addr(); var v6 = in6_addr()
+        if host.withCString({ inet_pton(AF_INET, $0, &v4) }) == 1 {
+            return [4] + withUnsafeBytes(of: &v4) { Array($0) }
+        }
+        if host.withCString({ inet_pton(AF_INET6, $0, &v6) }) == 1 {
+            return [6] + withUnsafeBytes(of: &v6) { Array($0) }
+        }
+        return nil // hostname/zone notation cannot safely prove a carrier egress IP
+    }
+    private static func verifiedSystemSSHSigningID() -> String? {
+        #if FLOWBRIDGE_PROVIDER_TEST
+        return TestRuntime.shared.systemSSHSigningID
+        #else
+        // Inspect /usr/bin/ssh in the privileged extension itself. The
+        // requesting app's persisted providerConfiguration is not trusted to
+        // declare an arbitrary application signing identity as exempt.
+        let url = URL(fileURLWithPath: "/usr/bin/ssh")
+        var code: SecStaticCode?
+        var requirement: SecRequirement?
+        var info: CFDictionary?
+        guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess, let code,
+              SecRequirementCreateWithString("anchor apple" as CFString, [], &requirement) == errSecSuccess,
+              let requirement,
+              SecStaticCodeCheckValidity(code, [], requirement) == errSecSuccess,
+              SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+              let attributes = info as? [String: Any],
+              let identity = attributes[kSecCodeInfoIdentifier as String] as? String,
+              !identity.isEmpty else { return nil }
+        return identity
+        #endif
     }
     private static func rule(_ host: String, port: Int, prefix: Int) -> NENetworkRule {
         NENetworkRule(remoteNetwork: NWHostEndpoint(hostname: host, port: String(port)), remotePrefix: prefix,
@@ -80,7 +130,25 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
                 settings.excludedNetworkRules = exclusions
                 self.lock.lock()
                 guard self.generation == revision else { self.lock.unlock(); throw Bridge.error("Start cancelled") }
-                self.bypassSigningIDs = Set(proto.providerConfiguration?["bypassSigningIDs"] as? [String] ?? [])
+                let ids = proto.providerConfiguration?["bypassSigningIDs"] as? [String] ?? []
+                let requestedTransport = proto.providerConfiguration?["sshTransport"] as? [String: Any]
+                var validatedBypass: SSHTransportBypass?
+                if !ids.isEmpty || requestedTransport != nil ||
+                   proto.providerConfiguration?["managedEndpoint"] != nil {
+                    guard ids.count == 1, let id = ids.first,
+                          id == Self.verifiedSystemSSHSigningID(),
+                          let target = requestedTransport,
+                          let host = target["host"] as? String,
+                          let port = target["port"] as? Int,
+                          (1...65535).contains(port),
+                          let key = Self.ipAddressKey(host),
+                          target.count == 2 else {
+                        self.lock.unlock()
+                        throw Bridge.error("SSH transport bypass requires Apple-signed /usr/bin/ssh and one literal server IP:port")
+                    }
+                    validatedBypass = SSHTransportBypass(signingID:id, addressKey:key, port:port)
+                }
+                self.sshTransportBypass = validatedBypass
                 var nativeOptions: [String: Any] = [
                     "managed_endpoint": proto.providerConfiguration?["managedEndpoint"] ?? NSNull(),
                     "ready": false, "ready_lease_ms": 5000, "pause_grace_ms": 30000]
@@ -167,7 +235,7 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
     override func handleNewFlow(_ flow: NEAppProxyFlow) -> Bool {
         guard let tcp = flow as? NEAppProxyTCPFlow else { return false } // UDP explicitly direct
         lock.lock(); let source = profile; let isReady = ready && !applyingRules
-        let timeout = idleSeconds; let bypass = bypassSigningIDs; let native = coreSession
+        let timeout = idleSeconds; let bypass = sshTransportBypass; let native = coreSession
         let revision = generation; let policy = policyRevision; lock.unlock()
         guard isReady else { reject(flow, "Provider not ready or applying rules"); return true }
         guard let endpoint = tcp.remoteEndpoint as? NWHostEndpoint, let port = Int(endpoint.port) else {
@@ -176,9 +244,10 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
         // Only OS-observed signing identity. Never invent a path, PID, DNS name,
         // reverse-DNS result or resolved IP. Empty signing identity remains null.
         let signingID = flow.metaData.sourceAppSigningIdentifier
-        // Managed OpenSSH transport must never re-enter its own local SOCKS.
-        // IDs come from inspecting the actual /usr/bin/ssh code signature.
-        if bypass.contains(signingID) {
+        // Never exempt the whole /usr/bin/ssh signing identity: other SSH
+        // connections must obey ordinary application rules. Only the exact
+        // OS-observed carrier source AND literal remote server socket bypasses.
+        if bypass?.matches(signingID: signingID, host: endpoint.hostname, port: port) == true {
             guard matchesFlowSnapshot(source: source, native: native, revision: revision, policy: policy) else {
                 reject(flow, "Provider changed during transport exclusion"); return true
             }
@@ -198,7 +267,7 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
                 record("Direct: \(endpoint.hostname):\(port)"); return false
             }
             if type == "block" { reject(flow, "Blocked by policy"); return true }
-            if !bypass.isEmpty && signingID.isEmpty {
+            if bypass != nil && signingID.isEmpty {
                 reject(flow, "Unknown source identity cannot be proxied while SSH transport exclusion is required"); return true
             }
             let id = UUID()
