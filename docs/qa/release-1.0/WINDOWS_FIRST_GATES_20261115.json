@@ -115,7 +115,7 @@
         "depends_on": [
           "WIN-00"
         ],
-        "status": "WFP_ALE_SOURCE_V3_DRIVER_FFI_HOSTED_PASS_NATIVE_KERNEL_AUTH_AND_EGRESS_OPEN",
+        "status": "WFP_AUTH_R198_SOURCE_WDK_AND_HOSTED_CI_PASS_NATIVE_G2_NO_GO",
         "accepted": false,
         "evidence": [],
         "required_native_windows": true,
@@ -216,6 +216,34 @@
           "selected_no_direct_physically_proved": false,
           "native_g2_accepted": false,
           "checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_WFP_ALE_KERNEL_EPOCH_V3_20261115.json"
+        },
+        "r198_auth_product_source": {
+          "exact_pr": "https://github.com/i-shutov/flowbridge/pull/70",
+          "exact_source_sha": "162e1ee164da4445f53e5c0e42a6125191b837ba",
+          "stacked_on": "https://github.com/i-shutov/flowbridge/pull/69",
+          "focus_msvc_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43734387790",
+          "nine_actual_C_ticket_scenarios_pass": true,
+          "eight_r198_source_mutants_rejected": true,
+          "original_test_zip_sha256": "98888dd69e9960707cbbb2a13b42fe8bf274b75366446697414de4ce2632c660",
+          "kernel_wdk_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43734387780",
+          "wdk_x64_unsigned_sys_sha256": "f30a56b05328facc88c0e4d4786576f9dcd438048b0c781b6175235966cfe97e",
+          "wdk_original_zip_sha256": "213fdac2b048c1ddaaa837fd794f1c6bebbdf897a256f1c105c89a6543734d8c",
+          "portable_native_regression_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43734387782",
+          "portable_native_jobs": "5/5 SUCCESS",
+          "real_windows_bfe_scope_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43734387821",
+          "dns_code_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43734387828",
+          "current_ale_appid_filter_source": true,
+          "original_appid_broker_selfblock_source_guard": true,
+          "one_use_kernel_auth_record_source": true,
+          "selected_bypass_os_appid_collision_denied": true,
+          "reauthorize_fails_closed_until_proved": true,
+          "auth_ticket_capacity_no_reuse": 512,
+          "signed_driver_loaded": false,
+          "physical_outbound_ssh_appid_collision_proved": false,
+          "accepted_socket_terminal_claim_proved": false,
+          "physical_native_ipv4v6_no_direct_proved": false,
+          "g2_accepted": false,
+          "checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_WFP_AUTH_R198_20261115.json"
         }
       },
       {
