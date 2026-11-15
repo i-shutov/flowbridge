@@ -210,6 +210,24 @@
         "native_packet_owner_accepted": false,
         "native_reauth_accepted": false,
         "approved_production_backend": false
+      },
+      "gui_owner_epoch_fix": {
+        "exact_product_pr": "https://github.com/i-shutov/flowbridge/pull/67",
+        "source_sha": "fd8eb07705456528fc2c95b389eac029bab647ce",
+        "ci_win32": "https://github.com/i-shutov/flowbridge/actions/runs/43692346319",
+        "ci_native": "https://github.com/i-shutov/flowbridge/actions/runs/43692346177",
+        "ci_bfe": "https://github.com/i-shutov/flowbridge/actions/runs/43692346264",
+        "owner_process_epoch_hosted_verified": true,
+        "kernel_packet_process_epoch_verified": false,
+        "macos_portable_core_ci_preserved": true,
+        "original_artifact_sha256": [
+          "02442c77dac0b71cf01813e5bad73945ffa061a30ea1a0ba7c1113bb8bd014a2",
+          "3620e1e41765957eba5822b0f200568d1e9988cb9d8ad3b745f55e7d81c21454"
+        ],
+        "checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_GUI_OWNER_EPOCH_20261115.md",
+        "native_driver_signed_loaded": false,
+        "g2_packet_bound_pass": false,
+        "accepted": false
       }
     },
     {
@@ -439,7 +457,10 @@
     "release_go": "WINDOWS_1_0_NO_GO_G2_NATIVE_OWNER_UNPROVED",
     "macos_beta_and_native_release": "DEFERRED_NOT_ACCEPTED",
     "windows_first_roadmap": "docs/qa/release-1.0/WINDOWS_FIRST_1_0_ROADMAP_20261115.md",
-    "original_beta_candidate_source": "f5ecd48d8f81c594f755a55e7969b57d20903020"
+    "original_beta_candidate_source": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+    "windows_win01_gui_owner_epoch_subgate": "HOSTED_WIN32_PASS_KERNEL_PACKET_G2_NO_GO",
+    "windows_win01_gui_owner_epoch_checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_GUI_OWNER_EPOCH_20261115.json",
+    "windows_1_0_release": "NO_GO"
   },
   "windows_first_release": {
     "decision_date": "2026-11-15",
