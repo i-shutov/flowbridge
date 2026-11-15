@@ -465,6 +465,15 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT driver, PUNICODE_STRING registryPath) {
     callout.calloutKey = FB_WFP_CALLOUT6;
     status = FwpsCalloutRegister1(gDevice, &callout, &gCallout6);
     if (!NT_SUCCESS(status)) goto failure;
+    /* AUTH_CONNECT is a separate terminating decision boundary. Do not
+     * confuse a successful REDIRECT callback with AUTH or accepted socket. */
+    callout.classifyFn = FbAuthClassify;
+    callout.calloutKey = FB_WFP_AUTH_CALLOUT4;
+    status = FwpsCalloutRegister1(gDevice, &callout, &gAuthCallout4);
+    if (!NT_SUCCESS(status)) goto failure;
+    callout.calloutKey = FB_WFP_AUTH_CALLOUT6;
+    status = FwpsCalloutRegister1(gDevice, &callout, &gAuthCallout6);
+    if (!NT_SUCCESS(status)) goto failure;
     status = PsSetCreateProcessNotifyRoutineEx(FbProcessNotify, FALSE);
     if (!NT_SUCCESS(status)) goto failure;
     gEpochNotifierRegistered = TRUE;
