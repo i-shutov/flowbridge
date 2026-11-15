@@ -40,14 +40,23 @@
     "os_specific_drivers_in_shared_core_forbidden": true
   },
   "backend": {
-    "currently_authorized": "separately installed official signed NDISRD + clean-room Rust user mode",
+    "currently_authorized": "WFP/ALE Windows-first backend development and non-invasive tests; existing NDISRD source preserved",
     "owner_authorization_source": "https://github.com/i-shutov/flowbridge/issues/41",
     "observed_gap": "NDISRD packet buffers do not contain a kernel-origin per-packet owner PID + creation epoch; IP Helper or ETW tuple/time correlation is not an authenticated witness",
     "current_g2": "NO_GO",
-    "wfp_ale_alternative_approved": false,
+    "wfp_ale_alternative_approved": true,
     "third_party_connection_aware_alternative_approved": false,
     "backend_change_requires_explicit_owner_decision": true,
-    "native_kernel_acceptance": false
+    "native_kernel_acceptance": false,
+    "previous_product_authorization": "Separately installed official signed NDISRD + Rust user mode; superseded for new WFP/ALE product development by explicit owner permission 2026-11-15",
+    "wfp_ale_product_development_approved": true,
+    "wfp_ale_product_qa_approved": true,
+    "wfp_ale_native_driver_deployment_ready": false,
+    "production_wfp_driver_signed_and_approved": false,
+    "wfp_ale_native_win10_win11_acceptance": false,
+    "driver_load_requires_isolated_rollback_lab": true,
+    "owner_approval_basis": "User explicitly authorized moving to WFP/ALE development and testing on 2026-11-15",
+    "authorized_code_branch": "https://github.com/i-shutov/flowbridge/pull/69"
   },
   "windows_beta_0_3_0": {
     "scope": "Windows only optional prerelease preceding Windows 1.0; preserve unchanged original cross-platform candidate",
@@ -106,7 +115,7 @@
         "depends_on": [
           "WIN-00"
         ],
-        "status": "BLOCKED_KERNEL_ORIGIN_TRUST_GUI_OWNER_AND_DRIVER_PROVENANCE_HOSTED_PARTIAL",
+        "status": "WFP_ALE_DEVELOPMENT_AUTHORIZED_NATIVE_PROCESS_EPOCH_SOURCE_CI_PARTIAL_G2_NO_GO",
         "accepted": false,
         "evidence": [],
         "required_native_windows": true,
@@ -158,6 +167,23 @@
           "protected_mode_authorized": false,
           "windows_1_0_accepted": false,
           "checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_NDISRD_DRIVER_PROVENANCE_20261115.md"
+        },
+        "authorized_wfp_ale_development": {
+          "date": "2026-11-15",
+          "owner_permission": "WFP_ALE_DEVELOPMENT_AND_TESTING",
+          "source_pr": "https://github.com/i-shutov/flowbridge/pull/69",
+          "exact_code_head_at_checkpoint": "bd2d46315a4655d5ec95ae039b86586c2c80abd9",
+          "process_ledger": "OS PsSetCreateProcessNotifyRoutineEx → PID + PsGetProcessCreateTimeQuadPart + PsGetProcessStartKey",
+          "redirect_context_version": 3,
+          "drive_abi": 3,
+          "fail_closed_foreign_redirect": true,
+          "fail_closed_disabled_driver": true,
+          "original_wfp_native_status": "SOURCE_BUILD_AND_UNLOADED_ONLY",
+          "signed_kernel_native_loaded": false,
+          "ale_auth_connect_complete": false,
+          "physical_packet_bound": false,
+          "g2_accepted": false,
+          "report": "docs/qa/WINDOWS_WFP_EPOCH_V3_PRODUCT_20261115.md"
         }
       },
       {
