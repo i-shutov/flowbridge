@@ -1,9 +1,6 @@
 import Foundation
 import NetworkExtension
 import Darwin
-#if !FLOWBRIDGE_PROVIDER_TEST
-import Security
-#endif
 
 /// TCP-only transparent adapter. A false return means DIRECT, never BLOCK.
 /// Socket I/O is confined to per-flow queues. Each direction holds at most one
@@ -64,26 +61,7 @@ final class TransparentProxyProvider: NETransparentProxyProvider {
         return nil // hostname/zone notation cannot safely prove a carrier egress IP
     }
     private static func verifiedSystemSSHSigningID() -> String? {
-        #if FLOWBRIDGE_PROVIDER_TEST
-        return TestRuntime.shared.systemSSHSigningID
-        #else
-        // Inspect /usr/bin/ssh in the privileged extension itself. The
-        // requesting app's persisted providerConfiguration is not trusted to
-        // declare an arbitrary application signing identity as exempt.
-        let url = URL(fileURLWithPath: "/usr/bin/ssh")
-        var code: SecStaticCode?
-        var requirement: SecRequirement?
-        var info: CFDictionary?
-        guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess, let code,
-              SecRequirementCreateWithString("anchor apple" as CFString, [], &requirement) == errSecSuccess,
-              let requirement,
-              SecStaticCodeCheckValidity(code, [], requirement) == errSecSuccess,
-              SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
-              let attributes = info as? [String: Any],
-              let identity = attributes[kSecCodeInfoIdentifier as String] as? String,
-              !identity.isEmpty else { return nil }
-        return identity
-        #endif
+        SystemSSHCarrierIdentity.verifiedIdentifier()
     }
     private static func rule(_ host: String, port: Int, prefix: Int) -> NENetworkRule {
         NENetworkRule(remoteNetwork: NWHostEndpoint(hostname: host, port: String(port)), remotePrefix: prefix,
