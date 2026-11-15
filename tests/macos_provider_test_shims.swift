@@ -16,8 +16,11 @@ final class TestRuntime {
     var rejectReload = false
     var beforeCreate: (() -> Void)?
     var action = "proxy"
+    // Test-controlled result for the kernel-protected /usr/bin/ssh code
+    // signature check. In production this value comes from Apple Security.
+    var systemSSHSigningID: String? = "com.apple.openssh"
     var zeroHandle = false
-    func reset() { lock.lock(); destroyed = []; sequence = 100; lock.unlock(); beforeEvaluate = nil; beforeReload = nil; rejectReload = false; beforeCreate = nil; action = "proxy"; zeroHandle = false }
+    func reset() { lock.lock(); destroyed = []; sequence = 100; lock.unlock(); beforeEvaluate = nil; beforeReload = nil; rejectReload = false; beforeCreate = nil; action = "proxy"; systemSSHSigningID = "com.apple.openssh"; zeroHandle = false }
     func create() -> UInt64 { beforeCreate?(); if zeroHandle { return 0 }; lock.lock(); defer { lock.unlock() }; sequence += 1; return sequence }
     func destroy(_ id: UInt64) { lock.lock(); destroyed.append(id); lock.unlock() }
     func destructionCount(_ id: UInt64) -> Int { lock.lock(); defer { lock.unlock() }; return destroyed.filter { $0 == id }.count }
