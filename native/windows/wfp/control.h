@@ -4,7 +4,7 @@
 /* Include ntddk.h or Windows.h/winioctl.h first. Access is restricted to
  * SYSTEM/admin and bound to the exclusive owner's OS-authenticated process. */
 #define FB_WFP_DEVICE L"\\\\.\\FlowBridgeWfp"
-#define FB_WFP_ABI 2u
+#define FB_WFP_ABI 3u
 #define FB_IOCTL_CONFIGURE CTL_CODE(FILE_DEVICE_NETWORK, 0x801, METHOD_BUFFERED, FILE_WRITE_DATA)
 #define FB_IOCTL_DISABLE CTL_CODE(FILE_DEVICE_NETWORK, 0x802, METHOD_BUFFERED, FILE_WRITE_DATA)
 #define FB_IOCTL_QUERY CTL_CODE(FILE_DEVICE_NETWORK, 0x803, METHOD_BUFFERED, FILE_READ_DATA)
