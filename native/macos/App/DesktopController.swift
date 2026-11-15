@@ -116,11 +116,21 @@ final class DesktopController: ObservableObject {
             if settings.mode == 1 {
                 guard native.available else { throw Bridge.error("Прозрачный режим недоступен: нужен подписанный и одобренный Network Extension.") }
                 if settings.integratedSSH {
+                    // A globally exempt signing ID allows *all* /usr/bin/ssh
+                    // traffic DIRECT, not only the owned transport. Require
+                    // exact literal server IP:port to avoid unsound exemptions.
+                    guard literalIP(settings.sshHost), (1...65535).contains(settings.sshPort) else {
+                        throw Bridge.error("Прозрачный SSH требует буквальный IP сервера и порт 1–65535. Имена хостов не допускаются для исключения транспорта.")
+                    }
                     guard let identity = InstalledApplication.systemSSHSigningID() else {
                         throw Bridge.error("Не удалось проверить signing ID /usr/bin/ssh для защиты от повторного перехвата SSH.")
                     }
                     native.bypassSigningIDs = [identity]
-                } else { native.bypassSigningIDs = [] }
+                    native.sshTransportEndpoint = ["host": settings.sshHost, "port": settings.sshPort]
+                } else {
+                    native.bypassSigningIDs = []
+                    native.sshTransportEndpoint = nil
+                }
                 if settings.appSelectionEnabled {
                     applicationProfile = try appProfile(profile)
                     guard var bootstrap = try JSONSerialization.jsonObject(with: Data(profile.utf8)) as? [String: Any] else { throw Bridge.error("Некорректный профиль") }
