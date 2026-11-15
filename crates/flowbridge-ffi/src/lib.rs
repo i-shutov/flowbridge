@@ -872,10 +872,33 @@ mod wfp_tests {
             .unwrap()
             .contains("only on Windows"));
         #[cfg(windows)]
-        assert!(result["error"]
-            .as_str()
-            .unwrap()
-            .contains("native pre-connect preparation"));
+        {
+            // Selected WFP redirection must reject DIRECT even earlier than
+            // the outbound socket's OS redirect-record preparation.
+            assert!(result["error"].as_str().unwrap().contains("DIRECT is forbidden"));
+            let mut protected: Value =
+                serde_json::from_str(include_str!("../../../examples/direct.json")).unwrap();
+            protected["proxies"] = json!([{
+                "id":"required-upstream", "kind":"socks5",
+                "endpoint":{"host":"127.0.0.1","port":address.port()},
+                "username":null, "password_env":null
+            }]);
+            protected["default_action"] = json!({"type":"proxy","id":"required-upstream"});
+            let protected = CString::new(protected.to_string()).unwrap();
+            let blocked = unsafe {
+                consume(fb_stream_open_wfp_json(
+                    protected.as_ptr(),
+                    flow.as_ptr(),
+                    records.as_ptr(),
+                    records.len(),
+                ))
+            };
+            assert_eq!(blocked["ok"], false);
+            assert!(blocked["error"]
+                .as_str()
+                .unwrap()
+                .contains("native pre-connect preparation"));
+        }
         assert!(matches!(listener.accept(),Err(e) if e.kind()==std::io::ErrorKind::WouldBlock));
     }
 }
