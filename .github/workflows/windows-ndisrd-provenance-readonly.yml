@@ -1,0 +1,52 @@
+name: Windows native NDISRD driver provenance - read-only
+on:
+  pull_request:
+    paths:
+      - 'tools/windows/FlowBridge-NDISRD-DriverProvenance-ReadOnly.ps1'
+      - 'tests/ndisrd_driver_provenance_native.ps1'
+      - 'docs/qa/release-1.0/checkpoints/WIN01_NDISRD_DRIVER_PROVENANCE_20261115.md'
+      - '.github/workflows/windows-ndisrd-provenance-readonly.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-real-scm-file-provenance:
+    runs-on: windows-2025
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: PowerShell 5.1 native service/file Authenticode and negative controls
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/ndisrd_driver_provenance_native.ps1 -Probe tools/windows/FlowBridge-NDISRD-DriverProvenance-ReadOnly.ps1 -OutputRoot build/verification/ndisrd-provenance
+          if($LASTEXITCODE -ne 0){throw 'READONLY_NDISRD_NATIVE_PREFLIGHT_FAILED'}
+      - name: PowerShell 7 syntax and prohibit mutating commands
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $path='tools/windows/FlowBridge-NDISRD-DriverProvenance-ReadOnly.ps1'
+          $tokens=$null; $errors=$null
+          $ast=[System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path).Path,[ref]$tokens,[ref]$errors)
+          if($errors.Count -ne 0){throw 'POWERSHELL7_PARSE_FAILED'}
+          $calls=@($ast.FindAll({
+            param($node)
+            $node -is [System.Management.Automation.Language.CommandAst]
+          },$true) | ForEach-Object { $_.GetCommandName() })
+          foreach($command in @('Set-Service','Start-Service','Stop-Service','New-Service','Remove-Service',
+              'Set-ItemProperty','New-ItemProperty','Remove-ItemProperty','Set-NetFirewallRule',
+              'Set-MpPreference','Restart-Service','Invoke-Expression','sc.exe','bcdedit.exe',
+              'netsh.exe','fltmc.exe')) {
+            if($calls -contains $command){throw ('UNAUTHORIZED_MUTATION_COMMAND: '+$command)}
+          }
+          Write-Host 'PASS read-only command AST; no service/driver/registry/network mutation'
+      - name: Retain original native x64 JSON evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-NDISRD-ReadOnly-Provenance-${{ github.run_id }}
+          path: build/verification/ndisrd-provenance/*.json
+          if-no-files-found: warn
+          retention-days: 30
