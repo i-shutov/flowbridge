@@ -89,7 +89,10 @@ try {
     if ($HostedSystemDriverControl -and -not $IsHosted) {
         throw 'HOSTED_POSITIVE_CONTROL_NOT_AUTHORIZED'
     }
-    if ($ExpectedVendorSha256 -and $ExpectedVendorSha256 -notmatch '^[0-9a-fA-F]{64}
+    if ($ExpectedVendorSha256 -and $ExpectedVendorSha256 -notmatch '^[0-9a-fA-F]{64}$') {
+        throw 'INVALID_VENDOR_PIN_FORMAT'
+    }
+    if ($ExpectedComputerName) {
         $matchHost = $ExpectedComputerName.Equals([Environment]::MachineName,
                                                  [StringComparison]::OrdinalIgnoreCase)
         $Report.expected_host_matches = $matchHost
@@ -140,90 +143,6 @@ try {
                         $Report.supplied_vendor_reference_sha256_matches = $matchesPin
                         if (-not $matchesPin) { throw 'VENDOR_PIN_MISMATCH' }
                     }
-                    try {
-                        $sig = Get-AuthenticodeSignature -LiteralPath $image -ErrorAction Stop
-                        $Report.authenticode_status = [string]$sig.Status
-                        if ($null -ne $sig.SignerCertificate) {
-                            $Report.signer_subject = [string]$sig.SignerCertificate.Subject
-                        }
-                    } catch { $Report.authenticode_status = 'UNAVAILABLE' }
-                    $Report.status = 'FILE_PROVENANCE_OBSERVED_NOT_NATIVE_G2'
-                }
-            } catch {
-                $Report.image_path_status = 'PATH_REFUSED'
-                $Report.status = 'DRIVER_IMAGE_UNVERIFIED'
-                $Report.error_code = if ([string]$_.Exception.Message -match '^[A-Z][A-Z_]+$') {
-                    [string]$_.Exception.Message
-                } else { 'IMAGE_INSPECTION_FAILED' }
-            }
-        }
-    }
-} catch {
-    $Report.status = 'BLOCKED'
-    $Report.error_code = if ([string]$_.Exception.Message -match '^[A-Z][A-Z_]+$') {
-        [string]$_.Exception.Message
-    } else { 'READONLY_OBSERVATION_FAILED' }
-} finally {
-    # Only a caller-selected JSON is written; never modify the system.
-    $json = $Report | ConvertTo-Json -Depth 8
-    $full = [IO.Path]::GetFullPath($OutputPath)
-    $parent = Split-Path -Parent $full
-    if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
-        [void](New-Item -Path $parent -ItemType Directory -Force)
-    }
-    [IO.File]::WriteAllText($full,
-        $json + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
-    Write-Output $json
-}
-if ($Report.status -eq 'BLOCKED') { exit 2 }
-) {
-        throw 'INVALID_VENDOR_PIN_FORMAT'
-    }
-    if ($ExpectedComputerName) {
-        $matchHost = $ExpectedComputerName.Equals([Environment]::MachineName,
-                                                 [StringComparison]::OrdinalIgnoreCase)
-        $Report.expected_host_matches = $matchHost
-        if (-not $matchHost) { throw 'UNEXPECTED_HOST' }
-    }
-    $nt = Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction Stop
-    $Report.os_caption = [string]$nt.ProductName
-    $Report.os_build = [string]$nt.CurrentBuildNumber
-    $serviceKey = 'HKLM:\SYSTEM\CurrentControlSet\Services\' + $ServiceName
-    if (-not (Test-Path -LiteralPath $serviceKey -PathType Container)) {
-        $Report.service_registration = 'NOT_INSTALLED'
-        $Report.status = 'NO_LOCAL_DRIVER_READONLY'
-    } else {
-        $reg = Get-ItemProperty -LiteralPath $serviceKey -ErrorAction Stop
-        $Report.service_registration = 'REGISTERED'
-        $driverType = [int]$reg.Type
-        $Report.service_type = if (($driverType -band 1) -ne 0) { 'KERNEL_DRIVER' } else { 'NOT_KERNEL_DRIVER' }
-        try {
-            $svc = Get-Service -Name $ServiceName -ErrorAction Stop
-            $Report.service_state = [string]$svc.Status
-        } catch { $Report.service_state = 'UNKNOWN' }
-        if ($Report.service_type -ne 'KERNEL_DRIVER') {
-            $Report.status = 'NOT_KERNEL_DRIVER'
-        } elseif ($null -eq $reg.ImagePath) {
-            $Report.image_path_status = 'MISSING'
-            $Report.status = 'MISSING_DRIVER_IMAGE_PATH'
-        } else {
-            try {
-                $image = Resolve-DriverPath ([string]$reg.ImagePath)
-                $Report.image_basename = [IO.Path]::GetFileName($image)
-                if (-not (Test-Path -LiteralPath $image -PathType Leaf)) {
-                    $Report.image_path_status = 'FILE_NOT_FOUND'
-                    $Report.status = 'DRIVER_FILE_MISSING'
-                } else {
-                    $file = Get-Item -LiteralPath $image -ErrorAction Stop
-                    if ([bool]($file.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-                        throw 'DRIVER_IMAGE_REPARSE_POINT'
-                    }
-                    if ($file.Length -lt 4096 -or $file.Length -gt 67108864) {
-                        throw 'DRIVER_FILE_SIZE_OUT_OF_BOUNDS'
-                    }
-                    $Report.driver_file_size_bytes = [long]$file.Length
-                    $Report.driver_file_sha256 = (Get-FileHash -LiteralPath $image -Algorithm SHA256).Hash.ToLowerInvariant()
-                    $Report.image_path_status = 'EXISTS_HASHED'
                     try {
                         $sig = Get-AuthenticodeSignature -LiteralPath $image -ErrorAction Stop
                         $Report.authenticode_status = [string]$sig.Status
