@@ -46,7 +46,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - name: Syntax-check real-VM WFP harness without claiming driver acceptance
-        run: python -m py_compile tests/windows_wfp_redirect_runtime.py tests/windows_wfp_userchain_runtime.py tests/windows_dpi_matrix_vm.py tests/windows_openssh_capacity_vm.py
+        run: python -m py_compile tests/windows_wfp_redirect_runtime.py tests/windows_wfp_userchain_runtime.py tests/windows_owner_epoch.py tests/windows_gui_owner_helper_preflight.py tests/windows_dpi_matrix_vm.py tests/windows_openssh_capacity_vm.py
       - run: cargo fmt --all -- --check
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - run: cargo test --locked --workspace
@@ -128,6 +128,12 @@ jobs:
       - name: Build native WFP capture service
         run: cmake -S native/windows/wfp -B build/windows-capture -A x64 -DFLOWBRIDGE_FFI_LIBRARY="$env:GITHUB_WORKSPACE/target/release/flowbridge_ffi.dll.lib"
       - run: cmake --build build/windows-capture --config Release
+      - name: Real compiled helper refuses unverified GUI incarnation before driver setup
+        shell: pwsh
+        run: |
+          Copy-Item -LiteralPath target/release/flowbridge_ffi.dll -Destination build/windows-capture/Release/flowbridge_ffi.dll
+          python tests/windows_gui_owner_helper_preflight.py --helper build/windows-capture/Release/FlowBridgeCapture.exe --output build/verification/windows-owner-helper/result.json
+          if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_GUI_OWNER_EPOCH_HELPER_FAIL' }
       - run: choco install nsis --yes --no-progress
       - run: python packaging/windows/build-installer.py --skip-build
       - name: Reject dependencies on a separately installed Visual C++ runtime
@@ -160,6 +166,7 @@ jobs:
           name: FlowBridge-windows-verification
           path: |
             build/verification/windows/
+            build/verification/windows-owner-helper/
             docs/verification/windows-package.json
           if-no-files-found: warn
           retention-days: 14
