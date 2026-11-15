@@ -31,8 +31,7 @@ enum ConfigError {
 }
 
 fn config_image(name: &str) -> Result<String, ConfigError> {
-    let raw_scm =
-        unsafe { OpenSCManagerW(std::ptr::null(), std::ptr::null(), SC_MANAGER_CONNECT) };
+    let raw_scm = unsafe { OpenSCManagerW(std::ptr::null(), std::ptr::null(), SC_MANAGER_CONNECT) };
     if raw_scm.is_null() {
         return Err(ConfigError::OpenScm(unsafe { GetLastError() }));
     }
@@ -50,9 +49,8 @@ fn config_image(name: &str) -> Result<String, ConfigError> {
     let mut storage = vec![0usize; MAX_CONFIG_BYTES / std::mem::size_of::<usize>()];
     let config = storage.as_mut_ptr().cast::<QUERY_SERVICE_CONFIGW>();
     let mut needed = 0;
-    let success = unsafe {
-        QueryServiceConfigW(service.0, config, MAX_CONFIG_BYTES as u32, &mut needed)
-    };
+    let success =
+        unsafe { QueryServiceConfigW(service.0, config, MAX_CONFIG_BYTES as u32, &mut needed) };
     if success == 0 {
         return Err(ConfigError::QueryConfig(unsafe { GetLastError() }));
     }
@@ -66,7 +64,10 @@ fn config_image(name: &str) -> Result<String, ConfigError> {
     }
     let available = ((end - ptr) / std::mem::size_of::<u16>()).min(1025);
     let raw = unsafe { std::slice::from_raw_parts(ptr as *const u16, available) };
-    let length = raw.iter().position(|unit| *unit == 0).ok_or(ConfigError::InvalidConfig)?;
+    let length = raw
+        .iter()
+        .position(|unit| *unit == 0)
+        .ok_or(ConfigError::InvalidConfig)?;
     if length == 0 || length > 1024 {
         return Err(ConfigError::InvalidConfig);
     }
@@ -80,7 +81,9 @@ fn path_hint(raw: &str) -> Option<&str> {
         return None;
     }
     let lower = value.to_ascii_lowercase();
-    if !lower.ends_with(".sys") || lower.starts_with(r"\\") || lower.starts_with(r"\device\")
+    if !lower.ends_with(".sys")
+        || lower.starts_with(r"\\")
+        || lower.starts_with(r"\device\")
         || lower.split('\\').any(|part| part == "..")
     {
         return None;
@@ -153,10 +156,14 @@ mod tests {
         assert_eq!(observed["configured_image_observed"], true);
         assert_eq!(observed["configured_image_basename"], "ndisrd.sys");
         for gate in [
-            "image_sha256_checked", "image_signing_verified",
-            "loaded_driver_image_attested", "packet_process_epoch_available",
-            "ndisrd_kernel_connection_id_available", "protected_capture_authorized",
-            "g2_accepted", "release_accepted",
+            "image_sha256_checked",
+            "image_signing_verified",
+            "loaded_driver_image_attested",
+            "packet_process_epoch_available",
+            "ndisrd_kernel_connection_id_available",
+            "protected_capture_authorized",
+            "g2_accepted",
+            "release_accepted",
         ] {
             assert_eq!(observed[gate], false);
         }
@@ -172,13 +179,20 @@ mod tests {
     #[test]
     fn invalid_or_ambiguous_service_path_fails_read_only() {
         for value in [
-            "", r"..\fake.sys", r"\\server\ndisrd.sys", r"\Device\volume\ndisrd.sys",
-            r"C:\Windows\drivers\..\evil.sys", r"C:\Windows\ndisrd.exe",
+            "",
+            r"..\fake.sys",
+            r"\\server\ndisrd.sys",
+            r"\Device\volume\ndisrd.sys",
+            r"C:\Windows\drivers\..\evil.sys",
+            r"C:\Windows\ndisrd.exe",
             "bad\0driver.sys",
         ] {
             assert!(path_hint(value).is_none(), "unsafe path: {value:?}");
         }
-        assert_eq!(path_hint(r"C:\Windows\System32\drivers\NDISRD.sys"), Some("NDISRD.sys"));
+        assert_eq!(
+            path_hint(r"C:\Windows\System32\drivers\NDISRD.sys"),
+            Some("NDISRD.sys")
+        );
     }
 
     #[test]
@@ -186,7 +200,10 @@ mod tests {
         // On hosted Windows, TCPIP is a real installed system kernel driver.
         // Its filename is read with QUERY_CONFIG only. It is NOT NDISRD.
         let tcp = config_image("Tcpip").expect("Windows TCPIP SCM config unavailable");
-        assert_eq!(path_hint(&tcp).map(str::to_ascii_lowercase).as_deref(), Some("tcpip.sys"));
+        assert_eq!(
+            path_hint(&tcp).map(str::to_ascii_lowercase).as_deref(),
+            Some("tcpip.sys")
+        );
         let ndis = report();
         assert_eq!(ndis["read_only"], true);
         assert_eq!(ndis["packet_process_epoch_available"], false);
