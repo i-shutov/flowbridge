@@ -1,5 +1,19 @@
 # FlowBridge — исполнимый план до 1.0
 
+> **РЕШЕНИЕ ВЛАДЕЛЬЦА — 15 ноября 2026: WINDOWS-FIRST 1.0.**
+> Текущий приоритет: **Windows 10 Pro 22H2 x64 + Windows 11 Pro x64**;
+> macOS Network Extension, DNS, подписанные пакеты и ручная Apple Silicon/Intel QA
+> перенесены на следующий платформенный релиз. Код macOS и единый Rust-core
+> сохраняются и продолжают проходить portable-core CI.
+> **Канонический текущий план**: [WINDOWS_FIRST_1_0_ROADMAP_20261115.md](qa/release-1.0/WINDOWS_FIRST_1_0_ROADMAP_20261115.md).
+> **Машинный Windows-only контракт выпуска**: [WINDOWS_FIRST_GATES_20261115.json](qa/release-1.0/WINDOWS_FIRST_GATES_20261115.json).
+> Прежний текст ниже (включая формулировку «обе ОС в 1.0»)
+> — сохранённый исторический план, **не актуальная целевая матрица**.
+> Ничего из прежних macOS PASS не засчитывается как Windows proof:
+> Windows G2 kernel-origin connection provenance, native Win10/Win11 и fail-closed
+> остаются обязательными. `windows_1_0_accepted=false`, `version_1_0_accepted=false`.
+
+
 > **Актуальный срез на 13 ноября 2026:** [FlowBridge 1.0 — release rebaseline, beta/RC/G0–G6/R00–R10](qa/FLOWBRIDGE_RELEASE_REBASELINE_20261113.md).
 > [19 машиночитаемых gate-решений](qa/release-1.0/gate_status_20261113.json) — RELEASE NO-GO.
 > Следующий текст — **история и исходный контракт**, не текущая приёмка. Ветка main не меняется.
