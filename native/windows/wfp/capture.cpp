@@ -38,7 +38,23 @@ void verifyCallout(HANDLE engine, const GUID& key) {
 }
 }
 Capture::~Capture() { stop(); }
+void Capture::claim(const FbRedirectContext& context) {
+    const FbWfpClaim request{sizeof(FbWfpClaim),FB_WFP_ABI,context};
+    DWORD count=0;
+    // An accepted socket must first yield genuine WFP redirect records
+    // and context through WSAIoctl. The exclusive owner helper forwards
+    // that exact context to the kernel after initial ALE_AUTH_CONNECT.
+    // Any rejected/expired/replayed claim terminates the connection.
+    std::lock_guard<std::mutex> lock(ownerMutex_);
+    if (driver_==INVALID_HANDLE_VALUE)
+        throw std::runtime_error("WFP kernel claim refused: capture driver is stopped");
+    if (!DeviceIoControl(driver_,FB_IOCTL_CLAIM,
+                         const_cast<FbWfpClaim*>(&request),sizeof(request),
+                         nullptr,0,&count,nullptr))
+        check(GetLastError(),"WFP kernel terminal AUTH claim");
+}
 void Capture::stop() noexcept {
+    std::lock_guard<std::mutex> lock(ownerMutex_);
     // Dynamic session close atomically removes admissions before listeners stop.
     if (engine_) { FwpmEngineClose0(engine_); engine_=nullptr; }
     if (driver_!=INVALID_HANDLE_VALUE) {
