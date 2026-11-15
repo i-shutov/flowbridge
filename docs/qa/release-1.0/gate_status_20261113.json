@@ -190,7 +190,7 @@
     {
       "id": "R01",
       "track": "1.0",
-      "status": "WFP_ALE_PRODUCT_DEV_SOURCE_PASS_SIGNED_NATIVE_G2_OPEN",
+      "status": "WFP_AUTH_R198_SOURCE_PASS_SIGNED_NATIVE_G2_OPEN",
       "depends_on": [
         "R00"
       ],
@@ -279,6 +279,24 @@
         "physical_ipv4_ipv6_no_direct_proved": false,
         "independent_evidence_checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_WFP_ALE_KERNEL_EPOCH_V3_20261115.md",
         "g2_accepted": false
+      },
+      "r198_auth_source": {
+        "owner_wfp_development_authorized": true,
+        "product_pr": "https://github.com/i-shutov/flowbridge/pull/70",
+        "head": "162e1ee164da4445f53e5c0e42a6125191b837ba",
+        "current_appid_filters_and_one_use_auth_ticket_source": true,
+        "physical_proxy_ssh_appid_verified": false,
+        "initial_auth_record_consumed_in_native_lab": false,
+        "signed_driver_physically_loaded": false,
+        "native_no_direct_proved": false,
+        "main_no_merge": true,
+        "ci_msvc": "https://github.com/i-shutov/flowbridge/actions/runs/43734387790",
+        "ci_wdk": "https://github.com/i-shutov/flowbridge/actions/runs/43734387780",
+        "ci_general": "https://github.com/i-shutov/flowbridge/actions/runs/43734387782",
+        "original_auth_source_zip_sha256": "98888dd69e9960707cbbb2a13b42fe8bf274b75366446697414de4ce2632c660",
+        "original_wdk_zip_sha256": "213fdac2b048c1ddaaa837fd794f1c6bebbdf897a256f1c105c89a6543734d8c",
+        "checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_WFP_AUTH_R198_20261115.md",
+        "accepted": false
       }
     },
     {
@@ -522,7 +540,11 @@
     "windows_wfp_current_dev_head": "d242c3726904eed1bf5b5eb9998bc37d02ac90ba",
     "windows_wfp_source_gate": "WDK_NATIVE_C_RUST_FFI_HOSTED_PASS_NO_PHYSICAL",
     "windows_wfp_checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_WFP_ALE_KERNEL_EPOCH_V3_20261115.json",
-    "current_G2": "NO_GO"
+    "current_G2": "NO_GO",
+    "windows_win01_auth_r198": "HOSTED_SOURCE_WDK_SUCCESS_NATIVE_NO_GO",
+    "windows_win01_auth_r198_checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_WFP_AUTH_R198_20261115.json",
+    "windows_current_product_pr": "https://github.com/i-shutov/flowbridge/pull/70",
+    "kernel_g2_truth": "NO_GO"
   },
   "windows_first_release": {
     "decision_date": "2026-11-15",
