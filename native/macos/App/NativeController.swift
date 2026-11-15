@@ -13,6 +13,8 @@ final class NativeController: NSObject, ObservableObject, OSSystemExtensionReque
     @Published var snapshot: [String: Any] = [:]
     @Published var ports = "80,443"
     var bypassSigningIDs: [String] = []
+    // Exact remote SSH server socket; not a wildcard exemption by signing ID.
+    var sshTransportEndpoint: [String: Any]?
     var managedPort: Int?
     var upstreamReady = false
     var remoteDNS: [String: Any]?
@@ -87,8 +89,21 @@ final class NativeController: NSObject, ObservableObject, OSSystemExtensionReque
         if manager?.connection.status == .connected && !ownsSession {
             message = "Обнаружен ранее запущенный перехват. Сначала нажмите Остановить; его SSH-сеанс не принадлежит этому запуску."; return
         }
-        do { try Bridge.validate(profile); try verifyEmbedded(); _ = try capturePorts() }
-        catch { message = error.localizedDescription; return }
+        do {
+            try Bridge.validate(profile); try verifyEmbedded(); _ = try capturePorts()
+            if managedPort != nil {
+                guard bypassSigningIDs.count == 1,
+                      bypassSigningIDs.first == InstalledApplication.systemSSHSigningID(),
+                      let remote = sshTransportEndpoint,
+                      remote.count == 2,
+                      let host = remote["host"] as? String, !host.isEmpty,
+                      let port = remote["port"] as? Int, (1...65535).contains(port) else {
+                    throw Bridge.error("Transparent SSH requires an authenticated carrier identity and exact server IP:port")
+                }
+            } else if !bypassSigningIDs.isEmpty || sshTransportEndpoint != nil {
+                throw Bridge.error("SSH transport exclusions require an owned managed SSH session")
+            }
+        } catch { message = error.localizedDescription; return }
         operation += 1; providerSessionID = nil; busy = true; active = false; stopping = false; pendingProfile = profile
         ownsSession = true; dnsRequested = nil; dnsStopError = nil
         message = "Requesting extension activation; macOS may require approval in System Settings."
@@ -112,6 +127,7 @@ final class NativeController: NSObject, ObservableObject, OSSystemExtensionReque
                     let proto = NETunnelProviderProtocol(); proto.providerBundleIdentifier = self.extensionID
                     proto.serverAddress = "FlowBridge TCP proxy"
                     proto.providerConfiguration = ["profile": profile, "capturePorts": try self.capturePorts(), "bypassSigningIDs": self.bypassSigningIDs]
+                    if let remote = self.sshTransportEndpoint { proto.providerConfiguration?["sshTransport"] = remote }
                     if let port = self.managedPort {
                         proto.providerConfiguration?["managedEndpoint"] = ["host":"127.0.0.1","port":port]
                     }
