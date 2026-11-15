@@ -114,6 +114,33 @@ static int FbAuthConsumeObserved(FbAuthBook* book, const FbAuthOrigin* observed)
     book->slots[found].state = 2;
     return 1;
 }
+/*
+ * Terminal kernel claim, available only AFTER the native initial
+ * ALE_AUTH_CONNECT indication consumed this exact OS-origin record.
+ * A rejected/unknown request does not consume a good receipt. Successful
+ * claims are never replayable or recyclable within the driver session.
+ *
+ * The IOCTL caller is the exclusive, kernel-PID-checked elevated helper.
+ * This primitive matches the supplied context to a kernel-authenticated
+ * receipt; it is NOT by itself an OS proof of the *socket object* from
+ * which user-mode WSAIoctl obtained the context. Native G2 remains NO-GO.
+ */
+static int FbAuthClaim(FbAuthBook* book, const FbAuthOrigin* exact) {
+    unsigned i, matchIndex = FB_AUTH_CAP;
+    if (!book || book->lost || !FbAuthOriginValid(exact)) return 0;
+    for (i = 0; i < book->count; ++i) {
+        if (book->slots[i].state != 2 ||
+            !FbAuthEqual(&book->slots[i].origin, exact)) continue;
+        if (matchIndex != FB_AUTH_CAP) {
+            book->lost = 1; /* duplicate kernel AUTH receipt: poison */
+            return 0;
+        }
+        matchIndex = i;
+    }
+    if (matchIndex == FB_AUTH_CAP) return 0;
+    book->slots[matchIndex].state = 3;
+    return 1;
+}
 static int FbAuthRetire(FbAuthBook* book, const FbAuthOrigin* exact) {
     unsigned i;
     if (!book || !FbAuthOriginValid(exact)) return 0;
