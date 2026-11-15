@@ -1,0 +1,123 @@
+{
+  "schema": "flowbridge-windows-win01-r198-auth-source-checkpoint-v1",
+  "date": "2026-11-15",
+  "product": "FlowBridge 1.0 Windows-first",
+  "status": "AUTH_CURRENT_APPID_ONE_SHOT_SOURCE_AND_WDK_PASS_NATIVE_G2_NO_GO",
+  "exact_pr": "https://github.com/i-shutov/flowbridge/pull/70",
+  "exact_head_sha": "162e1ee164da4445f53e5c0e42a6125191b837ba",
+  "based_on_pr": "https://github.com/i-shutov/flowbridge/pull/69",
+  "owner_wfp_ale_development_and_testing_authorized": true,
+  "main_unchanged_sha": "5b5afc2feeda2195f302380e615ba003d4906e09",
+  "frozen_beta_unchanged_source": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+  "implementation": {
+    "layers": [
+      "FWPM_LAYER_ALE_AUTH_CONNECT_V4",
+      "FWPM_LAYER_ALE_AUTH_CONNECT_V6"
+    ],
+    "filter_app_identity": "FWPM_CONDITION_ALE_APP_ID current OS app ID, exact selected executable",
+    "filter_original_appid_is_unsafe_for_proxy_ssh": true,
+    "selected_and_bypass_canonical_os_appid_must_be_disjoint": true,
+    "kernel_source": "OS process create callback PID + epoch + start key; WFP transport endpoint and original destination",
+    "auth_ticket": "kernel-origin one-shot: PID, creation epoch, start key, endpoint handle, broker PID, original IPv4/IPv6 destination and TCP port, unique flow ID",
+    "initial_authorization_only": true,
+    "physical_proxy_socket_has_no_broker_pid_blanket_bypass": true,
+    "external_ssh_socket_cannot_consume_initial_redirect_ticket": true,
+    "when_action_write_absent": "may veto only existing PERMIT; may not promote BLOCK to PERMIT",
+    "fail_closed": [
+      "missing OS redirect metadata",
+      "non-loopback server",
+      "different selected app/endpoint/port",
+      "stale PID or wrong epoch",
+      "replayed ticket",
+      "ambiguous endpoint",
+      "auth book overflow",
+      "unknown process",
+      "reauthorization"
+    ],
+    "auth_ticket_capacity": 512,
+    "ticket_reclamation_generation_safe": false,
+    "reauthorization_supported": false,
+    "driver_device_abi": 3,
+    "redirect_context_bytes": 2136,
+    "physical_ssh_egress_original_appid_collision_resolved": false
+  },
+  "ci": {
+    "focused": {
+      "run_id": 43734387790,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/43734387790",
+      "jobs": "1/1 SUCCESS",
+      "native_msvc_auth_scenarios": 9,
+      "native_msvc_process_epoch_scenarios": 6,
+      "auth_source_mutations_rejected": 8,
+      "preexisting_epoch_kernel_rust_mutations_rejected": 9,
+      "original_artifact_id": 14170450066,
+      "original_zip_sha256": "98888dd69e9960707cbbb2a13b42fe8bf274b75366446697414de4ce2632c660",
+      "original_zip_crc": "PASS",
+      "original_json": [
+        "auth-r198.json",
+        "epoch-native.json"
+      ],
+      "kernel_callback_executed": false,
+      "native_wfp_g2_accepted": false
+    },
+    "wdk": {
+      "run_id": 43734387780,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/43734387780",
+      "jobs": "1/1 SUCCESS",
+      "original_artifact_id": 14170345625,
+      "original_zip_sha256": "213fdac2b048c1ddaaa837fd794f1c6bebbdf897a256f1c105c89a6543734d8c",
+      "original_zip_crc": "PASS",
+      "unsigned_sys_sha256": "f30a56b05328facc88c0e4d4786576f9dcd438048b0c781b6175235966cfe97e",
+      "unsigned_sys_bytes": 30208,
+      "pe_machine": "0x8664",
+      "force_integrity": true,
+      "pe_certificate_directory_bytes": 0,
+      "signed": false,
+      "installed_or_loaded": false
+    },
+    "real_windows_bfe_scope": {
+      "run_id": 43734387821,
+      "jobs": "1/1 SUCCESS",
+      "custom_kernel_driver_loaded": false
+    },
+    "general_rust_native": {
+      "run_id": 43734387782,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/43734387782",
+      "jobs": "5/5 SUCCESS",
+      "operating_systems": [
+        "Windows Server 2025 hosted",
+        "Ubuntu 24.04 hosted",
+        "macOS 15 hosted"
+      ],
+      "owner_windows10_or_windows11_tested": false
+    },
+    "dns_code": {
+      "run_id": 43734387828,
+      "jobs": "3/3 SUCCESS",
+      "physical_dns_no_leak_verified": false
+    }
+  },
+  "open_gates": {
+    "accepted_socket_terminal_kernel_claim": false,
+    "external_proxy_ssh_records_auth_identity_physical_verified": false,
+    "native_win10_signed_driver_loaded": false,
+    "native_win11_signed_driver_loaded": false,
+    "origin_process_kernel_callback_physical_verified": false,
+    "actual_ale_auth_connect_and_reauthorize_physical_verified": false,
+    "auth_capacity_recycling_verified": false,
+    "g2_packet_bound_accepted": false,
+    "selected_no_direct_packet_capture_proved": false,
+    "udp_quic_dns_v4v6_scope_verified": false,
+    "competing_bfe_hard_permit_and_dynamic_loss_proved": false,
+    "independent_egress_observer_and_rollback_accepted": false,
+    "publisher_signing_and_legal_approved": false
+  },
+  "release_state": {
+    "native_g2_accepted": false,
+    "windows_1_0_accepted": false,
+    "beta_release_accepted": false,
+    "native_driver_installation_executed": false,
+    "main_merged": false,
+    "release_tag_created": false
+  }
+}
