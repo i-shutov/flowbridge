@@ -16,6 +16,7 @@ import struct
 import sys
 import tempfile
 import time
+from windows_owner_epoch import creation_filetime
 
 
 def require(condition, message):
@@ -126,10 +127,11 @@ def main():
                 "Native driver probe returned an invalid boolean")
         # Trust-boundary regression on the REAL installed helper, independent
         # of whether a signed kernel driver is available on hosted CI.
+        owner_epoch = creation_filetime(os.getpid())
         rejected_ssh = subprocess.run(
             [str(capture), "--console", "--profile", str(install / "examples/direct.json"),
              "--capture-app", str(install / "FlowBridge.exe"),
-             "--gui-owner", str(os.getpid()),
+             "--gui-owner", str(os.getpid()), "--gui-owner-epoch", str(owner_epoch),
              "--stop-event", "Local\\FlowBridgeCaptureStop-QA",
              "--ssh-profile", str(install / "examples/direct.json")],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=10, text=True)
@@ -154,6 +156,7 @@ def main():
                 [str(capture), "--console", "--profile",
                  str(install / "examples/direct.json"), "--capture-app",
                  str(install / "FlowBridge.exe"), "--gui-owner", str(os.getpid()),
+                 "--gui-owner-epoch", str(owner_epoch),
                  "--stop-event", stop_name, "--profile-sha256", "0" * 64],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 timeout=10, text=True)
@@ -194,6 +197,7 @@ def main():
                         [str(capture),"--console","--profile",str(isolated_file),
                          "--capture-app",str(selected_exe),
                          "--gui-owner",str(fake_owner.pid),
+                         "--gui-owner-epoch",str(creation_filetime(fake_owner.pid)),
                          "--stop-event",stop_name,"--profile-sha256",verified_sha],
                         stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
                         text=True,timeout=12)
@@ -211,6 +215,7 @@ def main():
                         [str(capture),"--console","--profile",str(isolated_file),
                          "--capture-app",str(selected_exe),
                          "--gui-owner",str(os.getpid()),
+                         "--gui-owner-epoch",str(owner_epoch),
                          "--stop-event",stop_name,"--profile-sha256",verified_sha],
                         stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
                         text=True,timeout=12)
