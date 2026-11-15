@@ -54,17 +54,27 @@ def audit(texts: list[str]) -> None:
             "book->slots[matchIndex].state = 3;" in ticket and
             "!FbAuthEqual(&book->slots[i].origin, exact)" in ticket,
             "terminal_claim_replay_or_substituted_origin")
-    require("void Capture::claim(const FbRedirectContext& context)" in helper and
+    require("void Capture::claim(SOCKET accepted, const FbRedirectContext& context)" in helper and
             "DeviceIoControl(driver_,FB_IOCTL_CLAIM," in helper and
             "throw std::runtime_error(\"WFP kernel claim refused:" in helper,
             "user_mode_can_skip_actual_kernel_ioctl")
+    socket_start=helper.find("getsockname(accepted,reinterpret_cast<sockaddr*>(&address),&length)")
+    socket_guard=helper.find("v4->sin_addr.s_addr!=htonl(INADDR_LOOPBACK)")
+    family_guard=helper.find("context.address_family==AF_INET6")
+    claim_call=helper.find("DeviceIoControl(driver_,FB_IOCTL_CLAIM,")
+    require(0 <= socket_start < socket_guard < claim_call and
+            0 <= family_guard < claim_call and
+            "v4->sin_port!=port4be_" in helper and
+            "v6->sin6_port!=port6be_" in helper and
+            "in6addr_loopback" in helper,
+            "accepted_socket_family_loopback_or_broker_port_not_verified")
     require("std::lock_guard<std::mutex> lock(ownerMutex_);" in helper and
             "std::mutex ownerMutex_" in helper_header,
             "Stop_and_claim_driver_handle_race")
     begin = service.find("void handle(SOCKET raw")
     query = service.find("fb_wfp_query(raw,&context,records.data()", begin)
     stop_check = service.find("if(stopping) throw std::runtime_error(", query)
-    claim = service.find("capture.claim(context);", query)
+    claim = service.find("capture.claim(raw,context);", query)
     connect = service.find("fb_native_stream_open_wfp_json(", query)
     require(0 <= begin < query < stop_check < claim < connect,
             "claim_not_between_real_OS_WSAIoctl_and_Rust_outbound_socket")
@@ -88,7 +98,7 @@ class TerminalClaimSecurity(unittest.TestCase):
     def test_exact_production_source_includes_terminal_claim(self) -> None:
         audit(self.files)
 
-    def test_nine_adversarial_source_mutants_are_rejected(self) -> None:
+    def test_eleven_adversarial_source_mutants_are_rejected(self) -> None:
         mutations = [
             (0, "#define FB_WFP_ABI 4u", "#define FB_WFP_ABI 3u"),
             (1, "case FB_IOCTL_CLAIM:", "case FB_IOCTL_RETIRED:"),
@@ -98,8 +108,11 @@ class TerminalClaimSecurity(unittest.TestCase):
             (2, "book->slots[i].state != 2", "book->slots[i].state != 1"),
             (2, "book->slots[matchIndex].state = 3;", "book->slots[matchIndex].state = 2;"),
             (3, "DeviceIoControl(driver_,FB_IOCTL_CLAIM,", "DeviceIoControl(driver_,FB_IOCTL_QUERY,"),
-            (5, "capture.claim(context);", "// omitted terminal claim"),
+            (5, "capture.claim(raw,context);", "// omitted terminal claim"),
             (5, "fb_native_stream_open_wfp_json(", "fb_native_stream_open_without_claim_json("),
+            (3, "getsockname(accepted,reinterpret_cast<sockaddr*>(&address),&length)",
+             "FakeUnverifiedSocketName(accepted,&address,&length)"),
+            (3, "v4->sin_port!=port4be_", "false /* allow foreign broker port */"),
         ]
         for index, before, after in mutations:
             original = self.files[index]
