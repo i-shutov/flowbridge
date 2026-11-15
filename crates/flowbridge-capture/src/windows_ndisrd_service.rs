@@ -135,7 +135,11 @@ fn classify(result: Result<ObservedService, QueryFailure>) -> Value {
 /// An independent diagnostic. Even an installed, running driver service
 /// cannot authorize capture. Packet routing requires separate native proof.
 pub(super) fn report() -> Value {
-    classify(query())
+    let mut observation = classify(query());
+    // An independently queried SCM image is evidence of configuration only,
+    // not on-disk authenticity, loaded driver identity or packet authority.
+    observation["configured_image"] = crate::windows_ndisrd_image::report();
+    observation
 }
 
 #[cfg(test)]
