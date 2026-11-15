@@ -6,12 +6,15 @@
 #include <ws2ipdef.h>
 #include "../control.h"
 #include "../redirect_context.h"
+#include "../process_epoch.h"
 #define FB_POOL_TAG 'rBbF'
 C_ASSERT(sizeof(FbRedirectContext) == FB_REDIRECT_CONTEXT_BYTES);
 static PDEVICE_OBJECT gDevice;
 static HANDLE gRedirect;
 static UINT32 gCallout4, gCallout6;
 static KSPIN_LOCK gLock;
+static FbEpochTable gEpochTable;
+static BOOLEAN gEpochNotifierRegistered;
 static PFILE_OBJECT gOwner;
 static HANDLE gOwnerPid;
 static FbWfpConfig gConfig;
@@ -20,6 +23,34 @@ static BOOLEAN gLinkCreated;
 static volatile LONG64 gFlowId;
 static UNICODE_STRING gLink = RTL_CONSTANT_STRING(L"\\DosDevices\\FlowBridgeWfp");
 
+/*
+ * WFP process creation is an OS-origin event at PASSIVE_LEVEL. We capture
+ * immutable PsGetProcessCreateTimeQuadPart and PsGetProcessStartKey ONCE.
+ * An old process existing before driver startup has no entry and MUST fail
+ * closed until it is relaunched under the notifier. No user-space PID table.
+ *
+ * This is still an identity component, not complete G2: ALE_AUTH_CONNECT,
+ * BFE competing filters, redirect-record consumption and physical egress
+ * must independently be accepted.
+ */
+static VOID NTAPI FbProcessNotify(PEPROCESS process, HANDLE pid, PPS_CREATE_NOTIFY_INFO info) {
+    KIRQL irql;
+    FbEpochRecord record;
+    if (process == NULL || pid == NULL) return;
+    record.pid = (FbUint64)(ULONG_PTR)pid;
+    record.process_token = (FbUint64)(ULONG_PTR)process;
+    record.creation_100ns = (FbUint64)PsGetProcessCreateTimeQuadPart(process);
+    record.start_key = (FbUint64)PsGetProcessStartKey(process);
+    KeAcquireSpinLock(&gLock, &irql);
+    if (info != NULL) {
+        if (info->CreationStatus >= 0 && !gEpochTable.lost) {
+            (void)FbEpochInsert(&gEpochTable, record);
+        }
+    } else {
+        (void)FbEpochExit(&gEpochTable, record);
+    }
+    KeReleaseSpinLock(&gLock, irql);
+}
 static void FbBlock(FWPS_CLASSIFY_OUT0* out) {
     out->actionType = FWP_ACTION_BLOCK;
     out->rights &= ~FWPS_RIGHT_ACTION_WRITE;
@@ -30,6 +61,7 @@ static void NTAPI FbClassify(const FWPS_INCOMING_VALUES0* values,
     UINT64 flowContext, FWPS_CLASSIFY_OUT0* out) {
     KIRQL irql;
     FbWfpConfig config;
+    FbEpochRecord processEpoch;
     HANDLE ownerPid;
     BOOLEAN enabled, v4;
     UINT32 appIndex, protocolIndex;
@@ -46,7 +78,9 @@ static void NTAPI FbClassify(const FWPS_INCOMING_VALUES0* values,
     KeAcquireSpinLock(&gLock, &irql);
     enabled = gEnabled; config = gConfig; ownerPid = gOwnerPid;
     KeReleaseSpinLock(&gLock, irql);
-    if (!enabled) return;
+    /* Selected dynamic filters may outlive a disable/owner-close callback:
+     * returning PERMIT here would silently leak a protected app DIRECT. */
+    if (!enabled || gEpochTable.lost) { FbBlock(out); return; }
     v4 = values->layerId == FWPS_LAYER_ALE_CONNECT_REDIRECT_V4;
     if (!v4 && values->layerId != FWPS_LAYER_ALE_CONNECT_REDIRECT_V6) return;
     protocolIndex = v4 ? FWPS_FIELD_ALE_CONNECT_REDIRECT_V4_IP_PROTOCOL : FWPS_FIELD_ALE_CONNECT_REDIRECT_V6_IP_PROTOCOL;
@@ -54,11 +88,25 @@ static void NTAPI FbClassify(const FWPS_INCOMING_VALUES0* values,
     if (values->incomingValue[protocolIndex].value.uint8 != IPPROTO_TCP) return;
     if (!FWPS_IS_METADATA_FIELD_PRESENT(metadata, FWPS_METADATA_FIELD_PROCESS_ID)) { FbBlock(out); return; }
     if (metadata->processId == (UINT64)(ULONG_PTR)ownerPid) return;
+    /* OS-origin endpoint + process PID are mandatory for our selected flow.
+     * A PID-only late lookup is not a process-incarnation witness. */
+    if (!FWPS_IS_METADATA_FIELD_PRESENT(metadata, FWPS_METADATA_FIELD_TRANSPORT_ENDPOINT_HANDLE)
+        || metadata->transportEndpointHandle == 0) { FbBlock(out); return; }
+    KeAcquireSpinLock(&gLock, &irql);
+    {
+        const int present = FbEpochLookup(&gEpochTable, metadata->processId, &processEpoch);
+        KeReleaseSpinLock(&gLock, irql);
+        if (!present) { FbBlock(out); return; }
+    }
     if (FWPS_IS_METADATA_FIELD_PRESENT(metadata, FWPS_METADATA_FIELD_REDIRECT_RECORD_HANDLE)) {
         FWPS_CONNECTION_REDIRECT_STATE state = FwpsQueryConnectionRedirectState0(metadata->redirectRecords, gRedirect, NULL);
-        /* Respect another redirector. Its target is not the original endpoint.
-         * Capture coverage is explicitly reduced in this coexistence case. */
-        if (state != FWPS_CONNECTION_NOT_REDIRECTED) return;
+        /* A second provider's redirect target is NOT the original selected
+         * destination. The previous PERMIT here was an unguarded DIRECT escape.
+         * Only self-redirect recursion is permitted to continue; other
+         * redirection stays BLOCKED until independently accepted in G2. */
+        if (state == FWPS_CONNECTION_REDIRECTED_BY_SELF ||
+            state == FWPS_CONNECTION_PREVIOUSLY_REDIRECTED_BY_SELF) return;
+        if (state != FWPS_CONNECTION_NOT_REDIRECTED) { FbBlock(out); return; }
     }
     /* PROCESS_PATH is not available at CONNECT_REDIRECT. ALE_APP_ID is the
      * kernel-supplied UTF-16 executable identity field at this exact layer. */
@@ -77,6 +125,9 @@ static void NTAPI FbClassify(const FWPS_INCOMING_VALUES0* values,
     context->size = sizeof(*context); context->original_process_id = metadata->processId;
     context->flow_id = (UINT64)InterlockedIncrement64(&gFlowId);
     context->process_path_chars = (UINT16)chars;
+    context->original_process_creation_100ns = processEpoch.creation_100ns;
+    context->original_process_start_key = processEpoch.start_key;
+    context->original_transport_endpoint = metadata->transportEndpointHandle;
     RtlCopyMemory(context->process_path, app->data, chars * sizeof(UINT16));
     /* The API takes an opaque non-const pointer although classifyFn receives const. */
     status = FwpsAcquireClassifyHandle0((void*)classifyContext, 0, &classifyHandle);
@@ -86,8 +137,10 @@ static void NTAPI FbClassify(const FWPS_INCOMING_VALUES0* values,
     /* Every successful writable acquisition is paired with Apply, including
      * identity/family/coexistence rejection below. No early returns here. */
     if (request->previousVersion && request->previousVersion->localRedirectHandle) {
+        /* Other redirector's history is not a trusted process/endpoint
+         * handoff and must not be promoted to DIRECT. */
         ExFreePoolWithTag(context, FB_POOL_TAG);
-        out->actionType = FWP_ACTION_PERMIT;
+        FbBlock(out);
     } else if (v4 && request->remoteAddressAndPort.ss_family == AF_INET) {
         SOCKADDR_IN* target = (SOCKADDR_IN*)&request->remoteAddressAndPort;
         context->address_family = AF_INET; context->destination_port_be = target->sin_port;
@@ -162,6 +215,10 @@ static void FbUnload(PDRIVER_OBJECT driver) {
     KIRQL irql;
     UNREFERENCED_PARAMETER(driver);
     KeAcquireSpinLock(&gLock, &irql); gEnabled = FALSE; KeReleaseSpinLock(&gLock, irql);
+    if (gEpochNotifierRegistered) {
+        (void)PsSetCreateProcessNotifyRoutineEx(FbProcessNotify, TRUE);
+        gEpochNotifierRegistered = FALSE;
+    }
     /* Unregister waits for active inline classifications before destroying the
      * redirect handle. There are no flow contexts/pended classify operations. */
     if (gCallout6) FwpsCalloutUnregisterById0(gCallout6);
@@ -178,6 +235,7 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT driver, PUNICODE_STRING registryPath) {
     NTSTATUS status;
     UNREFERENCED_PARAMETER(registryPath);
     KeInitializeSpinLock(&gLock);
+    RtlZeroMemory(&gEpochTable, sizeof(gEpochTable));
     driver->DriverUnload = FbUnload;
     driver->MajorFunction[IRP_MJ_CREATE] = FbDispatch;
     driver->MajorFunction[IRP_MJ_CLEANUP] = FbDispatch;
@@ -197,6 +255,11 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT driver, PUNICODE_STRING registryPath) {
     callout.calloutKey = FB_WFP_CALLOUT6;
     status = FwpsCalloutRegister1(gDevice, &callout, &gCallout6);
     if (!NT_SUCCESS(status)) goto failure;
+    status = PsSetCreateProcessNotifyRoutineEx(FbProcessNotify, FALSE);
+    if (!NT_SUCCESS(status)) goto failure;
+    gEpochNotifierRegistered = TRUE;
+    /* No backfill of pre-existing process IDs: launch selected EXEs AFTER
+     * the signed driver and process notifier are active, or block. */
     gDevice->Flags &= ~DO_DEVICE_INITIALIZING;
     return STATUS_SUCCESS;
 failure:
