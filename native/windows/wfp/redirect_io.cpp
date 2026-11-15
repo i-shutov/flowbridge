@@ -10,6 +10,9 @@
 #include <cstddef>
 static_assert(offsetof(FbRedirectContext, original_process_id) == 8, "ABI offset");
 static_assert(offsetof(FbRedirectContext, destination_address) == 28, "ABI offset");
+static_assert(offsetof(FbRedirectContext, original_process_creation_100ns) == 2112, "V3 kernel epoch offset");
+static_assert(offsetof(FbRedirectContext, original_process_start_key) == 2120, "V3 start-key offset");
+static_assert(offsetof(FbRedirectContext, original_transport_endpoint) == 2128, "V3 endpoint offset");
 namespace {
 constexpr DWORD Limit = 65536;
 bool zeros(const uint8_t* p, size_t count) {
@@ -28,7 +31,9 @@ extern "C" int fb_wfp_query(SOCKET accepted, FbRedirectContext *context,
                  &candidate,sizeof(candidate),&count,nullptr,nullptr)==SOCKET_ERROR) return WSAGetLastError();
     if (count!=sizeof(candidate) || candidate.magic!=FB_REDIRECT_MAGIC ||
         candidate.version!=FB_REDIRECT_VERSION || candidate.size!=sizeof(candidate) ||
-        !candidate.original_process_id || !candidate.destination_port_be ||
+        !candidate.original_process_id || !candidate.original_process_creation_100ns ||
+        !candidate.original_process_start_key || !candidate.original_transport_endpoint ||
+        !candidate.destination_port_be ||
         !candidate.process_path_chars || candidate.process_path_chars >= FB_PROCESS_PATH_CHARS ||
         !zeros(candidate.reserved,sizeof(candidate.reserved))) return WSAEINVAL;
     if (candidate.address_family==AF_INET) {
