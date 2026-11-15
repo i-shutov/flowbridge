@@ -19,6 +19,7 @@
 
 Сохранение действующих TCP-сессий после физического разрыва SSH, UDP-over-SSH, NTLM/Kerberos и полная совместимость со всеми функциями Proxifier **не обещаются**. Ограничения должны быть отражены в UI и release notes.
 
+**Безопасность Windows 10 в 2026 году:** обычная поддержка Windows 10 22H2 закончилась 14.10.2025. Мы сохраняем Win10 Pro в test/compatibility матрице, но для честного публичного заявления о защищённом продукте нужно проверить статус и доступность актуальных ESU/security updates на конкретном Windows 10 стенде. Наличие работающей беты на необновляемой ОС не подтверждает безопасность всей системы. Microsoft публикует [lifecycle] (https://learn.microsoft.com/en-us/lifecycle/announcements/windows-10-end-of-support) и [ESU](https://www.microsoft.com/en-us/windows/end-of-support). 
 ## 2. Жёсткий P0: подлинное происхождение Windows-соединения
 
 **Текущая разрешённая продуктовая архитектура** по [Issue #41](https://github.com/i-shutov/flowbridge/issues/41): отдельно установленный официальный подписанный NDISRD, независимый Rust user-mode. Это разрешение не означает, что NDISRD пригоден для строгого G2: `INTERMEDIATE_BUFFER` не содержит доверенной привязки пакета к PID + epoch. IP Helper/ETW 5-tuple snapshots не являются эквивалентом kernel-origin witness. [Decision checkpoint](../WINDOWS_G2_BACKEND_DECISION_20261113.md).
