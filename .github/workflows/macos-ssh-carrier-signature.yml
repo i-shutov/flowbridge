@@ -1,0 +1,54 @@
+name: macOS original Apple system SSH signer source verification
+on:
+  pull_request:
+    paths:
+      - 'native/macos/Shared/SystemSSHCarrierIdentity.swift'
+      - 'native/macos/App/AppDiscovery.swift'
+      - 'native/macos/Extension/TransparentProxyProvider.swift'
+      - 'tests/macos_system_ssh_identity_runtime.swift'
+      - '.github/workflows/macos-ssh-carrier-signature.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  signed-system-ssh:
+    name: Real Apple Security framework / ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Apple root signer requirement and system SSH signature
+        shell: bash
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "$EXPECTED_ARCH" || { echo WRONG_CPU_ARCH; exit 1; }
+          if grep -q 'FLOWBRIDGE_PROVIDER_TEST' native/macos/project.yml; then
+            echo TEST_IDENTITY_FLAG_IN_PRODUCTION; exit 1
+          fi
+          codesign --verify --strict --verbose=2 -R='anchor apple' /usr/bin/ssh
+          mkdir -p build/carrier-identity
+          xcrun swiftc -swift-version 5 -warnings-as-errors \
+            native/macos/Shared/SystemSSHCarrierIdentity.swift \
+            tests/macos_system_ssh_identity_runtime.swift \
+            -framework Security -o build/carrier-identity/verify-system-ssh
+          build/carrier-identity/verify-system-ssh > build/carrier-identity/report.json
+          python3 -c 'import json,pathlib,os; r=json.loads(pathlib.Path("build/carrier-identity/report.json").read_text()); assert r["architecture"] == os.environ["EXPECTED_ARCH"]; assert r["real_security_framework_executed"] is True; assert r["network_extension_activated"] is False; assert r["owner_native_accepted"] is False; assert r["physical_no_direct_proved"] is False; assert r["release_accepted"] is False; print("APPLE_SIGNED_SYSTEM_SSH_REAL_SOURCE_PASS")'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: FlowBridge-MacCarrierSigner-${{ matrix.arch }}-${{ github.run_id }}
+          path: build/carrier-identity/report.json
+          if-no-files-found: warn
+          retention-days: 30
