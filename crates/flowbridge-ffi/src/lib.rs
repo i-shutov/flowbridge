@@ -409,6 +409,23 @@ fn open_stream(
 ) -> Result<Value, String> {
     open_stream_managed(config, flow, redirect_records, None)
 }
+/// An OS-redirected selected flow must NEVER become an unguarded DIRECT
+/// connection in Rust if the app rule is missing, stale, or misconfigured.
+/// The WFP record source is not itself an authorization to use DIRECT.
+fn require_wfp_upstream(
+    action: &Action,
+    route_hops: usize,
+    with_records: bool,
+) -> Result<(), String> {
+    if !with_records {
+        return Ok(()); // Explicit SOCKS keeps its separately validated policy.
+    }
+    match action {
+        Action::Proxy { .. } | Action::Chain { .. } if route_hops > 0 => Ok(()),
+        Action::Block => Err("WFP selected connection blocked by policy".into()),
+        _ => Err("WFP selected connection requires a nonempty protected proxy route; DIRECT is forbidden".into()),
+    }
+}
 fn open_stream_managed(
     config: Config,
     flow: Flow,
@@ -421,6 +438,8 @@ fn open_stream_managed(
         return Err("connection blocked by policy".into());
     }
     let route = config.route(&decision.action).map_err(|e| e.to_string())?;
+    // Fail *before* any socket, credential lookup or stream lease is opened.
+    require_wfp_upstream(&decision.action, route.len(), redirect_records.is_some())?;
     let lease = StreamLease::reserve()?;
     let session = native.clone();
     let (socket, admission) = std::thread::Builder::new().name("flowbridge-connect".into())
@@ -853,10 +872,36 @@ mod wfp_tests {
             .unwrap()
             .contains("only on Windows"));
         #[cfg(windows)]
-        assert!(result["error"]
-            .as_str()
-            .unwrap()
-            .contains("native pre-connect preparation"));
+        {
+            // Selected WFP redirection must reject DIRECT even earlier than
+            // the outbound socket's OS redirect-record preparation.
+            assert!(result["error"]
+                .as_str()
+                .unwrap()
+                .contains("DIRECT is forbidden"));
+            let mut protected: Value =
+                serde_json::from_str(include_str!("../../../examples/direct.json")).unwrap();
+            protected["proxies"] = json!([{
+                "id":"required-upstream", "kind":"socks5",
+                "endpoint":{"host":"127.0.0.1","port":address.port()},
+                "username":null, "password_env":null
+            }]);
+            protected["default_action"] = json!({"type":"proxy","id":"required-upstream"});
+            let protected = CString::new(protected.to_string()).unwrap();
+            let blocked = unsafe {
+                consume(fb_stream_open_wfp_json(
+                    protected.as_ptr(),
+                    flow.as_ptr(),
+                    records.as_ptr(),
+                    records.len(),
+                ))
+            };
+            assert_eq!(blocked["ok"], false);
+            assert!(blocked["error"]
+                .as_str()
+                .unwrap()
+                .contains("native pre-connect preparation"));
+        }
         assert!(matches!(listener.accept(),Err(e) if e.kind()==std::io::ErrorKind::WouldBlock));
     }
 }
@@ -1350,5 +1395,26 @@ mod ssh_and_gate_tests {
             unsafe { consume(fb_engine_set_upstream_gate_json(id, value.as_ptr())) }["ok"],
             false
         );
+    }
+}
+
+#[cfg(test)]
+mod wfp_selected_direct_denial_tests {
+    use super::*;
+
+    #[test]
+    fn captured_selected_direct_is_denied_before_any_network_io() {
+        assert!(require_wfp_upstream(&Action::Direct, 0, true).is_err());
+        assert!(require_wfp_upstream(&Action::Block, 0, true).is_err());
+        assert!(require_wfp_upstream(&Action::Proxy { id: "p".into() }, 0, true).is_err());
+        assert!(require_wfp_upstream(&Action::Chain { id: "c".into() }, 0, true).is_err());
+    }
+
+    #[test]
+    fn protected_upstream_is_required_but_explicit_socks_direct_is_unchanged() {
+        assert!(require_wfp_upstream(&Action::Proxy { id: "p".into() }, 1, true).is_ok());
+        assert!(require_wfp_upstream(&Action::Chain { id: "c".into() }, 2, true).is_ok());
+        assert!(require_wfp_upstream(&Action::Direct, 0, false).is_ok());
+        assert!(require_wfp_upstream(&Action::Block, 0, false).is_ok());
     }
 }

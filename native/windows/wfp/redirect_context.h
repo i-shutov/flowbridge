@@ -1,12 +1,14 @@
 #ifndef FLOWBRIDGE_REDIRECT_CONTEXT_H
 #define FLOWBRIDGE_REDIRECT_CONTEXT_H
 #include "wire_types.h"
-/* Version 2 copies WFP ALE_APP_ID at classify time. Identity remains valid
- * after process exit/PID reuse. UTF-16 and all offsets match the Rust decoder. */
+/* V3: copies OS ALE_APP_ID and authenticated birth/start-key from the
+ * kernel process-creation callback's bounded live ledger. Identity remains
+ * immutable on the accepted socket, not from a post-hoc PID/tuple snapshot.
+ * This is not yet native G2/no-DIRECT acceptance. */
 #define FB_REDIRECT_MAGIC 0x46425243u
-#define FB_REDIRECT_VERSION 2u
+#define FB_REDIRECT_VERSION 3u
 #define FB_PROCESS_PATH_CHARS 1024u
-#define FB_REDIRECT_CONTEXT_BYTES 2112u
+#define FB_REDIRECT_CONTEXT_BYTES 2136u
 typedef struct FbRedirectContext {
     FbUint32 magic;
     FbUint16 version;
@@ -20,6 +22,9 @@ typedef struct FbRedirectContext {
     FbUint16 process_path_chars;
     FbUint8 reserved[14];
     FbUint16 process_path[FB_PROCESS_PATH_CHARS];
+    FbUint64 original_process_creation_100ns;
+    FbUint64 original_process_start_key;
+    FbUint64 original_transport_endpoint;
 } FbRedirectContext;
 #ifdef __cplusplus
 static_assert(sizeof(FbRedirectContext) == FB_REDIRECT_CONTEXT_BYTES, "Redirect ABI drift");
