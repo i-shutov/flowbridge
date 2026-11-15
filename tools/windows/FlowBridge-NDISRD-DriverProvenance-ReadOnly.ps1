@@ -178,4 +178,4 @@ try {
         $json + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
     Write-Output $json
 }
-if ($Report.status -eq 'BLOCKED') { exit 2 }
+if ($Report.status -eq 'BLOCKED' -or $Report.error_code -eq 'VENDOR_PIN_MISMATCH') { exit 2 }
