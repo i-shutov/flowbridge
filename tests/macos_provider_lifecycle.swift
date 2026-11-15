@@ -410,37 +410,37 @@ func carrierFlow(_ host: String, port: Int, signingID: String) -> NEAppProxyTCPF
 }
 func carrierOnlyExactSystemSSHDestinationBypasses() throws {
     let probe = SettingsProbe(); let p = try provider(probe)
-    configureCarrier(p, signingIDs: ["com.apple.openssh"])
+    configureCarrier(p, signingIDs: ["com.apple.ssh"])
     _ = try start(p, probe)
     TestRuntime.shared.action = "block"
-    let transport = carrierFlow("203.0.113.3", port: 22, signingID: "com.apple.openssh")
+    let transport = carrierFlow("203.0.113.3", port: 22, signingID: "com.apple.ssh")
     try expect(p.handleNewFlow(transport) == false && transport.readError == nil,
                "exact attested SSH transport was not bypassed")
     try stop(p, probe)
 }
 func carrierOtherSSHHostFollowsProtectedPolicy() throws {
     let probe = SettingsProbe(); let p = try provider(probe)
-    configureCarrier(p, signingIDs: ["com.apple.openssh"])
+    configureCarrier(p, signingIDs: ["com.apple.ssh"])
     _ = try start(p, probe)
     TestRuntime.shared.action = "block"
-    let unrelated = carrierFlow("203.0.113.99", port: 22, signingID: "com.apple.openssh")
+    let unrelated = carrierFlow("203.0.113.99", port: 22, signingID: "com.apple.ssh")
     try expect(p.handleNewFlow(unrelated) && unrelated.readError != nil,
                "non-carrier SSH destination escaped DIRECT")
     try stop(p, probe)
 }
 func carrierDifferentPortIsNotExempt() throws {
     let probe = SettingsProbe(); let p = try provider(probe)
-    configureCarrier(p, signingIDs: ["com.apple.openssh"])
+    configureCarrier(p, signingIDs: ["com.apple.ssh"])
     _ = try start(p, probe)
     TestRuntime.shared.action = "block"
-    let unrelated = carrierFlow("203.0.113.3", port: 2222, signingID: "com.apple.openssh")
+    let unrelated = carrierFlow("203.0.113.3", port: 2222, signingID: "com.apple.ssh")
     try expect(p.handleNewFlow(unrelated) && unrelated.readError != nil,
                "same SSH IP with wrong port escaped DIRECT")
     try stop(p, probe)
 }
 func carrierWrongAppIDCannotClaimSSHExemption() throws {
     let probe = SettingsProbe(); let p = try provider(probe)
-    configureCarrier(p, signingIDs: ["com.apple.openssh"])
+    configureCarrier(p, signingIDs: ["com.apple.ssh"])
     _ = try start(p, probe)
     TestRuntime.shared.action = "block"
     let unrelated = carrierFlow("203.0.113.3", port: 22, signingID: "test.application")
@@ -450,7 +450,7 @@ func carrierWrongAppIDCannotClaimSSHExemption() throws {
 }
 func carrierUnknownAppIDFailsClosed() throws {
     let probe = SettingsProbe(); let p = try provider(probe)
-    configureCarrier(p, signingIDs: ["com.apple.openssh"])
+    configureCarrier(p, signingIDs: ["com.apple.ssh"])
     _ = try start(p, probe)
     TestRuntime.shared.action = "direct"
     let unknown = carrierFlow("203.0.113.3", port: 22, signingID: "")
@@ -460,23 +460,23 @@ func carrierUnknownAppIDFailsClosed() throws {
 }
 func carrierIPv6FormsAreComparedByCanonicalBytes() throws {
     let probe = SettingsProbe(); let p = try provider(probe)
-    configureCarrier(p, signingIDs: ["com.apple.openssh"], host: "2001:db8::7")
+    configureCarrier(p, signingIDs: ["com.apple.ssh"], host: "2001:db8::7")
     _ = try start(p, probe)
     TestRuntime.shared.action = "block"
     let equal = carrierFlow("2001:0db8:0:0:0:0:0:7", port: 22,
-                            signingID: "com.apple.openssh")
+                            signingID: "com.apple.ssh")
     try expect(p.handleNewFlow(equal) == false, "canonical IPv6 SSH endpoint was not exempt")
-    let wrong = carrierFlow("2001:db8::8", port: 22, signingID: "com.apple.openssh")
+    let wrong = carrierFlow("2001:db8::8", port: 22, signingID: "com.apple.ssh")
     try expect(p.handleNewFlow(wrong) && wrong.readError != nil,
                "different IPv6 endpoint was exempt by textual prefix")
     try stop(p, probe)
 }
 func carrierIPv4MappedIPv6CannotAliasProof() throws {
     let probe = SettingsProbe(); let p = try provider(probe)
-    configureCarrier(p, signingIDs: ["com.apple.openssh"], host: "203.0.113.3")
+    configureCarrier(p, signingIDs: ["com.apple.ssh"], host: "203.0.113.3")
     _ = try start(p, probe)
     TestRuntime.shared.action = "block"
-    let mapped = carrierFlow("::ffff:203.0.113.3", port: 22, signingID: "com.apple.openssh")
+    let mapped = carrierFlow("::ffff:203.0.113.3", port: 22, signingID: "com.apple.ssh")
     try expect(p.handleNewFlow(mapped) && mapped.readError != nil,
                "v4-mapped IPv6 supplied a second unproved transport exemption")
     try stop(p, probe)
@@ -493,21 +493,21 @@ func carrierRejectsUntrustedOrMissingTransportConfig() throws {
     for input in 0..<7 {
         let probe = SettingsProbe(); let p = try provider(probe)
         switch input {
-        case 0: configureCarrier(p, signingIDs: ["com.apple.openssh"], host: nil)
-        case 1: configureCarrier(p, signingIDs: ["com.apple.openssh"], host: "example.com")
-        case 2: configureCarrier(p, signingIDs: ["com.apple.openssh"], host: "0.0.0.0", port: 0)
-        case 3: configureCarrier(p, signingIDs: ["com.apple.openssh"], port: 65536)
-        case 4: configureCarrier(p, signingIDs: ["com.apple.openssh", "test.application"])
-        case 5: configureCarrier(p, signingIDs: ["com.apple.openssh"], managed: false)
+        case 0: configureCarrier(p, signingIDs: ["com.apple.ssh"], host: nil)
+        case 1: configureCarrier(p, signingIDs: ["com.apple.ssh"], host: "example.com")
+        case 2: configureCarrier(p, signingIDs: ["com.apple.ssh"], host: "0.0.0.0", port: 0)
+        case 3: configureCarrier(p, signingIDs: ["com.apple.ssh"], port: 65536)
+        case 4: configureCarrier(p, signingIDs: ["com.apple.ssh", "test.application"])
+        case 5: configureCarrier(p, signingIDs: ["com.apple.ssh"], managed: false)
         default:
-            configureCarrier(p, signingIDs: ["com.apple.openssh"])
+            configureCarrier(p, signingIDs: ["com.apple.ssh"])
             TestRuntime.shared.systemSSHSigningID = nil
         }
         let result = Completion(); p.startProxy(options: nil, completionHandler: result.call)
         try wait(result.done, "invalid SSH carrier config did not finish")
         try expect(result.failed && probe.count == 0,
                    "invalid SSH carrier installed NetworkExtension settings")
-        TestRuntime.shared.systemSSHSigningID = "com.apple.openssh"
+        TestRuntime.shared.systemSSHSigningID = "com.apple.ssh"
     }
 }
 
