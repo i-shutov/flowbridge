@@ -412,7 +412,11 @@ fn open_stream(
 /// An OS-redirected selected flow must NEVER become an unguarded DIRECT
 /// connection in Rust if the app rule is missing, stale, or misconfigured.
 /// The WFP record source is not itself an authorization to use DIRECT.
-fn require_wfp_upstream(action: &Action, route_hops: usize, with_records: bool) -> Result<(), String> {
+fn require_wfp_upstream(
+    action: &Action,
+    route_hops: usize,
+    with_records: bool,
+) -> Result<(), String> {
     if !with_records {
         return Ok(()); // Explicit SOCKS keeps its separately validated policy.
     }
@@ -1367,7 +1371,6 @@ mod ssh_and_gate_tests {
         );
     }
 }
-
 
 #[cfg(test)]
 mod wfp_selected_direct_denial_tests {
