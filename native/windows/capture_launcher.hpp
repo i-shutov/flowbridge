@@ -7,6 +7,7 @@
 #include <vector>
 #include <stdexcept>
 #include "profile_integrity.hpp"
+#include "gui_owner_epoch.hpp"
 
 // Unprivileged GUI owns the stop event and observes an elevated helper.
 // The helper also watches the GUI PID, so abnormal GUI exit removes dynamic
@@ -34,10 +35,10 @@ inline std::wstring wideDigest(const std::string& digest) {
 inline std::wstring arguments(const std::wstring& profile,
                              const std::wstring& ssh,
                              const std::vector<std::wstring>& apps,
-                             DWORD owner, const std::wstring& eventName,
+                             DWORD owner, std::uint64_t ownerEpoch, const std::wstring& eventName,
                              const std::vector<std::wstring>& bypass,
                              const std::string& profileDigest) {
-    if (!owner || apps.empty() || apps.size()>64 || bypass.size()>16 ||
+    if (!owner || !ownerEpoch || apps.empty() || apps.size()>64 || bypass.size()>16 ||
         !std::filesystem::path(profile).is_absolute())
         throw std::runtime_error("Native capture requires an owner, profile, and 1..64 EXE paths");
     if(!ssh.empty() && !std::filesystem::path(ssh).is_absolute())
@@ -47,6 +48,7 @@ inline std::wstring arguments(const std::wstring& profile,
     if(!profile_integrity::valid(profileDigest))
         throw std::runtime_error("Native capture requires exact SHA-256 of its validated profile");
     std::wstring command=L"--console --profile "+quote(profile)+L" --gui-owner "+std::to_wstring(owner)+
+                         L" --gui-owner-epoch "+std::to_wstring(ownerEpoch)+
                          L" --stop-event "+quote(eventName)+L" --profile-sha256 "+wideDigest(profileDigest);
     if(!ssh.empty())command+=L" --ssh-profile "+quote(ssh);
     for(const auto& path:apps) {
@@ -109,7 +111,8 @@ public:
         HANDLE control=CreateEventW(nullptr,TRUE,FALSE,name.c_str());
         if(!control||GetLastError()==ERROR_ALREADY_EXISTS){if(control)CloseHandle(control);throw std::runtime_error("Capture event creation failed");}
         try {
-            auto params=arguments(profile,ssh,apps,GetCurrentProcessId(),name,bypass,profileDigest);
+            auto params=arguments(profile,ssh,apps,GetCurrentProcessId(),
+                                  gui_owner_epoch::current(),name,bypass,profileDigest);
             SHELLEXECUTEINFOW launch{};
             launch.cbSize=sizeof(launch);
             launch.fMask=SEE_MASK_NOCLOSEPROCESS|SEE_MASK_FLAG_NO_UI;
