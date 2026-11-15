@@ -106,7 +106,7 @@
         "depends_on": [
           "WIN-00"
         ],
-        "status": "BLOCKED_KERNEL_ORIGIN_TRUST_GUI_OWNER_SUBGATE_HOSTED_PASS",
+        "status": "BLOCKED_KERNEL_ORIGIN_TRUST_GUI_OWNER_AND_DRIVER_PROVENANCE_HOSTED_PARTIAL",
         "accepted": false,
         "evidence": [],
         "required_native_windows": true,
@@ -132,6 +132,32 @@
           "owner_win10_accepted": false,
           "owner_win11_accepted": false,
           "release_accepted": false
+        },
+        "r1_ndisrd_driver_provenance": {
+          "pull_request": "https://github.com/i-shutov/flowbridge/pull/68",
+          "exact_code_sha": "5528fb5962fcb6e1bd008d2f42debef6dd95f967",
+          "code_base": "integration/windows-rust-capture-agent-20261031",
+          "focus_run": "https://github.com/i-shutov/flowbridge/actions/runs/43706911211",
+          "focus_ci": "1/1 SUCCESS",
+          "original_artifact_id": 14159275280,
+          "artifact_sha256": "18ade9427ae8b18e26f15d3b4c1f541988b89706f7f7d8282c2703357496bf59",
+          "artifact_crc": "PASS",
+          "native_windows_reports": 6,
+          "authentic_vendor_ndisrd_on_hosted": "NOT_INSTALLED",
+          "real_system_driver_positive_control": "Tcpip Authenticode Valid; not product NDISRD",
+          "vendor_reference_negative_controls": "explicit match PASS; mismatched and malformed hash refused",
+          "source_rust_readonly_scm_config_build": "https://github.com/i-shutov/flowbridge/actions/runs/43706911213",
+          "general_cross_platform": "5/5 SUCCESS",
+          "g2_evidence_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43706911217",
+          "g2_kernel_connection_id_verified": false,
+          "g2_kernel_owner_ci_failure_preserved": true,
+          "owner_windows10_ndisrd_driver_proved": false,
+          "owner_windows11_ndisrd_driver_proved": false,
+          "vendor_signature_independently_approved": false,
+          "signed_loaded_image_approved": false,
+          "protected_mode_authorized": false,
+          "windows_1_0_accepted": false,
+          "checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_NDISRD_DRIVER_PROVENANCE_20261115.md"
         }
       },
       {
