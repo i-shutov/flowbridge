@@ -63,12 +63,12 @@ static void FbBlock(FWPS_CLASSIFY_OUT0* out) {
  * process departure, route disable and ticket insertion.
  */
 static BOOLEAN FbIssueOriginalReceipt(const FbRedirectContext* context,
-                                      HANDLE broker, FbAuthOrigin* issued) {
+                                      HANDLE broker) {
     FbAuthOrigin item = {0};
     FbEpochRecord current = {0};
     KIRQL irql;
     int ok = 0;
-    if (!context || !issued || !broker || context->ipv6_scope_id)
+    if (!context || !broker || context->ipv6_scope_id)
         return FALSE;
     item.pid = context->original_process_id;
     item.creation_100ns = context->original_process_creation_100ns;
@@ -87,7 +87,6 @@ static BOOLEAN FbIssueOriginalReceipt(const FbRedirectContext* context,
         current.start_key == item.process_start_key)
         ok = FbAuthIssue(&gAuthBook, &item);
     KeReleaseSpinLock(&gLock, irql);
-    if (ok) *issued = item;
     return (BOOLEAN)ok;
 }
 
@@ -252,8 +251,6 @@ static void NTAPI FbClassify(const FWPS_INCOMING_VALUES0* values,
     FWPS_CONNECT_REQUEST0* request = NULL;
     UINT64 classifyHandle = 0;
     NTSTATUS status;
-    FbAuthOrigin stagedReceipt = {0};
-    BOOLEAN staged = FALSE;
     UNREFERENCED_PARAMETER(layerData);
     UNREFERENCED_PARAMETER(flowContext);
     if (!(out->rights & FWPS_RIGHT_ACTION_WRITE)) return;
@@ -329,10 +326,9 @@ static void NTAPI FbClassify(const FWPS_INCOMING_VALUES0* values,
         SOCKADDR_IN* target = (SOCKADDR_IN*)&request->remoteAddressAndPort;
         context->address_family = AF_INET; context->destination_port_be = target->sin_port;
         RtlCopyMemory(context->destination_address, &target->sin_addr, 4);
-        if (!FbIssueOriginalReceipt(context, ownerPid, &stagedReceipt)) {
+        if (!FbIssueOriginalReceipt(context, ownerPid)) {
             ExFreePoolWithTag(context, FB_POOL_TAG); FbBlock(out);
         } else {
-        staged = TRUE;
         RtlZeroMemory(&request->remoteAddressAndPort, sizeof(request->remoteAddressAndPort));
         target->sin_family = AF_INET; target->sin_port = config.port_v4_be;
         ((UINT8*)&target->sin_addr)[0] = 127; ((UINT8*)&target->sin_addr)[3] = 1;
@@ -346,10 +342,9 @@ static void NTAPI FbClassify(const FWPS_INCOMING_VALUES0* values,
         context->address_family = AF_INET6; context->destination_port_be = target->sin6_port;
         context->ipv6_scope_id = target->sin6_scope_id;
         RtlCopyMemory(context->destination_address, &target->sin6_addr, 16);
-        if (!FbIssueOriginalReceipt(context, ownerPid, &stagedReceipt)) {
+        if (!FbIssueOriginalReceipt(context, ownerPid)) {
             ExFreePoolWithTag(context, FB_POOL_TAG); FbBlock(out);
         } else {
-        staged = TRUE;
         RtlZeroMemory(&request->remoteAddressAndPort, sizeof(request->remoteAddressAndPort));
         target->sin6_family = AF_INET6; target->sin6_port = config.port_v6_be;
         ((UINT8*)&target->sin6_addr)[15] = 1;
@@ -363,19 +358,13 @@ static void NTAPI FbClassify(const FWPS_INCOMING_VALUES0* values,
      * unless the filter explicitly requested a hard permit. */
     if (out->actionType == FWP_ACTION_PERMIT && !(filter->flags & FWPS_FILTER_FLAG_CLEAR_ACTION_RIGHT))
         out->rights |= FWPS_RIGHT_ACTION_WRITE;
-    status = FwpsApplyModifiedLayerData0(classifyHandle, request, 0);
-    if (!NT_SUCCESS(status)) {
-        /* An attempted redirect with uncommitted WFP layer data cannot
-         * leave a claimable AUTH ticket. Any uncertainty is terminal for
-         * this driver instance, never a fallback to DIRECT. */
-        if (staged) {
-            KeAcquireSpinLock(&gLock, &irql);
-            (void)FbAuthRetire(&gAuthBook, &stagedReceipt);
-            gAuthBook.lost = 1;
-            KeReleaseSpinLock(&gLock, irql);
-        }
-        FbBlock(out);
-    }
+    /* This WDK API returns VOID: the OS, not user supplied return bytes,
+     * decides if the redirection took effect. Our issued receipt is NOT an
+     * authorization until a later OS ALE_AUTH_CONNECT indication supplies
+     * the matching redirected-loopback metadata and consumes it once.
+     * No initial AUTH -> no permit. Unmatched tickets occupy bounded storage.
+     */
+    FwpsApplyModifiedLayerData0(classifyHandle, request, 0);
     FwpsReleaseClassifyHandle0(classifyHandle);
 }
 static NTSTATUS NTAPI FbNotify(FWPS_CALLOUT_NOTIFY_TYPE type, const GUID* key, FWPS_FILTER1* filter) {
