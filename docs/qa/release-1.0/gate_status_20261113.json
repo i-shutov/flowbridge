@@ -190,7 +190,7 @@
     {
       "id": "R01",
       "track": "1.0",
-      "status": "BLOCKED_ARCHITECTURE_AND_NATIVE",
+      "status": "WFP_ALE_PRODUCT_DEVELOPMENT_AUTHORIZED_G2_NATIVE_PENDING",
       "depends_on": [
         "R00"
       ],
@@ -198,7 +198,7 @@
       "accepted": false,
       "proof": "Issue #41 retains NDISRD-only product authorization; NDISRD packet→PID/epoch native G2 NO-GO, run 43407099791 kernel_connection_id_missing. WFP/ALE branch research is not production authorization.",
       "decision_checkpoint": "docs/qa/WINDOWS_G2_BACKEND_DECISION_20261113.md",
-      "architecture_status": "OWNER_NDISRD_ONLY_AUTHORIZATION_UNCHANGED",
+      "architecture_status": "OWNER_WFP_ALE_DEVELOPMENT_AUTHORIZED_SIGNATURE_NATIVE_G2_PENDING",
       "retained_auth_model": {
         "pull_request": "https://github.com/i-shutov/flowbridge/pull/61",
         "head_sha": "a738a125450defb6e675b1ff5dcb5a321665255e",
@@ -241,6 +241,31 @@
         "vendor_licensing_reviewed": false,
         "release_accepted": false,
         "checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_NDISRD_DRIVER_PROVENANCE_20261115.json"
+      },
+      "wfp_ale_product_development": {
+        "owner_authorized_on": "2026-11-15",
+        "authorization": "WFP/ALE product backend development and tests explicitly approved",
+        "product_pr": "https://github.com/i-shutov/flowbridge/pull/69",
+        "initial_stack_base": "https://github.com/i-shutov/flowbridge/pull/67",
+        "target_abi": 3,
+        "kernel_process_epoch_origin": "PsSetCreateProcessNotifyRoutineEx + PsGetProcessCreateTimeQuadPart + PsGetProcessStartKey",
+        "fail_closed_conditions": [
+          "unknown/retired process",
+          "ledger overflow",
+          "disabled selected WFP filter",
+          "foreign redirect",
+          "WFP-selected Rust DIRECT/empty route"
+        ],
+        "native_driver_signed": false,
+        "native_driver_loaded": false,
+        "selected_traffic_os_evidence": false,
+        "ale_auth_connect_native_accepted": false,
+        "redirect_record_terminal_claim_native_accepted": false,
+        "win10_native_accepted": false,
+        "win11_native_accepted": false,
+        "full_g2_accepted": false,
+        "signed_driver_install_requires_prepared_lab": true,
+        "source_doc": "docs/qa/WINDOWS_WFP_EPOCH_V3_PRODUCT_20261115.md"
       }
     },
     {
@@ -476,7 +501,11 @@
     "windows_1_0_release": "NO_GO",
     "ndisrd_driver_provenance_checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_NDISRD_DRIVER_PROVENANCE_20261115.md",
     "win01_packet_bound": "G2_NO_GO",
-    "ndisrd_win01_driver_provenance": "HOSTED_TCPIP_POSITIVE_NDISRD_MISSING_OWNER_NOT_RUN"
+    "ndisrd_win01_driver_provenance": "HOSTED_TCPIP_POSITIVE_NDISRD_MISSING_OWNER_NOT_RUN",
+    "windows_wfp_ale_architecture_owner_decision": "APPROVED_FOR_DEVELOPMENT_AND_TESTING_NOT_DEPLOYMENT_OR_RELEASE",
+    "windows_wfp_ale_product_pr": "https://github.com/i-shutov/flowbridge/pull/69",
+    "win01_kernel_origin": "SOURCE_AGE3_DEV_NOT_NATIVE",
+    "previous_ndisrd_only_choice": "SUPERSEDED_FOR_NEW_WFP_ALE_DEVELOPMENT"
   },
   "windows_first_release": {
     "decision_date": "2026-11-15",
