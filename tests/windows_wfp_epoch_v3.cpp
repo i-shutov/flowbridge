@@ -1,6 +1,8 @@
 // Real compiled C-compatible WFP process-incarnation ledger regression.
 // No system filter, driver loading, service change, or network I/O.
+#include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <iostream>
 #include <map>
