@@ -1,5 +1,16 @@
 # R01 / G2 — Windows protected transparent routing: architecture decision checkpoint
 
+> **15.11.2026 — Windows-first priority.** В соответствии с решением владельца
+> FlowBridge 1.0 выпускаем сначала только для Windows 10 Pro 22H2 x64 и Windows 11 Pro x64.
+> Поэтому R01/G2 — **основной критический блокер 1.0**; macOS NE не блокирует
+> Windows-only выпуск и переносится на отдельный платформенный релиз.
+> Область native G2 и запрет PID/tuple-эвристик остаются строгими.
+> Действующее решение владельца: NDISRD-only product; это изменение приоритетов
+> **не разрешает** автоматически менять backend на WFP или сторонний драйвер.
+> [Новый план](release-1.0/WINDOWS_FIRST_1_0_ROADMAP_20261115.md) ·
+> [Windows gates](release-1.0/WINDOWS_FIRST_GATES_20261115.json).
+
+
 Date: 2026-11-13. **Status: P0 BLOCKED / NO-GO.** This is a decision
 package, not new product authorization or native acceptance. The owner
 authorization for separately installed signed NDISRD + independent Rust
