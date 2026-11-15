@@ -1,0 +1,57 @@
+name: Windows WFP process-epoch v3 source and ABI negatives
+on:
+  pull_request:
+    paths:
+      - 'native/windows/wfp/**'
+      - 'tests/windows_wfp_epoch_v3.cpp'
+      - 'tests/wfp_epoch/**'
+      - 'tests/test_windows_wfp_epoch_source.py'
+      - '.github/workflows/windows-wfp-epoch-v3.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-epoch-v3-contract:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Seven source-level hostile mutations must not authorize WFP G2
+        run: python -m unittest discover -s tests -p test_windows_wfp_epoch_source.py -v
+      - name: Real MSVC compile of the production C process ledger and context ABI
+        run: cmake -S tests/wfp_epoch -B build/wfp-epoch -A x64
+      - run: cmake --build build/wfp-epoch --config Release
+      - name: Execute bound process birth, PID reuse and capacity-negative cases
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force build/verification/wfp-epoch | Out-Null
+          $exe=(Resolve-Path 'build/wfp-epoch/Release/FlowBridgeWfpEpochV3.exe').Path
+          $raw=& $exe
+          if($LASTEXITCODE -ne 0){throw 'PRODUCTION_EPOCH_SOURCE_TEST_FAILED'}
+          $raw | Set-Content -Encoding UTF8 build/verification/wfp-epoch/epoch-native.json
+          $r=$raw | ConvertFrom-Json
+          if($r.schema -ne 'flowbridge-wfp-epoch-v3-qa-v1' -or $r.cases_pass -ne 6 -or
+             $r.kernel_callback_executed -ne $false -or
+             $r.wfp_driver_loaded -ne $false -or
+             $r.auth_connect_covered -ne $false -or
+             $r.accepted_redirect_context_proved -ne $false -or
+             $r.g2_native_pass -ne $false -or
+             $r.physical_no_direct_proved -ne $false -or
+             $r.release_1_0_accepted -ne $false) {
+            throw 'NATIVE_EPOCH_TEST_FALSE_G2_CLAIM'
+          }
+          Write-Host 'PASS real C process ledger negative scenarios, ABI v3; native G2 NOT ACCEPTED'
+      - name: Preserve source-specific evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-WFP-EpochV3-${{ github.run_id }}
+          path: build/verification/wfp-epoch/
+          if-no-files-found: warn
+          retention-days: 30
