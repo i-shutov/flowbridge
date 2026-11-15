@@ -252,6 +252,8 @@ static void NTAPI FbClassify(const FWPS_INCOMING_VALUES0* values,
     FWPS_CONNECT_REQUEST0* request = NULL;
     UINT64 classifyHandle = 0;
     NTSTATUS status;
+    FbAuthOrigin stagedReceipt = {0};
+    BOOLEAN staged = FALSE;
     UNREFERENCED_PARAMETER(layerData);
     UNREFERENCED_PARAMETER(flowContext);
     if (!(out->rights & FWPS_RIGHT_ACTION_WRITE)) return;
@@ -327,6 +329,10 @@ static void NTAPI FbClassify(const FWPS_INCOMING_VALUES0* values,
         SOCKADDR_IN* target = (SOCKADDR_IN*)&request->remoteAddressAndPort;
         context->address_family = AF_INET; context->destination_port_be = target->sin_port;
         RtlCopyMemory(context->destination_address, &target->sin_addr, 4);
+        if (!FbIssueOriginalReceipt(context, ownerPid, &stagedReceipt)) {
+            ExFreePoolWithTag(context, FB_POOL_TAG); FbBlock(out);
+        } else {
+        staged = TRUE;
         RtlZeroMemory(&request->remoteAddressAndPort, sizeof(request->remoteAddressAndPort));
         target->sin_family = AF_INET; target->sin_port = config.port_v4_be;
         ((UINT8*)&target->sin_addr)[0] = 127; ((UINT8*)&target->sin_addr)[3] = 1;
@@ -334,11 +340,16 @@ static void NTAPI FbClassify(const FWPS_INCOMING_VALUES0* values,
         request->localRedirectHandle = gRedirect;
         request->localRedirectContext = context; request->localRedirectContextSize = sizeof(*context);
         out->actionType = FWP_ACTION_PERMIT; /* context ownership transfers to WFP */
+        }
     } else if (!v4 && request->remoteAddressAndPort.ss_family == AF_INET6) {
         SOCKADDR_IN6* target = (SOCKADDR_IN6*)&request->remoteAddressAndPort;
         context->address_family = AF_INET6; context->destination_port_be = target->sin6_port;
         context->ipv6_scope_id = target->sin6_scope_id;
         RtlCopyMemory(context->destination_address, &target->sin6_addr, 16);
+        if (!FbIssueOriginalReceipt(context, ownerPid, &stagedReceipt)) {
+            ExFreePoolWithTag(context, FB_POOL_TAG); FbBlock(out);
+        } else {
+        staged = TRUE;
         RtlZeroMemory(&request->remoteAddressAndPort, sizeof(request->remoteAddressAndPort));
         target->sin6_family = AF_INET6; target->sin6_port = config.port_v6_be;
         ((UINT8*)&target->sin6_addr)[15] = 1;
@@ -346,12 +357,25 @@ static void NTAPI FbClassify(const FWPS_INCOMING_VALUES0* values,
         request->localRedirectHandle = gRedirect;
         request->localRedirectContext = context; request->localRedirectContextSize = sizeof(*context);
         out->actionType = FWP_ACTION_PERMIT;
+        }
     } else { ExFreePoolWithTag(context, FB_POOL_TAG); FbBlock(out); }
     /* AcquireWritable cleared ACTION_WRITE. Restore soft permit arbitration
      * unless the filter explicitly requested a hard permit. */
     if (out->actionType == FWP_ACTION_PERMIT && !(filter->flags & FWPS_FILTER_FLAG_CLEAR_ACTION_RIGHT))
         out->rights |= FWPS_RIGHT_ACTION_WRITE;
-    FwpsApplyModifiedLayerData0(classifyHandle, request, 0);
+    status = FwpsApplyModifiedLayerData0(classifyHandle, request, 0);
+    if (!NT_SUCCESS(status)) {
+        /* An attempted redirect with uncommitted WFP layer data cannot
+         * leave a claimable AUTH ticket. Any uncertainty is terminal for
+         * this driver instance, never a fallback to DIRECT. */
+        if (staged) {
+            KeAcquireSpinLock(&gLock, &irql);
+            (void)FbAuthRetire(&gAuthBook, &stagedReceipt);
+            gAuthBook.lost = 1;
+            KeReleaseSpinLock(&gLock, irql);
+        }
+        FbBlock(out);
+    }
     FwpsReleaseClassifyHandle0(classifyHandle);
 }
 static NTSTATUS NTAPI FbNotify(FWPS_CALLOUT_NOTIFY_TYPE type, const GUID* key, FWPS_FILTER1* filter) {
