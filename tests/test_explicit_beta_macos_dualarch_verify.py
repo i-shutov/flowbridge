@@ -70,11 +70,13 @@ class FrozenMacChecks(unittest.TestCase):
 
     def test_missing_one_architecture_never_passes(self) -> None:
         with tempfile.TemporaryDirectory() as root:
-            write(Path(root) / "check-arm64.json", a4.verify_native_fixture_not_used() if False else {
-                "schema": a4.SCHEMA, "arch": "arm64",
-                "status": "HOSTED_NATIVE_6_6_OWNER_OPEN"})
+            directory = Path(root)
+            write(directory / "bytes-arm64.json", native("arm64", preflight=True))
+            write(directory / "native-arm64.json", native("arm64"))
+            write(directory / "check-arm64.json", a4.verify_native(directory, "arm64"))
+            # The only missing evidence must be Intel, not malformed ARM data.
             with self.assertRaisesRegex(a4.Fail, "missing_or_duplicate_arch_report"):
-                a4.compare(Path(root))
+                a4.compare(directory)
 
     def test_wrong_arch_or_emulated_claim_does_not_pass(self) -> None:
         with tempfile.TemporaryDirectory() as root:
