@@ -302,6 +302,9 @@ final class NativeController: ObservableObject {
     @Published var snapshot: [String: Any] = [:]
     @Published var ports = "80,443"
     var bypassSigningIDs: [String] = []
+    // Preserve the same public controller interface in local SOCKS-only builds;
+    // this stub never activates or interprets an SSH transport exemption.
+    var sshTransportEndpoint: [String: Any]?
     var managedPort: Int?
     var upstreamReady = false
     var remoteDNS: [String: Any]?
