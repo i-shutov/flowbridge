@@ -58,6 +58,184 @@ static void FbBlock(FWPS_CLASSIFY_OUT0* out) {
     out->actionType = FWP_ACTION_BLOCK;
     out->rights &= ~FWPS_RIGHT_ACTION_WRITE;
 }
+/* Issue after kernel selected-source validation; a user-supplied PID/path or
+ * redirect blob cannot enqueue an AUTH receipt. The same spinlock serializes
+ * process departure, route disable and ticket insertion.
+ */
+static BOOLEAN FbIssueOriginalReceipt(const FbRedirectContext* context,
+                                      HANDLE broker, FbAuthOrigin* issued) {
+    FbAuthOrigin item = {0};
+    FbEpochRecord current = {0};
+    KIRQL irql;
+    int ok = 0;
+    if (!context || !issued || !broker || context->ipv6_scope_id)
+        return FALSE;
+    item.pid = context->original_process_id;
+    item.creation_100ns = context->original_process_creation_100ns;
+    item.process_start_key = context->original_process_start_key;
+    item.endpoint = context->original_transport_endpoint;
+    item.flow_id = context->flow_id;
+    item.broker_pid = HandleToULong(broker);
+    item.port_be = context->destination_port_be;
+    item.family = (context->address_family == AF_INET) ? 4 :
+                  (context->address_family == AF_INET6) ? 6 : 0;
+    RtlCopyMemory(item.original_ip, context->destination_address, 16);
+    KeAcquireSpinLock(&gLock, &irql);
+    if (gEnabled && !gEpochTable.lost && !gAuthBook.lost &&
+        FbEpochLookup(&gEpochTable, item.pid, &current) &&
+        current.creation_100ns == item.creation_100ns &&
+        current.start_key == item.process_start_key)
+        ok = FbAuthIssue(&gAuthBook, &item);
+    KeReleaseSpinLock(&gLock, irql);
+    if (ok) *issued = item;
+    return (BOOLEAN)ok;
+}
+
+/* An AUTH classification only matches the selected *current* OS ALE_APP_ID
+ * in BFE. ALE_ORIGINAL_APP_ID may still be selected on the physical proxy's
+ * records-tagged SSH socket (R198), so it is NEVER used as the filter key.
+ *
+ * The kernel-origin ticket permits exactly the original selected connection
+ * redirected to OUR local broker. A direct sibling, wrong PID epoch, wrong
+ * redirect target or external SSH socket cannot consume that ticket.
+ * A second physical-SSH exception is NOT minted by broker PID.
+ */
+static BOOLEAN FbAuthObserved(const FWPS_INCOMING_VALUES0* values,
+                              const FWPS_INCOMING_METADATA_VALUES0* metadata,
+                              HANDLE broker, FbWfpConfig config,
+                              FbAuthOrigin* observed) {
+    BOOLEAN v4;
+    UINT32 protocolIndex, flagsIndex, appIndex, ipIndex, portIndex;
+    UINT32 flags;
+    FWP_BYTE_BLOB* app;
+    FbAuthOrigin candidate = {0};
+    const SOCKADDR* addr;
+    if (!values || !metadata || !observed || !broker ||
+        !values->incomingValue) return FALSE;
+    v4 = (values->layerId == FWPS_LAYER_ALE_AUTH_CONNECT_V4);
+    if (!v4 && values->layerId != FWPS_LAYER_ALE_AUTH_CONNECT_V6) return FALSE;
+    protocolIndex = v4 ? FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_PROTOCOL :
+                         FWPS_FIELD_ALE_AUTH_CONNECT_V6_IP_PROTOCOL;
+    flagsIndex = v4 ? FWPS_FIELD_ALE_AUTH_CONNECT_V4_FLAGS :
+                      FWPS_FIELD_ALE_AUTH_CONNECT_V6_FLAGS;
+    appIndex = v4 ? FWPS_FIELD_ALE_AUTH_CONNECT_V4_ALE_APP_ID :
+                    FWPS_FIELD_ALE_AUTH_CONNECT_V6_ALE_APP_ID;
+    ipIndex = v4 ? FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_REMOTE_ADDRESS :
+                   FWPS_FIELD_ALE_AUTH_CONNECT_V6_IP_REMOTE_ADDRESS;
+    portIndex = v4 ? FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_REMOTE_PORT :
+                     FWPS_FIELD_ALE_AUTH_CONNECT_V6_IP_REMOTE_PORT;
+    if (protocolIndex >= values->valueCount || flagsIndex >= values->valueCount ||
+        appIndex >= values->valueCount || ipIndex >= values->valueCount ||
+        portIndex >= values->valueCount) return FALSE;
+    if (values->incomingValue[protocolIndex].value.type != FWP_UINT8 ||
+        values->incomingValue[protocolIndex].value.uint8 != IPPROTO_TCP ||
+        values->incomingValue[flagsIndex].value.type != FWP_UINT32)
+        return FALSE;
+    flags = values->incomingValue[flagsIndex].value.uint32;
+    /* Reauth is a separate lifecycle and must never replay the initial
+     * one-shot receipt; leave it blocked until independently accepted. */
+    if ((flags & FWP_CONDITION_FLAG_IS_CONNECTION_REDIRECTED) == 0 ||
+        (flags & FWP_CONDITION_FLAG_IS_REAUTHORIZE) != 0) return FALSE;
+    if (!FWPS_IS_METADATA_FIELD_PRESENT(metadata, FWPS_METADATA_FIELD_PROCESS_ID) ||
+        !FWPS_IS_METADATA_FIELD_PRESENT(metadata, FWPS_METADATA_FIELD_TRANSPORT_ENDPOINT_HANDLE) ||
+        !FWPS_IS_METADATA_FIELD_PRESENT(metadata, FWPS_METADATA_FIELD_LOCAL_REDIRECT_TARGET_PID) ||
+        !FWPS_IS_METADATA_FIELD_PRESENT(metadata, FWPS_METADATA_FIELD_ORIGINAL_DESTINATION) ||
+        !metadata->processId || !metadata->transportEndpointHandle ||
+        !metadata->originalDestination ||
+        metadata->localRedirectTargetPID != HandleToULong(broker) ||
+        metadata->processId == (UINT64)(ULONG_PTR)broker) return FALSE;
+    if (values->incomingValue[appIndex].value.type != FWP_BYTE_BLOB_TYPE)
+        return FALSE;
+    app = values->incomingValue[appIndex].value.byteBlob;
+    if (!app || !app->data || app->size < 2 ||
+        app->size > FB_PROCESS_PATH_CHARS * sizeof(UINT16) ||
+        (app->size & 1)) return FALSE;
+    /* BFE's exact full-path ALE_APP_ID condition matched the current source.
+     * Merely having a nonempty ORIGINAL_APP_ID is not a broker exemption. */
+    if (values->incomingValue[portIndex].value.type != FWP_UINT16 ||
+        values->incomingValue[portIndex].value.uint16 !=
+            RtlUshortByteSwap(v4 ? config.port_v4_be : config.port_v6_be))
+        return FALSE;
+    if (v4) {
+        if (values->incomingValue[ipIndex].value.type != FWP_UINT32 ||
+            values->incomingValue[ipIndex].value.uint32 != 0x7f000001)
+            return FALSE;
+    } else {
+        FWP_BYTE_ARRAY16* ip;
+        UINT8 loopback[16] = {0};
+        loopback[15] = 1;
+        if (values->incomingValue[ipIndex].value.type != FWP_BYTE_ARRAY16_TYPE)
+            return FALSE;
+        ip = values->incomingValue[ipIndex].value.byteArray16;
+        if (!ip || RtlCompareMemory(ip->byteArray16, loopback, sizeof(loopback)) != sizeof(loopback))
+            return FALSE;
+    }
+    candidate.pid = metadata->processId;
+    candidate.endpoint = metadata->transportEndpointHandle;
+    candidate.broker_pid = HandleToULong(broker);
+    candidate.family = v4 ? 4 : 6;
+    addr = (const SOCKADDR*)metadata->originalDestination;
+    if ((v4 && addr->sa_family != AF_INET) ||
+        (!v4 && addr->sa_family != AF_INET6)) return FALSE;
+    if (v4) {
+        const SOCKADDR_IN* original = (const SOCKADDR_IN*)addr;
+        candidate.port_be = original->sin_port;
+        RtlCopyMemory(candidate.original_ip, &original->sin_addr, 4);
+    } else {
+        const SOCKADDR_IN6* original = (const SOCKADDR_IN6*)addr;
+        if (original->sin6_scope_id) return FALSE;
+        candidate.port_be = original->sin6_port;
+        RtlCopyMemory(candidate.original_ip, &original->sin6_addr, 16);
+    }
+    /* Birth epoch and start key are supplied from the referenced process
+     * callback's live ledger, NEVER from a user-mode table or stream JSON. */
+    *observed = candidate;
+    return TRUE;
+}
+
+static void NTAPI FbAuthClassify(const FWPS_INCOMING_VALUES0* values,
+    const FWPS_INCOMING_METADATA_VALUES0* metadata, void* layerData,
+    const void* classifyContext, const FWPS_FILTER1* filter,
+    UINT64 flowContext, FWPS_CLASSIFY_OUT0* out) {
+    KIRQL irql;
+    HANDLE broker;
+    FbWfpConfig config;
+    FbEpochRecord process = {0};
+    FbAuthOrigin observed = {0};
+    BOOLEAN enabled, approved;
+    UNREFERENCED_PARAMETER(layerData);
+    UNREFERENCED_PARAMETER(classifyContext);
+    UNREFERENCED_PARAMETER(filter);
+    UNREFERENCED_PARAMETER(flowContext);
+    if (!out) return;
+    if (!(out->rights & FWPS_RIGHT_ACTION_WRITE)) {
+        /* WFP allows a hard-PERMIT veto; never promote a prior BLOCK. */
+        if (out->actionType == FWP_ACTION_PERMIT) FbBlock(out);
+        return;
+    }
+    KeAcquireSpinLock(&gLock, &irql);
+    broker = gOwnerPid; config = gConfig;
+    enabled = gEnabled && !gEpochTable.lost && !gAuthBook.lost;
+    KeReleaseSpinLock(&gLock, irql);
+    if (!enabled || !FbAuthObserved(values, metadata, broker, config, &observed)) {
+        FbBlock(out); return;
+    }
+    KeAcquireSpinLock(&gLock, &irql);
+    approved = (BOOLEAN)(gEnabled && !gEpochTable.lost && !gAuthBook.lost &&
+        FbEpochLookup(&gEpochTable, observed.pid, &process) &&
+        process.creation_100ns != 0 && process.start_key != 0);
+    if (approved) {
+        observed.creation_100ns = process.creation_100ns;
+        observed.process_start_key = process.start_key;
+        approved = (BOOLEAN)FbAuthConsumeObserved(&gAuthBook, &observed);
+    }
+    KeReleaseSpinLock(&gLock, irql);
+    if (!approved) { FbBlock(out); return; }
+    /* Permit ONLY the one-shot original local redirect. Soft action allows
+     * Windows firewall and other sublayers to enforce stricter policy. */
+    out->actionType = FWP_ACTION_PERMIT;
+}
+
 static void NTAPI FbClassify(const FWPS_INCOMING_VALUES0* values,
     const FWPS_INCOMING_METADATA_VALUES0* metadata, void* layerData,
     const void* classifyContext, const FWPS_FILTER1* filter,
