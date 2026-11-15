@@ -190,7 +190,7 @@
     {
       "id": "R01",
       "track": "1.0",
-      "status": "WFP_AUTH_R198_SOURCE_PASS_SIGNED_NATIVE_G2_OPEN",
+      "status": "WFP_ABI4_TERMINAL_CLAIM_HOSTED_PASS_NATIVE_SOCKET_G2_OPEN",
       "depends_on": [
         "R00"
       ],
@@ -297,6 +297,29 @@
         "original_wdk_zip_sha256": "213fdac2b048c1ddaaa837fd794f1c6bebbdf897a256f1c105c89a6543734d8c",
         "checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_WFP_AUTH_R198_20261115.md",
         "accepted": false
+      },
+      "terminal_claim_abi4": {
+        "exact_product_branch": "https://github.com/i-shutov/flowbridge/pull/71",
+        "exact_code_head": "391316368470f0a9f6fe85eb302d54a6afaeb5f8",
+        "previous_product_pr": "https://github.com/i-shutov/flowbridge/pull/70",
+        "driver_abi": 4,
+        "fixed_native_C_auth_claim_test_cases": 13,
+        "new_adversarial_source_mutations_rejected": 11,
+        "natively_compiled_wdk_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43739267383",
+        "exact_unsigned_sys_sha256": "0fae76a8336220d91ecb4cfba9e75357ece5e9dc9fd613673268f31dc3800528",
+        "original_wdk_zip_sha256": "e39694404a9e9dd0914f1a6b6ab41196c3e880fa9c1a06ee90a796acc28abcb3",
+        "real_hosted_native_C_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43739267311",
+        "original_C_test_zip_sha256": "8a8a851dca3bec2f40919e1f59144d198a43c3f039118eadb5b1dc16565dae6b",
+        "entire_general_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43739267354",
+        "portable_jobs": "5/5 SUCCESS",
+        "current_source_claim_requires_real_accepted_WSA_context_records_and_socket_loopback_port": true,
+        "kernel_ticket_claim_once_before_Rust": true,
+        "actual_kernel_socket_object_independently_proved": false,
+        "native_Win10_Win11_signed_WFP_activated": false,
+        "actual_G2_packet_bound_proved": false,
+        "native_no_direct_proved": false,
+        "release_accepted": false,
+        "checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_WFP_TERMINAL_CLAIM_ABI4_20261115.md"
       }
     },
     {
@@ -544,7 +567,11 @@
     "windows_win01_auth_r198": "HOSTED_SOURCE_WDK_SUCCESS_NATIVE_NO_GO",
     "windows_win01_auth_r198_checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_WFP_AUTH_R198_20261115.json",
     "windows_current_product_pr": "https://github.com/i-shutov/flowbridge/pull/70",
-    "kernel_g2_truth": "NO_GO"
+    "kernel_g2_truth": "NO_GO",
+    "windows_terminal_claim_stage": "ABI4_HOSTED_WDK_C_RUST_WIN_GUI_PASS_NO_NATIVE_G2",
+    "windows_terminal_claim_checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_WFP_TERMINAL_CLAIM_ABI4_20261115.json",
+    "windows_product_current_pr": "https://github.com/i-shutov/flowbridge/pull/71",
+    "g2_signed_kernel_socket_object_and_no_direct": "NOT_ACCEPTED"
   },
   "windows_first_release": {
     "decision_date": "2026-11-15",
