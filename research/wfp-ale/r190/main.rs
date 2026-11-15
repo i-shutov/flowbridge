@@ -141,8 +141,9 @@ mod windows_probe {
             "selected_appid_utf16_terminator")?;
         Ok(bytes.to_vec())
     }
-    unsafe fn inspect(engine: HANDLE, selected: &[u8]) -> Result<u64, String> {
-        let sessions = session_count(engine)?;
+    unsafe fn inspect(engine: HANDLE, selected: &[u8], sessions: u64) -> Result<u64, String> {
+        // Session enumeration is a separate ACL-limited pre-transaction snapshot.
+        // FwpmSessionCreateEnumHandle0 is forbidden inside any explicit transaction.
         // Both enumeration and GetByKey occur inside a single read-only BFE
         // transaction; this does not attest runtime classify callbacks.
         let _visible_filters = inspect_visible_competitors(engine)?;
@@ -207,9 +208,12 @@ mod windows_probe {
         check(code, "engine_open")?;
         let engine = Engine(h);
         require(!engine.0.is_null(), "null_engine")?;
-        // Explicit management-object read-only transaction; not an enforcement fence.
+        // Enumerate sessions before the BFE transaction. The enum handle is
+        // destroyed before the next step; this count is not an atomic filter join.
+        let sessions = unsafe { session_count(engine.0) }?;
+        // Read-only transaction protects the filter enumeration/GetByKey portion.
         check(unsafe { FwpmTransactionBegin0(engine.0, FWPM_TXN_READ_ONLY) }, "readonly_txn_begin")?;
-        let data = unsafe { inspect(engine.0, &selected) };
+        let data = unsafe { inspect(engine.0, &selected, sessions) };
         match data {
             Ok(sessions) => {
                 check(unsafe { FwpmTransactionCommit0(engine.0) }, "readonly_txn_commit")?;
