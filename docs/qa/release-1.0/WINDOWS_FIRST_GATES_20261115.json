@@ -106,10 +106,33 @@
         "depends_on": [
           "WIN-00"
         ],
-        "status": "BLOCKED_KERNEL_ORIGIN_TRUST",
+        "status": "BLOCKED_KERNEL_ORIGIN_TRUST_GUI_OWNER_SUBGATE_HOSTED_PASS",
         "accepted": false,
         "evidence": [],
-        "required_native_windows": true
+        "required_native_windows": true,
+        "gui_owner_incarnation_subgate": {
+          "status": "HOSTED_WIN32_COMPILATION_AND_PROCESS_LIFETIME_PASS_NOT_PACKET_G2",
+          "draft_pr": "https://github.com/i-shutov/flowbridge/pull/67",
+          "exact_source_sha": "fd8eb07705456528fc2c95b389eac029bab647ce",
+          "exact_test_merge_sha": "48d49c19ee907523b7ac078933b857a791bf159d",
+          "exact_shared_tree_sha": "c9efdd04867042a4937b7f6ac573795c9103741a",
+          "win32_owner_test_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43692346319",
+          "negative_mutants_rejected": 3,
+          "compiled_helper_negative_test_cases_passed": 7,
+          "installed_windows_product_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43692346177",
+          "native_general_ci": "5/5 SUCCESS",
+          "native_bfe_scope_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43692346264",
+          "native_bfe_scope": "1/1 SUCCESS_DRIVER_NOT_LOADED",
+          "wdk_compile_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43692346190",
+          "dns_code_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43692346214",
+          "original_evidence_checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_GUI_OWNER_EPOCH_20261115.json",
+          "user_mode_gui_process_lifetime_attested": true,
+          "kernel_origin_packet_owner_attested": false,
+          "signed_native_driver_loaded": false,
+          "owner_win10_accepted": false,
+          "owner_win11_accepted": false,
+          "release_accepted": false
+        }
       },
       {
         "id": "WIN-02",
