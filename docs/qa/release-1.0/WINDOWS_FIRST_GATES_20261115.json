@@ -115,7 +115,7 @@
         "depends_on": [
           "WIN-00"
         ],
-        "status": "WFP_ALE_DEVELOPMENT_AUTHORIZED_NATIVE_PROCESS_EPOCH_SOURCE_CI_PARTIAL_G2_NO_GO",
+        "status": "WFP_ALE_SOURCE_V3_DRIVER_FFI_HOSTED_PASS_NATIVE_KERNEL_AUTH_AND_EGRESS_OPEN",
         "accepted": false,
         "evidence": [],
         "required_native_windows": true,
@@ -183,7 +183,39 @@
           "ale_auth_connect_complete": false,
           "physical_packet_bound": false,
           "g2_accepted": false,
-          "report": "docs/qa/WINDOWS_WFP_EPOCH_V3_PRODUCT_20261115.md"
+          "report": "docs/qa/WINDOWS_WFP_EPOCH_V3_PRODUCT_20261115.md",
+          "product_pr": "https://github.com/i-shutov/flowbridge/pull/69",
+          "exact_product_source_sha": "d242c3726904eed1bf5b5eb9998bc37d02ac90ba",
+          "kernel_witness_fields": [
+            "PID",
+            "creation_100ns",
+            "PsGetProcessStartKey",
+            "transportEndpointHandle"
+          ],
+          "wfp_context_version": 3,
+          "device_abi_version": 3,
+          "disabled_or_foreign_redirect_fails_closed_source": true,
+          "rust_wfp_selected_direct_fails_closed_source": true,
+          "source_test_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43713831922",
+          "native_ledger_cases": 6,
+          "security_source_mutants": 9,
+          "original_source_evidence_sha256": "49b0b932e9952728dc7785d9bfa7b371c8946a7d657bbc338877dafa251a00f4",
+          "wdk_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43713831976",
+          "wdk_unsigned_bin_sha256": "51f931967ef32e84a9fc591235ca9bf22e29877851bbbf8d6879ef7ab95e2319",
+          "wdk_force_integrity": true,
+          "original_wdk_evidence_sha256": "704fc5149a07c45a4f9db1dc88b25a89d7068abb3f6fe5f888ab7b2755d3fbc6",
+          "general_portable_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43713831970",
+          "general_ci_jobs": "5/5 SUCCESS",
+          "real_windows_bfe_scope_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43713831985",
+          "dns_code_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43713832030",
+          "driver_signed": false,
+          "driver_physically_loaded": false,
+          "native_process_callback_executed": false,
+          "ale_auth_connect_native_proved": false,
+          "redirect_record_terminal_claim_proved": false,
+          "selected_no_direct_physically_proved": false,
+          "native_g2_accepted": false,
+          "checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_WFP_ALE_KERNEL_EPOCH_V3_20261115.json"
         }
       },
       {
