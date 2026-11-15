@@ -875,7 +875,10 @@ mod wfp_tests {
         {
             // Selected WFP redirection must reject DIRECT even earlier than
             // the outbound socket's OS redirect-record preparation.
-            assert!(result["error"].as_str().unwrap().contains("DIRECT is forbidden"));
+            assert!(result["error"]
+                .as_str()
+                .unwrap()
+                .contains("DIRECT is forbidden"));
             let mut protected: Value =
                 serde_json::from_str(include_str!("../../../examples/direct.json")).unwrap();
             protected["proxies"] = json!([{
