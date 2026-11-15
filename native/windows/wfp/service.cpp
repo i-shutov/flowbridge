@@ -21,6 +21,7 @@
 #include "control.h"
 #include "listener_owner.hpp"
 #include "../profile_integrity.hpp"
+#include "../gui_owner_epoch.hpp"
 #include "flowbridge.h"
 #include "nlohmann/json.hpp"
 using Json=nlohmann::json;
@@ -32,6 +33,7 @@ std::mutex statusLock, logLock;
 std::wstring profilePath, sshProfilePath;
 std::vector<std::wstring> bypassPaths, capturePaths;
 DWORD guiOwnerPid=0;
+std::uint64_t guiOwnerEpoch=0;
 std::wstring guiStopName;
 std::string guiProfileSha256;
 // The lifetime guard is optional in service/console developer mode. It is
@@ -42,12 +44,23 @@ class GuiLifetime {
 public:
     GuiLifetime() {
         if(!guiOwnerPid)return;
+        if(!guiOwnerEpoch)
+            throw std::runtime_error("GUI process creation epoch is missing");
         if(guiStopName.rfind(L"Local\\FlowBridgeCaptureStop-",0)!=0 || guiStopName.size()>128)
             throw std::runtime_error("Invalid GUI capture stop event");
-        owner_=OpenProcess(SYNCHRONIZE,FALSE,guiOwnerPid);
-        stop_=OpenEventW(SYNCHRONIZE,FALSE,guiStopName.c_str());
-        if(!owner_||!stop_){if(owner_)CloseHandle(owner_);if(stop_)CloseHandle(stop_);owner_=stop_=nullptr;
-            throw std::runtime_error("Capture GUI owner or stop event is unavailable");}
+        // Keep the actual process object pinned for the entire capture lifetime.
+        // A PID + TCP owner snapshot alone is not a reliable process incarnation.
+        owner_=OpenProcess(SYNCHRONIZE|PROCESS_QUERY_LIMITED_INFORMATION,FALSE,guiOwnerPid);
+        if(!owner_) throw std::runtime_error("GUI owner process unavailable");
+        try {
+            gui_owner_epoch::verify(owner_,guiOwnerPid,guiOwnerEpoch);
+            stop_=OpenEventW(SYNCHRONIZE,FALSE,guiStopName.c_str());
+            if(!stop_) throw std::runtime_error("GUI capture stop event unavailable");
+        } catch (...) {
+            if(stop_) CloseHandle(stop_);
+            CloseHandle(owner_); owner_=stop_=nullptr;
+            throw; // Fail before the privileged helper can open any driver.
+        }
         monitor_=std::thread([this]{
             while(!stopping) {
                 if(WaitForSingleObject(owner_,0)!=WAIT_TIMEOUT ||
@@ -359,6 +372,14 @@ int wmain(int argc,wchar_t** argv) {
                 if(number==0||number>0xffffffffULL)throw std::runtime_error("Invalid GUI process ID");
                 guiOwnerPid=static_cast<DWORD>(number);
             }
+            else if(arg==L"--gui-owner-epoch" && i+1<argc) {
+                const std::wstring value=argv[++i];
+                if(value.empty() || value.size()>20 ||
+                    !std::all_of(value.begin(),value.end(),[](wchar_t digit){return digit>=L'0' && digit<=L'9';}))
+                    throw std::runtime_error("Invalid GUI owner creation epoch");
+                guiOwnerEpoch=std::stoull(value);
+                if(!guiOwnerEpoch) throw std::runtime_error("Empty GUI owner creation epoch");
+            }
             else if(arg==L"--stop-event" && i+1<argc) guiStopName=argv[++i];
             else if(arg==L"--profile-sha256" && i+1<argc) {
                 const auto hash=std::wstring(argv[++i]);
@@ -371,7 +392,8 @@ int wmain(int argc,wchar_t** argv) {
             else if(arg==L"--bypass" && i+1<argc) bypassPaths.emplace_back(argv[++i]);
             else throw std::runtime_error("Usage: FlowBridgeCapture --console|--service --profile ABSOLUTE_PATH --capture-app ABSOLUTE_EXE_PATH [--capture-app ...] [--ssh-profile ABSOLUTE_PATH] [--bypass ABSOLUTE_EXE_PATH]...");
         }
-        if((guiOwnerPid==0)!=guiStopName.empty())throw std::runtime_error("GUI owner and stop event must be provided together");
+        if((guiOwnerPid==0)!=guiStopName.empty() || (guiOwnerPid==0)!=(guiOwnerEpoch==0))
+            throw std::runtime_error("GUI owner PID, process creation epoch and stop event must be provided together");
         if(service&&guiOwnerPid)throw std::runtime_error("SCM-managed helper cannot accept a GUI owner");
         // A UAC-elevated helper must not start OpenSSH or read private identity
         // files using the elevated token for an unelevated GUI owner. The GUI
