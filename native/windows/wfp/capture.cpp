@@ -1,4 +1,5 @@
 #include "capture.h"
+#include <ws2tcpip.h>
 #include <initguid.h>
 #include <fwpmu.h>
 #include <winioctl.h>
