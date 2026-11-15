@@ -7,13 +7,15 @@
 #include "../control.h"
 #include "../redirect_context.h"
 #include "../process_epoch.h"
+#include "../auth_receipt.h"
 #define FB_POOL_TAG 'rBbF'
 C_ASSERT(sizeof(FbRedirectContext) == FB_REDIRECT_CONTEXT_BYTES);
 static PDEVICE_OBJECT gDevice;
 static HANDLE gRedirect;
-static UINT32 gCallout4, gCallout6;
+static UINT32 gCallout4, gCallout6, gAuthCallout4, gAuthCallout6;
 static KSPIN_LOCK gLock;
 static FbEpochTable gEpochTable;
+static FbAuthBook gAuthBook;
 static BOOLEAN gEpochNotifierRegistered;
 static PFILE_OBJECT gOwner;
 static HANDLE gOwnerPid;
@@ -47,6 +49,7 @@ static VOID NTAPI FbProcessNotify(PEPROCESS process, HANDLE pid, PPS_CREATE_NOTI
             (void)FbEpochInsert(&gEpochTable, record);
         }
     } else {
+        (void)FbAuthProcessExit(&gAuthBook, record.pid, record.creation_100ns, record.start_key);
         (void)FbEpochExit(&gEpochTable, record);
     }
     KeReleaseSpinLock(&gLock, irql);
@@ -189,7 +192,7 @@ static NTSTATUS FbDispatch(PDEVICE_OBJECT device, PIRP irp) {
         else { gOwner = stack->FileObject; gOwnerPid = IoGetRequestorProcessId(irp) ? ULongToHandle(IoGetRequestorProcessId(irp)) : NULL; status = gOwnerPid ? STATUS_SUCCESS : STATUS_ACCESS_DENIED; if (!gOwnerPid) gOwner = NULL; }
         break;
     case IRP_MJ_CLEANUP:
-        if (gOwner == stack->FileObject) { gEnabled = FALSE; gOwner = NULL; gOwnerPid = NULL; RtlZeroMemory(&gConfig, sizeof(gConfig)); }
+        if (gOwner == stack->FileObject) { gEnabled = FALSE; gAuthBook.lost = 1; gOwner = NULL; gOwnerPid = NULL; RtlZeroMemory(&gConfig, sizeof(gConfig)); }
         status = STATUS_SUCCESS; break;
     case IRP_MJ_CLOSE: status = STATUS_SUCCESS; break;
     case IRP_MJ_DEVICE_CONTROL:
@@ -199,10 +202,10 @@ static NTSTATUS FbDispatch(PDEVICE_OBJECT device, PIRP irp) {
             if (stack->Parameters.DeviceIoControl.InputBufferLength != sizeof(FbWfpConfig)) { status = STATUS_INFO_LENGTH_MISMATCH; break; }
             { FbWfpConfig* c = irp->AssociatedIrp.SystemBuffer;
               if (c->size != sizeof(*c) || c->version != FB_WFP_ABI || c->reserved || !c->port_v4_be || !c->port_v6_be) { status = STATUS_INVALID_PARAMETER; break; }
-              if (gEpochTable.lost || !gEpochNotifierRegistered) { status = STATUS_DEVICE_NOT_READY; break; }
+              if (gEpochTable.lost || gAuthBook.lost || !gEpochNotifierRegistered) { status = STATUS_DEVICE_NOT_READY; break; }
               gConfig = *c; gEnabled = TRUE; status = STATUS_SUCCESS; }
             break;
-        case FB_IOCTL_DISABLE: gEnabled = FALSE; status = STATUS_SUCCESS; break;
+        case FB_IOCTL_DISABLE: gEnabled = FALSE; gAuthBook.lost = 1; status = STATUS_SUCCESS; break;
         case FB_IOCTL_QUERY:
             if (stack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(FbWfpStatus)) { status = STATUS_BUFFER_TOO_SMALL; break; }
             { FbWfpStatus* s = irp->AssociatedIrp.SystemBuffer; s->size = sizeof(*s); s->version = FB_WFP_ABI; s->enabled = gEnabled; s->service_pid = HandleToULong(gOwnerPid); information = sizeof(*s); status = STATUS_SUCCESS; }
@@ -223,6 +226,8 @@ static void FbUnload(PDRIVER_OBJECT driver) {
     }
     /* Unregister waits for active inline classifications before destroying the
      * redirect handle. There are no flow contexts/pended classify operations. */
+    if (gAuthCallout6) FwpsCalloutUnregisterById0(gAuthCallout6);
+    if (gAuthCallout4) FwpsCalloutUnregisterById0(gAuthCallout4);
     if (gCallout6) FwpsCalloutUnregisterById0(gCallout6);
     if (gCallout4) FwpsCalloutUnregisterById0(gCallout4);
     if (gRedirect) FwpsRedirectHandleDestroy0(gRedirect);
@@ -238,6 +243,7 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT driver, PUNICODE_STRING registryPath) {
     UNREFERENCED_PARAMETER(registryPath);
     KeInitializeSpinLock(&gLock);
     RtlZeroMemory(&gEpochTable, sizeof(gEpochTable));
+    RtlZeroMemory(&gAuthBook, sizeof(gAuthBook));
     driver->DriverUnload = FbUnload;
     driver->MajorFunction[IRP_MJ_CREATE] = FbDispatch;
     driver->MajorFunction[IRP_MJ_CLEANUP] = FbDispatch;
