@@ -50,14 +50,30 @@ if($LASTEXITCODE -ne 2){throw 'HOSTNAME_SCOPE_GUARD_BROKEN'}
 $a=Get-Content -LiteralPath $default -Raw | ConvertFrom-Json
 $b=Get-Content -LiteralPath $positive -Raw | ConvertFrom-Json
 $c=Get-Content -LiteralPath $mismatch -Raw | ConvertFrom-Json
+$pinOk=Join-Path $OutputRoot 'explicit-reference-match.json'
+$pinBad=Join-Path $OutputRoot 'explicit-reference-mismatch.json'
+$pinMalformed=Join-Path $OutputRoot 'explicit-reference-invalid.json'
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Probe -OutputPath $pinOk -HostedSystemDriverControl -ExpectedVendorSha256 $b.driver_file_sha256 | Out-Null
+if($LASTEXITCODE -ne 0){throw 'REFERENCE_PIN_VALID_PRECHECK_FAILED'}
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Probe -OutputPath $pinBad -HostedSystemDriverControl -ExpectedVendorSha256 ('0'*64) | Out-Null
+if($LASTEXITCODE -ne 2){throw 'WRONG_VENDOR_REFERENCE_NOT_REFUSED'}
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Probe -OutputPath $pinMalformed -HostedSystemDriverControl -ExpectedVendorSha256 'invalid-pin' | Out-Null
+if($LASTEXITCODE -ne 2){throw 'MALFORMED_VENDOR_REFERENCE_NOT_REFUSED'}
+$d=Get-Content $pinOk -Raw | ConvertFrom-Json
+$e=Get-Content $pinBad -Raw | ConvertFrom-Json
+$g=Get-Content $pinMalformed -Raw | ConvertFrom-Json
+if($d.supplied_vendor_reference_sha256_matches -ne $true -or $d.supplied_vendor_reference_authority_verified -ne $false -or
+   $e.supplied_vendor_reference_sha256_matches -ne $false -or $e.error_code -ne 'VENDOR_PIN_MISMATCH' -or
+   $g.error_code -ne 'INVALID_VENDOR_PIN_FORMAT'){throw 'EXPLICIT_REFERENCE_HASH_GATE_UNSOUND'}
+Write-Host 'PASS explicit hash reference matched, mismatched and malformed refs denied without vendor trust assertion'
 if($a.target -ne 'NDISRD' -or $a.target_is_product_ndisrd -ne $true){throw 'TARGET_NDISRD_CHANGED'}
 if($b.target -ne 'Tcpip' -or $b.target_is_product_ndisrd -ne $false -or
    $b.service_registration -ne 'REGISTERED' -or $b.service_type -ne 'KERNEL_DRIVER' -or
    $b.image_path_status -ne 'EXISTS_HASHED' -or
-   $b.driver_file_sha256 -notmatch '^[0-9a-f]{64}$'){throw 'REAL_WINDOWS_SYSTEM_DRIVER_PATH_HASH_NOT_PROVED'}
+   $b.driver_file_sha256 -notmatch '^[0-9a-f]{64}$' -or $b.authenticode_status -ne 'Valid'){throw 'REAL_WINDOWS_SYSTEM_DRIVER_PATH_HASH_NOT_PROVED'}
 if($c.status -ne 'BLOCKED' -or $c.error_code -ne 'UNEXPECTED_HOST' -or
     $c.expected_host_matches -ne $false){throw 'HOSTNAME_MISMATCH_NOT_BLOCKED'}
-foreach($item in @($a,$b,$c)){
+foreach($item in @($a,$b,$c,$d,$e,$g)){
     foreach($key in @('driver_device_opened','filter_or_adapter_mode_modified',
         'service_installed_or_started_by_probe','network_or_security_settings_modified',
         'owner_process_per_packet_proven','kernel_connection_id_available',
