@@ -228,6 +228,19 @@
         "native_driver_signed_loaded": false,
         "g2_packet_bound_pass": false,
         "accepted": false
+      },
+      "ndisrd_driver_provenance_preflight": {
+        "pr": "https://github.com/i-shutov/flowbridge/pull/68",
+        "code": "5528fb5962fcb6e1bd008d2f42debef6dd95f967",
+        "run": "https://github.com/i-shutov/flowbridge/actions/runs/43706911211",
+        "general_rust": "https://github.com/i-shutov/flowbridge/actions/runs/43706911213",
+        "verified_original_zip_sha256": "18ade9427ae8b18e26f15d3b4c1f541988b89706f7f7d8282c2703357496bf59",
+        "read_only_real_windows_kernel_control": true,
+        "owner_ndisrd_file_checked": false,
+        "native_ndisrd_packet_process_origin_proved": false,
+        "vendor_licensing_reviewed": false,
+        "release_accepted": false,
+        "checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_NDISRD_DRIVER_PROVENANCE_20261115.json"
       }
     },
     {
@@ -460,7 +473,10 @@
     "original_beta_candidate_source": "f5ecd48d8f81c594f755a55e7969b57d20903020",
     "windows_win01_gui_owner_epoch_subgate": "HOSTED_WIN32_PASS_KERNEL_PACKET_G2_NO_GO",
     "windows_win01_gui_owner_epoch_checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_GUI_OWNER_EPOCH_20261115.json",
-    "windows_1_0_release": "NO_GO"
+    "windows_1_0_release": "NO_GO",
+    "ndsrd_win01_driver_provenance": "HOSTED_TCPIP_POSITIVE_NDISRD_MISSING_OWNER_NOT_RUN",
+    "ndisrd_driver_provenance_checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_NDISRD_DRIVER_PROVENANCE_20261115.md",
+    "win01_packet_bound": "G2_NO_GO"
   },
   "windows_first_release": {
     "decision_date": "2026-11-15",
