@@ -215,13 +215,13 @@
     {
       "id": "R02",
       "track": "1.0",
-      "status": "BLOCKED_EXTERNAL",
+      "status": "SIGNED_NE_NATIVE_BLOCKED_CARRIER_SOURCE_CI_PASS",
       "depends_on": [
         "R00"
       ],
       "exit_criterion": "macOS signed+entitled NE activation v4/v6 on ARM/Intel, selected app, fail-closed/reboot/uninstall",
       "accepted": false,
-      "proof": "Hosted unsigned macOS explicit beta contains no NE; real native sign/entitle/approve/activate and Apple Silicon+Intel per-app TCP evidence OPEN.",
+      "proof": "PR66 product SSH transport exception narrowed to Apple-verified /usr/bin/ssh plus literal destination IP+port. 32/32 provider code tests (5 baseline, 5 mutants), actual real Apple signer on arm64/x86_64 2/2, full native CI 5/5. No signed activated NE, no physical no-DIRECT, no process-instance attestation.",
       "work_package": {
         "pull_request": "https://github.com/i-shutov/flowbridge/pull/60",
         "exact_head": "32f15c8131a90f34dee6a86527191c5242fc5576",
@@ -248,6 +248,40 @@
         "physical_mac_signed_ne": false,
         "physical_dns_no_leak": false,
         "native_r02_accepted": false
+      },
+      "ssh_carrier_bypass_fix": {
+        "pull_request": "https://github.com/i-shutov/flowbridge/pull/66",
+        "exact_head_sha": "328768f064994eb2797f128460d78a025e9c6032",
+        "parent_stack": "https://github.com/i-shutov/flowbridge/pull/63",
+        "original_broad_bypass": "Apple /usr/bin/ssh signing ID exempted all destinations",
+        "product_fix": "App and NE share real Apple Security verifier; only OS source signing ID plus canonical literal SSH host IP and exact TCP port may bypass. Unknown identity blocked before DIRECT; carrier requires owned managed endpoint.",
+        "focused_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43681078817",
+        "focused_tests_passed": 32,
+        "historical_regressions_reproduced": 5,
+        "deliberate_mutations_rejected": 5,
+        "real_apple_signature_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43681078771",
+        "real_apple_signature_arms": [
+          "arm64",
+          "x86_64"
+        ],
+        "observed_system_ssh_signing_id": "com.apple.ssh",
+        "full_native_regression": "https://github.com/i-shutov/flowbridge/actions/runs/43681078874",
+        "full_native_regression_jobs": "5/5 SUCCESS",
+        "dns_regression": "https://github.com/i-shutov/flowbridge/actions/runs/43681078758",
+        "dns_regression_jobs": "3/3 SUCCESS",
+        "original_sanitized_artifacts": [
+          14147893527,
+          14148123414,
+          14147734396
+        ],
+        "original_artifact_crc": "3/3 PASS",
+        "independent_original_hash_report": "docs/qa/release-1.0/checkpoints/R02_MACOS_SSH_CARRIER_20261115.json",
+        "source_level_fix_accepted_for_research": true,
+        "real_signed_ne_activated": false,
+        "physical_selected_egress_verified": false,
+        "real_owned_ssh_process_instance_bound": false,
+        "native_r02_accepted": false,
+        "release_accepted": false
       }
     },
     {
@@ -305,6 +339,14 @@
         "corrected": "Apply rules Swift/Rust policy split and stale DIRECT/Proxy in-flight decisions; admission fenced before Rust reload",
         "exact_native_traffic_proof": false,
         "review_status": "INDEPENDENT_CODE_REVIEW_OPEN"
+      },
+      "ssh_carrier_rule_safety": {
+        "pull_request": "https://github.com/i-shutov/flowbridge/pull/66",
+        "exact_head": "328768f064994eb2797f128460d78a025e9c6032",
+        "verified_source_only": true,
+        "rule_exception_now_scoped_to_literal_transport": true,
+        "native_process_ownership_proved": false,
+        "physical_no_direct_proved": false
       }
     },
     {
@@ -386,6 +428,11 @@
     "python_free_windows_a3": "HOSTED_6_6_PASS_OWNER_NATIVE_OPEN",
     "original_beta_binaries_unchanged": true,
     "macos_a4_dualarch": "HOSTED_ARM64_INTEL_6_6_EACH_OWNER_OPEN",
-    "macos_a4_checkpoint": "docs/qa/release-1.0/checkpoints/A4_MACOS_DUALARCH_20261115.json"
+    "macos_a4_checkpoint": "docs/qa/release-1.0/checkpoints/A4_MACOS_DUALARCH_20261115.json",
+    "macos_r02_ssh_carrier_checkpoint": "docs/qa/release-1.0/checkpoints/R02_MACOS_SSH_CARRIER_20261115.md",
+    "macos_r02_source_proof": "PR66 REAL APPLE SIGNER 2/2; SWIFT 32/32; FULL NATIVE 5/5; PHYSICAL R02 NO-GO",
+    "beta_release_accepted": false,
+    "version_1_0_accepted": false,
+    "original_beta_source_unchanged": true
   }
 }
