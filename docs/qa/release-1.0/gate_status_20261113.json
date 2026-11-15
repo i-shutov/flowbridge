@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "as_of": "2026-11-14",
+  "as_of": "2026-11-15",
   "project": "i-shutov/flowbridge",
   "source": {
     "main": "5b5afc2feeda2195f302380e615ba003d4906e09",
@@ -93,13 +93,40 @@
     {
       "id": "A4",
       "track": "beta",
-      "status": "NOT_RUN_NEW_BYTES",
+      "status": "HOSTED_ARM64_INTEL_NATIVE_LIFECYCLE_PASS_OWNER_OPEN",
       "depends_on": [
         "A1"
       ],
       "exit_criterion": "macOS explicit-only package, ARM64/Intel GUI/SSH/native upgrade/remove, without NE",
       "accepted": false,
-      "proof": "Hosted macOS arm64 package and six lifecycle checks PASS, but new-source owner Apple Silicon and Intel GUI/SSH NOT_RUN; a 4-second process launch is not a manual GUI acceptance."
+      "proof": "Exact frozen original 0.3.0-beta.1 pkg executed on real GitHub-hosted Apple Silicon AND Intel; 6/6 native user-mode lifecycle per OS, 3/3 CI success, 9 negative tests, independent source/manifest/pkg identity compare. Owner ARM/Intel native, GUI/keyboards, real SSH, signing and independent review remain NOT_RUN/OPEN.",
+      "dualarch_hosted_evidence": {
+        "work_package": "https://github.com/i-shutov/flowbridge/pull/65",
+        "exact_head": "3510cb9db7bee3100df81c4bf67911115c47bba6",
+        "workflow_run": "https://github.com/i-shutov/flowbridge/actions/runs/43676247783",
+        "workflow_jobs": "3/3 SUCCESS",
+        "platform_results": {
+          "macos-15": "arm64 6/6 PASS",
+          "macos-15-intel": "x86_64 6/6 PASS"
+        },
+        "compared_same_original_sha": true,
+        "original_source_sha": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+        "original_pkg_sha256": "7eb645e227442ba5a2d12bc1b9c5853212baf8a3d28e7215640f0e3e2ec0453c",
+        "negative_control_tests": "9/9 PASS",
+        "artifacts": [
+          14146717484,
+          14145964268,
+          14145529135
+        ],
+        "independent_original_zip_crc": "3/3 PASS",
+        "checkpoint": "docs/qa/release-1.0/checkpoints/A4_MACOS_DUALARCH_20261115.md",
+        "owner_mac_silicon_accepted": false,
+        "owner_mac_intel_accepted": false,
+        "independent_visual_keyboard_review": false,
+        "real_managed_ssh_accepted": false,
+        "signed_network_extension_accepted": false,
+        "release_accepted": false
+      }
     },
     {
       "id": "A5",
@@ -350,13 +377,15 @@
     "owner_windows_new_package": "NOT_RUN",
     "owner_macos_new_package": "NOT_RUN",
     "backend_decision": "Issue #41 NDISRD-only authorization still in force; WFP is separate research",
-    "updated_as_of": "2026-11-14",
+    "updated_as_of": "2026-11-15",
     "blocker_checkpoint": "docs/qa/FLOWBRIDGE_RELEASE_BLOCKER_PROGRESS_20261114.md",
     "product_main_unchanged": true,
     "original_binary_candidate_source": "f5ecd48d8f81c594f755a55e7969b57d20903020",
     "new_r06_mac_policy_apply": "PR63_CODE_LEVEL_PASS; live NE NOT_ACCEPTED",
     "flowbridge_1_0": "NO_GO",
     "python_free_windows_a3": "HOSTED_6_6_PASS_OWNER_NATIVE_OPEN",
-    "original_beta_binaries_unchanged": true
+    "original_beta_binaries_unchanged": true,
+    "macos_a4_dualarch": "HOSTED_ARM64_INTEL_6_6_EACH_OWNER_OPEN",
+    "macos_a4_checkpoint": "docs/qa/release-1.0/checkpoints/A4_MACOS_DUALARCH_20261115.json"
   }
 }
