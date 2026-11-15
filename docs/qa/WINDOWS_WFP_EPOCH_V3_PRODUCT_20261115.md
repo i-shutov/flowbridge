@@ -21,6 +21,15 @@ Microsoft's WFP connect-redirection and reauthorization guidance distinguishes i
 - The real WDK driver registers `PsSetCreateProcessNotifyRoutineEx` at startup; calls `PsGetProcessCreateTimeQuadPart` and `PsGetProcessStartKey` in OS process-create/exit callbacks, and unregisters the callback at unload. The linker marks the .sys image `/INTEGRITYCHECK`; this is an image property, NOT a signature, not code-integrity acceptance and not authorization to load it.
 - The real ALE_CONNECT_REDIRECT classify method reads the cached OS process origin under its kernel spinlock, requires OS `transportEndpointHandle`, and copies all three fields into the immutable per-socket **v3** redirect context. Missing/poisoned kernel record → `BLOCK`; never substitute PID+tuple snapshots.
 - WFP device control ABI raised from **2 to 3**; older driver/GUI helper combinations refuse to interoperate. The accepted-socket Win32 `SIO_QUERY_WFP_CONNECTION_REDIRECT_CONTEXT` reader validates the v3 length, PID/creation/start-key/transport endpoint and remaining canonical byte fields before any routing.
+- **Rust FFI fail-open fix:** the actual `crates/flowbridge-ffi/src/lib.rs`
+  WFP entrypoint previously permitted a selected redirected connection to
+  choose a profile `DIRECT` route if the application-specific rule did not
+  match. With non-empty OS WFP redirect records, a protected connection
+  must now resolve to **Proxy/Chain with at least one hop**; missing rule,
+  `DIRECT`, `BLOCK` or an empty route aborts **before** stream reservation
+  and creation of any outbound socket. An explicit SOCKS connection
+  without WFP records keeps its existing independent DIRECT policy.
+  Rust unit tests and two independent source mutations guard the boundary.
 - Existing selected flow `gEnabled==FALSE` and foreign redirector scenarios now **block**. Self/previous-self redirection is still returned to WFP to avoid recursion; actual authorization at `ALE_AUTH_CONNECT` remains the separate outstanding P0. On configuration, a lost/unregistered process-notify ledger produces `STATUS_DEVICE_NOT_READY`.
 
 ## 3. Tests and exact acceptance boundaries
