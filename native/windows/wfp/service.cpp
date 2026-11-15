@@ -174,7 +174,7 @@ void handle(SOCKET raw,uint64_t nativeSession,uint64_t idleMs,Capture& capture) 
         // application policy can cause any outbound TCP socket to be created.
         // Failure throws and closes the accepted socket: no DIRECT fallback.
         if(stopping) throw std::runtime_error("WFP capture stopped before terminal claim");
-        capture.claim(context);
+        capture.claim(raw,context);
         if(context.ipv6_scope_id) throw std::runtime_error("Scoped IPv6 destinations are not supported by the core endpoint ABI");
         auto path=utf8(context.process_path,context.process_path_chars);
         auto split=path.find_last_of("\\/"); auto application=path.substr(split==std::string::npos?0:split+1);
