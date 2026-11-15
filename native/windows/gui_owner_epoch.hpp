@@ -10,7 +10,10 @@
 // preventing PID reuse while that owner relationship is in force.
 namespace gui_owner_epoch {
 inline std::uint64_t creationTime(HANDLE process) {
-    if (!process || process == INVALID_HANDLE_VALUE)
+    // GetCurrentProcess() is the valid pseudo-handle (HANDLE)-1, which equals
+    // INVALID_HANDLE_VALUE numerically. Never reject it as a generic error.
+    // OpenProcess failures are NULL and checked separately at the call site.
+    if (!process)
         throw std::runtime_error("GUI owner process handle unavailable");
     FILETIME created{}, exited{}, kernel{}, user{};
     if (!GetProcessTimes(process, &created, &exited, &kernel, &user))
@@ -24,7 +27,7 @@ inline std::uint64_t current() {
     return creationTime(GetCurrentProcess());
 }
 inline void verify(HANDLE owner, DWORD expectedPid, std::uint64_t expectedEpoch) {
-    if (!expectedPid || !expectedEpoch || !owner || owner == INVALID_HANDLE_VALUE)
+    if (!expectedPid || !expectedEpoch || !owner)
         throw std::runtime_error("GUI owner PID and creation time are mandatory");
     if (GetProcessId(owner) != expectedPid)
         throw std::runtime_error("GUI owner process handle PID changed");
