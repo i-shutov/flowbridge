@@ -370,6 +370,50 @@ static void NTAPI FbClassify(const FWPS_INCOMING_VALUES0* values,
 static NTSTATUS NTAPI FbNotify(FWPS_CALLOUT_NOTIFY_TYPE type, const GUID* key, FWPS_FILTER1* filter) {
     UNREFERENCED_PARAMETER(type); UNREFERENCED_PARAMETER(key); UNREFERENCED_PARAMETER(filter); return STATUS_SUCCESS;
 }
+/*
+ * Interpret only the kernel-owned v3 context layout returned by WSAIoctl.
+ * The exclusive elevated helper supplies this context. The claim can succeed
+ * ONLY after a real ALE_AUTH_CONNECT consumed an OS-origin ticket.
+ * This IOCTL does not independently prove which socket object was accepted.
+ */
+static BOOLEAN FbValidateClaim(const FbWfpClaim* claim, HANDLE broker,
+                               FbAuthOrigin* output) {
+    const FbRedirectContext* context;
+    FbAuthOrigin ticket = {0};
+    unsigned i;
+    if (!claim || !output || !broker ||
+        claim->size != sizeof(FbWfpClaim) || claim->version != FB_WFP_ABI)
+        return FALSE;
+    context = &claim->context;
+    if (context->magic != FB_REDIRECT_MAGIC ||
+        context->version != FB_REDIRECT_VERSION ||
+        context->size != sizeof(FbRedirectContext) ||
+        context->original_process_id == (FbUint64)(ULONG_PTR)broker ||
+        context->ipv6_scope_id != 0 ||
+        !context->process_path_chars ||
+        context->process_path_chars >= FB_PROCESS_PATH_CHARS)
+        return FALSE;
+    for (i = 0; i < sizeof(context->reserved); ++i)
+        if (context->reserved[i] != 0) return FALSE;
+    for (i = 0; i < FB_PROCESS_PATH_CHARS; ++i) {
+        if (i < context->process_path_chars) {
+            if (context->process_path[i] < 32) return FALSE;
+        } else if (context->process_path[i] != 0) return FALSE;
+    }
+    ticket.pid = context->original_process_id;
+    ticket.creation_100ns = context->original_process_creation_100ns;
+    ticket.process_start_key = context->original_process_start_key;
+    ticket.endpoint = context->original_transport_endpoint;
+    ticket.flow_id = context->flow_id;
+    ticket.broker_pid = HandleToULong(broker);
+    ticket.family = context->address_family == AF_INET ? 4 :
+                    context->address_family == AF_INET6 ? 6 : 0;
+    ticket.port_be = context->destination_port_be;
+    RtlCopyMemory(ticket.original_ip, context->destination_address, 16);
+    if (!FbAuthOriginValid(&ticket)) return FALSE;
+    *output = ticket;
+    return TRUE;
+}
 static NTSTATUS FbDispatch(PDEVICE_OBJECT device, PIRP irp) {
     PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(irp);
     NTSTATUS status = STATUS_INVALID_DEVICE_REQUEST;
@@ -395,6 +439,34 @@ static NTSTATUS FbDispatch(PDEVICE_OBJECT device, PIRP irp) {
               if (c->size != sizeof(*c) || c->version != FB_WFP_ABI || c->reserved || !c->port_v4_be || !c->port_v6_be) { status = STATUS_INVALID_PARAMETER; break; }
               if (gEpochTable.lost || gAuthBook.lost || !gEpochNotifierRegistered) { status = STATUS_DEVICE_NOT_READY; break; }
               gConfig = *c; gEnabled = TRUE; status = STATUS_SUCCESS; }
+            break;
+        case FB_IOCTL_CLAIM:
+            if (stack->Parameters.DeviceIoControl.InputBufferLength != sizeof(FbWfpClaim) ||
+                irp->AssociatedIrp.SystemBuffer == NULL) {
+                status = STATUS_INFO_LENGTH_MISMATCH; break;
+            }
+            {
+                FbAuthOrigin requested = {0};
+                FbEpochRecord live = {0};
+                const FbWfpClaim* received = (const FbWfpClaim*)irp->AssociatedIrp.SystemBuffer;
+                if (!FbValidateClaim(received, gOwnerPid, &requested)) {
+                    status = STATUS_INVALID_PARAMETER; break;
+                }
+                /* gLock already held by dispatcher. An unchanged owner PID
+                 * plus a terminal AUTH book claim is not a copy of a
+                 * transient TCP/IP 5-tuple lookup. */
+                if (!gEnabled || !gEpochNotifierRegistered ||
+                    gEpochTable.lost || gAuthBook.lost) {
+                    status = STATUS_DEVICE_NOT_READY; break;
+                }
+                if (!FbEpochLookup(&gEpochTable, requested.pid, &live) ||
+                    live.creation_100ns != requested.creation_100ns ||
+                    live.start_key != requested.process_start_key ||
+                    !FbAuthClaim(&gAuthBook, &requested)) {
+                    status = STATUS_ACCESS_DENIED; break;
+                }
+                status = STATUS_SUCCESS;
+            }
             break;
         case FB_IOCTL_DISABLE: gEnabled = FALSE; gAuthBook.lost = 1; status = STATUS_SUCCESS; break;
         case FB_IOCTL_QUERY:
