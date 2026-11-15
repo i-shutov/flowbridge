@@ -3,6 +3,7 @@
 // fwpmu GUID definitions are intentionally outside its ordinary include guard;
 // re-including it in an INITGUID translation unit defines every GUID twice.
 #include <array>
+#include <cstring>
 #include <filesystem>
 #include <stdexcept>
 #include <string>
@@ -36,6 +37,12 @@ public:
     ApplicationId(const ApplicationId&)=delete;
     ApplicationId& operator=(const ApplicationId&)=delete;
     ApplicationId(ApplicationId&& other) noexcept : blob_(std::exchange(other.blob_,nullptr)) {}
+    FWP_BYTE_BLOB* blob() const noexcept { return blob_; }
+    bool sameOsIdentity(const ApplicationId& other) const noexcept {
+        return blob_ && other.blob_ && blob_->data && other.blob_->data &&
+            blob_->size == other.blob_->size &&
+            std::memcmp(blob_->data, other.blob_->data, blob_->size) == 0;
+    }
     std::array<FWPM_FILTER_CONDITION0,2> tcpConditions() const {
         std::array<FWPM_FILTER_CONDITION0,2> conditions{};
         conditions[0].fieldKey=FWPM_CONDITION_IP_PROTOCOL;

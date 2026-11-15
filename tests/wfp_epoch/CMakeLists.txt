@@ -11,5 +11,15 @@ if(MSVC)
   set_property(TARGET FlowBridgeWfpEpochV3 PROPERTY MSVC_RUNTIME_LIBRARY
                "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
+add_executable(FlowBridgeWfpAuthReceiptR198 ../windows_wfp_auth_receipt_r198.cpp)
+target_compile_features(FlowBridgeWfpAuthReceiptR198 PRIVATE cxx_std_17)
+target_compile_definitions(FlowBridgeWfpAuthReceiptR198 PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+if(MSVC)
+  target_compile_options(FlowBridgeWfpAuthReceiptR198 PRIVATE /W4 /WX /utf-8)
+  set_property(TARGET FlowBridgeWfpAuthReceiptR198 PROPERTY MSVC_RUNTIME_LIBRARY
+               "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 enable_testing()
 add_test(NAME FlowBridge_WFP_RealSourceEpochV3 COMMAND FlowBridgeWfpEpochV3)
+
+add_test(NAME FlowBridge_WFP_R198_AuthReceipt_Source COMMAND FlowBridgeWfpAuthReceiptR198)

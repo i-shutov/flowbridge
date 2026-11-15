@@ -4,6 +4,8 @@ on:
     paths:
       - 'native/windows/wfp/**'
       - 'tests/windows_wfp_epoch_v3.cpp'
+      - 'tests/windows_wfp_auth_receipt_r198.cpp'
+      - 'tests/test_windows_wfp_auth_r198_source.py'
       - 'tests/wfp_epoch/**'
       - 'tests/test_windows_wfp_epoch_source.py'
       - '.github/workflows/windows-wfp-epoch-v3.yml'
@@ -23,6 +25,8 @@ jobs:
           python-version: '3.13'
       - name: Seven source-level hostile mutations must not authorize WFP G2
         run: python -m unittest discover -s tests -p test_windows_wfp_epoch_source.py -v
+      - name: R198 original/current AppId, ticket and veto source mutation controls
+        run: python -m unittest discover -s tests -p test_windows_wfp_auth_r198_source.py -v
       - name: Real MSVC compile of the production C process ledger and context ABI
         run: cmake -S tests/wfp_epoch -B build/wfp-epoch -A x64
       - run: cmake --build build/wfp-epoch --config Release
@@ -47,6 +51,25 @@ jobs:
             throw 'NATIVE_EPOCH_TEST_FALSE_G2_CLAIM'
           }
           Write-Host 'PASS real C process ledger negative scenarios, ABI v3; native G2 NOT ACCEPTED'
+      - name: Execute native WFP R198 original-loopback receipt negatives
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $exe=(Resolve-Path 'build/wfp-epoch/Release/FlowBridgeWfpAuthReceiptR198.exe').Path
+          $raw=& $exe
+          if($LASTEXITCODE -ne 0){throw 'NATIVE_AUTH_RECEIPT_R198_TEST_FAILED'}
+          $raw | Set-Content -Encoding UTF8 build/verification/wfp-epoch/auth-r198.json
+          $r=$raw | ConvertFrom-Json
+          if($r.schema -ne 'flowbridge-wfp-r198-auth-receipt-source-v1' -or
+             $r.status -ne 'C_SOURCE_LOGIC_PASS_NATIVE_WFP_NOT_RUN' -or
+             $r.cases_pass -ne 9 -or
+             $r.kernel_callbacks_executed -ne $false -or
+             $r.physical_proxy_ssh_verified -ne $false -or
+             $r.native_g2_accepted -ne $false -or
+             $r.release_accepted -ne $false) {
+            throw 'AUTH_SOURCE_TEST_FALSE_NATIVE_G2_CLAIM'
+          }
+          Write-Host 'PASS native compiled C AUTH one-shot and R198 collision negatives (source only)'
       - name: Preserve source-specific evidence even on failure
         if: always()
         uses: actions/upload-artifact@v4

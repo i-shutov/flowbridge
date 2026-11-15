@@ -54,6 +54,15 @@ void Capture::start(unsigned short p4, unsigned short p6, const std::vector<std:
     std::vector<ApplicationId> applications;
     applications.reserve(paths.size());
     for(const auto& path:paths) applications.emplace_back(path);
+    std::vector<ApplicationId> bypassApplications;
+    bypassApplications.reserve(bypass.size());
+    for(const auto& path:bypass) bypassApplications.emplace_back(path);
+    // The OS-normalized file identity is authoritative, not caller spelling.
+    // A high-weight bypass overlapping a selected app would create DIRECT.
+    for(const auto& selected:applications)
+        for(const auto& excluded:bypassApplications)
+            if(selected.sameOsIdentity(excluded))
+                throw std::runtime_error("Selected application overlaps protected transport bypass");
     try {
         driver_=CreateFileW(FB_WFP_DEVICE,GENERIC_READ|GENERIC_WRITE,0,nullptr,OPEN_EXISTING,0,nullptr);
         if (driver_==INVALID_HANDLE_VALUE) check(GetLastError(),"Open signed WFP driver");
@@ -94,18 +103,44 @@ void Capture::start(unsigned short p4, unsigned short p6, const std::vector<std:
                 filter.filterCondition=conditions.data();
                 check(FwpmFilterAdd0(engine_,&filter,nullptr,nullptr),"Add selected application TCP filter");
             }
-            for (const auto& path:bypass) {
-                FWP_BYTE_BLOB* app=nullptr;
-                check(FwpmGetAppIdFromFileName0(path.c_str(),&app),"Resolve bypass executable");
+            for (const auto& excluded:bypassApplications) {
                 FWPM_FILTER_CONDITION0 condition{}; condition.fieldKey=FWPM_CONDITION_ALE_APP_ID;
-                condition.matchType=FWP_MATCH_EQUAL; condition.conditionValue.type=FWP_BYTE_BLOB_TYPE; condition.conditionValue.byteBlob=app;
-                // Separate high-weight permit filters avoid OR semantics for
-                // repeated NOT_EQUAL conditions on the same app-id field.
+                condition.matchType=FWP_MATCH_EQUAL; condition.conditionValue.type=FWP_BYTE_BLOB_TYPE;
+                condition.conditionValue.byteBlob=excluded.blob();
+                // Exact canonical OS identity, same as collision check.
                 filter.action.type=FWP_ACTION_PERMIT; filter.weight.uint64=&bypassWeight;
                 filter.numFilterConditions=1; filter.filterCondition=&condition;
                 filter.displayData.name=const_cast<wchar_t*>(L"FlowBridge explicit executable bypass");
-                DWORD result=FwpmFilterAdd0(engine_,&filter,nullptr,nullptr);
-                FwpmFreeMemory0(reinterpret_cast<void**>(&app)); check(result,"Add bypass filter");
+                check(FwpmFilterAdd0(engine_,&filter,nullptr,nullptr),"Add bypass filter");
+            }
+        }
+        // Separate terminating AUTH_CONNECT enforcement. Scope to the
+        // CURRENT OS ALE_APP_ID of each selected EXE, not ORIGINAL_APP_ID:
+        // ORIGINAL_APP_ID may persist on the broker's records-tagged external
+        // SSH socket (R198). An unconditional broker PID permit is forbidden.
+        const GUID authLayers[]={FWPM_LAYER_ALE_AUTH_CONNECT_V4,FWPM_LAYER_ALE_AUTH_CONNECT_V6};
+        const GUID authKeys[]={FB_WFP_AUTH_CALLOUT4,FB_WFP_AUTH_CALLOUT6};
+        for (unsigned i=0;i<2;++i) {
+            FWPM_CALLOUT0 callout{}; callout.calloutKey=authKeys[i];
+            callout.applicableLayer=authLayers[i];
+            callout.providerKey=const_cast<GUID*>(&FB_WFP_PROVIDER);
+            callout.displayData.name=const_cast<wchar_t*>(L"FlowBridge selected original AUTH");
+            check(FwpmCalloutAdd0(engine_,&callout,nullptr,nullptr),"Add original AUTH callout");
+            verifyCallout(engine_,authKeys[i]);
+            FWPM_FILTER0 filter{}; filter.layerKey=authLayers[i];
+            filter.subLayerKey=FB_WFP_SUBLAYER;
+            filter.providerKey=const_cast<GUID*>(&FB_WFP_PROVIDER);
+            filter.displayData.name=const_cast<wchar_t*>(L"FlowBridge exact current-app AUTH");
+            UINT64 authWeight=1;
+            filter.weight.type=FWP_UINT64;filter.weight.uint64=&authWeight;
+            filter.action.type=FWP_ACTION_CALLOUT_TERMINATING;
+            filter.action.calloutKey=authKeys[i];
+            for(const auto& selected:applications) {
+                auto conditions=selected.tcpConditions();
+                filter.numFilterConditions=static_cast<UINT32>(conditions.size());
+                filter.filterCondition=conditions.data();
+                check(FwpmFilterAdd0(engine_,&filter,nullptr,nullptr),
+                      "Add exact selected-app AUTH filter");
             }
         }
         FbWfpConfig config{sizeof(FbWfpConfig),FB_WFP_ABI,p4,p6,0};

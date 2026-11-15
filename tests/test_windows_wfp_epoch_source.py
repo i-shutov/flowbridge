@@ -55,7 +55,7 @@ def audit(driver: str, context: str, reader: str, control: str, table: str) -> N
     require("FWPS_METADATA_FIELD_TRANSPORT_ENDPOINT_HANDLE" in driver and
             "metadata->transportEndpointHandle == 0) { FbBlock(out); return; }" in driver,
             "transport endpoint handle missing but selected connection admitted")
-    require("if (gEpochTable.lost || !gEpochNotifierRegistered)" in driver and
+    require("if (gEpochTable.lost || gAuthBook.lost || !gEpochNotifierRegistered)" in driver and
             "status = STATUS_DEVICE_NOT_READY" in driver,
             "driver config allowed after process ledger loss")
     require("if (firstFree == FB_EPOCH_CAPACITY)" in table and
@@ -120,7 +120,7 @@ class G2SourceSecurityTests(unittest.TestCase):
              "state != FWPS_CONNECTION_NOT_REDIRECTED) { return; }"),
             (0, "FbEpochLookup(&gEpochTable, metadata->processId, &processEpoch)",
              "FakePidOnlyLookup(&gEpochTable, metadata->processId, &processEpoch)"),
-            (0, "if (gEpochTable.lost || !gEpochNotifierRegistered)",
+            (0, "if (gEpochTable.lost || gAuthBook.lost || !gEpochNotifierRegistered)",
              "if (!gEpochNotifierRegistered)"),
             (2, "!candidate.original_process_creation_100ns",
              "candidate.original_process_creation_100ns"),
