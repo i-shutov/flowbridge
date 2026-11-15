@@ -33,10 +33,15 @@
       <AdditionalIncludeDirectories>..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <BufferSecurityCheck>true</BufferSecurityCheck>
     </ClCompile>
-    <Link><AdditionalDependencies>Fwpkclnt.lib;Wdmsec.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+    <Link>
+      <AdditionalDependencies>Fwpkclnt.lib;Wdmsec.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <!-- PsSetCreateProcessNotifyRoutineEx requires FORCE_INTEGRITY in the
+           image header. This flag is NOT code signing or permission to load. -->
+      <AdditionalOptions>/INTEGRITYCHECK %(AdditionalOptions)</AdditionalOptions>
+    </Link>
   </ItemDefinitionGroup>
   <ItemGroup><ClCompile Include="driver.c" /><Inf Include="FlowBridgeWfp.inf" /></ItemGroup>
-  <ItemGroup><ClInclude Include="wdk_headers.h" /><ClInclude Include="..\control.h" /><ClInclude Include="..\redirect_context.h" /></ItemGroup>
+  <ItemGroup><ClInclude Include="wdk_headers.h" /><ClInclude Include="..\control.h" /><ClInclude Include="..\redirect_context.h" /><ClInclude Include="..\process_epoch.h" /></ItemGroup>
   <ItemGroup>
     <!-- Inf2Cat validates files in the package directory, not just OutDir. -->
     <FilesToPackage Include="$(TargetPath)" />
