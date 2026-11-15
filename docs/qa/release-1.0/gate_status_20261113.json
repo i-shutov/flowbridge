@@ -433,6 +433,59 @@
     "macos_r02_source_proof": "PR66 REAL APPLE SIGNER 2/2; SWIFT 32/32; FULL NATIVE 5/5; PHYSICAL R02 NO-GO",
     "beta_release_accepted": false,
     "version_1_0_accepted": false,
-    "original_beta_source_unchanged": true
+    "original_beta_source_unchanged": true,
+    "first_release_scope": "WINDOWS_ONLY_1_0",
+    "first_release_scope_note": "Owner decision: target Windows 10 Pro 22H2 x64 + Windows 11 Pro x64; Mac follows separately; core stays portable",
+    "release_go": "WINDOWS_1_0_NO_GO_G2_NATIVE_OWNER_UNPROVED",
+    "macos_beta_and_native_release": "DEFERRED_NOT_ACCEPTED",
+    "windows_first_roadmap": "docs/qa/release-1.0/WINDOWS_FIRST_1_0_ROADMAP_20261115.md",
+    "original_beta_candidate_source": "f5ecd48d8f81c594f755a55e7969b57d20903020"
+  },
+  "windows_first_release": {
+    "decision_date": "2026-11-15",
+    "owner_scope_decision": "WINDOWS_FIRST_1_0_MACOS_LATER",
+    "target_platforms": [
+      "Windows 10 Pro 22H2 x64 build 19045",
+      "Windows 11 Pro x64"
+    ],
+    "scope_accepted_not_release_go": true,
+    "windows_1_0_accepted": false,
+    "windows_1_0_gates_file": "docs/qa/release-1.0/WINDOWS_FIRST_GATES_20261115.json",
+    "windows_1_0_roadmap": "docs/qa/release-1.0/WINDOWS_FIRST_1_0_ROADMAP_20261115.md",
+    "required_windows_gates": [
+      "WIN-00",
+      "WIN-01",
+      "WIN-02",
+      "WIN-03",
+      "WIN-04",
+      "WIN-05",
+      "WIN-06",
+      "WIN-07",
+      "WIN-08",
+      "WIN-09"
+    ],
+    "first_release_macos_excluded": true,
+    "macos_work_preserved": true,
+    "macos_historical_gate_status_unchanged": true,
+    "macos_R02_and_R04_not_required_for_windows_1_0": true,
+    "macos_native_accepted": false,
+    "beta_windows_only_pre_release_optional": true,
+    "beta_windows_required_legacy_gates": [
+      "A0",
+      "A1",
+      "A2",
+      "A3",
+      "A5",
+      "A6",
+      "A7"
+    ],
+    "macos_beta_A4_owner_accepted": false,
+    "r01_windows_g2_still_no_go": true,
+    "ndisrd_only_authorization_unchanged": true,
+    "alternative_wfp_authorized": false,
+    "no_direct_proved": false,
+    "windows_10_11_native_1_0_proved": false,
+    "frozen_0_3_0_beta_binary_source_unchanged": true,
+    "full_existing_19_gate_accepted_flags_all_false": true
   }
 }
