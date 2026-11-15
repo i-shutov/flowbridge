@@ -62,7 +62,7 @@ def check_source(policy: str, driver: str, tickets: str, guids: str) -> None:
             "values->incomingValue[ipIndex].value.uint32 != 0x7f000001" in driver,
             "external_SSH_accepted_as_loopback")
     require("FbAuthIssue(&gAuthBook, &item)" in driver and
-            driver.count("FbIssueOriginalReceipt(context, ownerPid, &stagedReceipt)") == 2 and
+            driver.count("FbIssueOriginalReceipt(context, ownerPid)") == 2 and
             "FwpsApplyModifiedLayerData0(classifyHandle, request, 0);" in driver and
             "status = FwpsApplyModifiedLayerData0" not in driver,
             "same_kernel_redirect_did_not_issue_and_apply")
