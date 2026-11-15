@@ -75,7 +75,7 @@ def check_source(policy: str, driver: str, tickets: str, guids: str) -> None:
             "gAuthBook.lost = 1" in driver,
             "process_death_or_driver_stop_does_not_revoke_AUTH")
     require("if (!book || book->lost || !FbAuthOriginValid(item))" in tickets and
-            "book->slots[matchIndex].state = 2" in tickets and
+            "book->slots[found].state = 2" in tickets and
             "book->lost = 1" in tickets,
             "one_shot_or_overflow_protection_missing")
 
@@ -105,8 +105,8 @@ class R198SourceTests(unittest.TestCase):
              "1 /* PID-only broker bypass */"),
             (1, "RtlUshortByteSwap(v4 ? config.port_v4_be : config.port_v6_be)",
              "(v4 ? config.port_v4_be : config.port_v6_be)"),
-            (2, "book->slots[matchIndex].state = 2",
-             "book->slots[matchIndex].state = 1"),
+            (2, "book->slots[found].state = 2",
+             "book->slots[found].state = 1"),
         ]
         for which, before, after in cases:
             state = list(self.data)
