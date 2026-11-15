@@ -61,12 +61,12 @@ def audit(texts: list[str]) -> None:
     require("std::lock_guard<std::mutex> lock(ownerMutex_);" in helper and
             "std::mutex ownerMutex_" in helper_header,
             "Stop_and_claim_driver_handle_race")
-    begin = service.index("void handle(SOCKET raw")
-    query = service.index("fb_wfp_query(raw,&context,records.data()", begin)
-    stop_check = service.index("if(stopping) throw std::runtime_error(", query)
-    claim = service.index("capture.claim(context);", query)
-    connect = service.index("fb_native_stream_open_wfp_json(", query)
-    require(begin < query < stop_check < claim < connect,
+    begin = service.find("void handle(SOCKET raw")
+    query = service.find("fb_wfp_query(raw,&context,records.data()", begin)
+    stop_check = service.find("if(stopping) throw std::runtime_error(", query)
+    claim = service.find("capture.claim(context);", query)
+    connect = service.find("fb_native_stream_open_wfp_json(", query)
+    require(0 <= begin < query < stop_check < claim < connect,
             "claim_not_between_real_OS_WSAIoctl_and_Rust_outbound_socket")
     require("handle(socket,native.id,idleMs,capture)" in service,
             "worker_not_using_exclusive_live_capture_owner")
