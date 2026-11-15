@@ -20,9 +20,11 @@ public:
     // Trusted helper must consume exactly one OS-origin AUTH receipt before
     // allowing Rust to open any outbound connection for this accepted flow.
     // This verifies a kernel ticket, not independent kernel socket identity.
-    void claim(const FbRedirectContext& context);
+    void claim(SOCKET accepted, const FbRedirectContext& context);
 private:
     std::mutex ownerMutex_; // serialize worker claim with Stop/driver handle close
     HANDLE driver_ = INVALID_HANDLE_VALUE;
     HANDLE engine_ = nullptr;
+    unsigned short port4be_ = 0;
+    unsigned short port6be_ = 0;
 };
