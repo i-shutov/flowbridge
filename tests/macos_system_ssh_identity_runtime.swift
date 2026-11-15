@@ -11,10 +11,8 @@ import Darwin
         guard uname(&system) == 0 else {
             fputs("HOST_KERNEL_UNAVAILABLE\n", stderr); exit(1)
         }
-        let actual = withUnsafePointer(to: &system.machine) {
-            $0.withMemoryRebound(to: CChar.self, capacity: MemoryLayout.size(ofValue: system.machine)) {
-                String(cString: $0)
-            }
+        let actual = withUnsafeBytes(of: &system.machine) { raw in
+            String(bytes: raw.prefix(while: { $0 != 0 }), encoding: .utf8) ?? ""
         }
         guard ["arm64", "x86_64"].contains(actual), actual == architecture else {
             fputs("WRONG_NATIVE_ARCH\n", stderr); exit(1)
