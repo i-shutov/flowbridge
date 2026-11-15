@@ -1,0 +1,144 @@
+name: Frozen 0.3.0-beta.1 macOS native Intel + ARM acceptance
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/explicit-beta-macos-dualarch-frozen.yml'
+      - 'tools/explicit_beta_macos_dualarch_verify.py'
+      - 'tests/test_explicit_beta_macos_dualarch_verify.py'
+      - 'docs/qa/EXPLICIT_BETA_MACOS_DUALARCH_20261115.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  frozen-native:
+    name: Frozen macOS native / ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+            label: Apple-Silicon
+          - runner: macos-15-intel
+            arch: x86_64
+            label: Intel
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Retrieve only the original accepted candidate artifact (never rebuild)
+        uses: actions/download-artifact@v4
+        with:
+          name: FlowBridge-ExplicitBeta-VerifiedCandidate-43407093536
+          run-id: 43407093536
+          github-token: ${{ github.token }}
+          path: build/frozen-original
+      - name: Verify original kit and target native architecture before installation
+        shell: bash
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          actual="$(uname -m)"
+          test "$actual" = "$EXPECTED_ARCH" || { echo "WRONG_NATIVE_ARCH"; exit 1; }
+          find build/frozen-original -type f -name 'FlowBridge-0.3.0-beta.1-candidate-f5ecd48d8f81.zip' > "$RUNNER_TEMP/kit-locations.txt"
+          test "$(wc -l < "$RUNNER_TEMP/kit-locations.txt" | tr -d ' ')" = "1" || { echo "ORIGINAL_KIT_MISSING_OR_AMBIGUOUS"; exit 1; }
+          kit="$(cat "$RUNNER_TEMP/kit-locations.txt")"
+          expected_kit="4b51d4136878476b48946361ce1635cb6d630e62b50ca82c73df28a5902ed8b8"
+          actual_kit="$(shasum -a 256 "$kit" | awk '{print $1}')"
+          test "$actual_kit" = "$expected_kit" || { echo "KIT_SHA256_MISMATCH"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/flowbridge-frozen-kit"
+          /usr/bin/unzip -q "$kit" -d "$RUNNER_TEMP/flowbridge-frozen-kit"
+          root="$RUNNER_TEMP/flowbridge-frozen-kit"
+          python3 tools/explicit_beta_macos_dualarch_verify.py verify-kit \
+            --root "$root" --platform "$EXPECTED_ARCH" \
+            --output "build/macos-dualarch/prerequisite-$EXPECTED_ARCH.json"
+          /usr/bin/sudo -n /usr/bin/true || { echo "NO_NONINTERACTIVE_SUDO"; exit 1; }
+      - name: Install, launch, upgrade and uninstall original frozen pkg on native CPU
+        shell: bash
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/flowbridge-frozen-kit"
+          source_sha="f5ecd48d8f81c594f755a55e7969b57d20903020"
+          tool="$root/tools/explicit_beta_acceptance.py"
+          manifest="$root/macos/explicit-macos-package.json"
+          pkg="$root/macos/FlowBridge-0.3.0-beta.1-macOS-universal-explicit-beta.pkg"
+          host="$(python3 -c 'import platform;print(platform.node())')"
+          common=(
+            --manifest "$manifest"
+            --package "$pkg"
+            --expected-source "$source_sha"
+            --expected-package-sha256 "7eb645e227442ba5a2d12bc1b9c5853212baf8a3d28e7215640f0e3e2ec0453c"
+            --expected-manifest-sha256 "ed00c3257a4b5f1db453169fc802c3ba85215265bb2dce783d79275cbb386a03"
+            --expected-tool-sha256 "faf62aabeea95ef316f5c0935177a65820ea4679ac94afe8b5461138dd17a33c"
+            --expected-computer "$host"
+          )
+          python3 "$tool" "${common[@]}" --output "$RUNNER_TEMP/flowbridge-mac-bytes"
+          python3 "$tool" "${common[@]}" --execute --output "$RUNNER_TEMP/flowbridge-mac-native"
+          mkdir -p build/macos-dualarch
+          cp "$RUNNER_TEMP/flowbridge-mac-bytes/native-acceptance.json" "build/macos-dualarch/bytes-$EXPECTED_ARCH.json"
+          cp "$RUNNER_TEMP/flowbridge-mac-native/native-acceptance.json" "build/macos-dualarch/native-$EXPECTED_ARCH.json"
+          python3 tools/explicit_beta_macos_dualarch_verify.py verify-native \
+            --root build/macos-dualarch --platform "$EXPECTED_ARCH" \
+            --output "build/macos-dualarch/check-$EXPECTED_ARCH.json"
+          echo "HOSTED_MACOS_NATIVE_$EXPECTED_ARCH_SIX_STEPS_PASS_OWNER_NOT_RUN"
+      - name: Collect original-byte reports even on a test failure
+        if: always()
+        shell: bash
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          mkdir -p build/macos-dualarch
+          if test -f "$RUNNER_TEMP/flowbridge-mac-bytes/native-acceptance.json"; then
+            cp "$RUNNER_TEMP/flowbridge-mac-bytes/native-acceptance.json" "build/macos-dualarch/bytes-$EXPECTED_ARCH.json"
+          fi
+          if test -f "$RUNNER_TEMP/flowbridge-mac-native/native-acceptance.json"; then
+            cp "$RUNNER_TEMP/flowbridge-mac-native/native-acceptance.json" "build/macos-dualarch/native-$EXPECTED_ARCH.json"
+          fi
+      - name: Retain scope-limited report for this platform
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-A4-MacFrozen-${{ matrix.arch }}-${{ github.run_id }}
+          path: build/macos-dualarch/
+          if-no-files-found: warn
+          retention-days: 30
+
+  cross-arch-acceptance:
+    name: Independently compare identical frozen Intel + ARM evidence
+    needs: [frozen-native]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: FlowBridge-A4-MacFrozen-*-${{ github.run_id }}
+          path: build/macos-dualarch-raw
+      - name: Negative controls and exact-source evidence agreement
+        run: |
+          python3 -m unittest discover -s tests -p test_explicit_beta_macos_dualarch_verify.py -v
+          python3 tools/explicit_beta_macos_dualarch_verify.py compare \
+            --root build/macos-dualarch-raw \
+            --output build/macos-dualarch-integral.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: FlowBridge-A4-MacFrozen-Comparison-${{ github.run_id }}
+          path: build/macos-dualarch-integral.json
+          if-no-files-found: warn
+          retention-days: 30
