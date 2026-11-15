@@ -199,13 +199,16 @@ static void nativeLauncherArgumentTest() {
     auto testApp=std::wstring(module,count);
     const auto event=L"Local\\FlowBridgeCaptureStop-{12345678-1234-1234-1234-123456789012}";
     const auto digest=profile_integrity::sha256("abc");
+    const auto ownerEpoch=gui_owner_epoch::current();
     need(digest=="ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
          "Windows SHA-256 interoperability with standard crypto is broken");
     need(profile_integrity::identical(digest,digest)&&
          !profile_integrity::identical(digest,std::string(64,'0')),
          "Native SHA-256 comparison failed");
-    auto params=capture_launcher::arguments(L"C:\\Users\\Test User\\profile.json",L"",{testApp},42,event,{},digest);
+    auto params=capture_launcher::arguments(L"C:\\Users\\Test User\\profile.json",L"",{testApp},42,ownerEpoch,event,{},digest);
     need(params.find(L"--gui-owner 42")!=std::wstring::npos,"GUI lifetime argument missing");
+    need(params.find(L"--gui-owner-epoch "+std::to_wstring(ownerEpoch))!=std::wstring::npos,
+         "GUI process epoch was not passed to elevated helper");
     need(params.find(L"--capture-app ")!=std::wstring::npos,"Selected process path missing");
     need(params.find(L"--stop-event ")!=std::wstring::npos,"Stop event argument missing");
     need(params.find(L"--profile-sha256 ")!=std::wstring::npos,
@@ -218,31 +221,64 @@ static void nativeLauncherArgumentTest() {
     const auto bypassExe=(std::filesystem::path(systemDirectory)/L"cmd.exe").wstring();
     need(std::filesystem::is_regular_file(bypassExe),"Windows cmd.exe unavailable");
     const auto withBypass=capture_launcher::arguments(
-        LR"(C:\Users\Test User\profile.json)",L"",{testApp},42,event,{bypassExe},digest);
+        LR"(C:\Users\Test User\profile.json)",L"",{testApp},42,ownerEpoch,event,{bypassExe},digest);
     need(withBypass.find(L"--bypass ")!=std::wstring::npos &&
          withBypass.find(L"--ssh-profile")==std::wstring::npos,
          "GUI/SSH process identity bypass or unprivileged SSH boundary missing");
     bool selfBypassRejected=false;
     try {
-        capture_launcher::arguments(LR"(C:\profile.json)",L"",{testApp},42,event,{testApp},digest);
+        capture_launcher::arguments(LR"(C:\profile.json)",L"",{testApp},42,ownerEpoch,event,{testApp},digest);
     } catch(const std::exception&) { selfBypassRejected=true; }
     need(selfBypassRejected,"Selected executable was silently bypassed at the WFP layer");
     bool invalidBypass=false;
     try {
-        capture_launcher::arguments(LR"(C:\profile.json)",L"",{testApp},42,event,{L"relative-ssh.exe"},digest);
+        capture_launcher::arguments(LR"(C:\profile.json)",L"",{testApp},42,ownerEpoch,event,{L"relative-ssh.exe"},digest);
     } catch(const std::exception&) { invalidBypass=true; }
     need(invalidBypass,"Relative SSH backend bypass accepted");
     need(capture_launcher::quote(L"C:\\A B\\") == L"\"C:\\A B\\\\\"", "Windows backslash quoting incorrect");
     bool rejected=false;
-    try {capture_launcher::arguments(L"relative.json",L"",{testApp},42,event,{},digest);} catch(const std::exception&) {rejected=true;}
+    try {capture_launcher::arguments(L"relative.json",L"",{testApp},42,ownerEpoch,event,{},digest);} catch(const std::exception&) {rejected=true;}
     need(rejected,"Relative elevated configuration accepted");
     rejected=false;
-    try {capture_launcher::arguments(L"C:\\profile.json",L"",{L"relative.exe"},42,event,{},digest);} catch(const std::exception&) {rejected=true;}
+    try {capture_launcher::arguments(L"C:\\profile.json",L"",{L"relative.exe"},42,ownerEpoch,event,{},digest);} catch(const std::exception&) {rejected=true;}
     need(rejected,"Relative capture executable accepted");
     bool missingHashRejected=false;
-    try {capture_launcher::arguments(LR"(C:\profile.json)",L"",{testApp},42,event,{},"invalid");}
+    try {capture_launcher::arguments(LR"(C:\profile.json)",L"",{testApp},42,ownerEpoch,event,{},"invalid");}
     catch(const std::exception&) {missingHashRejected=true;}
     need(missingHashRejected,"Launcher accepted missing/invalid GUI profile digest");
+    bool missingEpochRejected=false;
+    try {capture_launcher::arguments(LR"(C:\profile.json)",L"",{testApp},42,0,event,{},digest);}
+    catch(const std::exception&) {missingEpochRejected=true;}
+    need(missingEpochRejected,"Launcher accepted missing GUI process epoch");
+    gui_owner_epoch::verify(GetCurrentProcess(),GetCurrentProcessId(),ownerEpoch);
+    bool mismatchedOwnerRejected=false;
+    try {gui_owner_epoch::verify(GetCurrentProcess(),GetCurrentProcessId()+1,ownerEpoch);}
+    catch(const std::exception&) {mismatchedOwnerRejected=true;}
+    need(mismatchedOwnerRejected,"Windows process handle accepted incorrect owner PID");
+    bool mismatchedEpochRejected=false;
+    try {gui_owner_epoch::verify(GetCurrentProcess(),GetCurrentProcessId(),ownerEpoch-1);}
+    catch(const std::exception&) {mismatchedEpochRejected=true;}
+    need(mismatchedEpochRejected,"Windows process handle accepted incorrect creation epoch");
+    // A retained HANDLE to an exited process still exposes the original
+    // creation time. It must never be accepted as the live GUI owner.
+    const auto cmdExe=(std::filesystem::path(systemDirectory)/L"cmd.exe").wstring();
+    std::wstring commandLine=L"\""+cmdExe+L"\" /d /c exit /b 0";
+    std::vector<wchar_t> commandBytes(commandLine.begin(),commandLine.end());
+    commandBytes.push_back(L'\0');
+    STARTUPINFOW si{};si.cb=sizeof(si);
+    PROCESS_INFORMATION pi{};
+    need(CreateProcessW(cmdExe.c_str(),commandBytes.data(),nullptr,nullptr,FALSE,CREATE_NO_WINDOW,
+                        nullptr,nullptr,&si,&pi)!=0,"Unable to start disposable Windows owner test process");
+    const auto childEpoch=gui_owner_epoch::creationTime(pi.hProcess);
+    const DWORD wait=WaitForSingleObject(pi.hProcess,10000);
+    if(wait!=WAIT_OBJECT_0) {TerminateProcess(pi.hProcess,1);WaitForSingleObject(pi.hProcess,1000);}
+    bool exitedOwnerRejected=false;
+    try {gui_owner_epoch::verify(pi.hProcess,pi.dwProcessId,childEpoch);}
+    catch(const std::exception&) {exitedOwnerRejected=true;}
+    CloseHandle(pi.hThread);CloseHandle(pi.hProcess);
+    need(wait==WAIT_OBJECT_0 && exitedOwnerRejected,
+         "Windows exited owner process handle was incorrectly accepted");
+    std::puts("PASS real Win32 GUI lifetime: PID, exact process epoch, exited owner, spoof refusal");
     std::puts("PASS native capture launcher: full-path selection, quoted parameters, GUI owner and validation");
 }
 // Use client coordinates rather than comparing screen rectangles. These
