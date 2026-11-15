@@ -26,14 +26,9 @@ struct InstalledApplication: Identifiable {
         return signingID
     }
     static func systemSSHSigningID() -> String? {
-        var code: SecStaticCode?; var information: CFDictionary?
-        let url = URL(fileURLWithPath: "/usr/bin/ssh")
-        guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess, let code,
-              SecStaticCodeCheckValidity(code, [], nil) == errSecSuccess,
-              SecCodeCopySigningInformation(code, [], &information) == errSecSuccess,
-              let info = information as? [String: Any], let identity = info[kSecCodeInfoIdentifier as String] as? String,
-              !identity.isEmpty else { return nil }
-        return identity
+        // The UI and privileged extension MUST use the same Apple-signature
+        // trust anchor; no unchecked user-selected signing ID can mint DIRECT.
+        SystemSSHCarrierIdentity.verifiedIdentifier()
     }
 }
 final class AppDiscovery: ObservableObject {
