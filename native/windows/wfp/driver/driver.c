@@ -63,7 +63,7 @@ static void NTAPI FbClassify(const FWPS_INCOMING_VALUES0* values,
     FbWfpConfig config;
     FbEpochRecord processEpoch;
     HANDLE ownerPid;
-    BOOLEAN enabled, v4;
+    BOOLEAN enabled, v4, epochLost;
     UINT32 appIndex, protocolIndex;
     FWP_BYTE_BLOB* app;
     SIZE_T chars, i;
@@ -77,10 +77,11 @@ static void NTAPI FbClassify(const FWPS_INCOMING_VALUES0* values,
     out->actionType = FWP_ACTION_PERMIT; /* soft permit; no firewall override */
     KeAcquireSpinLock(&gLock, &irql);
     enabled = gEnabled; config = gConfig; ownerPid = gOwnerPid;
+    epochLost = (gEpochTable.lost != 0);
     KeReleaseSpinLock(&gLock, irql);
     /* Selected dynamic filters may outlive a disable/owner-close callback:
      * returning PERMIT here would silently leak a protected app DIRECT. */
-    if (!enabled || gEpochTable.lost) { FbBlock(out); return; }
+    if (!enabled || epochLost) { FbBlock(out); return; }
     v4 = values->layerId == FWPS_LAYER_ALE_CONNECT_REDIRECT_V4;
     if (!v4 && values->layerId != FWPS_LAYER_ALE_CONNECT_REDIRECT_V6) return;
     protocolIndex = v4 ? FWPS_FIELD_ALE_CONNECT_REDIRECT_V4_IP_PROTOCOL : FWPS_FIELD_ALE_CONNECT_REDIRECT_V6_IP_PROTOCOL;
@@ -198,6 +199,7 @@ static NTSTATUS FbDispatch(PDEVICE_OBJECT device, PIRP irp) {
             if (stack->Parameters.DeviceIoControl.InputBufferLength != sizeof(FbWfpConfig)) { status = STATUS_INFO_LENGTH_MISMATCH; break; }
             { FbWfpConfig* c = irp->AssociatedIrp.SystemBuffer;
               if (c->size != sizeof(*c) || c->version != FB_WFP_ABI || c->reserved || !c->port_v4_be || !c->port_v6_be) { status = STATUS_INVALID_PARAMETER; break; }
+              if (gEpochTable.lost || !gEpochNotifierRegistered) { status = STATUS_DEVICE_NOT_READY; break; }
               gConfig = *c; gEnabled = TRUE; status = STATUS_SUCCESS; }
             break;
         case FB_IOCTL_DISABLE: gEnabled = FALSE; status = STATUS_SUCCESS; break;
