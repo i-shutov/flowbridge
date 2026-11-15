@@ -103,6 +103,33 @@ static int FbAuthConsumeInitial(FbAuthBook* book, const FbAuthOrigin* exact) {
     book->slots[matchIndex].state = 2;
     return 1;
 }
+/* AUTH receives OS origin PID, endpoint, broker and original SOCKADDR, but
+ * NOT the secret flow sequence. The sequence is only generated in our
+ * CONNECT_REDIRECT path; the kernel's exact match is unique within this book.
+ * Missing OS metadata is represented by zero and never matches a record.
+ * A physical proxy SSH socket to an external destination never satisfies the
+ * original redirected-loopback authorization and must not be auto-permitted.
+ */
+static int FbAuthConsumeObserved(FbAuthBook* book, const FbAuthOrigin* observed) {
+    unsigned i, found = FB_AUTH_CAP;
+    if (!book || book->lost || !observed || observed->flow_id != 0 ||
+        !observed->pid || !observed->creation_100ns ||
+        !observed->process_start_key || !observed->endpoint ||
+        !observed->broker_pid || !observed->port_be ||
+        (observed->family != 4 && observed->family != 6))
+        return 0;
+    for (i = 0; i < book->count; ++i) {
+        FbAuthOrigin current = book->slots[i].origin;
+        if (book->slots[i].state != 1) continue;
+        current.flow_id = 0;
+        if (!FbAuthEqual(&current, observed)) continue;
+        if (found != FB_AUTH_CAP) { book->lost = 1; return 0; }
+        found = i;
+    }
+    if (found == FB_AUTH_CAP) return 0;
+    book->slots[found].state = 2;
+    return 1;
+}
 static int FbAuthRetire(FbAuthBook* book, const FbAuthOrigin* exact) {
     unsigned i;
     if (!book || !FbAuthOriginValid(exact)) return 0;
