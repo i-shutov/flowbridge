@@ -190,7 +190,7 @@
     {
       "id": "R01",
       "track": "1.0",
-      "status": "WFP_ALE_PRODUCT_DEVELOPMENT_AUTHORIZED_G2_NATIVE_PENDING",
+      "status": "WFP_ALE_PRODUCT_DEV_SOURCE_PASS_SIGNED_NATIVE_G2_OPEN",
       "depends_on": [
         "R00"
       ],
@@ -265,7 +265,20 @@
         "win11_native_accepted": false,
         "full_g2_accepted": false,
         "signed_driver_install_requires_prepared_lab": true,
-        "source_doc": "docs/qa/WINDOWS_WFP_EPOCH_V3_PRODUCT_20261115.md"
+        "source_doc": "docs/qa/WINDOWS_WFP_EPOCH_V3_PRODUCT_20261115.md",
+        "exact_product_source_sha": "d242c3726904eed1bf5b5eb9998bc37d02ac90ba",
+        "original_abi": 3,
+        "context_v3_kernel_process_epoch_source_code": true,
+        "delivered_native_epoch_source_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43713831922",
+        "delivered_wdk_unsigned_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43713831976",
+        "delivered_full_portable_ci": "https://github.com/i-shutov/flowbridge/actions/runs/43713831970",
+        "original_unsigned_driver_sha256": "51f931967ef32e84a9fc591235ca9bf22e29877851bbbf8d6879ef7ab95e2319",
+        "rust_wfp_records_direct_route_denied_before_socket": true,
+        "native_production_kernel_activated": false,
+        "signed_wfp_backend_certified": false,
+        "physical_ipv4_ipv6_no_direct_proved": false,
+        "independent_evidence_checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_WFP_ALE_KERNEL_EPOCH_V3_20261115.md",
+        "g2_accepted": false
       }
     },
     {
@@ -505,7 +518,11 @@
     "windows_wfp_ale_architecture_owner_decision": "APPROVED_FOR_DEVELOPMENT_AND_TESTING_NOT_DEPLOYMENT_OR_RELEASE",
     "windows_wfp_ale_product_pr": "https://github.com/i-shutov/flowbridge/pull/69",
     "win01_kernel_origin": "SOURCE_AGE3_DEV_NOT_NATIVE",
-    "previous_ndisrd_only_choice": "SUPERSEDED_FOR_NEW_WFP_ALE_DEVELOPMENT"
+    "previous_ndisrd_only_choice": "SUPERSEDED_FOR_NEW_WFP_ALE_DEVELOPMENT",
+    "windows_wfp_current_dev_head": "d242c3726904eed1bf5b5eb9998bc37d02ac90ba",
+    "windows_wfp_source_gate": "WDK_NATIVE_C_RUST_FFI_HOSTED_PASS_NO_PHYSICAL",
+    "windows_wfp_checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_WFP_ALE_KERNEL_EPOCH_V3_20261115.json",
+    "current_G2": "NO_GO"
   },
   "windows_first_release": {
     "decision_date": "2026-11-15",
