@@ -90,7 +90,7 @@ jobs:
           python3 tools/explicit_beta_macos_dualarch_verify.py verify-native \
             --root build/macos-dualarch --platform "$EXPECTED_ARCH" \
             --output "build/macos-dualarch/check-$EXPECTED_ARCH.json"
-          echo "HOSTED_MACOS_NATIVE_$EXPECTED_ARCH_SIX_STEPS_PASS_OWNER_NOT_RUN"
+          echo "HOSTED_MACOS_NATIVE_${EXPECTED_ARCH}_SIX_STEPS_PASS_OWNER_NOT_RUN"
       - name: Collect original-byte reports even on a test failure
         if: always()
         shell: bash
