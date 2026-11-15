@@ -24,6 +24,7 @@ REGRESSIONS = {
     "cancel_pending_start": "native handle destroyed more than once",
     "restart_during_clear": "restart during clear did not reject",
     "stale_direct_after_stop": "stale decision released flow DIRECT after stop",
+    "carrier_other_ssh_host": "non-carrier SSH destination escaped DIRECT",
 }
 
 
@@ -45,7 +46,7 @@ def compile_provider(source: bytes, folder: Path, swift: str) -> Path:
     transformed = folder / "ProviderUnderTest.swift"
     transformed.write_text(text, encoding="utf-8")
     binary = folder / "provider-tests"
-    result = run([swift, "-swift-version", "5", "-warnings-as-errors", "-O",
+    result = run([swift, "-swift-version", "5", "-D", "FLOWBRIDGE_PROVIDER_TEST", "-warnings-as-errors", "-O",
                   str(ROOT / "tests/macos_provider_test_shims.swift"),
                   str(ROOT / "native/macos/Extension/SharedNativeSession.swift"),
                   str(ROOT / "native/macos/Extension/ProviderLifecycleQueue.swift"),
@@ -77,7 +78,9 @@ def main() -> int:
         report["swift_version"] = run([swift, "--version"]).stdout.strip()
         source = (ROOT / PROVIDER).read_bytes()
         report["production_provider_sha256"] = hashlib.sha256(source).hexdigest()
-        tracked = [PROVIDER, "native/macos/Extension/ProviderLifecycleQueue.swift",
+        tracked = [PROVIDER, "native/macos/App/DesktopController.swift",
+                   "native/macos/App/NativeController.swift",
+                   "native/macos/Extension/ProviderLifecycleQueue.swift",
                    "native/macos/Extension/SharedNativeSession.swift",
                    "tests/macos_provider_test_shims.swift", "tests/macos_provider_lifecycle.swift",
                    "tools/test_macos_provider_lifecycle.py"]
@@ -91,7 +94,7 @@ def main() -> int:
             (output / "current-tests.log").write_text(result.stdout + result.stderr, encoding="utf-8")
             require(result.returncode == 0, "Provider regressions failed:\n" + result.stdout + result.stderr)
             match = re.search(r"TESTS=(\d+) FAILED=(\d+) NATIVE_NE_ACTIVATION=false", result.stdout)
-            require(match is not None and int(match[1]) == 23 and int(match[2]) == 0,
+            require(match is not None and int(match[1]) == 32 and int(match[2]) == 0,
                     "Unexpected suite count / failed tests")
             report["tests_passed"] = int(match[1])
             if args.negative_controls:
@@ -129,7 +132,15 @@ def main() -> int:
                 broken_apply = text.replace(barrier_snapshot, 'let isReady = ready').replace(
                     barrier_recheck,
                     'return ready && !stopping && native != 0 && coreSession == native')
+                carrier_bypass = 'if bypass?.matches(signingID: signingID, host: endpoint.hostname, port: port) == true {'
+                carrier_identity = 'id == Self.verifiedSystemSSHSigningID(),'
+                require(text.count(carrier_bypass) == 1 and text.count(carrier_identity) == 1,
+                        "Carrier bypass mutation anchors drifted")
                 mutations = [
+                    ("carrier_unscoped", text.replace(carrier_bypass, 'if bypass?.signingID == signingID {'),
+                     "carrier_other_ssh_host", "non-carrier SSH destination escaped DIRECT"),
+                    ("carrier_unverified", text.replace(carrier_identity, '!id.isEmpty,'),
+                     "carrier_unverified_identity", "unverified SSH carrier was accepted"),
                     ("stale_direct", text.replace(anchor1, 'guard true else {'), "stale_direct_after_stop",
                      "stale decision released flow DIRECT after stop"),
                     ("double_destroy", text.replace(anchor2,
