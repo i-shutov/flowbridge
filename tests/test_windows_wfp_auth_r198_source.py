@@ -63,8 +63,9 @@ def check_source(policy: str, driver: str, tickets: str, guids: str) -> None:
             "external_SSH_accepted_as_loopback")
     require("FbAuthIssue(&gAuthBook, &item)" in driver and
             driver.count("FbIssueOriginalReceipt(context, ownerPid, &stagedReceipt)") == 2 and
-            "FbAuthRetire(&gAuthBook, &stagedReceipt)" in driver,
-            "same_kernel_redirect_did_not_issue_and_retire")
+            "FwpsApplyModifiedLayerData0(classifyHandle, request, 0);" in driver and
+            "status = FwpsApplyModifiedLayerData0" not in driver,
+            "same_kernel_redirect_did_not_issue_and_apply")
     require("FbAuthConsumeObserved(&gAuthBook, &observed)" in driver and
             "FbEpochLookup(&gEpochTable, observed.pid, &process)" in driver,
             "AUTH_missing_native_PID_epoch_link")
