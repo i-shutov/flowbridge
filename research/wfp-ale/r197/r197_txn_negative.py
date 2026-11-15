@@ -49,7 +49,7 @@ class Test(unittest.TestCase):
         self.assertTrue(guard(fixture))
         self.assertFalse(guard(fixture.replace("session_count(engine.0); FwpmTransactionBegin0(engine.0", "FwpmTransactionBegin0(engine.0; session_count(engine.0)")))
         self.assertFalse(guard(fixture + "\nFwpmFilterAdd0("))
-        self.assertFalse(guard(fixture.replace("FwpmSessionCreateEnumHandle0(", "Unavailable("))
+        self.assertFalse(guard(fixture.replace("FwpmSessionCreateEnumHandle0(", "Unavailable(")))
 
 if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(Test)
