@@ -2,8 +2,6 @@
 // Executes Win32 GetProcessTimes, GetProcessId, OpenProcess semantics without
 // a network driver, service, BFE filter or system configuration modification.
 // A pass CANNOT identify the process that originated an NDISRD packet.
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
 #include <windows.h>
 #include <filesystem>
 #include <iostream>
