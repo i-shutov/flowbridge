@@ -13,6 +13,7 @@ CONTEXT = ROOT / "native/windows/wfp/redirect_context.h"
 READER = ROOT / "native/windows/wfp/redirect_io.cpp"
 CONTROL = ROOT / "native/windows/wfp/control.h"
 TABLE = ROOT / "native/windows/wfp/process_epoch.h"
+FFI = ROOT / "crates/flowbridge-ffi/src/lib.rs"
 
 
 def require(ok: bool, why: str) -> None:
@@ -74,6 +75,41 @@ class G2SourceSecurityTests(unittest.TestCase):
 
     def test_true_source_sealed_not_native_accepted(self) -> None:
         audit(*self.files)
+
+    def test_wfp_redirect_records_cannot_select_direct_in_rust_ffi(self) -> None:
+        ffi = FFI.read_text(encoding="utf-8")
+        self.audit_ffi_guard(ffi)
+
+    @staticmethod
+    def audit_ffi_guard(ffi: str) -> None:
+        # Must be reached synchronously before any stream lease or TCP socket.
+        start = ffi.index("fn open_stream_managed(")
+        route = ffi.index("let route = config.route(&decision.action)", start)
+        guard = ffi.find(
+            "require_wfp_upstream(&decision.action, route.len(), redirect_records.is_some())?;",
+            route,
+        )
+        lease = ffi.index("let lease = StreamLease::reserve()?", route)
+        require(route < guard < lease, "WFP DIRECT guard is absent or too late")
+        require("Action::Proxy { .. } | Action::Chain { .. } if route_hops > 0 => Ok(())"
+                in ffi, "WFP proxy route was not required")
+        require("if !with_records {" in ffi and
+                "DIRECT is forbidden" in ffi,
+                "WFP redirection can return to DIRECT")
+
+    def test_two_wfp_direct_guard_mutations_rejected(self) -> None:
+        ffi = FFI.read_text(encoding="utf-8")
+        guard = "require_wfp_upstream(&decision.action, route.len(), redirect_records.is_some())?;"
+        deny = "Action::Proxy { .. } | Action::Chain { .. } if route_hops > 0 => Ok(())"
+        self.assertEqual(ffi.count(guard), 1)
+        self.assertEqual(ffi.count(deny), 1)
+        for before, after in [
+            (guard, "/* previously guarded flow */"),
+            (deny, "Action::Direct => Ok(())"),
+        ]:
+            with self.subTest(before=before[:40]):
+                with self.assertRaises(AssertionError):
+                    self.audit_ffi_guard(ffi.replace(before, after))
 
     def test_seven_reintroduced_faults_are_rejected(self) -> None:
         driver, context, reader, control, table = self.files
