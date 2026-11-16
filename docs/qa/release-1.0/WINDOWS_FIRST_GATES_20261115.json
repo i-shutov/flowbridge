@@ -170,12 +170,34 @@
       "invalid_identity_key_path_on_exact_beta2_tested": false,
       "owner_win11_exact_kit_accepted": false,
       "unified_candidate_attempt_1": "FAILURE_CANCELLED_MACOS_UNIVERSAL",
-      "unified_candidate_attempt_2": "REQUESTED_MACOS_UNIVERSAL_QUEUED_AT_REVIEW",
+      "unified_candidate_attempt_2": "MACOS_UNIVERSAL_PACKAGE_PASS_WINDOWS_NATIVE_QA_PASS_MACOS_NATIVE_QA_QUEUED_UNIFIED_CANDIDATE_PENDING",
       "unified_candidate_accepted": false,
       "windows_only_pre_release_approved": false,
       "source_managed_ssh_raw_512_supported": false,
       "release_accepted": false,
-      "checkpoint": "docs/qa/release-1.0/checkpoints/BETA2_WINDOWS_GITHUB_ARTIFACT_INDEPENDENT_AUDIT_20261116.md"
+      "checkpoint": "docs/qa/release-1.0/checkpoints/BETA2_WINDOWS_GITHUB_ARTIFACT_INDEPENDENT_AUDIT_20261116.md",
+      "macOS_universal_package": {
+        "artifact_id": 14238428978,
+        "original_zip_sha256": "3e00e4a7a674806c0aa1fdff4254429d2184d270ef3708f129ecb55ebe66c116",
+        "pkg_sha256": "0b69658f053c2c5a95a1f456769a527aea91465bef5b194ebddbe71b4cdc815b",
+        "source_sha": "86583a1a0487b9d383c0122b24558e620bde5b9c",
+        "manifest_and_scope_json_sha_match": true,
+        "universal_arches": [
+          "arm64",
+          "x86_64"
+        ],
+        "signed": false,
+        "network_extension_included": false,
+        "macos_owner_native_accepted": false
+      },
+      "windows_second_hosted_qa": {
+        "artifact_id": 14239875561,
+        "artifact_zip_sha256": "62c192fd69d0d97babbc1a40ad1d0e98a62f360beffcf29a251a200c2e7493fe",
+        "status": "CI_AUTOMATED_CHECKS_PASS",
+        "six_phases_pass": true,
+        "screenshot_5_of_5_sha_match": true,
+        "owner_native": false
+      }
     }
   },
   "windows_1_0": {
