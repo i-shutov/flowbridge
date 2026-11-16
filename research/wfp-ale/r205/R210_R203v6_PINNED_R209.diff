@@ -1,0 +1,34 @@
+--- a/research/wfp-ale/r203/Run-R203ReadOnly.ps1
++++ b/research/wfp-ale/r203/Run-R203ReadOnly.ps1
+@@ -93,12 +93,31 @@
+   $commits = @(& git -C $root rev-list --reverse "$sourceAnchor..$head")
+   if ($LASTEXITCODE -ne 0 -or $commits.Count -eq 0) { throw 'Cannot establish descendant history' }
+   $allowedPrefix = @('research/wfp-ale/r203/','research/wfp-ale/r204/','research/wfp-ale/r205/')
++  # R210: audit-pinned exception for precisely the published R209 commit.
++  # A generic r209/ prefix would silently admit future unreviewed research files;
++  # admitting the entire branch by date/HEAD would be weaker still. The commit
++  # and all three blobs were independently read from GitHub before pinning.
++  $r209Commit = '9ead09f9001c02444975fab37caee03ed4e55308'
++  $r209Blobs = [ordered]@{
++    'research/wfp-ale/r209/R209_PROXY_AUTH_SELF_BLOCK_NO_GO.md' = 'f55dc3dcb8f6ecd9c6b97f23ca2712a5ca7b9b45'
++    'research/wfp-ale/r209/r209_self_block_negative.py' = '8824be431e526429b8d221c3b2c90d56c3c704aa'
++    'research/wfp-ale/r209/r209_self_block_oracle.mjs' = 'f4ab7d61164672e85fdd086684b13087bb08baec'
++  }
+   foreach ($commit in $commits) {
+     if ($commit -cnotmatch '^[0-9a-f]{40}$') { throw 'Malformed commit in research history' }
+     $parentLine = GitValue -Argv @('rev-list','--parents','-n','1',$commit)
+     if (($parentLine -split ' ').Count -ne 2) { throw "Nonlinear/merge research history: $commit" }
+     $changes = @(& git -C $root diff-tree --root --no-commit-id --name-only -r $commit)
+     if ($LASTEXITCODE -ne 0 -or $changes.Count -eq 0) { throw "Missing commit diff: $commit" }
++    if ($commit -ceq $r209Commit) {
++      if ($changes.Count -ne $r209Blobs.Count) { throw "R209 commit path count changed: $commit" }
++      foreach ($entry in $changes) {
++        if (-not $r209Blobs.Contains($entry)) { throw "Unexpected R209 path: $entry" }
++        $blob = GitValue -Argv @('rev-parse',('{0}:{1}' -f $commit,$entry))
++        if ($blob -cne $r209Blobs[$entry]) { throw "R209 committed blob changed: $entry" }
++      }
++      continue
++    }
+     foreach ($entry in $changes) {
+       $permitted = $false
+       foreach ($prefix in $allowedPrefix) {

@@ -1,0 +1,17 @@
+# R210 — R203 read-only evidence collection blocked by published R209
+
+Date: 2026-11-17. ONLY research/windows-wfp-ale-attribution-20261107. Not beta, PR #56, release, PacketBound/G2, or kernel proof.
+
+Start branch HEAD: `9ead09f9001c02444975fab37caee03ed4e55308`; read-only main: `5b5afc2feeda2195f302380e615ba003d4906e09`. Source anchor: `7631a5904189ba90949259909d4f317f06e2584d`. GitHub compare showed **eight linear commits** after the anchor. R203v6's PowerShell preflight only permits per-commit paths under `r203/`, `r204/`, or `r205/`. The last commit adds three `r209/` files, so native R201/R202 execution and optional passive R199 BFE inventory stop at the history gate **before execution**. This is a reproducible source/lineage blocker, not observed Windows interception.
+
+The attached unified diff updates the **offline** R203v6 collector to v7, admitting only that exact immutable R209 commit (SHA `9ead09f9001c02444975fab37caee03ed4e55308`) and three precise Git blob identities. It does **not** add `r209/` as an open-ended path prefix; later unreviewed R209 commits still STOP. Preexisting source pins, per-commit linearity checks, dirty-worktree rejection and reparse-point ancestry preflight are preserved. The complete revised collector and expanded independent tests are in the separately delivered R210 offline checkpoint; the repo contains this patch and two compact independent patch guards, not a native PowerShell result.
+
+Run: `python3 research/wfp-ale/r205/r210_published_contract.py`, `node research/wfp-ale/r205/r210_published_oracle.mjs`. Local patch guards: Python 8/8, Node 9/9; expanded offline lineage oracles: Python 14/14, Node 14/14. These checks are synthetic source/model tests, NOT executed PowerShell 5.1, Rust, BFE, WFP, ALE classify or physical SSH.
+
+All five R199/R201/R202 source Git blobs were re-read and matched frozen source pins. R209's proxy SSH AUTH self-block hypothesis duplicates earlier research R88/R101/R198 and remains **conditional**. In particular R19's actual physical SSH is **AF_INET IPv4**, even for an original IPv6 destination; synthetic IPv6 physical SSH paths must not be promoted to runtime facts.
+
+**NO-GO:** no validated join from kernel-origin referenced EPROCESS/FileObject + PID/creation epoch/start key/canonical EXE/AppId to the *same* ALE CONNECT_REDIRECT/AUTH_CONNECT V4/V6 endpoint, accepted socket WSAIoctl redirect CONTEXT/RECORDS, terminal CLAIM and SIO_SET-tagged physical SSH. Reauthorization R207, endpoint closure R208, sibling DIRECT, DNS/UDP/QUIC, PID/5-tuple reuse, process death, IPv4/IPv6, BFE/WFP/SSH loss remain open. R199 read-only `FwpmEngineOpen0` is management-plane inventory, not kernel attribution.
+
+Next decisive allowed experiment: run the offline R203v7 collector on separately admitted Windows 10 Pro x64 with pre-existing Rust, producing evidence outside checkout, independently verify with both R203 validators and trusted fresh HEAD. Native WFP classify needs **separate owner decision and full driver/VNC/SYSTEM rescue/rollback gates**. No drivers, callouts, filters, services, firewall, Defender, SecureBoot, MemoryIntegrity, network settings, runners, automations or non-research refs were changed.
+
+Official contracts: https://learn.microsoft.com/en-us/windows-hardware/drivers/network/using-bind-or-connect-redirection ; https://learn.microsoft.com/en-us/windows-hardware/drivers/network/using-proxied-connections-tracking ; https://learn.microsoft.com/en-us/windows-hardware/drivers/network/ale-endpoint-lifetime-management .
