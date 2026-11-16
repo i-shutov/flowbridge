@@ -1,0 +1,34 @@
+name: R182 retained-authority Rust model (no driver)
+on:
+  pull_request:
+    paths:
+      - 'research/wfp-ale/r182/**'
+      - '.github/workflows/r182-retained-authority.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  rust-model:
+    name: Rust model / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Rust model (no driver or network changes)
+        run: python research/wfp-ale/r182/run_tests.py --report build/r182/r182-report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: R182-Model-${{ runner.os }}-${{ github.run_id }}
+          path: build/r182/r182-report.json
+          if-no-files-found: warn
