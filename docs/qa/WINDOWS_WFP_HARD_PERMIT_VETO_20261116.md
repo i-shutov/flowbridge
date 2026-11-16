@@ -23,3 +23,9 @@ Microsoft states that a callout can veto a prior hard PERMIT by setting `FWP_ACT
 - No merge to main, release tag, 1.0 acceptance or bypass of existing G2 gates follows from hosted tests.
 
 **State:** `WIN-01.source-hard-permit-veto=PATCHED_PENDING_CI`; `WIN-01.native-g2=NO_GO`; `release-1.0=NO_GO`.
+
+## 16 November CI integration — test-only macOS preflight-port correction
+
+- The original WFP #72 source `91699dac13e925a0cc90d51c4ba06853c42561e7` passed source/ABI WDK, Windows application scope and DNS, but `rust-and-native-applications` run #43822796200 failed a **pre-child fake SSH test bind collision** on hosted macOS, unrelated to WFP kernel semantics.
+- [PR #74](https://github.com/i-shutov/flowbridge/pull/74) independently fixed this deterministic test artifact. This WFP branch now brings the **same one-test-only change** to `crates/flowbridge-tunnel/src/lib.rs`, using the already-tested bounded `started_mock_with_preflight_retry(config(), "healthy")` that retries only pre-child `EADDRINUSE` (max three) and not authentication, SOCKS health, child failures, or production behavior.
+- This changes **no runtime code**, `driver.c`, ABI4, routing/security semantics, or kernel G2. Exact-head WFP+portable CI must be rerun; past successful workflows are not automatically transferred to the new SHA. Native Windows 10/11 signed-driver packet receipt, independent accepted socket object proof, generation-safe reauthorization and physical no-DIRECT remain **OPEN**.
