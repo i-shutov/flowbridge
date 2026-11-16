@@ -364,8 +364,13 @@ static void actualRuleEditorTest(HWND window, const wchar_t* screenshot) {
                reinterpret_cast<LPARAM>(GetDlgItem(window,289)))!=0,
          "Could not post native rule editor command");
     HWND dialog=nullptr;
-    waitFor([&]{dialog=FindWindowW(L"FlowBridgeNativeRulesV1",nullptr);return dialog!=nullptr;},
-            "Native visual rule editor did not open");
+    DWORD ownerPid=0;GetWindowThreadProcessId(window,&ownerPid);
+    waitFor([&]{
+        dialog=FindWindowW(L"FlowBridgeNativeRulesV1",nullptr);
+        DWORD dialogPid=0;if(dialog)GetWindowThreadProcessId(dialog,&dialogPid);
+        return dialog && dialogPid==ownerPid && IsWindowVisible(dialog) &&
+               IsWindowVisible(GetDlgItem(dialog,6100));
+    },"Native visual rule editor did not become visible");
     RECT r{};need(GetWindowRect(dialog,&r)!=0,"Native rule window cannot be measured");
     MONITORINFO monitor{sizeof(MONITORINFO)};
     need(GetMonitorInfoW(MonitorFromWindow(dialog,MONITOR_DEFAULTTONEAREST),&monitor)!=0,
