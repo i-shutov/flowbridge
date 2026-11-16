@@ -50,3 +50,8 @@ No driver, WFP filter/callout creation, services, firewall, security or
 network changes. No beta, PR #56 or protected-branch changes.
 
 Microsoft API: https://learn.microsoft.com/en-us/windows/win32/api/fwpmu/nf-fwpmu-fwpmengineopen0
+
+R204 follow-up: BFE stdout is read as UTF-16LE (PowerShell 5.1 redirection)
+when BOM/zero-byte framing is present, and UTF-8 otherwise. Local tests
+independently accepted a valid UTF-16 management transcript and rejected
+the same transcript after engine_api_code changed from 0 to 5.

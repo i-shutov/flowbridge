@@ -5,6 +5,14 @@ import json
 import pathlib
 import sys
 
+def read_native(path):
+    raw = path.read_bytes()
+    if raw.startswith(b'\xff\xfe'):
+        return raw.decode('utf-16')
+    if len(raw) > 1 and raw[1] == 0:
+        return raw.decode('utf-16-le')
+    return raw.decode('utf-8-sig')
+
 def accept(bfe, exit_code):
     if type(exit_code) is not int or exit_code not in (0, 3):
         return False
@@ -53,7 +61,7 @@ def main():
     item = e['results']['r199-readback']
     if item['stdout'] != 'r199-readback.stdout.txt':
         raise ValueError('unexpected BFE stdout path')
-    bfe = json.loads((a.evidence_dir / item['stdout']).read_text(encoding='utf-8-sig'))
+    bfe = json.loads(read_native(a.evidence_dir / item['stdout']))
     okay = accept(bfe, item['exit_code'])
     print('R204_BFE_MANAGEMENT_CONSISTENCY_ACCEPTED_NOT_KERNEL_PROOF' if okay else 'REJECTED_NO_GO')
     return 0 if okay else 1

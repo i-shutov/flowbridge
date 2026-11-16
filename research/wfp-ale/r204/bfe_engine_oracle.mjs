@@ -2,6 +2,12 @@
 // Independent JS oracle for R199 BFE engine-code/exit integrity; no kernel proof.
 import fs from 'node:fs';
 import path from 'node:path';
+function readNative(file) {
+ const b=fs.readFileSync(file);
+ if(b.length>1 && b[0]===255 && b[1]===254)return b.subarray(2).toString('utf16le');
+ if(b.length>1 && b[1]===0)return b.toString('utf16le');
+ return b.toString('utf8').replace(/^\uFEFF/,'');
+}
 function accepts(bfe, exit) {
   if (!Number.isInteger(exit) || (exit!==0 && exit!==3) || bfe===null ||
       typeof bfe!=='object' || Array.isArray(bfe) || bfe.kernel_proof!==false ||
@@ -35,7 +41,7 @@ try {
   else{
    const item=e.results['r199-readback'];
    if(item.stdout!=='r199-readback.stdout.txt')throw Error('unexpected BFE stdout path');
-   const bfe=JSON.parse(fs.readFileSync(path.join(dir,item.stdout),'utf8').replace(/^\uFEFF/,''));
+   const bfe=JSON.parse(readNative(path.join(dir,item.stdout)));
    const ok=accepts(bfe,item.exit_code);
    console.log(ok?'R204_BFE_MANAGEMENT_CONSISTENCY_ACCEPTED_NOT_KERNEL_PROOF':'REJECTED_NO_GO');
    if(!ok)process.exitCode=1;
