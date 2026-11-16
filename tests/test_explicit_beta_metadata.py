@@ -30,7 +30,7 @@ class MetadataTests(unittest.TestCase):
             self.fixture(root)
             META.check_versions(root)
             lock = root / "Cargo.lock"
-            lock.write_text(lock.read_text().replace('version = "0.3.0-beta.1"', 'version = "0.3.0"', 1))
+            lock.write_text(lock.read_text().replace('version = "0.3.0-beta.2"', 'version = "0.3.0"', 1))
             with self.assertRaisesRegex(ValueError, "Cargo.lock version mismatch"):
                 META.check_versions(root)
 

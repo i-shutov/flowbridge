@@ -2,7 +2,7 @@ FlowBridge Explicit SOCKS Candidate — Windows x64
 ================================================
 
 ENGINEERING CANDIDATE, NOT A PRODUCTION RELEASE
-Candidate version: 0.3.0-beta.1, explicit SOCKS-only engineering build.
+Candidate version: 0.3.0-beta.2, explicit SOCKS-only engineering build.
 
 Supported: local SOCKS5/SOCKS5h TCP listener, explicitly configured clients,
 external upstream proxies, user-owned OpenSSH -D with watchdog (GUI),

@@ -53,7 +53,7 @@ jobs:
         run: |
           set -euo pipefail
           app=build/macos/explicit-beta/Build/Products/Release/FlowBridgeExplicitBeta.app
-          pkg=build/macos/explicit-beta/packages/FlowBridge-0.3.0-beta.1-macOS-universal-explicit-beta.pkg
+          pkg=build/macos/explicit-beta/packages/FlowBridge-0.3.0-beta.2-macOS-universal-explicit-beta.pkg
           python tests/macos_explicit_beta_scope.py --app "$app" --pkg "$pkg" \
             --out build/verification/explicit-macos/native-package.json
           shasum -a 256 "$pkg" > "$pkg.sha256"
@@ -63,8 +63,8 @@ jobs:
         with:
           name: FlowBridge-Explicit-SOCKS-EngineeringCandidate-macOS-${{ github.run_id }}
           path: |
-            build/macos/explicit-beta/packages/FlowBridge-0.3.0-beta.1-macOS-universal-explicit-beta.pkg
-            build/macos/explicit-beta/packages/FlowBridge-0.3.0-beta.1-macOS-universal-explicit-beta.pkg.sha256
+            build/macos/explicit-beta/packages/FlowBridge-0.3.0-beta.2-macOS-universal-explicit-beta.pkg
+            build/macos/explicit-beta/packages/FlowBridge-0.3.0-beta.2-macOS-universal-explicit-beta.pkg.sha256
             build/verification/explicit-macos-package.json
             build/verification/explicit-macos/native-package.json
             build/macos/explicit-beta/Build/Products/Release/FlowBridgeExplicitBeta.app/Contents/Resources/BUILD-METADATA.json
