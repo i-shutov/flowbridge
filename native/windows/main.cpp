@@ -19,6 +19,7 @@
 #include "native_profile.hpp"
 #include "capture_launcher.hpp"
 #include "ssh_pool_policy.hpp"
+#include "ssh_status_presentation.hpp"
 #include "rule_editor_win32.hpp"
 #include "flowbridge.h"
 #include "nlohmann/json.hpp"
@@ -46,6 +47,7 @@ std::filesystem::path profile;
 bool busy=false, closing=false, filling=false, quickDirty=false;
 bool shutdownDispatched=false;
 std::string localLog, workerError;
+std::string lastLoggedSshError;
 std::string selectedProxyId;
 Json draft;
 Json latestEngineSnapshot=Json::object(),latestSshSnapshot=Json::object();
@@ -665,7 +667,10 @@ void refreshConnectionModeSummary(){
     // A mode edit changes presentation only; the accepted route changes on reconnect.
     const bool managed=SendMessageW(GetDlgItem(window,ManagedMode),CB_GETCURSEL,0,0)==1;
     if(latestSshSnapshot.is_object()&&latestSshSnapshot.contains("status")){
-        setText(GetDlgItem(window,SshSummary),managed?utf8(GetDlgItem(window,SshHealth)):
+        // The connection card has room for a single status line.  Keep the
+        // detailed health text separate and put error details in the log.
+        auto summary=ssh_status_presentation::summary(utf8(GetDlgItem(window,SshHealth)));
+        setText(GetDlgItem(window,SshSummary),managed?summary:
             "Выбран внешний прокси. Для смены текущего маршрута переподключитесь.");
         return;
     }
@@ -712,7 +717,11 @@ void showSsh(const Json& ssh,bool waiting){
     setText(GetDlgItem(window,SshHealth),text);refreshConnectionModeSummary();
     if(waiting){setText(GetDlgItem(window,Badge),"●  Ожидание готовности SSH");setText(GetDlgItem(window,Status),"Сначала проверяется SSH/SOCKS5. Локальный движок запустится после подтверждения готовности.");}
     if(engineRunning&&!tunnelReady){setText(GetDlgItem(window,Badge),state=="degraded"?"●  SSH перегружен / проверяется · новые соединения ждут":"●  SSH восстанавливается · SOCKS ждёт upstream");}
-    std::string events=utf8(logEdit);for(const auto& event:ssh.value("events",Json::array()))events+="\r\n[SSH / "+event.value("level",std::string("info"))+"] "+event.value("message",std::string());if(events.size()>60000)events.erase(0,events.size()-60000);while(!events.empty()&&(static_cast<unsigned char>(events[0])&0xc0)==0x80)events.erase(0,1);setText(logEdit,events);
+    std::string events=utf8(logEdit);
+    const auto error=status.value("last_error",Json());
+    const auto errorText=error.is_string()?error.get<std::string>():std::string();
+    ssh_status_presentation::append_changed_error(events,lastLoggedSshError,errorText);
+    for(const auto& event:ssh.value("events",Json::array()))events+="\r\n[SSH / "+event.value("level",std::string("info"))+"] "+event.value("message",std::string());if(events.size()>60000)events.erase(0,events.size()-60000);while(!events.empty()&&(static_cast<unsigned char>(events[0])&0xc0)==0x80)events.erase(0,1);setText(logEdit,events);
 }
 
 HWND control(const wchar_t* cls,const wchar_t* label,DWORD style,int id,DWORD ex=0) {

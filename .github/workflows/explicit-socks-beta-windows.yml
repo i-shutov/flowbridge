@@ -52,6 +52,8 @@ jobs:
           New-Item -ItemType Directory -Force build/verification/explicit-beta|Out-Null
           & build/windows-explicit-beta/Release/FlowBridgeRuleModelTest.exe
           if($LASTEXITCODE -ne 0){throw 'Rule editor model regression'}
+          & build/windows-explicit-beta/Release/FlowBridgeSshStatusTest.exe
+          if($LASTEXITCODE -ne 0){throw 'SSH status presentation regression'}
           # Do NOT launch the GUI here: it writes an actual user profile,
           # and the installed-product test must first assert no prior profile.
           # That test runs FlowBridgeNativeSmoke against the installed GUI.
