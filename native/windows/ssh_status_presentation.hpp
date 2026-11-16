@@ -7,9 +7,9 @@ inline std::string summary(const std::string& health) {
     return health.substr(0, health.find_first_of("\r\n"));
 }
 
-inline void append_changed_error(std::string& journal, std::string& previous,
-                                 const std::string& error) {
-    if (!error.empty() && error != previous) journal += "\r\n[SSH / error] " + error;
-    previous = error;
+inline void append_changed_health(std::string& journal, std::string& previous,
+                                  const std::string& health) {
+    if (!health.empty() && health != previous) journal += "\r\n[SSH / status] " + health;
+    previous = health;
 }
 }

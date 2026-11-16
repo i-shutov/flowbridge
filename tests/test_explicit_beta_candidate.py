@@ -54,8 +54,8 @@ class EvidenceFixture:
         self.lock = b"version = 4\n# Synthetic lockfile for provenance validation\n"
         self.contract = encoded({"schema": "flowbridge-explicit-beta-version-v1",
                                  "version": VERSION, "release_approved": False,
-                                 "windows_file_version": "0.3.0.1", "macos_short_version": "0.3.0",
-                                 "macos_bundle_version": "3.0.1",
+                                 "windows_file_version": "0.3.0.2", "macos_short_version": "0.3.0",
+                                 "macos_bundle_version": "3.0.2",
                                  "windows_installer": f"FlowBridge-{VERSION}-windows-x64-setup.exe",
                                  "macos_installer": f"FlowBridge-{VERSION}-macOS-universal-explicit-beta.pkg",
                                  "windows_namespace": "FlowBridgeExplicitBeta",
