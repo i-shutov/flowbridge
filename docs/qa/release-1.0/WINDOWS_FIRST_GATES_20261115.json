@@ -74,7 +74,38 @@
       "A7"
     ],
     "macos_A4_deferred_not_passed": true,
-    "release_accepted": false
+    "release_accepted": false,
+    "owner_win10_automated_lifecycle": {
+      "status": "OWNER_REPORTED_6_OF_6_EVIDENCE_VERIFIED_MANUAL_A3_OPEN",
+      "original_package_sha256": "74ff309d2e8ae115083bed9c5d4f233fd02dc841a8084a22912f3430c1e4b504",
+      "source_sha": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+      "evidence_zip_sha256": "20a3596d09cab6a561463c0e14fd4cf1843b7eccd1d0ec21cf70bdb91eb402b1",
+      "original_report_sha256": "5100736117c4d1ed609df062f9297ba6163d302efb9245bc79c01a75bf3c1bf8",
+      "original_json_and_five_bmp_hashes_independently_verified": true,
+      "six_phases": [
+        "install",
+        "payload",
+        "launch",
+        "upgrade",
+        "uninstall",
+        "stable_preserved"
+      ],
+      "six_phases_all_pass": true,
+      "owner_host_cryptographically_attested": false,
+      "native_interactive_gui_verified": false,
+      "real_frozen_kit_managed_ssh_verified": false,
+      "a3_full_accepted": false,
+      "checkpoint": "docs/qa/release-1.0/checkpoints/A3_OWNER_WIN10_ORIGINAL_EVIDENCE_REVIEW_20261116.md",
+      "codex_interactive_qa_task": "https://github.com/i-shutov/flowbridge/blob/48e7d15ee433fcb949ea866ff356563f4ee1436a/docs/qa/release-1.0/checkpoints/A3_WIN10_CODEX_AUTONOMOUS_GUI_SSH_TASK_20261116.md",
+      "codex_execution_proved": false
+    },
+    "remaining_release_gates": [
+      "A3: real interactive native GUI + frozen-package real SSH/SOCKS5h, then independent review",
+      "A3: separate exact-kit Win11 native acceptance",
+      "A5: independent legal, native-runtime and project LICENSE decision; original SBOM inventory PASS only",
+      "A6: independent P0/privacy/release reviewer decision",
+      "A7: explicit owner prerelease approval and publication"
+    ]
   },
   "windows_1_0": {
     "required_gate_ids": [
@@ -115,7 +146,7 @@
         "depends_on": [
           "WIN-00"
         ],
-        "status": "WFP_TERMINAL_CLAIM_ABI4_WDK_NATIVE_MSVC_HOSTED_PASS_SIGNED_SOCKET_G2_OPEN",
+        "status": "WFP_ABI4_TERMINAL_CLAIM_AND_HARD_PERMIT_SOURCE_WDK_PASS_SIGNED_KERNEL_SOCKET_G2_OPEN",
         "accepted": false,
         "evidence": [],
         "required_native_windows": true,
@@ -282,6 +313,35 @@
           "terminal_claim_source_subgate_pass": true,
           "entire_win01_accepted": false,
           "checkpoint": "docs/qa/release-1.0/checkpoints/WIN01_WFP_TERMINAL_CLAIM_ABI4_20261115.md"
+        },
+        "latest_wfp_product_source": {
+          "stacked_prs": [
+            69,
+            70,
+            71,
+            72
+          ],
+          "latest_source_sha": "91699dac13e925a0cc90d51c4ba06853c42561e7",
+          "hard_permit_veto_fixed_in_real_driver_source": true,
+          "wdk_source_test_ci": {
+            "source_negative_and_msvc_run": "https://github.com/i-shutov/flowbridge/actions/runs/43822796108",
+            "wdk_driver_compile_run": "https://github.com/i-shutov/flowbridge/actions/runs/43822796306",
+            "win_application_scope_run": "https://github.com/i-shutov/flowbridge/actions/runs/43822796272",
+            "dns_source_run": "https://github.com/i-shutov/flowbridge/actions/runs/43822796203",
+            "status": "4/5 workflows SUCCESS; general CI #43822796200 FAILED due macOS SSH mock port race"
+          },
+          "portable_core_retry_fix": {
+            "pr": "https://github.com/i-shutov/flowbridge/pull/74",
+            "rust_native_run": "https://github.com/i-shutov/flowbridge/actions/runs/43823314402",
+            "result": "SUCCESS on separate source branch, NOT an integrated PR72 run",
+            "windows_real_openssh_run": "https://github.com/i-shutov/flowbridge/actions/runs/43823314443",
+            "windows_real_openssh_result": "FAIL raw backend capacity, keep visible"
+          },
+          "signed_driver_loaded": false,
+          "kernel_accepted_socket_object_binding_independently_proved": false,
+          "ticket_reclamation_and_reauthorization_accepted": false,
+          "independent_native_ipv4_ipv6_no_direct": false,
+          "g2_accepted": false
         }
       },
       {
@@ -341,10 +401,17 @@
         "depends_on": [
           "WIN-02"
         ],
-        "status": "NOT_ACCEPTED",
+        "status": "HOSTED_MANAGED_CAPACITY_BASELINE_PASS_RAW_OPENSSH_RESOURCE_FAILURE_24H_NATIVE_OPEN",
         "accepted": false,
         "evidence": [],
-        "required_native_windows": true
+        "required_native_windows": true,
+        "native_ssh_evidence": {
+          "source_beta_managed_hosted": "128 held / 1152 expected overload rejections / 10000 churn / four owned workers PASS",
+          "raw_openssh_512": "FAILED; observed ~244 held before WinError 10054, sshd resource shortage in hosted Windows; not a universal capacity limit",
+          "negative_run": "https://github.com/i-shutov/flowbridge/actions/runs/43823314443",
+          "hosted_512_stability_accepted": false,
+          "owner_native_win10_win11_24h_accepted": false
+        }
       },
       {
         "id": "WIN-06",
@@ -358,10 +425,17 @@
           "WIN-02",
           "WIN-03"
         ],
-        "status": "NOT_ACCEPTED",
+        "status": "FROZEN_BETA_GUI_SMOKE_SCREENSHOTS_VERIFIED_INTERACTIVE_CODEX_OPEN_1_0_RULES_OPEN",
         "accepted": false,
         "evidence": [],
-        "required_native_windows": true
+        "required_native_windows": true,
+        "beta_subgate": {
+          "automated_screenshots_verified": 5,
+          "interactive_gui_and_keyboard_verified": false,
+          "codex_task": "https://github.com/i-shutov/flowbridge/blob/48e7d15ee433fcb949ea866ff356563f4ee1436a/docs/qa/release-1.0/checkpoints/A3_WIN10_CODEX_AUTONOMOUS_GUI_SSH_TASK_20261116.md",
+          "codex_execution_proved": false,
+          "notes": "Beta GUI acceptance does not count as full protected Windows 1.0 rule editor"
+        }
       },
       {
         "id": "WIN-07",
@@ -453,5 +527,7 @@
       "https://learn.microsoft.com/en-us/lifecycle/announcements/windows-10-end-of-support",
       "https://www.microsoft.com/en-us/windows/end-of-support"
     ]
-  }
+  },
+  "last_status_update": "2026-11-16",
+  "current_rebaseline_checkpoint": "docs/qa/release-1.0/checkpoints/WINDOWS_FIRST_RELEASE_REBASELINE_20261116.md"
 }
