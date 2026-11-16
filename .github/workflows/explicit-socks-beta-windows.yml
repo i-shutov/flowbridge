@@ -98,8 +98,8 @@ jobs:
         with:
           name: FlowBridge-Explicit-SOCKS-EngineeringCandidate-Windows-${{ github.run_id }}
           path: |
-            artifacts/FlowBridge-0.3.0-beta.1-windows-x64-setup.exe
-            artifacts/FlowBridge-0.3.0-beta.1-windows-x64-setup.exe.sha256
+            artifacts/FlowBridge-0.3.0-beta.2-windows-x64-setup.exe
+            artifacts/FlowBridge-0.3.0-beta.2-windows-x64-setup.exe.sha256
             build/verification/explicit-beta-package.json
             build/verification/explicit-beta/explicit-beta-installer-result.json
             build/verification/explicit-beta/*.bmp

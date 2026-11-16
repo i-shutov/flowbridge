@@ -27,7 +27,7 @@ SOURCE = "a" * 40
 TREE = "b" * 40
 OTHER = "c" * 40
 RUN = "123456789"
-VERSION = "0.3.0-beta.1"
+VERSION = "0.3.0-beta.2"
 
 
 def encoded(value: object) -> bytes:
@@ -327,7 +327,7 @@ class CandidateReportContractTests(unittest.TestCase):
                     report[field] = previous
 
     def test_beta_version_and_package_identity_must_agree(self):
-        self.f.mac["candidate"] = "0.3.0-beta.2"
+        self.f.mac["candidate"] = "0.3.0-beta.3"
         with self.assertRaises(ValueError):
             self.f.validate()
         self.f.mac["candidate"] = VERSION

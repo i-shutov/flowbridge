@@ -3,7 +3,7 @@
 
 This builder NEVER invokes the WFP/helper build; it refuses any driver/helper
 in the payload and requires the GUI to have the compile-time beta scope gate.
-It creates an unsigned QA installer, not the production v0.3.0-beta.1 release.
+It creates an unsigned QA installer, not the production v0.3.0-beta.2 release.
 """
 from __future__ import annotations
 

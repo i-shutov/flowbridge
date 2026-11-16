@@ -1,7 +1,7 @@
 name: Explicit SOCKS beta candidate — one source and packaged binaries
 on:
   push:
-    branches: [release/explicit-socks-beta-20261111]
+    branches: [release/explicit-socks-beta-20261111, codex/a3-beta2-v4]
   workflow_dispatch:
 permissions:
   contents: read
