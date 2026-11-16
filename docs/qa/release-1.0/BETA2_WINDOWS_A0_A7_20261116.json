@@ -1,0 +1,118 @@
+{
+  "schema": "flowbridge-windows-beta2-release-gates-v1",
+  "date": "2026-11-16",
+  "scope": "Windows-only explicit SOCKS5/SOCKS5h engineering prerelease, no system transparent interception",
+  "version": "0.3.0-beta.2",
+  "candidate": {
+    "source_sha": "86583a1a0487b9d383c0122b24558e620bde5b9c",
+    "source_tree_sha": "9f92e9e9e87725d127505c8ac415f37e42a8d148",
+    "workflow_url": "https://github.com/i-shutov/flowbridge/actions/runs/43883696169",
+    "workflow_attempt": 2,
+    "workflow_status": "SUCCESS_11_11",
+    "verified_artifact_id": 14238314845,
+    "verified_inner_kit_sha256": "9980c786ceea82d2609b0229eca87b7f3ba044dc742466fedfa5e3b08e7585ae",
+    "windows_installer_sha256": "0699bed4acaa1b9df9b63c658808b08fd65b5953cacdaaddb7a13953389e19f4",
+    "installed_gui_sha256": "0cf1749e7531659b1f5a42433818ecf31fe517d6815d11faeca6e04f9821325e",
+    "ffi_sha256": "23b62d54a89feea53331f3ac68fe7c3d348ca99ed72d816f3dcfbc94ef3fd2b4",
+    "signed": false,
+    "driver_included": false,
+    "publisher_approved": false
+  },
+  "gates": [
+    {
+      "id": "A0",
+      "status": "PASS",
+      "accepted": true,
+      "what": "Explicit-only scope/no system driver/DNS",
+      "evidence": [
+        "https://github.com/i-shutov/flowbridge/pull/76"
+      ]
+    },
+    {
+      "id": "A1",
+      "status": "PASS",
+      "accepted": true,
+      "what": "Exact-head Windows/portable+Mac packaging candidate 11/11 CI",
+      "evidence": [
+        "https://github.com/i-shutov/flowbridge/actions/runs/43883696169"
+      ]
+    },
+    {
+      "id": "A2",
+      "status": "PASS_WITH_128_SCOPE",
+      "accepted": true,
+      "what": "Frozen packaged Windows FFI managed SSH, 128 held, 1152 admitted rejections, 10k churn, 4 workers; raw512 unproved and not claimed",
+      "evidence": [
+        "https://github.com/i-shutov/flowbridge/actions/runs/43883696169",
+        "https://github.com/i-shutov/flowbridge/actions/runs/43883706200"
+      ]
+    },
+    {
+      "id": "A3",
+      "status": "EVIDENCE_REVIEW_PASS_WITH_MISSING_FINAL_NEGATIVE",
+      "accepted": false,
+      "what": "Owner Win10 real GUI/SSH original V4 ZIP 100/100 audited; beta2 missing private key file path case NOT_RUN; separate Win11 native OPEN",
+      "evidence": [
+        "https://github.com/i-shutov/flowbridge/blob/docs/release-win10-vm910136-20261110/docs/qa/release-1.0/checkpoints/BETA2_OWNER_WIN10_A3_V4_INDEPENDENT_REVIEW_20261116.md",
+        "https://github.com/i-shutov/flowbridge/blob/docs/release-win10-vm910136-20261110/docs/qa/release-1.0/checkpoints/A3_BETA2_CODEX_V5_MISSING_IDENTITY_NEGATIVE_20261116.md"
+      ]
+    },
+    {
+      "id": "A4",
+      "status": "HOSTED_PASS_NATIVE_DEFERRED_FOR_WINDOWS_ONLY",
+      "accepted": false,
+      "required_for_windows_only": false,
+      "what": "Mac universal hosted CI passes, owner native Mac target not accepted; deferred to later platform release",
+      "evidence": [
+        "https://github.com/i-shutov/flowbridge/actions/runs/43883696169"
+      ]
+    },
+    {
+      "id": "A5",
+      "status": "TECHNICAL_AUDIT_PASS_LICENSE_SECURITY_OPEN",
+      "accepted": false,
+      "what": "Original immutable candidate hash/SBOM 3/3 CI PASS, license not selected, legal/runtime and RustSec advisory review separate",
+      "evidence": [
+        "https://github.com/i-shutov/flowbridge/pull/77",
+        "https://github.com/i-shutov/flowbridge/actions/runs/43933964021",
+        "https://github.com/i-shutov/flowbridge/issues/78"
+      ]
+    },
+    {
+      "id": "A6",
+      "status": "INDEPENDENT_RELEASE_QA_NO_GO_PENDING_A3_A5_WIN11",
+      "accepted": false,
+      "what": "Independent reviewer must verify final V5, owner Win11 and legal/security/publisher claims",
+      "evidence": []
+    },
+    {
+      "id": "A7",
+      "status": "NOT_AUTHORIZED_NOT_PUBLISHED",
+      "accepted": false,
+      "what": "Explicit owner release GO, label unsigned engineering prerelease if approved, original sha-signoff and publication only after A0–A6",
+      "evidence": []
+    }
+  ],
+  "scope_exclusions": {
+    "macos_native_release": true,
+    "transparent_tcp_by_exe": true,
+    "wfp_ndisrd": true,
+    "system_dns_leak_proof": true,
+    "udp_quic_proxying": true,
+    "raw_512_ssh_universal_guarantee": true
+  },
+  "open_dependencies": [
+    "Codex V5 one-case final beta2 invalid key-path original evidence ZIP",
+    "Win11 Pro x64 native installation/SSH/GUI acceptance",
+    "Issue #78 owner project distribution-license decision and legal/runtime review",
+    "RustSec locked advisory result and any resulting remediation",
+    "A6 independent all-gates review and A7 explicit publisher GO"
+  ],
+  "windows_1_0_wfp_g2_accepted": false,
+  "all_required_beta_gates_accepted": false,
+  "windows_beta2_release_accepted": false,
+  "publisher_release_approved": false,
+  "github_release_created": false,
+  "tag_created": false,
+  "link_to_integral_checkpoint": "docs/qa/release-1.0/checkpoints/BETA2_RELEASE_BLOCKERS_EXECUTION_20261116.md"
+}
