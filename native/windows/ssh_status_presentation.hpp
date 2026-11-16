@@ -7,9 +7,9 @@ inline std::string summary(const std::string& health) {
     return health.substr(0, health.find_first_of("\r\n"));
 }
 
-inline void append_changed_health(std::string& journal, std::string& previous,
-                                  const std::string& health) {
-    if (!health.empty() && health != previous) journal += "\r\n[SSH / status] " + health;
-    previous = health;
+inline void append_health(std::string& journal, const std::string& health) {
+    if (health.empty()) return;
+    const auto record = "\r\n[SSH / status] " + health;
+    if (journal.find(record) == std::string::npos) journal += record;
 }
 }
