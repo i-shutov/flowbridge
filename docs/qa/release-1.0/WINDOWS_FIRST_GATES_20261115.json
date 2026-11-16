@@ -115,12 +115,12 @@
       }
     },
     "remaining_release_gates": [
-      "A3 beta.2: one final exact EXE invalid identity-file path negative NOT_RUN; or independent explicit reviewed exclusion",
-      "A3 beta.2: independent sign-off (original V4 evidence 100/100 reviewed, host not cryptographically attested)",
-      "A3 beta.2: separate Win11 owner-native acceptance",
-      "A5: decide project-specific LICENSE and complete independent legal/security/native runtime review",
-      "A6: independent release P0/privacy/GUI/SSH gate decision",
-      "A7: explicit owner GO for Windows-only prerelease and publication; original installers unsigned"
+      "A3 beta.2: Codex V5 exact final GUI invalid private key path negative + positive-control original ZIP pending",
+      "A3 beta.2: independent signoff of A3 after original V5 (100/100 V4 reviewed)",
+      "A3 beta.2: separate Win11 native user-mode acceptance",
+      "A5: independent original kit hash/SBOM technical audit PASS 3/3; choose own-code LICENSE, legal/native-runtime/vulnerability reviews OPEN",
+      "A6: exact-source independent release P0/privacy/GUI/SSH review",
+      "A7: explicit owner GO and signing/unsigned engineering prerelease decision; no publication yet"
     ],
     "codex_v3": {
       "source": "owner-forwarded Codex report, raw evidence ZIP local-only and not independently inspected",
@@ -221,7 +221,37 @@
       "official_verified_candidate_artifact_id": 14238314845,
       "official_verified_candidate_outer_zip_sha256": "8ab897935e48f02bf7e3524db36b6601985184c6e151af505c209f414c8ddfb8",
       "official_verified_candidate_inner_zip_sha256": "9980c786ceea82d2609b0229eca87b7f3ba044dc742466fedfa5e3b08e7585ae",
-      "owner_win10_real_gui_ssh_original_evidence_review": "EVIDENCE_CONSISTENCY_PASS_FINAL_KEY_PATH_NOT_RUN"
+      "owner_win10_real_gui_ssh_original_evidence_review": "EVIDENCE_CONSISTENCY_PASS_FINAL_KEY_PATH_NOT_RUN",
+      "a5_beta2_original_kit_independent_technical_audit": {
+        "pr": "https://github.com/i-shutov/flowbridge/pull/77",
+        "ci": "https://github.com/i-shutov/flowbridge/actions/runs/43933964021",
+        "exact_original_candidate_run_id": 43883696169,
+        "candidate_kit_sha256": "9980c786ceea82d2609b0229eca87b7f3ba044dc742466fedfa5e3b08e7585ae",
+        "status": "TECHNICAL_A5_INVENTORY_PASS_LEGAL_AND_NATIVE_REVIEW_OPEN",
+        "ci_jobs_passed": "3/3",
+        "windows_sbom_components": 71,
+        "macos_sbom_components": 37,
+        "missing_license_metadata_count": 0,
+        "windows_license_inventory_entries": 64,
+        "macos_license_inventory_entries": 31,
+        "license_obligation_flagged_expressions": [],
+        "project_license_selected": false,
+        "native_runtime_review_passed": false,
+        "independent_legal_review_passed": false,
+        "vulnerability_audit_passed": false,
+        "a5_accepted": false,
+        "evidence_artifact_id": 14259407987,
+        "evidence_artifact_sha256": "a1883d6b4630d9df3749108542c5a803e9a5f20788668360735acc0f6e2ac2fc",
+        "checkpoint": "docs/qa/release-1.0/checkpoints/A5_BETA2_INDEPENDENT_ORIGINAL_BINARY_AUDIT_20261116.md"
+      },
+      "a3_beta2_remaining_single_case": {
+        "id": "INVALID_KEY_PATH_FINAL_BETA2",
+        "status": "NOT_RUN_ON_FINAL_EXE",
+        "exact_run_task": "docs/qa/release-1.0/checkpoints/A3_BETA2_CODEX_V5_MISSING_IDENTITY_NEGATIVE_20261116.md",
+        "owner_action": "Send task to current Admin Codex; no manual GUI clicks",
+        "result_awaited": true,
+        "release_accepted": false
+      }
     }
   },
   "windows_1_0": {
@@ -458,7 +488,11 @@
           "kernel_accepted_socket_object_binding_independently_proved": false,
           "ticket_reclamation_and_reauthorization_accepted": false,
           "independent_native_ipv4_ipv6_no_direct": false,
-          "g2_accepted": false
+          "g2_accepted": false,
+          "latest_combined_source_sha": "f1ac3b04369163ece245c4fea9520571cec112bf",
+          "test_only_mac_mock_port_preflight_integrated": true,
+          "wfp_exact_head_ci_status": "IN_PROGRESS_2026_11_16",
+          "native_g2_accepted": false
         }
       },
       {
