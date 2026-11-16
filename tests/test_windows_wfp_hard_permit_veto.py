@@ -93,7 +93,8 @@ class TestWfpHardPermitVeto(unittest.TestCase):
         mutated = (
             mutate_function(original, "FbClassify", veto, "/* no hard-permit veto */"),
             mutate_function(original, "FbAuthClassify", veto, "/* auth hard permit escaped */"),
-            mutate_function(original, "FbClassify", "== FWP_ACTION_PERMIT", "!= FWP_ACTION_PERMIT"),
+            mutate_function(original, "FbClassify", veto,
+                            "if (out->actionType != FWP_ACTION_PERMIT) FbBlock(out);"),
             mutate_function(original, "FbClassify", guard,
                             "if (out->rights & FWPS_RIGHT_ACTION_WRITE)"),
             mutate_function(original, "FbClassify", veto, "return; " + veto),
