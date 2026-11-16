@@ -43,6 +43,11 @@ WFP signed native kernel socket authority → реальный IPv4/v6 selected 
 
 **Открыто:** на финальной beta.2 не выполнена одна негативная проверка *неверного пути к приватному ключу* (пройдена только beta.1). Она должна быть пройдена отдельно или обоснованно исключена решением ревьюера. Сама личность реальной Win10 машины криптографически не аттестована; файловый аудит и screenshots не означают независимого физического повторного прогона. **A3 full acceptance=false**, отдельно Win11 native не пройден, проектная LICENSE/A5 legal/security и A6/A7 GO открыты. Windows `1.0` WFP/G2, TCP selected-app provenance, no-DIRECT и DNS физические проверки остаются `NO_GO`. macOS native для Windows-only не блокирует, хотя hosted unified beta.2 теперь действительно SUCCESS. Старые фразы про Mac runner в очереди в исторических секциях документа относятся к состоянию **до** успешного завершения попытки 2.
 
+## Release blocker execution checkpoint — 16 Nov
+
+> **16 ноября, новый checkpoint выполнения блокеров:** [beta.2 A3/A5/WFP release-blockers](checkpoints/BETA2_RELEASE_BLOCKERS_EXECUTION_20261116.md). Оригинальный beta.2 CI `11/11 PASS`, Win10 V4 original evidence `100/100` integrity reviewed. **A3**: для финального EXE остался ровно один тест `INVALID_KEY_PATH_FINAL_BETA2`, [автономная задача для Codex V5](checkpoints/A3_BETA2_CODEX_V5_MISSING_IDENTITY_NEGATIVE_20261116.md). **A5**: [PR #77](https://github.com/i-shutov/flowbridge/pull/77) source+artifact technical auditor `3/3 PASS`, но [owner license decision #78](https://github.com/i-shutov/flowbridge/issues/78), independent legal/runtime/vulnerability audit не закрыты. **WIN-01**: WFP [PR #72](https://github.com/i-shutov/flowbridge/pull/72) exact `f1ac3b0` WDK/source PASS, общие CI ещё не завершены; физический signed G2 NO-GO. `release_accepted=false`, `publisher_release_approved=false`, тег отсутствует.
+
+
 ## 1. Что именно выпускаем первым
 
 | Параметр | Windows 1.0 |
