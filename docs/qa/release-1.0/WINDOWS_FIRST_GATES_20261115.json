@@ -115,11 +115,12 @@
       }
     },
     "remaining_release_gates": [
-      "A3 beta.2: independently audit original 100-file owner V4 ZIP; verify final exact GUI/SSH/restore and invalid key path negative case",
-      "A3 beta.2: separate Win11 original exact package owner native acceptance",
-      "A5 beta.2: choose FlowBridge-specific LICENSE and independent legal/security/runtime review; technical SBOM manifest verified",
-      "A6 beta.2: independent P0/GUI/SSH/privacy reviewer decision on final exact SHA; Mac cancellation does not imply Windows fail",
-      "A7 beta.2: explicit Windows-only prerelease GO, scope/signing notices and publication; no tag yet"
+      "A3 beta.2: one final exact EXE invalid identity-file path negative NOT_RUN; or independent explicit reviewed exclusion",
+      "A3 beta.2: independent sign-off (original V4 evidence 100/100 reviewed, host not cryptographically attested)",
+      "A3 beta.2: separate Win11 owner-native acceptance",
+      "A5: decide project-specific LICENSE and complete independent legal/security/native runtime review",
+      "A6: independent release P0/privacy/GUI/SSH gate decision",
+      "A7: explicit owner GO for Windows-only prerelease and publication; original installers unsigned"
     ],
     "codex_v3": {
       "source": "owner-forwarded Codex report, raw evidence ZIP local-only and not independently inspected",
@@ -165,12 +166,12 @@
       "hosted_windows_installer_lifecycle_pass": true,
       "hosted_windows_managed_ssh_pass": true,
       "original_owner_v4_zip_reported_sha256": "23844631907f96063f0b13db73a835b92c386a4be3ed13a174c484c3139606e2",
-      "original_owner_v4_zip_independently_audited": false,
+      "original_owner_v4_zip_independently_audited": true,
       "owner_win10_real_gui_ssh_full_accepted": false,
       "invalid_identity_key_path_on_exact_beta2_tested": false,
       "owner_win11_exact_kit_accepted": false,
       "unified_candidate_attempt_1": "FAILURE_CANCELLED_MACOS_UNIVERSAL",
-      "unified_candidate_attempt_2": "MACOS_UNIVERSAL_PACKAGE_PASS_WINDOWS_NATIVE_QA_PASS_MACOS_NATIVE_QA_QUEUED_UNIFIED_CANDIDATE_PENDING",
+      "unified_candidate_attempt_2": "SUCCESS_11_OF_11_ALL_HOSTED_JOBS_AND_VERIFIED_CANDIDATE",
       "unified_candidate_accepted": false,
       "windows_only_pre_release_approved": false,
       "source_managed_ssh_raw_512_supported": false,
@@ -197,7 +198,30 @@
         "six_phases_pass": true,
         "screenshot_5_of_5_sha_match": true,
         "owner_native": false
-      }
+      },
+      "owner_win10_v4_independent_audit": {
+        "original_user_uploaded_zip_sha256": "23844631907f96063f0b13db73a835b92c386a4be3ed13a174c484c3139606e2",
+        "status": "EVIDENCE_INTEGRITY_AND_CROSS_SOURCE_CONSISTENCY_PASS",
+        "original_manifest_files_verified": "100/100",
+        "v3_original_nested_files_verified": "41/41",
+        "official_windows_artifact_product_payload_verified": "13/13",
+        "original_owner_gui_png_decoded_and_visually_reviewed": 17,
+        "native_owner_lifecycle_original_report": "6/6",
+        "ssh_real_loopback_original_reported_cases_verified_consistent": true,
+        "all_down_socks_reply": "01",
+        "all_down_elapsed_ms": 30011,
+        "owner_beta_profile_restore_report_consistent": true,
+        "reviewer_independent_physical_host_attestation": false,
+        "exact_beta2_invalid_key_path_negative_executed": false,
+        "full_a3_accepted": false,
+        "sanitized_checkpoint": "docs/qa/release-1.0/checkpoints/BETA2_OWNER_WIN10_A3_V4_INDEPENDENT_REVIEW_20261116.md",
+        "independent_verdict_sha256": "88086df63281c54a9bb3f23d6620ce33fa49eaef09d8b1334847e7be1b6abbda"
+      },
+      "unified_candidate_attempt_2_all_jobs_pass": true,
+      "official_verified_candidate_artifact_id": 14238314845,
+      "official_verified_candidate_outer_zip_sha256": "8ab897935e48f02bf7e3524db36b6601985184c6e151af505c209f414c8ddfb8",
+      "official_verified_candidate_inner_zip_sha256": "9980c786ceea82d2609b0229eca87b7f3ba044dc742466fedfa5e3b08e7585ae",
+      "owner_win10_real_gui_ssh_original_evidence_review": "EVIDENCE_CONSISTENCY_PASS_FINAL_KEY_PATH_NOT_RUN"
     }
   },
   "windows_1_0": {
@@ -518,7 +542,7 @@
           "WIN-02",
           "WIN-03"
         ],
-        "status": "WINDOWS_BETA2_EXACT_HOSTED_GUI_BLOB_VERIFIED_OWNER_V4_PRIVATE_EVIDENCE_NOT_AUDITED_WIN1_0_GUI_OPEN",
+        "status": "EXPLICIT_BETA2_WIN10_OWNER_V4_EVIDENCE_100_OF_100_REVIEWED_1_0_GUI_AND_G2_STILL_OPEN",
         "accepted": false,
         "evidence": [],
         "required_native_windows": true,
@@ -534,7 +558,10 @@
           "codex_v3_local_branch_not_pushed": true,
           "final_rebuilt_qa_exe_tested": false,
           "beta2_hosted_final_gui_sha_verified": true,
-          "beta2_owner_original_v4_evidence_audited": false
+          "beta2_owner_original_v4_evidence_audited": true,
+          "beta2_final_gui_owner_screenshot_audit_pass": true,
+          "beta2_final_gui_rebuild_sha_matches_installer": true,
+          "beta2_invalid_identity_path_negative_rerun": false
         }
       },
       {
