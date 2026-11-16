@@ -115,12 +115,11 @@
       }
     },
     "remaining_release_gates": [
-      "A3: publish local GUI fix branch, independently review diff and original V3 ZIP; build uniquely identified beta-next and test final exact EXE",
-      "A3: rerun Codex V2 in existing Admin interactive session using transactional beta profile escrow and signed portable sshd; independent original ZIP review",
-      "A3: separate exact-kit Win11 native acceptance",
-      "A5: independent legal, native-runtime and project LICENSE decision; original SBOM inventory PASS only",
-      "A6: independent P0/privacy/release reviewer decision",
-      "A7: explicit owner prerelease approval and publication"
+      "A3 beta.2: independently audit original 100-file owner V4 ZIP; verify final exact GUI/SSH/restore and invalid key path negative case",
+      "A3 beta.2: separate Win11 original exact package owner native acceptance",
+      "A5 beta.2: choose FlowBridge-specific LICENSE and independent legal/security/runtime review; technical SBOM manifest verified",
+      "A6 beta.2: independent P0/GUI/SSH/privacy reviewer decision on final exact SHA; Mac cancellation does not imply Windows fail",
+      "A7 beta.2: explicit Windows-only prerelease GO, scope/signing notices and publication; no tag yet"
     ],
     "codex_v3": {
       "source": "owner-forwarded Codex report, raw evidence ZIP local-only and not independently inspected",
@@ -143,6 +142,40 @@
       "new_candidate_a3_accepted": false,
       "next_task": "https://github.com/i-shutov/flowbridge/blob/4be43c6569fe222a2153488a5c5bdb046ba0e1e1/docs/qa/release-1.0/checkpoints/A3_CODEX_V4_FINAL_CANDIDATE_HANDOFF_20261116.md",
       "provenance_checkpoint": "docs/qa/release-1.0/checkpoints/WINDOWS_FIRST_RELEASE_REBASELINE_20261116.md"
+    },
+    "next_candidate": {
+      "version": "0.3.0-beta.2",
+      "code_review_prs": [
+        "https://github.com/i-shutov/flowbridge/pull/75",
+        "https://github.com/i-shutov/flowbridge/pull/76"
+      ],
+      "source_sha": "86583a1a0487b9d383c0122b24558e620bde5b9c",
+      "source_tree_sha": "9f92e9e9e87725d127505c8ac415f37e42a8d148",
+      "github_actions_run": 43883696169,
+      "windows_actions_artifact_id": 14233377409,
+      "windows_artifact_outer_zip_sha256": "1cb5ceef10609f5921ea376a496819ece5915b8fe55e281862f1fdc356362b90",
+      "installer_sha256": "0699bed4acaa1b9df9b63c658808b08fd65b5953cacdaaddb7a13953389e19f4",
+      "gui_exe_sha256": "0cf1749e7531659b1f5a42433818ecf31fe517d6815d11faeca6e04f9821325e",
+      "ffi_dll_sha256": "23b62d54a89feea53331f3ac68fe7c3d348ca99ed72d816f3dcfbc94ef3fd2b4",
+      "windows_qa_manifest_sha256": "3ed7c6b73bc1edf4e3418203be07fc054b1f451d69b0ac0d9f5b589ed2581629",
+      "independent_original_windows_artifact_zip_crc_pass": true,
+      "independent_manifest_payload_hashes_pass": "13/13",
+      "independent_hosted_installed_gui_sha_matches_final_binary": true,
+      "independent_hosted_qa_bmp_count": 7,
+      "hosted_windows_installer_lifecycle_pass": true,
+      "hosted_windows_managed_ssh_pass": true,
+      "original_owner_v4_zip_reported_sha256": "23844631907f96063f0b13db73a835b92c386a4be3ed13a174c484c3139606e2",
+      "original_owner_v4_zip_independently_audited": false,
+      "owner_win10_real_gui_ssh_full_accepted": false,
+      "invalid_identity_key_path_on_exact_beta2_tested": false,
+      "owner_win11_exact_kit_accepted": false,
+      "unified_candidate_attempt_1": "FAILURE_CANCELLED_MACOS_UNIVERSAL",
+      "unified_candidate_attempt_2": "REQUESTED_MACOS_UNIVERSAL_QUEUED_AT_REVIEW",
+      "unified_candidate_accepted": false,
+      "windows_only_pre_release_approved": false,
+      "source_managed_ssh_raw_512_supported": false,
+      "release_accepted": false,
+      "checkpoint": "docs/qa/release-1.0/checkpoints/BETA2_WINDOWS_GITHUB_ARTIFACT_INDEPENDENT_AUDIT_20261116.md"
     }
   },
   "windows_1_0": {
@@ -463,7 +496,7 @@
           "WIN-02",
           "WIN-03"
         ],
-        "status": "FROZEN_BETA_GUI_DEFECT_REPORTED_CODEX_QA_FIX_LOCAL_UNREVIEWED_BETA_NEXT_REQUIRED_WIN1_0_GUI_OPEN",
+        "status": "WINDOWS_BETA2_EXACT_HOSTED_GUI_BLOB_VERIFIED_OWNER_V4_PRIVATE_EVIDENCE_NOT_AUDITED_WIN1_0_GUI_OPEN",
         "accepted": false,
         "evidence": [],
         "required_native_windows": true,
@@ -477,7 +510,9 @@
           "codex_v3_positive_ssh_reported": true,
           "codex_v3_original_evidence_independently_reviewed": false,
           "codex_v3_local_branch_not_pushed": true,
-          "final_rebuilt_qa_exe_tested": false
+          "final_rebuilt_qa_exe_tested": false,
+          "beta2_hosted_final_gui_sha_verified": true,
+          "beta2_owner_original_v4_evidence_audited": false
         }
       },
       {
