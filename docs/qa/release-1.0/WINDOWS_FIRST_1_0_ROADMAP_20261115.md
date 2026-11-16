@@ -4,6 +4,20 @@
 
 **Актуальный статус: Windows 1.0 NO-GO; Windows beta 0.3.0-beta.1 NOT_RELEASED.** Для всех защищённых режимов требуются реальные native доказательства. Исторический общий 19-gate реестр сохраняется: [gate_status_20261113.json](gate_status_20261113.json). Новый независимый Windows-gate реестр: [WINDOWS_FIRST_GATES_20261115.json](WINDOWS_FIRST_GATES_20261115.json).
 
+## Обновление 16 ноября 2026 — новый source-of-truth статус
+
+> **Новый контрольный срез:** [WINDOWS_FIRST_RELEASE_REBASELINE_20261116.md](checkpoints/WINDOWS_FIRST_RELEASE_REBASELINE_20261116.md). Исходное решение о Windows-first от 15 ноября не меняется. **Не объявлять релиз по количеству зелёных CI.**
+
+| Маршрут | Фактический результат | Открытый release gate |
+| --- | --- | --- |
+| **Windows explicit SOCKS 0.3.0-beta.1** | На Win10 Pro реальный frozen kit: native automated install/payload/GUI smoke/upgrade/uninstall/stable preservation **6/6 PASS**; оригинальные JSON/5 BMP и SHA-256 независимо проверены [PR #73](https://github.com/i-shutov/flowbridge/pull/73). | **A3 interactive GUI и настоящий exact-kit managed SSH ещё не выполнялись**, затем отдельная Win11, A5 license/security/legal, A6 reviewer и A7 GO/tag. |
+| **Codex на Win10** | Владелец делегировал GUI/SSH QA локальному агенту, не будет сам нажимать GUI. [Готовое pinned-задание](https://github.com/i-shutov/flowbridge/blob/48e7d15ee433fcb949ea866ff356563f4ee1436a/docs/qa/release-1.0/checkpoints/A3_WIN10_CODEX_AUTONOMOUS_GUI_SSH_TASK_20261116.md). | `CODEX_NOT_EXECUTED_OR_ORIGINAL_EVIDENCE_NOT_RECEIVED`. Принятие только после реальных действий и независимого ZIP-review; не повторять 6/6 без причины. |
+| **Windows-first 1.0 G2/WIN-01** | WFP stack [#69–#72](https://github.com/i-shutov/flowbridge/pull/72): ABI4 CLAIM и hard-PERMIT veto, source/WDK PASS. Но driver ещё не был подписан и запущен в native Win10/11. | **P0:** доказанная связь AUTH/CLAIM с kernel socket object, поколение+reclaim tickets, reauthorization, реальное BFE/SSH/no-DIRECT/driver rollback. |
+| **Native SSH capacity** | У frozen beta hosted managed SSH: 128 held/1152 rejected/10k churn/4 workers PASS. В отдельной direct OpenSSH пробе [#43823314443](https://github.com/i-shutov/flowbridge/actions/runs/43823314443) запрошенные 512 не достигнуты, около 244 удержано и Windows sshd показал resource errors. | Без универсальной цифры «max 244». Измерить реальный safe ceiling, 251/252, owner Win10/11 и 24h soak. |
+| **1.0 CI/release** | В PR #72 4/5 workflows SUCCESS; общий Rust/native FAIL из-за macOS test port race, отдельно исправлен в [PR #74](https://github.com/i-shutov/flowbridge/pull/74). PR #74 portable-core SUCCESS, независимый Windows raw OpenSSH workflow FAIL. | Свести изменения в интеграционную RC-ветку и повторить exact-head CI, не скрывая raw SSH ресурсный отказ. |
+
+**Граница релизов:** в Windows `0.3.0-beta.1` разрешена только честная explicit SOCKS функциональность. `1.0` требует полноценного выбранного transparent TCP и физического fail-closed. Mac NE/нотаризация отложены на следующий платформенный релиз, но Rust-core CI остаётся обязательным. Никаких разрешений на установку экспериментального WFP-драйвера на существующий пользовательский QA-хост данное обновление не даёт.
+
 ## 1. Что именно выпускаем первым
 
 | Параметр | Windows 1.0 |
@@ -43,7 +57,7 @@
 | **WIN-08 Frozen RC/native** | Одни и те же SHA проходят полноразмерные выбранные/невыбранные TCP+DNS+crash/Stop+soak Win10 и Win11 | Оригинальные JSON/pcap/BMP/логи, OS/build, exact SHA256, ноль P0 SKIP/UNKNOWN |
 | **WIN-09 Independent GO** | Независимая физическая, security/legal и интерфейсная приёмка; явное решение владельца | Только после всех WIN-01–08: подписанные байты=тестовые байты, changelog/SBOM, Windows 1.0 tag/release |
 
-**Параллельные работы без отвлечения от G2:** текущая Windows explicit beta из frozen SHA `f5ecd48d8f81c594f755a55e7969b57d20903020`: [PR #64](https://github.com/i-shutov/flowbridge/pull/64) показал 6/6 hosted Windows без Python; требуется Win10 VM-910136 и отдельный Win11 owner-native прогон, затем независимая QA (A3/A5/A6/A7). A4 macOS hosted Intel/ARM PASS остаётся исторической проверкой, но **не блокирует Windows-only beta/1.0** и не превращается в приёмку macOS.
+**Параллельные работы без отвлечения от G2 (16.11):** frozen Windows explicit beta source `f5ecd48d8f81c594f755a55e7969b57d20903020` теперь имеет **Win10 owner automated 6/6 PASS с независимо проверенными оригинальными JSON/BMP** ([PR #73](https://github.com/i-shutov/flowbridge/pull/73)); оставшийся *интерактивный* GUI и SSH exact-kit поручены локальному Codex по [pinned ТЗ](https://github.com/i-shutov/flowbridge/blob/48e7d15ee433fcb949ea866ff356563f4ee1436a/docs/qa/release-1.0/checkpoints/A3_WIN10_CODEX_AUTONOMOUS_GUI_SSH_TASK_20261116.md), ещё **не приняты**. Отдельная Win11 owner native, A5/A6/A7 открыты. A4 Mac deferred и не блокирует Windows-only beta/1.0.
 
 ## 4. Оставляем архитектуру по-настоящему кроссплатформенной
 
@@ -62,7 +76,7 @@
 - Продолжать крупными блоками, фиксировать чекпойнт в `docs/qa/release-1.0/checkpoints/`, не засорять корень репозитория микродокументами.
 - Существующие PR #60/#63/#65/#66 на macOS **сохранить**; не сливать в Windows-продукт без необходимости. Новые macOS фичи до выхода Windows 1.0 не являются приоритетом.
 
-## Контрольные факты на 15 ноября 2026
+## Исторические контрольные факты на 15 ноября 2026 (заменены срезом выше)
 
 - `main` на момент обновления: `5b5afc2feeda2195f302380e615ba003d4906e09` — Windows 1.0 ещё не интегрирован.
 - Windows kernel G2: `NO_GO`, по issue #41; peer snapshot ≠ per-packet connection provenance.
