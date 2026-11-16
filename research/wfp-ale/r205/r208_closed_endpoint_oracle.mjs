@@ -37,4 +37,4 @@ const two=[ev('issue',5),ev('issue',6),ev('auth',5),ev('auth',6),ev('closure',5)
 assert.deepEqual(reduce(two,true).slice(-2),[false,true]);n++;
 assert.equal(reduce([ev('issue',7),ev('auth',7),ev('death',7),ev('claim',7)],false).at(-1),false);n++;
 assert.deepEqual(reduce([ev('issue',8),ev('claim',8),ev('issue',8) ],false),[true,false,false]);n++;
-console.log(\`R208 Node compact independent negative traces \${n}/\${n} PASS; not native Windows/kernel evidence\`);
+console.log(`R208 Node compact independent negative traces ${n}/${n} PASS; not native Windows/kernel evidence`);
