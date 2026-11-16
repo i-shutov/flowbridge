@@ -1,5 +1,13 @@
 # FlowBridge — исполнимый план до 1.0
 
+> **СВЕЖИЙ СРЕЗ — 16 ноября 2026:** [Windows-first 1.0 rebaseline](qa/release-1.0/checkpoints/WINDOWS_FIRST_RELEASE_REBASELINE_20261116.md), [актуализированный roadmap](qa/release-1.0/WINDOWS_FIRST_1_0_ROADMAP_20261115.md) и [машинный реестр gates](qa/release-1.0/WINDOWS_FIRST_GATES_20261115.json).
+>
+> - Windows `0.3.0-beta.1`: **Win10 original frozen automated A3 6/6 PASS, оригинальный JSON/5 BMP независимо проверены**. Интерактивные GUI+exact-kit SSH/SOCKS5h **не зачтены**, их выполнение делегировано [Codex на Win10](https://github.com/i-shutov/flowbridge/blob/48e7d15ee433fcb949ea866ff356563f4ee1436a/docs/qa/release-1.0/checkpoints/A3_WIN10_CODEX_AUTONOMOUS_GUI_SSH_TASK_20261116.md) и пока не подтверждено оригинальными результатами. Остаются Win11 QA, LICENSE/A5, A6 и A7.
+> - Windows `1.0.0`: **строго NO-GO**. WFP/ALE source/WDK-сборки и ABI4 CLAIM не заменяют signed native Win10/11 G2. P0: accepted-socket kernel authority, ticket lifecycle/reauthorization, no-DIRECT, DNS/UDP, ресурсная/24h SSH QA, Win10/11 RC, подписи/безопасность.
+> - macOS NE/физическая Mac-приёмка перенесены после Windows 1.0 решением от 15 ноября; перенос не означает PASS. Русло Rust остаётся кроссплатформенным.
+> - `main` не является 1.0 release, теги/публикация не создавались. Не устанавливать WFP-драйвер на пользовательскую VM в рамках beta GUI/SSH тестов.
+
+
 > **РЕШЕНИЕ ВЛАДЕЛЬЦА — 15 ноября 2026: WINDOWS-FIRST 1.0.**
 > Текущий приоритет: **Windows 10 Pro 22H2 x64 + Windows 11 Pro x64**;
 > macOS Network Extension, DNS, подписанные пакеты и ручная Apple Silicon/Intel QA
