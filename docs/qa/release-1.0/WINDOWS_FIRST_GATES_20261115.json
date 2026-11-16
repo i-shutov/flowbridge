@@ -513,8 +513,19 @@
           "g2_accepted": false,
           "latest_combined_source_sha": "f1ac3b04369163ece245c4fea9520571cec112bf",
           "test_only_mac_mock_port_preflight_integrated": true,
-          "wfp_exact_head_ci_status": "IN_PROGRESS_2026_11_16",
-          "native_g2_accepted": false
+          "wfp_exact_head_ci_status": "WFP_SOURCE_WDK_BFE_DNS_PASS_RAW_OPENSSH_512_RESOURCE_FAILURE_RUST_QUEUED",
+          "native_g2_accepted": false,
+          "wfp_run_evidence": {
+            "source_negatives": "https://github.com/i-shutov/flowbridge/actions/runs/43934208928",
+            "bfe_application_scope": "https://github.com/i-shutov/flowbridge/actions/runs/43934208781",
+            "wdk_driver_compile": "https://github.com/i-shutov/flowbridge/actions/runs/43934208759",
+            "dns": "https://github.com/i-shutov/flowbridge/actions/runs/43934208882",
+            "real_ssh": "https://github.com/i-shutov/flowbridge/actions/runs/43934209527",
+            "real_ssh_status": "FAIL_RAW512_RESOURCE_AFTER_MANAGED_128_1152_10000_4_PASS",
+            "portable_core": "https://github.com/i-shutov/flowbridge/actions/runs/43934209139",
+            "portable_core_status": "QUEUED_AT_LAST_OBSERVATION",
+            "native_g2_accepted": false
+          }
         }
       },
       {
