@@ -144,6 +144,7 @@ def from_zip(path: pathlib.Path) -> tuple[bytes, dict[str, bytes]]:
                     sum(e.file_size for e in entries) <= 120 * 1024 * 1024,
                     "ZIP_RESOURCE_LIMIT")
             names = [e.filename.replace("\\", "/") for e in entries if not e.is_dir()]
+            require(len(names) == len(set(names)), "AMBIGUOUS_ZIP_ENTRIES")
             for e in entries:
                 p = pathlib.PurePosixPath(e.filename.replace("\\", "/"))
                 require(not p.is_absolute() and ".." not in p.parts and
