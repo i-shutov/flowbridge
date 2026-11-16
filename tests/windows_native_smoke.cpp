@@ -272,6 +272,8 @@ static void assertCompactLayout(HWND window,const wchar_t* screenshot) {
     // DPI-virtualized) GetDeviceCaps(LOGPIXELSX). This is actual OS DPI.
     const UINT dpi=GetDpiForWindow(window);
     need(dpi>=96&&dpi<=768,"Actual GUI window reported an invalid Win32 DPI");
+    need((GetWindowLongW(GetDlgItem(window,280),GWL_STYLE)&SS_ENDELLIPSIS)!=0,
+         "Long banner text has no visible truncation indicator");
     std::printf("FB_QA_WINDOW_DPI=%u\n",static_cast<unsigned>(dpi));
     RECT client{};GetClientRect(window,&client);
     need(client.right>=920&&client.bottom>=600,"Compact window minimum client area not reached");

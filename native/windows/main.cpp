@@ -815,7 +815,7 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         window=h;
         auto add=[](const wchar_t* cls,const wchar_t* text,DWORD style,int id,int page){HWND c=control(cls,text,style,id);pages[id]=page;return c;};
         auto label=[&](const wchar_t* text,int id,int page){return add(L"STATIC",text,0,id,page);};
-        label(L"",PageTitle,-1);label(L"",PageSubtitle,-1);label(L"",Banner,-1);SendMessageW(GetDlgItem(h,Banner),WM_SETFONT,reinterpret_cast<WPARAM>(smallFont),TRUE);SendMessageW(GetDlgItem(h,PageTitle),WM_SETFONT,reinterpret_cast<WPARAM>(titleFont),TRUE);
+        label(L"",PageTitle,-1);label(L"",PageSubtitle,-1);add(L"STATIC",L"",SS_LEFT|SS_ENDELLIPSIS|SS_NOPREFIX,Banner,-1);SendMessageW(GetDlgItem(h,Banner),WM_SETFONT,reinterpret_cast<WPARAM>(smallFont),TRUE);SendMessageW(GetDlgItem(h,PageTitle),WM_SETFONT,reinterpret_cast<WPARAM>(titleFont),TRUE);
         add(L"BUTTON",L"Обзор",WS_TABSTOP,NavDashboard,-1);add(L"BUTTON",L"Подключение",WS_TABSTOP,NavConnection,-1);add(L"BUTTON",L"Приложения",WS_TABSTOP,NavApps,-1);add(L"BUTTON",L"Журнал и JSON",WS_TABSTOP,NavAdvanced,-1);add(L"BUTTON",L"Сменить тему",WS_TABSTOP,Theme,-1);
         add(L"BUTTON",L"Диагностика…",WS_TABSTOP,ExportDiagnostics,-1);
         add(L"BUTTON",L"Подключить",WS_TABSTOP,Start,-1);add(L"BUTTON",L"Остановить",WS_TABSTOP,Stop,-1);
@@ -917,7 +917,12 @@ LRESULT CALLBACK windowProc(HWND h,UINT message,WPARAM w,LPARAM l) {
         try{wchar_t exe[32768]{};GetModuleFileNameW(nullptr,exe,32768);auto resource=std::filesystem::path(exe).parent_path()/L"resources"/L"presets.json";if(!std::filesystem::exists(resource))resource=std::filesystem::path(__FILE__).parent_path().parent_path().parent_path()/"resources"/"presets.json";catalog=Json::parse(readFile(resource));}catch(const std::exception& e){catalog=Json::object();note(std::string("Каталог шаблонов недоступен: ")+e.what());}
         setText(configEdit,value);fillQuick();refreshConnectionModeSummary();applyTheme();switchPage(0);worker.start();SetTimer(h,1,1000,nullptr);return 0;
     }
-    case WM_SIZE: layout(); return 0;
+    case WM_SIZE:
+        layout();
+        // Child controls can retain stale pixels when the window grows after
+        // a compact layout. Repaint the new geometry and all child windows.
+        RedrawWindow(h,nullptr,nullptr,RDW_INVALIDATE|RDW_ERASE|RDW_ALLCHILDREN|RDW_UPDATENOW);
+        return 0;
     case WM_GETMINMAXINFO: reinterpret_cast<MINMAXINFO*>(l)->ptMinTrackSize={980,680}; return 0;
     case WM_COMMAND:
         try {
