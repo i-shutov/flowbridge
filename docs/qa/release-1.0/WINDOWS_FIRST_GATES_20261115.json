@@ -96,11 +96,26 @@
       "real_frozen_kit_managed_ssh_verified": false,
       "a3_full_accepted": false,
       "checkpoint": "docs/qa/release-1.0/checkpoints/A3_OWNER_WIN10_ORIGINAL_EVIDENCE_REVIEW_20261116.md",
-      "codex_interactive_qa_task": "https://github.com/i-shutov/flowbridge/blob/48e7d15ee433fcb949ea866ff356563f4ee1436a/docs/qa/release-1.0/checkpoints/A3_WIN10_CODEX_AUTONOMOUS_GUI_SSH_TASK_20261116.md",
-      "codex_execution_proved": false
+      "codex_interactive_qa_task": "https://github.com/i-shutov/flowbridge/blob/8c23e10819e200e7bf38e596490fba2c1113cf37/docs/qa/release-1.0/checkpoints/A3_WIN10_CODEX_AUTONOMOUS_GUI_SSH_TASK_20261116.md",
+      "codex_execution_proved": false,
+      "first_codex_attempt": {
+        "source": "owner-pasted Codex summary; original Codex evidence ZIP not independently inspected",
+        "status": "BLOCKED_GUI_PROFILE_ISOLATION_AND_POSITIVE_SSHD",
+        "windows_account": "Admin",
+        "user_requires_new_qa_account": false,
+        "gui_real_interactive_actions_verified": false,
+        "positive_real_ssh_echo_verified": false,
+        "negative_unavailable_ssh_reported_pass": true,
+        "original_stable_beta_profile_hashes_reported_preserved": true,
+        "root_cause": "Existing beta Known Folder persisted as designed; pinned signed Microsoft portable sshd fixture not discovered/obtained by first Codex task",
+        "remediation": "Same Admin profile transactional escrow+restore; pinned signed portable OpenSSH ZIP, no Windows Feature/service install",
+        "remediation_task": "https://github.com/i-shutov/flowbridge/blob/8c23e10819e200e7bf38e596490fba2c1113cf37/docs/qa/release-1.0/checkpoints/A3_WIN10_CODEX_AUTONOMOUS_GUI_SSH_TASK_20261116.md",
+        "sanitized_rca": "https://github.com/i-shutov/flowbridge/blob/ef1277d1bcc6ede436cc5800048d088d534c7b90/docs/qa/release-1.0/checkpoints/A3_CODEX_FIRST_PASS_BLOCKER_RCA_20261116.md",
+        "v2_execution_verified": false
+      }
     },
     "remaining_release_gates": [
-      "A3: real interactive native GUI + frozen-package real SSH/SOCKS5h, then independent review",
+      "A3: rerun Codex V2 in existing Admin interactive session using transactional beta profile escrow and signed portable sshd; independent original ZIP review",
       "A3: separate exact-kit Win11 native acceptance",
       "A5: independent legal, native-runtime and project LICENSE decision; original SBOM inventory PASS only",
       "A6: independent P0/privacy/release reviewer decision",
@@ -425,14 +440,14 @@
           "WIN-02",
           "WIN-03"
         ],
-        "status": "FROZEN_BETA_GUI_SMOKE_SCREENSHOTS_VERIFIED_INTERACTIVE_CODEX_OPEN_1_0_RULES_OPEN",
+        "status": "FROZEN_BETA_GUI_SMOKE_VERIFIED_FIRST_CODEX_BLOCKED_V2_ADMIN_PORTABLE_SSHD_READY_1_0_GUI_OPEN",
         "accepted": false,
         "evidence": [],
         "required_native_windows": true,
         "beta_subgate": {
           "automated_screenshots_verified": 5,
           "interactive_gui_and_keyboard_verified": false,
-          "codex_task": "https://github.com/i-shutov/flowbridge/blob/48e7d15ee433fcb949ea866ff356563f4ee1436a/docs/qa/release-1.0/checkpoints/A3_WIN10_CODEX_AUTONOMOUS_GUI_SSH_TASK_20261116.md",
+          "codex_task": "https://github.com/i-shutov/flowbridge/blob/8c23e10819e200e7bf38e596490fba2c1113cf37/docs/qa/release-1.0/checkpoints/A3_WIN10_CODEX_AUTONOMOUS_GUI_SSH_TASK_20261116.md",
           "codex_execution_proved": false,
           "notes": "Beta GUI acceptance does not count as full protected Windows 1.0 rule editor"
         }
