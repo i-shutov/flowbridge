@@ -1,9 +1,74 @@
-# FlowBridge A3 — автономное native GUI / SSH тестирование агентом Codex на Win10
+# FlowBridge A3 — Codex V2: ПОЛНАЯ QA под текущим Admin, без искусственных блокеров
 
 **Дата:** 2026-11-16. **Статус задания:** READY_FOR_WIN10_CODEX; не является отчётом о выполнении.
-**Машина:** уже открытая интерактивная Windows 10 Pro x64 22H2, host `VM-910136`; запускать задания в текущем пользовательском desktop-сеансе.
+**Машина:** `VM-910136`, Windows 10 Pro x64 22H2, **уже существующий пользователь `Admin`**, интерактивный `WinSta0\Default` (RDP). **Не создавать новую учётную запись, не требовать clean VM**. Для этой Codex-задачи владелец уже выдал Full Access и разрешил использование настроенного выхода из локальной песочницы для GUI/user-mode QA. Это не меняет Windows UAC и не даёт разрешения отключать защиту ОС. Продолжай со штатными полномочиями Admin, без нового запроса разрешений на каждый клик.
 **Продукт:** исключительно оригинальные неизменённые байты `FlowBridge 0.3.0-beta.1`, explicit SOCKS-only.
 
+## ВАЖНО: исправление первого ложного BLOCKED (приоритет выше прежних формулировок)
+
+ПЕРВЫЙ ПРОХОД CODEX УЖЕ СОСТОЯЛСЯ, но остановился: `BLOCKED_PROFILE_ISOLATION`, `BLOCKED_SIGNED_SSHD_UNAVAILABLE`. Владелец **явно разрешил текущую учётную запись Admin и существующий профиль**. Эти две причины **устраняются локально**; повторять ту же ошибку запрещено. Пользователь не будет тестировать GUI вручную. Этот раздел отменяет любые прежние трактовки «нужен новый пользователь/чистая VM/установленный Windows Feature sshd».
+
+### A. Исправление PROFILE_ISOLATION — транзакционное тестирование в профиле Admin
+
+По точному frozen source `native/windows/main.cpp`, beta читает `%LOCALAPPDATA%\FlowBridgeExplicitBeta\profile.json` и `%LOCALAPPDATA%\FlowBridgeExplicitBeta\desktop-settings.json` через Windows `SHGetKnownFolderPath(FOLDERID_LocalAppData)`; это **ожидаемое поведение продукта**, а не ошибка и не основание отказывать в GUI QA. NSIS `packaging/windows/FlowBridgeExplicitBeta.nsi` сохраняет эти файлы после uninstall. Установка в другую директорию не изолирует Known Folder — **не пытайся подменить `%LOCALAPPDATA%`**.
+
+**Исполняемый алгоритм без новой учётной записи:**
+
+1. Установи, нет ли сейчас работающей beta. Перед сохранением снимка корректно останови только её собственный GUI/SSH через штатный Stop/Close; чужие процессы и стабильный `FlowBridge` не трогай. Запиши все PID. Сохрани SHA256-реестр и размер/ACL/время всех файлов `%LOCALAPPDATA%\FlowBridgeExplicitBeta` и `%LOCALAPPDATA%\FlowBridge`, а также экспортируй только `HKCU\Software\FlowBridgeExplicitBeta` и связанные user-only uninstall-значения, если они существуют. Резервную копию делай в закрытом локальном QA-каталоге (не загружай в публичный GitHub).
+2. Создай **транзакционный escrow** исходного beta-каталога на том же NTFS-томе: при полном отсутствии открытых beta-процессов переименуй `%LOCALAPPDATA%\FlowBridgeExplicitBeta` в уникальное `%LOCALAPPDATA%\FlowBridgeExplicitBeta.A3-escrow-<UTC>`. Для надёжности скопируй escrow в резервную папку, проверь исходные SHA256 и отсутствие reparse points. Если каталог отсутствует, зафиксируй `ABSENT` и работай дальше без блокировки. Свои тестовые файлы и фиктивные ключи держи отдельно.
+3. Используй **тот же Windows Known Folder и того же Admin**. Установи исходную неизменённую beta (если она действительно удалена после A3) и реально запускай GUI в интерактивной сессии, в которой есть разрешённый локальный UI Automation/Win32 SendInput. Если программа создаёт новый `%LOCALAPPDATA%\FlowBridgeExplicitBeta`, считай его *собственным тестовым состоянием* и не выдавай за оригинальный профиль. Разрешены действия с временной копией профиля, но не с escrow.
+4. **Безусловный `finally`:** останови только собственные тестовые процессы, штатно удали только созданную QA-установку, затем при наличии нового QA-only beta каталога убери его в отдельную диагностическую папку (не удаляй оригинал). Атомарно верни escrow под `%LOCALAPPDATA%\FlowBridgeExplicitBeta`; восстанови исходные user-only registry значения, не трогая stable ветку; перепроверь все SHA256, список файлов, ACL и сохранение stable FlowBridge. Если не можешь выполнить rollback или SHA не сошлись — `P0_RESTORE_FAILED`, путь резервной копии и оригинальный снимок в отчёт, **не удалять escrow**.
+5. После успешной реставрации **не оставляй пользователя с тестовой конфигурацией**. Отдельный временный каталог с приватными ключами уничтожай только после записи санитизированных технических доказательств. Никаких новых пользователей, clean VM, Defender/UAC отключений. Сам факт существования штатного профиля **НЕ является blocker**.
+
+### B. Исправление SIGNED_SSHD_UNAVAILABLE — уже проверенный portable Microsoft OpenSSH
+
+Нужный signed `sshd.exe` **не обязан находиться в Windows Optional Features**. Он есть в portable архиве, уже использованном успешным FlowBridge W2b1 и CI:
+
+- Официальный файл: `https://github.com/PowerShell/Win32-OpenSSH/releases/download/10.4.0.0p1-Preview/OpenSSH-Win64.zip`
+- **Закреплённый SHA256:** `b67ff8becd203502190ec42ac7787c24c2cd3325ed7700485fe7a1c83d2a7957`.
+- Исходный проверенный сценарий: `tools/windows/FlowBridge-Win10-W2B1-RealSSH.ps1`, read-only использование fixture source/ACL из `tests/windows_real_ssh_hosted.py`. **Не запускать W2b1 без изменений** для приёмки beta: он ожидает *другой* прошлый CLI SHA, а новый тест должен использовать frozen installer `0.3.0-beta.1`.
+
+Пример подготовки portable fixture в PowerShell текущего `Admin`:
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$root = Join-Path $env:TEMP 'FlowBridge-A3-PortableSSHD'
+New-Item -ItemType Directory -Force -Path $root | Out-Null
+$zip = Join-Path $root 'OpenSSH-Win64.zip'
+$uri = 'https://github.com/PowerShell/Win32-OpenSSH/releases/download/10.4.0.0p1-Preview/OpenSSH-Win64.zip'
+$pinned = 'b67ff8becd203502190ec42ac7787c24c2cd3325ed7700485fe7a1c83d2a7957'
+if (-not (Test-Path -LiteralPath $zip -PathType Leaf)) {
+    Invoke-WebRequest -UseBasicParsing -Uri $uri -OutFile $zip
+}
+if ((Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pinned) {
+    throw 'PINNED_MICROSOFT_OPENSSH_SHA_MISMATCH'
+}
+$extract = Join-Path $root 'portable'
+if (-not (Test-Path (Join-Path $extract 'OpenSSH-Win64\sshd.exe'))) {
+    Expand-Archive -LiteralPath $zip -DestinationPath $extract
+}
+$sshd = Join-Path $extract 'OpenSSH-Win64\sshd.exe'
+$sig = Get-AuthenticodeSignature -LiteralPath $sshd
+if ($sig.Status -ne 'Valid' -or -not $sig.SignerCertificate -or
+    $sig.SignerCertificate.Subject -notmatch 'Microsoft') {
+    throw 'SSHD_MICROSOFT_AUTHENTICODE_NOT_VALID'
+}
+$sshd
+```
+
+Проверь также подпись локальных `ssh.exe`/`ssh-keygen.exe`. Создай только ephemeral localhost `sshd_config`/host keys/authorized_keys и запускай `$sshd -D -e -f <TEMP_CONFIG>` отдельным **собственным** процессом, без Windows service/SCM, Feature Install или изменения firewall. Используй только порт `127.0.0.1`, `StrictHostKeyChecking=yes`, временные known_hosts с корректной и ложной host key. До теста и после него проверь PID/listener, не убивай чужие процессы. Если сеть GitHub временно недоступна, поищи *существующий* ZIP/fixture с **тем же SHA256**, не ставь feature и не проси вручную искать сервер.
+
+### C. Что именно значит «проверить ВСЁ»
+
+**Весь scope этой beta**: реальный GUI на текущем Admin, клавиатура/мышь/редактирование/Save/Cancel/restart, пять страниц, настоящий Microsoft signed localhost SSHD, GUI Start/Stop (если поддерживается), exact frozen CLI/FFI managed SSH, SOCKS5h/domain, бинарный echo/half-close, host-key rejection, wrong credentials, missing SSH, занятый порт, SSH crash/all-down, недопущение direct bypass **в explicit route**, recovery, аудит исходных профилей и cleanup. Не останавливайся только из-за предупреждения `Admin`, fixed Known Folder или отсутствия Windows Feature.
+
+**Отдельный protected 1.0:** WFP/ALE и физический signed driver G2 **не включаются в эту beta**. Разрешены read-only toolchain/driver-readiness проверки; установка драйвера, изменение BFE, DNS, системных proxy, UAC, BCD, SecureBoot, Defender или firewall на живом RDP хосте — **не** часть теста и может оборвать ваш доступ. Для G2 нужен отдельный подписанный артефакт и изолированная rollback/VNC лаборатория. Не обещать ложный 1.0 PASS.
+
+### D. Отчётность и порядок действий
+
+После каждой крупной фазы: реальный verdict, скриншоты/логи, SHA, дефекты, **восстановление оригинального профиля**. Минимизируй оставшиеся BLOCKED: сначала выполни оба конкретных рецепта выше. Не объявляй `PASS`, если не было вызова настоящего GUI/sshd. Передай один ZIP с санитизированными доказательствами + SHA256. Старый первый Codex проход — только исторический `BLOCKED`, и его отчёт не был независимо загружен сюда.
+
+---
 ## Исходный доказанный baseline
 
 - Source commit **`f5ecd48d8f81c594f755a55e7969b57d20903020`**; original unified CI [#43407093536](https://github.com/i-shutov/flowbridge/actions/runs/43407093536).
@@ -30,7 +95,7 @@
 
 1. Зафиксировать hostname, `whoami`, ОС/build/arch, user/admin token, session ID, DPI, screen resolution, RDP desktop, UTC time, `codex --version`, доступные средства Win32/UIA.
 2. Найти `kit\windows\FlowBridge-0.3.0-beta.1-windows-x64-setup.exe` и `explicit-beta-package.json` из принятого A3. Проверить SHA-256 установщика по независимой pinned константе выше, source SHA/версию и разрешённые 13 payload. Оригинальный A3 report **не перезаписывать**. Если отсутствует — проверить исходный ZIP по pinned SHA, распаковать в отдельное staging.
-3. Сохранить fingerprints существующих beta/stable файлов и HKCU; **не устанавливать поверх живой beta**. Если пользовательский профиль после A3 сохранён, читать и не удалять его. Установить **только** исходный user-mode NSIS в отдельную тестовую директорию после safety preflight, либо использовать уже установленный строго сопоставленный binary. Проверить installed FFI/CLI/GUI хеши по original manifest; запуск `capabilities` должен подтвердить explicit SOCKS, отсутствие transparent WFP, UDP и kill switch. В случае конфликта профиля — сохранять исходные данные, помечать `BLOCKED_PROFILE_ISOLATION`, не обходить защиту.
+3. Выполни **обязательный escrow/backup/restore алгоритм A** выше в **том же Admin-профиле**. Используй только исходный NSIS per-user beta и verified FFI/CLI/GUI hashes; `capabilities` должен подтвердить explicit SOCKS и отсутствие transparent WFP, UDP, kill switch. Существующий beta profile НЕ повод для `BLOCKED_PROFILE_ISOLATION`; только подтверждённая невозможность безопасной реставрации после собственных попыток может быть `P0_RESTORE_FAILED`.
 
 ## Блок 1 — реальный GUI, интерактивные сценарии
 
@@ -44,7 +109,7 @@
 
 ## Блок 2 — настоящие SSH + SOCKS5h на pinned beta, без внешней сети
 
-1. Использовать изолированный loopback `sshd` без службы Windows, ephemeral host/user keys и отдельный `known_hosts` с `StrictHostKeyChecking=yes`. Переиспользовать безопасную механику из `tools/windows/FlowBridge-Win10-W2B1-RealSSH.ps1` и/или `tests/windows_real_ssh_hosted.py`, **но привязать исполняемый product к точным DLL/CLI/GUI из frozen installer**, а не к старому `c339df2e` либо newly rebuilt artifact. Перед каждым тестом записывать binary SHA.
+1. **Самостоятельно скачать и проверить portable signed Microsoft `sshd.exe` по алгоритму B выше**. Это уже проверенный URL и ZIP SHA из `tools/windows/FlowBridge-Win10-W2B1-RealSSH.ps1` и hosted CI. Запустить отдельный изолированный loopback `sshd` без службы Windows, ephemeral keys + `StrictHostKeyChecking=yes`; затем испытать **точные DLL/CLI/GUI из frozen installer**, а не старый `c339df2e` или новую сборку. Перед каждым тестом записывать binary SHA.
 2. GUI SSH Start/Stop — если в beta реально реализован этот путь; отдельно CLI/FFI managed SSH тесты. **CLI PASS не заменяет GUI-driven PASS**. Контролировать число дочерних OpenSSH процессов и listener PID, не убивать чужие процессы.
 3. Положительный: правильный host key/public-key auth → Ready; реально подключить SOCKS5 к `127.0.0.1:port`, send `ATYP=DOMAINNAME` для `localhost` (SOCKS5h), удалённый TCP echo, бинарный payload, half-close/EOF parity, Stop → listener/owned child gone. Регистрация домена на SOCKS доказывает тип запроса, **не** абсолютное отсутствие системных DNS-утечек.
 4. Отрицательные: неверный host key, недоступный локальный SSHD, занятый порт, неверные credentials, Stop во время подключения, all-down/SSH child exit. Сравнить ожидаемый fail-closed: новая связь НЕ должна незаметно обходить заданный SOCKS-путь по DIRECT. Только локальный 127.0.0.1 egress тестового стенда; для утверждений о системном no-leak потребуются отдельные packet traces и G2.
