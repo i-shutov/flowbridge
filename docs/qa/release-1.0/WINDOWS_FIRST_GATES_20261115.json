@@ -242,7 +242,29 @@
         "a5_accepted": false,
         "evidence_artifact_id": 14259407987,
         "evidence_artifact_sha256": "a1883d6b4630d9df3749108542c5a803e9a5f20788668360735acc0f6e2ac2fc",
-        "checkpoint": "docs/qa/release-1.0/checkpoints/A5_BETA2_INDEPENDENT_ORIGINAL_BINARY_AUDIT_20261116.md"
+        "checkpoint": "docs/qa/release-1.0/checkpoints/A5_BETA2_INDEPENDENT_ORIGINAL_BINARY_AUDIT_20261116.md",
+        "rustsec_original_lockfile_scan": {
+          "workflow_run": 43935816560,
+          "workflow_url": "https://github.com/i-shutov/flowbridge/actions/runs/43935816560",
+          "workflow_status": "SUCCESS_4_OF_4",
+          "audited_original_source_sha": "86583a1a0487b9d383c0122b24558e620bde5b9c",
+          "audited_cargo_lock_sha256": "7873affb09ffbb45dcb811b30555ad3844c0e4ce4da995e4a7f22130483d4b29",
+          "rustsec_cli_version": "0.23.0",
+          "database_last_updated": "2026-11-15T10:59:21+01:00",
+          "database_last_commit": "02e2517f457a359fc6d3440ea4560c8ea188fee8",
+          "advisory_count": 1509,
+          "dependency_count": 75,
+          "known_vulnerability_count": 0,
+          "warnings_count": 0,
+          "status": "PASS_KNOWN_RUSTSEC_ADVISORIES_ONLY",
+          "artifact_id": 14261670133,
+          "original_artifact_zip_sha256": "edfeb32ca02fb468e2ea0e222b987ae22fc8204498023b0ac6b3f51175021ca8",
+          "pin_cli_0_23_0_workflow_head": "282c404176751679b0f07402ba2ef8bf477e28f9",
+          "pin_cli_exact_head_ci_status": "PENDING",
+          "independent_legal_review": false,
+          "native_binary_c_cpp_security_assessment": false,
+          "a5_accepted": false
+        }
       },
       "a3_beta2_remaining_single_case": {
         "id": "INVALID_KEY_PATH_FINAL_BETA2",
