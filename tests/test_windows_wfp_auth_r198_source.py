@@ -69,8 +69,12 @@ def check_source(policy: str, driver: str, tickets: str, guids: str) -> None:
     require("FbAuthConsumeObserved(&gAuthBook, &observed)" in driver and
             "FbEpochLookup(&gEpochTable, observed.pid, &process)" in driver,
             "AUTH_missing_native_PID_epoch_link")
-    require("if (out->actionType == FWP_ACTION_PERMIT) FbBlock(out);" in driver and
-            "if (!approved) { FbBlock(out); return; }" in driver,
+    # Scope the R198 veto to AUTH_CONNECT. CONNECT_REDIRECT has its own
+    # independently required veto and must never mask loss of AUTH protection.
+    auth = driver.split("static void NTAPI FbAuthClassify(", 1)[1].split(
+        "static void NTAPI FbClassify(", 1)[0]
+    require("if (out->actionType == FWP_ACTION_PERMIT) FbBlock(out);" in auth and
+            "if (!approved) { FbBlock(out); return; }" in auth,
             "hard_PERMIT_veto_or_default_deny_removed")
     require("FbAuthProcessExit(&gAuthBook" in driver and
             "gAuthBook.lost = 1" in driver,
@@ -111,8 +115,17 @@ class R198SourceTests(unittest.TestCase):
         ]
         for which, before, after in cases:
             state = list(self.data)
-            self.assertEqual(state[which].count(before), 1, before[:55])
-            state[which] = state[which].replace(before, after)
+            if which == 1 and before == "if (out->actionType == FWP_ACTION_PERMIT) FbBlock(out);":
+                # There are two legitimate vetoes: AUTH and REDIRECT.
+                # Mutation must remove AUTH veto, not whichever first matches.
+                start = state[1].index("static void NTAPI FbAuthClassify(")
+                end = state[1].index("static void NTAPI FbClassify(", start)
+                auth = state[1][start:end]
+                self.assertEqual(auth.count(before), 1, before[:55])
+                state[1] = state[1][:start] + auth.replace(before, after) + state[1][end:]
+            else:
+                self.assertEqual(state[which].count(before), 1, before[:55])
+                state[which] = state[which].replace(before, after)
             with self.subTest(removed=before[:50]):
                 with self.assertRaises(AssertionError):
                     check_source(*state)
