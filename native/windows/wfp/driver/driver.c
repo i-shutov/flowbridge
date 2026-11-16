@@ -253,7 +253,13 @@ static void NTAPI FbClassify(const FWPS_INCOMING_VALUES0* values,
     NTSTATUS status;
     UNREFERENCED_PARAMETER(layerData);
     UNREFERENCED_PARAMETER(flowContext);
-    if (!(out->rights & FWPS_RIGHT_ACTION_WRITE)) return;
+    if (!(out->rights & FWPS_RIGHT_ACTION_WRITE)) {
+        /* A prior hard PERMIT is not proof of our protected redirect. WFP
+         * allows a terminating callout to veto that PERMIT even without
+         * ACTION_WRITE; a prior BLOCK must never be changed to PERMIT. */
+        if (out->actionType == FWP_ACTION_PERMIT) FbBlock(out);
+        return;
+    }
     out->actionType = FWP_ACTION_PERMIT; /* soft permit; no firewall override */
     KeAcquireSpinLock(&gLock, &irql);
     enabled = gEnabled; config = gConfig; ownerPid = gOwnerPid;
