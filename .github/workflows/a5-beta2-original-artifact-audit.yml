@@ -1,0 +1,142 @@
+name: Frozen explicit beta A5 independent distribution audit
+on:
+  pull_request:
+    paths:
+      - 'tools/a5_beta2_original_artifact_audit.py'
+      - 'tests/test_a5_beta2_original_artifact_audit.py'
+      - 'docs/qa/EXPLICIT_BETA_A5_FROZEN_AUDIT.md'
+      - '.github/workflows/a5-beta2-original-artifact-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  adversarial-tests:
+    name: Adversarial A5 audit tests / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Negative kit/license/ZIP fixtures (not a native test)
+        run: python -m unittest discover -s tests -p test_a5_beta2_original_artifact_audit.py -v
+  frozen-original-a5:
+    needs: adversarial-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Download immutable original 11/11 candidate artifact (never rebuild)
+        uses: actions/download-artifact@v4
+        with:
+          name: FlowBridge-ExplicitBeta-VerifiedCandidate-43883696169
+          run-id: 43883696169
+          github-token: ${{ github.token }}
+          path: build/frozen-artifact
+      - name: Independently validate original frozen package bytes and metadata
+        run: python tools/a5_beta2_original_artifact_audit.py --original-artifact-dir build/frozen-artifact --report build/a5/a5-verdict.json
+      - name: Enforce no release/owner/legal approval in technical result
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+          r=json.loads(Path('build/a5/a5-verdict.json').read_text())
+          assert r['result']=='TECHNICAL_A5_INVENTORY_PASS_LEGAL_AND_NATIVE_REVIEW_OPEN'
+          assert r['technical_inventory_and_hashes']=='PASS'
+          assert r['a5_accepted'] is False and r['release_accepted'] is False
+          assert r['project_license_selected'] is False
+      - name: Retain sanitized original-byte A5 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-A5-Beta2-OriginalKit-Audit-${{ github.run_id }}
+          path: build/a5/a5-verdict.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  rustsec-locked-advisories:
+    name: RustSec known advisories / exact original beta.2 lockfile
+    needs: frozen-original-a5
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+      checks: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: FlowBridge-ExplicitBeta-VerifiedCandidate-43883696169
+          run-id: 43883696169
+          github-token: ${{ github.token }}
+          path: build/a5-original
+      - name: Pin source zip and Cargo.lock to original signed-off CI source
+        shell: python
+        run: |
+          import hashlib, pathlib, zipfile
+          root=pathlib.Path('build/a5-original')
+          src=root/'flowbridge-source-86583a1a0487b9d383c0122b24558e620bde5b9c.zip'
+          sha=lambda b:hashlib.sha256(b).hexdigest()
+          assert src.is_file() and sha(src.read_bytes())=='f37533b57453ecbc79efd014d9dbc405e6076b2c9b35f823ecae1e56684f3628'
+          out=root/'source'
+          with zipfile.ZipFile(src) as archive:
+              members=archive.infolist()
+              assert 1<=len(members)<=2000
+              for m in members:
+                  name=m.filename.rstrip('/')
+                  path=pathlib.PurePosixPath(name)
+                  assert name==path.as_posix() and not name.startswith('/') and '..' not in path.parts and '\\' not in name
+                  assert ((m.external_attr>>16)&0o170000)!=0o120000
+              archive.extractall(out)
+          lock=out/'flowbridge'/'Cargo.lock'
+          assert sha(lock.read_bytes())=='7873affb09ffbb45dcb811b30555ad3844c0e4ce4da995e4a7f22130483d4b29'
+          assert (out/'flowbridge'/'Cargo.toml').is_file()
+          print('ORIGINAL_SOURCE_AND_LOCKFILE_SHA256_PASS; no dependency code executed')
+      - name: Install pinned cargo-audit 0.23.0 with locked dependency tree
+        run: cargo install cargo-audit --version 0.23.0 --locked
+      - name: RustSec advisory scan of the ORIGINAL beta.2 Cargo.lock
+        id: rustsec
+        uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ github.token }}
+          working-directory: build/a5-original/source/flowbridge
+      - name: Preserve bounded RustSec result without promoting A5/release
+        if: always()
+        env:
+          AUDIT_OUTCOME: ${{ steps.rustsec.outcome }}
+        shell: python
+        run: |
+          import json, pathlib, os
+          out=pathlib.Path('build/a5-security');out.mkdir(parents=True,exist_ok=True)
+          verdict={'schema':'flowbridge-beta2-a5-rustsec-known-advisories-v1',
+                   'source_sha':'86583a1a0487b9d383c0122b24558e620bde5b9c',
+                   'cargo_lock_sha256':'7873affb09ffbb45dcb811b30555ad3844c0e4ce4da995e4a7f22130483d4b29',
+                   'advisory_database':'RustSec live at scan time',
+                   'rustsec_action':'rustsec/audit-check@v2.0.0',
+                   'cargo_audit_cli_pinned':'0.23.0 --locked',
+                   'rustsec_check_outcome':os.environ.get('AUDIT_OUTCOME','unknown'),
+                   'binary_reachability_proved':False,'native_runtime_review_passed':False,
+                   'legal_review_passed':False,'a5_accepted':False,'release_accepted':False}
+          (out/'rustsec-summary.json').write_text(json.dumps(verdict,sort_keys=True,indent=2)+'\n',encoding='utf-8')
+          print('RustSec check outcome:',verdict['rustsec_check_outcome'])
+      - name: Upload advisory scan status even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-A5-Beta2-RustSec-${{ github.run_id }}
+          path: build/a5-security/rustsec-summary.json
+          if-no-files-found: warn
+          retention-days: 30
