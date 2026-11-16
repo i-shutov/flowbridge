@@ -33,6 +33,10 @@ Frozen GUI имеет по отчёту воспроизводимый дефе�
 
 WFP signed native kernel socket authority → реальный IPv4/v6 selected app → физическая no-DIRECT защита и DNS/UDP → SSH soak → Win10/11 RC+signing. Отсутствие macOS NE не блокирует Windows-first, но и A3 beta не заменяет G2.
 
+## Дополнительная контрольная точка: независимый original Windows beta.2 CI artifact
+
+> **Source audit update, 16 November 2026 — Windows beta.2**: [PR #76](https://github.com/i-shutov/flowbridge/pull/76) exact head `86583a1a0487b9d383c0122b24558e620bde5b9c`. **Original GitHub Actions Windows artifact #14233377409 independently verified**: ZIP SHA/CRC PASS, 13/13 manifest payloads, final installer/GUI/FFI SHA256 match report; exact final GUI SHA in hosted installed-product JSON. [Independent audit checkpoint](https://github.com/i-shutov/flowbridge/blob/docs/release-win10-vm910136-20261110/docs/qa/release-1.0/checkpoints/BETA2_WINDOWS_GITHUB_ARTIFACT_INDEPENDENT_AUDIT_20261116.md). **Owner native V4 ZIP is NOT independently received/reviewed** (local owner-reported SHA `23844631907f96063f0b13db73a835b92c386a4be3ed13a174c484c3139606e2`); new beta A3 full remains OPEN. Unified candidate workflow #43883696169 attempt 1 FAILURE due cancelled macOS universal-package; targeted attempt 2 MAC queued. Windows-only release must use honest, separate Windows gate; no universal CI green claim. Raw SSH 512 not proved (peak 246, baseline 128). A5 LICENSE/legal, A6/A7, separate Win11 QA and Windows 1.0 WFP/G2 remain open.
+
 ## 1. Что именно выпускаем первым
 
 | Параметр | Windows 1.0 |
