@@ -105,6 +105,8 @@ jobs:
           assert sha(lock.read_bytes())=='7873affb09ffbb45dcb811b30555ad3844c0e4ce4da995e4a7f22130483d4b29'
           assert (out/'flowbridge'/'Cargo.toml').is_file()
           print('ORIGINAL_SOURCE_AND_LOCKFILE_SHA256_PASS; no dependency code executed')
+      - name: Install pinned cargo-audit 0.23.0 with locked dependency tree
+        run: cargo install cargo-audit --version 0.23.0 --locked
       - name: RustSec advisory scan of the ORIGINAL beta.2 Cargo.lock
         id: rustsec
         uses: rustsec/audit-check@v2.0.0
@@ -124,6 +126,7 @@ jobs:
                    'cargo_lock_sha256':'7873affb09ffbb45dcb811b30555ad3844c0e4ce4da995e4a7f22130483d4b29',
                    'advisory_database':'RustSec live at scan time',
                    'rustsec_action':'rustsec/audit-check@v2.0.0',
+                   'cargo_audit_cli_pinned':'0.23.0 --locked',
                    'rustsec_check_outcome':os.environ.get('AUDIT_OUTCOME','unknown'),
                    'binary_reachability_proved':False,'native_runtime_review_passed':False,
                    'legal_review_passed':False,'a5_accepted':False,'release_accepted':False}
