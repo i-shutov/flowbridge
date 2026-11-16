@@ -1,5 +1,8 @@
 # FlowBridge — исполнимый план до 1.0
 
+> **16 ноября, новый checkpoint выполнения блокеров:** [beta.2 A3/A5/WFP release-blockers](qa/release-1.0/checkpoints/BETA2_RELEASE_BLOCKERS_EXECUTION_20261116.md). Оригинальный beta.2 CI `11/11 PASS`, Win10 V4 original evidence `100/100` integrity reviewed. **A3**: для финального EXE остался ровно один тест `INVALID_KEY_PATH_FINAL_BETA2`, [автономная задача для Codex V5](qa/release-1.0/checkpoints/A3_BETA2_CODEX_V5_MISSING_IDENTITY_NEGATIVE_20261116.md). **A5**: [PR #77](https://github.com/i-shutov/flowbridge/pull/77) source+artifact technical auditor `3/3 PASS`, но [owner license decision #78](https://github.com/i-shutov/flowbridge/issues/78), independent legal/runtime/vulnerability audit не закрыты. **WIN-01**: WFP [PR #72](https://github.com/i-shutov/flowbridge/pull/72) exact `f1ac3b0` WDK/source PASS, общие CI ещё не завершены; физический signed G2 NO-GO. `release_accepted=false`, `publisher_release_approved=false`, тег отсутствует.
+
+
 > **НОВАЯ ОПОРНАЯ ТОЧКА 16.11 (после V4 review):** реальный владелец передал оригинальный архив A3 Codex beta.2; независимо проверены **100/100 SHA**, **41/41 V3**, **13/13 Windows payload**, **17 GUI screenshots**, оригинальные loopback SSH/Stop/negative JSON. Полный beta.2 candidate CI #43883696169 **attempt 2 SUCCESS 11/11**. [Проверяемый аудит Win10](qa/release-1.0/checkpoints/BETA2_OWNER_WIN10_A3_V4_INDEPENDENT_REVIEW_20261116.md). **Открыты** один beta.2 invalid-key-path negative case, независимое финальное A3-решение, Win11 owner QA, лицензия/A5, A6/A7. `1.0` WFP G2 остаётся NO-GO; публикации нет.
 
 
