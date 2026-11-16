@@ -7,6 +7,7 @@ on:
       - 'tests/windows_wfp_auth_receipt_r198.cpp'
       - 'tests/test_windows_wfp_auth_r198_source.py'
       - 'tests/test_windows_wfp_claim_source.py'
+      - 'tests/test_windows_wfp_hard_permit_veto.py'
       - 'tests/wfp_epoch/**'
       - 'tests/test_windows_wfp_epoch_source.py'
       - '.github/workflows/windows-wfp-epoch-v3.yml'
@@ -30,6 +31,8 @@ jobs:
         run: python -m unittest discover -s tests -p test_windows_wfp_auth_r198_source.py -v
       - name: Terminal kernel CLAIM, legacy-helper and no-DIRECT source negatives
         run: python -m unittest discover -s tests -p test_windows_wfp_claim_source.py -v
+      - name: Refuse hard-PERMIT bypass at BOTH native WFP source callouts
+        run: python -m unittest discover -s tests -p test_windows_wfp_hard_permit_veto.py -v
       - name: Real MSVC compile of the production C process ledger and context ABI
         run: cmake -S tests/wfp_epoch -B build/wfp-epoch -A x64
       - run: cmake --build build/wfp-epoch --config Release
