@@ -115,12 +115,35 @@
       }
     },
     "remaining_release_gates": [
+      "A3: publish local GUI fix branch, independently review diff and original V3 ZIP; build uniquely identified beta-next and test final exact EXE",
       "A3: rerun Codex V2 in existing Admin interactive session using transactional beta profile escrow and signed portable sshd; independent original ZIP review",
       "A3: separate exact-kit Win11 native acceptance",
       "A5: independent legal, native-runtime and project LICENSE decision; original SBOM inventory PASS only",
       "A6: independent P0/privacy/release reviewer decision",
       "A7: explicit owner prerelease approval and publication"
-    ]
+    ],
+    "codex_v3": {
+      "source": "owner-forwarded Codex report, raw evidence ZIP local-only and not independently inspected",
+      "reported_evidence_zip_sha256": "8cf08b80a6d3e4d595cd2b33cf43eb6628cecf61e1c1940295d7d13de16883c6",
+      "reported_evidence_file_count": 41,
+      "original_frozen_gui_defect_reported": true,
+      "source_gui_multiline_status_verified": true,
+      "reported_local_fix_branch": "codex/a3-ssh-status-layout",
+      "reported_local_fix_sha": "7ac6ef0ef5d4fb61e275e8a6c9f222893b7dd341",
+      "local_fix_remote_branch_verified": false,
+      "local_fix_commit_remote_verified": false,
+      "qa_gui_tested_exe_sha_prefix": "82c308",
+      "rebuilt_final_exe_sha_prefix": "30f855",
+      "rebuilt_final_exe_actually_executed": false,
+      "frozen_ssh_real_loopback_reported_pass": true,
+      "frozen_ssh_real_loopback_independent_review_pass": false,
+      "reported_all_down_rejection_after_ms": 30012,
+      "original_frozen_a3_gui_accepted": false,
+      "new_candidate_version": "PROPOSED_0.3.0-beta.2_NOT_BUILT",
+      "new_candidate_a3_accepted": false,
+      "next_task": "https://github.com/i-shutov/flowbridge/blob/4be43c6569fe222a2153488a5c5bdb046ba0e1e1/docs/qa/release-1.0/checkpoints/A3_CODEX_V4_FINAL_CANDIDATE_HANDOFF_20261116.md",
+      "provenance_checkpoint": "docs/qa/release-1.0/checkpoints/WINDOWS_FIRST_RELEASE_REBASELINE_20261116.md"
+    }
   },
   "windows_1_0": {
     "required_gate_ids": [
@@ -440,7 +463,7 @@
           "WIN-02",
           "WIN-03"
         ],
-        "status": "FROZEN_BETA_GUI_SMOKE_VERIFIED_FIRST_CODEX_BLOCKED_V2_ADMIN_PORTABLE_SSHD_READY_1_0_GUI_OPEN",
+        "status": "FROZEN_BETA_GUI_DEFECT_REPORTED_CODEX_QA_FIX_LOCAL_UNREVIEWED_BETA_NEXT_REQUIRED_WIN1_0_GUI_OPEN",
         "accepted": false,
         "evidence": [],
         "required_native_windows": true,
@@ -449,7 +472,12 @@
           "interactive_gui_and_keyboard_verified": false,
           "codex_task": "https://github.com/i-shutov/flowbridge/blob/8c23e10819e200e7bf38e596490fba2c1113cf37/docs/qa/release-1.0/checkpoints/A3_WIN10_CODEX_AUTONOMOUS_GUI_SSH_TASK_20261116.md",
           "codex_execution_proved": false,
-          "notes": "Beta GUI acceptance does not count as full protected Windows 1.0 rule editor"
+          "notes": "Beta GUI acceptance does not count as full protected Windows 1.0 rule editor",
+          "original_frozen_gui_known_layout_defect_reported": true,
+          "codex_v3_positive_ssh_reported": true,
+          "codex_v3_original_evidence_independently_reviewed": false,
+          "codex_v3_local_branch_not_pushed": true,
+          "final_rebuilt_qa_exe_tested": false
         }
       },
       {
