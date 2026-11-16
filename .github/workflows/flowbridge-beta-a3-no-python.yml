@@ -3,6 +3,9 @@ on:
   pull_request:
     paths:
       - 'tools/windows/FlowBridge-ExplicitBeta-A3-NoPython.ps1'
+      - 'tools/explicit_beta_win10_owner_verify.py'
+      - 'tests/test_explicit_beta_win10_owner_verify.py'
+      - 'docs/qa/FLOWBRIDGE_A3_EVIDENCE_REVIEW_20261116.md'
       - 'docs/qa/FLOWBRIDGE_A3_NO_PYTHON_20261114.md'
       - '.github/workflows/flowbridge-beta-a3-no-python.yml'
   workflow_dispatch:
@@ -35,6 +38,11 @@ jobs:
             elseif(-not $content.Contains($pin)) { throw 'SOURCE_PIN_MISSING' }
           }
           Write-Host 'PASS Windows PowerShell 5.1 AST and safe-scope';
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Independent A3 report and BMP audit must reject hostile fixtures
+        run: python -m unittest discover -s tests -p test_explicit_beta_win10_owner_verify.py -v
       - name: Also parse in PowerShell 7
         shell: pwsh
         run: |
