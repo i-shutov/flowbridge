@@ -1,5 +1,7 @@
 # FlowBridge — исполнимый план до 1.0
 
+> **Машинный gate-срез Windows beta.2 (A0–A7):** [BETA2_WINDOWS_A0_A7_20261116.json](qa/release-1.0/BETA2_WINDOWS_A0_A7_20261116.json). A0/A1/A2 PASS в пределах explicit SOCKS; **A3/A5/A6/A7 не приняты**, Win11 native открыт. Дата 16.11, оригинальный Source SHA `86583a1a...`; признак `windows_beta2_release_accepted=false`. Полное состояние: [blocker execution](qa/release-1.0/checkpoints/BETA2_RELEASE_BLOCKERS_EXECUTION_20261116.md).
+
 > **16 ноября, новый checkpoint выполнения блокеров:** [beta.2 A3/A5/WFP release-blockers](qa/release-1.0/checkpoints/BETA2_RELEASE_BLOCKERS_EXECUTION_20261116.md). Оригинальный beta.2 CI `11/11 PASS`, Win10 V4 original evidence `100/100` integrity reviewed. **A3**: для финального EXE остался ровно один тест `INVALID_KEY_PATH_FINAL_BETA2`, [автономная задача для Codex V5](qa/release-1.0/checkpoints/A3_BETA2_CODEX_V5_MISSING_IDENTITY_NEGATIVE_20261116.md). **A5**: [PR #77](https://github.com/i-shutov/flowbridge/pull/77) source+artifact technical auditor `3/3 PASS`, но [owner license decision #78](https://github.com/i-shutov/flowbridge/issues/78), independent legal/runtime/vulnerability audit не закрыты. **WIN-01**: WFP [PR #72](https://github.com/i-shutov/flowbridge/pull/72) exact `f1ac3b0` WDK/source PASS, общие CI ещё не завершены; физический signed G2 NO-GO. `release_accepted=false`, `publisher_release_approved=false`, тег отсутствует.
 
 
