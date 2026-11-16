@@ -1703,12 +1703,15 @@ mod tests {
     }
     #[test]
     fn readiness_requires_child_and_socks_and_stop_reaps_without_restart() {
-        let config = config();
-        let port = config.local_port;
-        let supervisor = supervisor(config, "healthy");
-        let start = supervisor.start().unwrap();
-        assert!(matches!(start.status.state.as_str(), "starting" | "ready"));
-        let ready = wait(&supervisor, |s| s.status.state == "ready");
+        // A bind/release probe in config() cannot reserve the port until
+        // a separate fake SSH child starts. Hosted macOS may race another
+        // test executable into that exact port: retry only a verified
+        // pre-child bind collision, never an actual SSH/health failure.
+        let (supervisor, _preflight_retries) =
+            started_mock_with_preflight_retry(config(), "healthy");
+        let ready = supervisor.snapshot();
+        assert_eq!(ready.status.state, "ready");
+        let port = ready.status.local_port;
         assert_eq!(ready.status.attempt, 1);
         assert_eq!(ready.status.restarts, 0);
         let pid = ready.status.pid.unwrap();
