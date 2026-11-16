@@ -76,7 +76,18 @@
         "https://github.com/i-shutov/flowbridge/pull/77",
         "https://github.com/i-shutov/flowbridge/actions/runs/43933964021",
         "https://github.com/i-shutov/flowbridge/issues/78"
-      ]
+      ],
+      "known_rustsec_original_locked_scan": {
+        "source_sha": "86583a1a0487b9d383c0122b24558e620bde5b9c",
+        "cargo_lock_sha256": "7873affb09ffbb45dcb811b30555ad3844c0e4ce4da995e4a7f22130483d4b29",
+        "scanned_dep_count": 75,
+        "advisory_db_entry_count": 1509,
+        "known_vulnerability_count": 0,
+        "warnings_count": 0,
+        "result": "KNOWN_RUSTSEC_ADVISORIES_PASS",
+        "workflow_url": "https://github.com/i-shutov/flowbridge/actions/runs/43935816560",
+        "a5_accepted": false
+      }
     },
     {
       "id": "A6",
