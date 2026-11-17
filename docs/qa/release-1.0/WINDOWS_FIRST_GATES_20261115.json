@@ -263,6 +263,13 @@
           "independent_legal_review": false,
           "native_binary_c_cpp_security_assessment": false,
           "a5_accepted": false
+        },
+        "latest_pinned_cargo_audit_exact_head_ci": {
+          "source_review_commit": "282c404176751679b0f07402ba2ef8bf477e28f9",
+          "workflow_run": "https://github.com/i-shutov/flowbridge/actions/runs/43936785163",
+          "ci_jobs": "4/4 SUCCESS",
+          "known_rustsec_vulnerabilities": 0,
+          "legal_review": false
         }
       },
       "a3_beta2_remaining_single_case": {
@@ -298,7 +305,10 @@
         "original_v5_manifest": "26/26",
         "host_attestation": false,
         "reviewer_physical_execution": false
-      }
+      },
+      "owner_win11_native_acceptance_issue": "https://github.com/i-shutov/flowbridge/issues/79",
+      "owner_win11_codex_task": "docs/qa/release-1.0/checkpoints/BETA2_WIN11_CODEX_NATIVE_ACCEPTANCE_20261117.md",
+      "a6_independent_pre_review_packet": "docs/qa/release-1.0/checkpoints/BETA2_A6_RELEASE_REVIEW_PACKET_20261117.md"
     }
   },
   "windows_1_0": {
