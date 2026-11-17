@@ -56,7 +56,10 @@ fn reject_reparse_components(path: &Path) -> io::Result<()> {
 pub(super) fn verify_and_lock(executable: &Path) -> io::Result<File> {
     const FILE_SHARE_READ: u32 = 0x0000_0001;
     if !executable.is_absolute()
-        || executable.extension().is_none_or(|s| !s.eq_ignore_ascii_case("exe"))
+        || executable
+            .extension()
+            .and_then(|s| s.to_str())
+            .is_none_or(|s| !s.eq_ignore_ascii_case("exe"))
     {
         return Err(denied());
     }
