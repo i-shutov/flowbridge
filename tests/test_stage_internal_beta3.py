@@ -85,7 +85,7 @@ class OfflinePrivateStaging(unittest.TestCase):
         raw = stream.getvalue()
         self.assertEqual(raw.count(b'dir/file'), 2)
         with self.assertRaisesRegex(s.StagingError, 'unsafe_source_archive_path'):
-            s.safe_archive_files(raw.replace(b'dir/file', b'dir\file'))
+            s.safe_archive_files(raw.replace(b'dir/file', b'dir\\file'))
         stream = BytesIO()
         with ZipFile(stream, 'w') as z:
             info = ZipInfo('link')
