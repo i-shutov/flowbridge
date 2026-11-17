@@ -316,5 +316,23 @@
       "confidentiality_mitigation_complete": false
     }
   },
-  "latest_security_findings_checkpoint": "docs/qa/release-1.0/checkpoints/SECURITY_P1_FINDINGS_AND_BETA_NEXT_GATE_20261117.md"
+  "latest_security_findings_checkpoint": "docs/qa/release-1.0/checkpoints/SECURITY_P1_FINDINGS_AND_BETA_NEXT_GATE_20261117.md",
+  "security_next_candidate": {
+    "proposed_version": "0.3.0-beta.3",
+    "status": "PROPOSED_NOT_BUILT_NOT_ACCEPTED",
+    "tracker": "https://github.com/i-shutov/flowbridge/issues/87",
+    "privacy_source_pr": "https://github.com/i-shutov/flowbridge/pull/84",
+    "privacy_source_ci": "https://github.com/i-shutov/flowbridge/actions/runs/44061327017",
+    "privacy_source_build_only": true,
+    "ssh_backend_runtime_trust_issue": "https://github.com/i-shutov/flowbridge/issues/86",
+    "owner_repo_confidentiality_issue": "https://github.com/i-shutov/flowbridge/issues/83",
+    "recommended_private_artifact_before_package": true,
+    "new_candidate_source_sha": null,
+    "new_candidate_installer_sha256": null,
+    "original_win10_native_a3_not_inherited": true,
+    "current_beta2_still_unpatched": true,
+    "a5_a6_security_accepted": false,
+    "a7_internal_deployment_approved": false,
+    "public_release_authorized": false
+  }
 }
