@@ -118,6 +118,12 @@ class OfflinePrivateStaging(unittest.TestCase):
             pinned = subprocess.check_output(['git', '-C', str(src),
                                              'rev-parse', 'HEAD'], text=True).strip()
             out = home / 'private-internal-checkout'
+            # A request to build on an unsupported host must be rejected
+            # BEFORE the script creates a new source repo or installer.
+            with patch.object(s.sys, 'platform', 'unsupported-ci-host'):
+                with self.assertRaisesRegex(s.StagingError, 'build_requires_native_win10'):
+                    s.stage(src, home / 'forbidden-build', build=True)
+            self.assertFalse((home / 'forbidden-build').exists())
             with patch.object(s, 'PINNED_SOURCE', pinned):
                 res = s.stage(src, out)
             self.assertEqual(res['status'], 'PRIVATE_SOURCE_ONLY_READY_NOT_BUILT')
