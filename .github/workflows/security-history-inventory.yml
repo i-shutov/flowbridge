@@ -94,3 +94,6 @@ jobs:
             throw ('Unexpected failure mode: ' + $data.error_code)
           }
           Write-Host 'PINNED_BETA2_INSTALLER_SHA_PASS; NON_WIN10_SERVER_REJECTED; NO_INSTALL'
+          # Hosted Server rejection is EXPECTED; overwrite native subcommand's
+          # last exit code after verifying all denial/hash assertions above.
+          exit 0
