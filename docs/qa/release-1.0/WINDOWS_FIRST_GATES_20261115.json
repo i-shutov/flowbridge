@@ -119,11 +119,11 @@
       }
     },
     "remaining_release_gates": [
-      "A0-A3 Win10-only exact beta.2 source and owner V4+V5 evidence accepted; no further Win10 tests for unchanged bytes",
-      "A5: choose own-code LICENSE and independent legal/native runtime/security distribution review",
-      "A6: formal independent P0/privacy/security Win10-only release decision",
-      "A7: explicit owner Win10-only unsigned engineering prerelease publication approval; no tag or release",
-      "Win11 Pro x64 QA/publication explicitly DEFERRED to subsequent releases and NOT accepted, not current blocker"
+      "A0/A1/A2/A3: Win10-only accepted on exact immutable beta2 and original V4/V5 evidence",
+      "A5: own-code LICENSE and independent native SDK/runtime/legal/C++ security review still OPEN (Issue #78)",
+      "A6: technical SHA/ZIP/PE-source audit 4/4 PASS, formal Win10 privacy/security/distribution release sign-off OPEN",
+      "A7: owner GO and explicit unsigned engineering prerelease distribution approval NOT_GRANTED",
+      "Win11/macOS native testing/deployment DEFERRED to later releases and not counted PASS"
     ],
     "codex_v3": {
       "source": "owner-forwarded Codex report, raw evidence ZIP local-only and not independently inspected",
@@ -316,7 +316,31 @@
       "owner_win11_status": "DEFERRED_NOT_TESTED_NOT_PUBLISHED",
       "owner_win11_required_for_current_release": false,
       "win10_only_a3_full_current_scope_pass": true,
-      "win11_not_a_current_release_blocker": true
+      "win11_not_a_current_release_blocker": true,
+      "a6_exact_win10_beta2_technical_review": {
+        "status": "TECHNICAL_EVIDENCE_PASS_FORMAL_RELEASE_GO_OPEN",
+        "pr": "https://github.com/i-shutov/flowbridge/pull/80",
+        "exact_qa_head": "6cbebe418eeb88539dff86054332ee46f6801127",
+        "exact_ci_run": "https://github.com/i-shutov/flowbridge/actions/runs/44041579615",
+        "jobs": "4/4 SUCCESS",
+        "original_candidate_source_sha": "86583a1a0487b9d383c0122b24558e620bde5b9c",
+        "original_immutable_kit_sha256": "9980c786ceea82d2609b0229eca87b7f3ba044dc742466fedfa5e3b08e7585ae",
+        "win10_owner_v4_manifest": "100/100",
+        "win10_owner_v5_manifest": "26/26",
+        "original_ci_qa_artifact_id": 14308749465,
+        "original_ci_qa_artifact_digest_sha256": "f06b4376098bb92a2a8ff65f7349c85ad73cb6b92bed2c1f82de30e789de3d9a",
+        "original_pe_artifact_id": 14309039018,
+        "original_pe_artifact_digest_sha256": "817d939f4e0b1041f179ec3ee7064441a8ce5508e901a11f061a627ecf7acd23",
+        "direct_ms_runtime_dll_imports_found": false,
+        "recursive_pe_linkage_proven": false,
+        "independent_cpp_native_security_audit": false,
+        "project_license_selected": false,
+        "a5_legal_pass": false,
+        "a6_release_go": false,
+        "a7_publisher_go": false,
+        "beta2_release_accepted": false,
+        "checkpoint": "docs/qa/release-1.0/checkpoints/BETA2_A6_RELEASE_REVIEW_PACKET_20261117.md"
+      }
     },
     "current_required_target_os": [
       "Windows 10 Pro 22H2 x64"
