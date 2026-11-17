@@ -1,0 +1,81 @@
+name: A6 Win10-only beta.2 original-byte independent release pre-review
+on:
+  pull_request:
+    paths:
+      - 'tools/a6_win10_beta2_release_gate.py'
+      - 'tests/test_a6_win10_beta2_release_gate.py'
+      - '.github/workflows/a6-win10-beta2-release-gate.yml'
+      - 'docs/qa/release-1.0/checkpoints/A6_WIN10_BETA2_TECHNICAL_PRE_REVIEW_20261117.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  adverse:
+    name: A6 fail-closed mutations (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Fail negative archive, marker, provenance and release mutants
+        run: python -m unittest discover -s tests -p 'test_a6_win10_beta2_release_gate.py' -v
+
+  original:
+    name: Audit original immutable successful beta.2 candidate, never rebuild
+    needs: adverse
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Download exact original successful beta.2 Actions artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: FlowBridge-ExplicitBeta-VerifiedCandidate-43883696169
+          run-id: 43883696169
+          github-token: ${{ github.token }}
+          path: build/a6-original
+      - name: Independently compare original kit, source, manifest, LICENSE and payload SHA256
+        run: |
+          python tools/a6_win10_beta2_release_gate.py \
+            --original-candidate-directory build/a6-original \
+            --output build/a6/a6-original-verdict.json
+      - name: Strict no-owner-evidence and no-release assertion
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+          r=json.loads(Path('build/a6/a6-original-verdict.json').read_text())
+          assert r['status']=='ORIGINAL_CANDIDATE_PASS_PRIVATE_A3_REVIEW_NOT_RUN'
+          assert r['candidate']['status']=='PASS_ORIGINAL_BYTES'
+          assert r['candidate']['project_specific_license_selected'] is False
+          assert r['a0_a3_win10_technical_evidence_ready'] is False
+          assert r['owner_original_evidence'] is None
+          for field in ('a5_legal_and_native_review_accepted','a6_release_approved',
+                        'a7_publication_approved','publisher_release_approved',
+                        'release_accepted','wfp_g2_accepted'):
+              assert r[field] is False, field
+          print('A6 CI: ORIGINAL_BYTES_PASS_PRIVATE_OWNER_REVIEW_SEPARATE_RELEASE_NO_GO')
+      - name: Retain sanitized source/manifest QA only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-A6-Win10-Beta2-OriginalKit-${{ github.run_id }}
+          path: build/a6/a6-original-verdict.json
+          if-no-files-found: warn
+          retention-days: 30
