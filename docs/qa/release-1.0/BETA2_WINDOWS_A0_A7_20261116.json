@@ -190,9 +190,10 @@
     "win11_publication": true
   },
   "open_dependencies": [
-    "A5: internal third-party/runtime rights plus SSH backend trust verification (#86); repository proprietary but public (#83) awaiting owner action",
-    "A6: original frozen beta2 raw OpenSSH stderr/log P1 (#85) source patch PR #84 requires new exact candidate/retested Win10 evidence; full native C++/privacy sign-off not granted",
-    "A7: explicit internal pilot deployment GO NOT_GRANTED; no public release/tag or binary replacement"
+    "P0 confidentiality: repository remains public pending owner-controlled Private change (#83), no new proprietary Windows installer artifacts in public GitHub",
+    "P1 #85/#86: source/build CI PASS including real Microsoft-signed ssh and unsigned fake rejection; must cut new exact private beta3 and re-accept native owner Win10",
+    "A5/A6: independent native Win10 runtime/FFI privacy/C++ review and owner host signed ssh/ESU checks not yet accepted",
+    "A7: explicit internal pilot deployment GO not granted; public GitHub release/tag prohibited"
   ],
   "windows_1_0_wfp_g2_accepted": false,
   "all_required_beta_gates_accepted": false,
@@ -308,7 +309,11 @@
       "original_behavior": "explicit local path or first ssh.exe from PATH; -V OpenSSH_ prefix not signature proof",
       "read_only_signed_backend_preflight_source": "https://github.com/i-shutov/flowbridge/blob/qa/win10-internal-security-inventory-20261117/tools/windows/FlowBridge-SignedOpenSSH-ReadOnly.ps1",
       "runtime_binary_pin_to_launch_proved": false,
-      "internal_go": false
+      "internal_go": false,
+      "source_fix_pr": "https://github.com/i-shutov/flowbridge/pull/88",
+      "source_runtime_test_ci": "https://github.com/i-shutov/flowbridge/actions/runs/44075525234",
+      "source_fix_ci_pass": true,
+      "original_frozen_beta2_unfixed": true
     },
     "closed_source_repo_visibility_p0": {
       "status": "OWNER_TO_PRIVATIZE_LATER_CURRENTLY_PUBLIC",
@@ -319,7 +324,7 @@
   "latest_security_findings_checkpoint": "docs/qa/release-1.0/checkpoints/SECURITY_P1_FINDINGS_AND_BETA_NEXT_GATE_20261117.md",
   "security_next_candidate": {
     "proposed_version": "0.3.0-beta.3",
-    "status": "PROPOSED_NOT_BUILT_NOT_ACCEPTED",
+    "status": "SOURCE_RUNTIME_SSH_TRUST_AND_PRIVACY_CI_PASS_NEW_INSTALLER_NOT_BUILT",
     "tracker": "https://github.com/i-shutov/flowbridge/issues/87",
     "privacy_source_pr": "https://github.com/i-shutov/flowbridge/pull/84",
     "privacy_source_ci": "https://github.com/i-shutov/flowbridge/actions/runs/44061327017",
@@ -333,6 +338,26 @@
     "current_beta2_still_unpatched": true,
     "a5_a6_security_accepted": false,
     "a7_internal_deployment_approved": false,
-    "public_release_authorized": false
+    "public_release_authorized": false,
+    "tracking_issue": "https://github.com/i-shutov/flowbridge/issues/87",
+    "windows_signed_ssh_runtime_pr": "https://github.com/i-shutov/flowbridge/pull/88",
+    "exact_signed_runtime_source_sha": "0a0addce6e0a28cf5e69376f04af2fdb84435b50",
+    "exact_source_build_ci": "https://github.com/i-shutov/flowbridge/actions/runs/44075525234",
+    "exact_source_build_ci_status": "SUCCESS_3_OF_3",
+    "windows_and_linux_rust_ssh_tests_pass": true,
+    "windows_native_gui_and_ffi_compilation_pass": true,
+    "signed_system_openssh_authenticode_positive_ci_pass": true,
+    "unsigned_executable_pre_spawn_negative_ci_pass": true,
+    "windows_path_fallback_disabled_in_new_source": true,
+    "ssh_version_while_write_delete_guard_held_tested": true,
+    "remote_dns_ssh_child_signed_guard_in_new_source": true,
+    "original_beta2_sha_unchanged": true,
+    "original_beta2_privacy_and_trust_runtime_fixed": false,
+    "new_installer_not_built": true,
+    "win10_native_owner_new_candidate_evidence_accepted": false,
+    "private_repo_visibility_proved": false,
+    "a5_a6_native_security_formal_go": false,
+    "a7_internal_pilot_go": false,
+    "wfp_g2_accepted": false
   }
 }
