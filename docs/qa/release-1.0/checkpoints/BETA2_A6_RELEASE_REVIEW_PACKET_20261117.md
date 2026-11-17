@@ -1,5 +1,17 @@
 # FlowBridge Windows 0.3.0-beta.2 — A6 independent release-review packet (NOT GO)
 
+
+## 17 November — independently executed A6 original-byte gate
+
+- [Independent read-only A6 QA PR #80](https://github.com/i-shutov/flowbridge/pull/80), final exact review HEAD `ff3cae712ad9ea65f2f4efcd95a3e3ff6bab7a90`: [Actions #44040978619](https://github.com/i-shutov/flowbridge/actions/runs/44040978619) **3/3 SUCCESS** (Windows and Linux adversarial ZIP/provenance/no-release tests; third job re-downloads and validates **original unchanged** candidate kit and source ZIP from run #43883696169). Original A6 CI verdict `ORIGINAL_CANDIDATE_PASS_PRIVATE_A3_REVIEW_NOT_RUN` is intentional: GitHub CI does **not** possess or upload the user's original private V4+V5 evidence.
+- **Separate offline owner-original A6 review**, run with originally provided V4 and V5 in the private review environment, gave `A6_TECHNICAL_EVIDENCE_PASS_RELEASE_GO_BLOCKED`: V4 100/100 file hashes, V5 26/26, original source/payload SHA, GUI/SSH/Stop/restore positive/negative data consistent. This is a verification of original submitted records, **not** a cryptographically attested host or independently repeated physical test. Private self-contained handoff ZIP SHA256 `2864c7d9c0905126219bbd45a56021d5dc07e5f4029ee09369f91d39a6918112` retained for owner, **not** uploaded to public GitHub.
+- The A6 checker now rejects **raw Windows ZIP names before Python filename normalization**, protecting against slash/backslash path coercion; the Windows-specific negative-control initially caught this and passed after repair. No FlowBridge binary, package, or original candidate SHA changed.
+- Source-level privacy spot check: `fb_diagnostic_report_json` in `crates/flowbridge-ffi/src/diagnostics.rs` uses allowlisted numeric/enum records, without raw SSH errors/paths; unredacted GUI screenshots/logs can still contain local paths and are **not release deliverables**. This is **not** a comprehensive Win32/C++ code audit.
+- [A5 owner license and native-runtime choice packet](https://github.com/i-shutov/flowbridge/blob/qa/a6-win10-beta2-release-20261117/docs/qa/release-1.0/checkpoints/A5_LICENSE_NATIVE_RUNTIME_DECISION_PACKET_20261117.md) was prepared with exact original 71/37 BOM metadata, NSIS/Unicode notices and Microsoft runtime terms. Project own-code `LICENSE` is still unselected. The owner must explicitly decide MIT, Apache-2.0, proprietary terms, or internal-only before external publication.
+
+**Strict conclusion:** `A0–A3 Win10 PASS` and `A6 technical original-byte evidence PASS`; `A5_LEGAL_AND_NATIVE_RUNTIME=OPEN`, `A6_FORMAL_SECURITY_PRIVACY_RELEASE_GO=OPEN`, `A7_PUBLISHER_GO=NOT_GRANTED`. This is **NO PUBLIC RELEASE**. Windows 11/macOS remain deferred, and protected `1.0` WFP/G2 stays NO-GO.
+
+
 **Scope amendment 17 November 2026:** owner explicitly selected **Windows 10 Pro 22H2 x64 only** for the current beta.2 and Windows 1.0 release plan. Windows 11 native QA, support announcement and publication are **DEFERRED to later releases; not PASS and NOT a current blocker**. [Decision and scope contract](WIN10_ONLY_SCOPE_DECISION_20261117.md). This is a technical pre-review, not a distribution authorization, release note publication, or merge/tag. Product remains an **unsigned Windows engineering prerelease, explicit SOCKS-only**. `release_accepted=false`, `publisher_release_approved=false`.
 
 ## 1. Exact immutable candidate identity and verified source chain
