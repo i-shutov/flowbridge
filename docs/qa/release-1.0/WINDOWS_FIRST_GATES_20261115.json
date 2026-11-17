@@ -115,12 +115,11 @@
       }
     },
     "remaining_release_gates": [
-      "A3 beta.2: Codex V5 exact final GUI invalid private key path negative + positive-control original ZIP pending",
-      "A3 beta.2: independent signoff of A3 after original V5 (100/100 V4 reviewed)",
-      "A3 beta.2: separate Win11 native user-mode acceptance",
-      "A5: independent original kit hash/SBOM technical audit PASS 3/3; choose own-code LICENSE, legal/native-runtime/vulnerability reviews OPEN",
-      "A6: exact-source independent release P0/privacy/GUI/SSH review",
-      "A7: explicit owner GO and signing/unsigned engineering prerelease decision; no publication yet"
+      "A3 Windows 10 owner-native subgate accepted on independently reviewed original V4+V5 evidence; no repeat required for unchanged bytes",
+      "A3 Windows target matrix: separate Win11 Pro x64 owner-native GUI/SSH/install/upgrade/uninstall remains NOT_RUN",
+      "A5: original source/kit hashes, 71/37 SBOM and RustSec 0 known advisories PASS; project-specific LICENSE, native/runtime legal review and security approval remain open",
+      "A6: formal independent Windows beta release P0/privacy/security decision OPEN",
+      "A7: explicit publisher GO, distribution terms, unsigned engineering prerelease caveats and tag/release NOT_GRANTED"
     ],
     "codex_v3": {
       "source": "owner-forwarded Codex report, raw evidence ZIP local-only and not independently inspected",
@@ -167,8 +166,8 @@
       "hosted_windows_managed_ssh_pass": true,
       "original_owner_v4_zip_reported_sha256": "23844631907f96063f0b13db73a835b92c386a4be3ed13a174c484c3139606e2",
       "original_owner_v4_zip_independently_audited": true,
-      "owner_win10_real_gui_ssh_full_accepted": false,
-      "invalid_identity_key_path_on_exact_beta2_tested": false,
+      "owner_win10_real_gui_ssh_full_accepted": true,
+      "invalid_identity_key_path_on_exact_beta2_tested": true,
       "owner_win11_exact_kit_accepted": false,
       "unified_candidate_attempt_1": "FAILURE_CANCELLED_MACOS_UNIVERSAL",
       "unified_candidate_attempt_2": "SUCCESS_11_OF_11_ALL_HOSTED_JOBS_AND_VERIFIED_CANDIDATE",
@@ -221,7 +220,7 @@
       "official_verified_candidate_artifact_id": 14238314845,
       "official_verified_candidate_outer_zip_sha256": "8ab897935e48f02bf7e3524db36b6601985184c6e151af505c209f414c8ddfb8",
       "official_verified_candidate_inner_zip_sha256": "9980c786ceea82d2609b0229eca87b7f3ba044dc742466fedfa5e3b08e7585ae",
-      "owner_win10_real_gui_ssh_original_evidence_review": "EVIDENCE_CONSISTENCY_PASS_FINAL_KEY_PATH_NOT_RUN",
+      "owner_win10_real_gui_ssh_original_evidence_review": "WIN10_A3_ACCEPTED_ON_SUBMITTED_ORIGINAL_V4_V5_EVIDENCE_NO_PHYSICAL_RERUN",
       "a5_beta2_original_kit_independent_technical_audit": {
         "pr": "https://github.com/i-shutov/flowbridge/pull/77",
         "ci": "https://github.com/i-shutov/flowbridge/actions/runs/43933964021",
@@ -268,11 +267,37 @@
       },
       "a3_beta2_remaining_single_case": {
         "id": "INVALID_KEY_PATH_FINAL_BETA2",
-        "status": "NOT_RUN_ON_FINAL_EXE",
-        "exact_run_task": "docs/qa/release-1.0/checkpoints/A3_BETA2_CODEX_V5_MISSING_IDENTITY_NEGATIVE_20261116.md",
-        "owner_action": "Send task to current Admin Codex; no manual GUI clicks",
-        "result_awaited": true,
-        "release_accepted": false
+        "status": "PASS_ON_ORIGINAL_USER_V5_EVIDENCE_INDEPENDENTLY_REVIEWED",
+        "v5_user_zip_sha256": "809dee21f0884e0d31dfa89a98033276cefaad859de1de64a87a2b90f454cb4c",
+        "original_files_verified": "26/26",
+        "native_gui_actions_in_original_log": 23,
+        "original_gui_png_reviewed": 6,
+        "missing_identity_file_before": true,
+        "negative_gui_state": "SSH_0_1_PUBLICKEY_DENIAL",
+        "negative_openssh_observation": "No such file or directory; Permission denied (publickey)",
+        "negative_socks_listener_opened": false,
+        "negative_socks_probe_count": 12,
+        "negative_socks_rep": null,
+        "local_target_direct_accept_count": 0,
+        "positive_socks5h_binary_echo_bytes": 10,
+        "positive_eof_both_sides": true,
+        "gui_stop_children_and_listeners_empty": true,
+        "original_beta_and_stable_profiles_restored_report_pass": true,
+        "reviewer_test_execution_rerun": false,
+        "host_identity_cryptographically_attested": false,
+        "reviewer_original_archive_integrity_pass": true,
+        "independent_verdict_sha256": "2f99ba49e14f42fd5a8145dd7527a6a9b109248d4608c55cacd2b50e862cf5ad",
+        "sanitized_checkpoint": "docs/qa/release-1.0/checkpoints/BETA2_WIN10_A3_V5_INDEPENDENT_REVIEW_20261117.md"
+      },
+      "owner_win10_a3_native_subgate": {
+        "accepted": true,
+        "basis": "Independently validated original owner reports, archived GUI/SSH traces, exact binary pins, V4+V5; host not independently attested",
+        "original_v4_sha256": "23844631907f96063f0b13db73a835b92c386a4be3ed13a174c484c3139606e2",
+        "original_v5_sha256": "809dee21f0884e0d31dfa89a98033276cefaad859de1de64a87a2b90f454cb4c",
+        "original_v4_manifest": "100/100",
+        "original_v5_manifest": "26/26",
+        "host_attestation": false,
+        "reviewer_physical_execution": false
       }
     }
   },
@@ -609,7 +634,7 @@
           "WIN-02",
           "WIN-03"
         ],
-        "status": "EXPLICIT_BETA2_WIN10_OWNER_V4_EVIDENCE_100_OF_100_REVIEWED_1_0_GUI_AND_G2_STILL_OPEN",
+        "status": "EXPLICIT_BETA2_WIN10_GUI_SSH_ORIGINAL_EVIDENCE_ACCEPTED_WIN11_AND_1_0_FULL_RULE_EDITOR_OPEN",
         "accepted": false,
         "evidence": [],
         "required_native_windows": true,
@@ -628,7 +653,10 @@
           "beta2_owner_original_v4_evidence_audited": true,
           "beta2_final_gui_owner_screenshot_audit_pass": true,
           "beta2_final_gui_rebuild_sha_matches_installer": true,
-          "beta2_invalid_identity_path_negative_rerun": false
+          "beta2_invalid_identity_path_negative_rerun": true,
+          "beta2_win10_v4_v5_owner_test_evidence_accepted": true,
+          "beta2_win11_owner_test_evidence_accepted": false,
+          "beta2_v5_original_sha256": "809dee21f0884e0d31dfa89a98033276cefaad859de1de64a87a2b90f454cb4c"
         }
       },
       {
@@ -722,6 +750,6 @@
       "https://www.microsoft.com/en-us/windows/end-of-support"
     ]
   },
-  "last_status_update": "2026-11-16",
+  "last_status_update": "2026-11-17",
   "current_rebaseline_checkpoint": "docs/qa/release-1.0/checkpoints/WINDOWS_FIRST_RELEASE_REBASELINE_20261116.md"
 }
