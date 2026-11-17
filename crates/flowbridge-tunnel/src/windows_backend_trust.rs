@@ -6,7 +6,11 @@ use std::{
     ffi::OsString,
     fs::{File, OpenOptions},
     io,
-    os::windows::{ffi::OsStringExt, fs::{MetadataExt, OpenOptionsExt}, process::CommandExt},
+    os::windows::{
+        ffi::OsStringExt,
+        fs::{MetadataExt, OpenOptionsExt},
+        process::CommandExt,
+    },
     path::{Path, PathBuf},
     process::{Command, Stdio},
     thread,
@@ -88,7 +92,9 @@ if ($s.SignerCertificate.Subject -notmatch '(^|,\s*)O=Microsoft Corporation(,|$)
 exit 0
 "#;
     let powershell = system_directory()?
-        .join("WindowsPowerShell").join("v1.0").join("powershell.exe");
+        .join("WindowsPowerShell")
+        .join("v1.0")
+        .join("powershell.exe");
     reject_reparse_components(&powershell)?;
     // std::fs::canonicalize yields an extended \\?\C:\ path on Windows.
     // Windows PowerShell 5.1 providers are not required to accept that
@@ -97,14 +103,18 @@ exit 0
     let name = executable.to_str().ok_or_else(denied)?;
     let shell_path = name.strip_prefix(r"\\?\").unwrap_or(name);
     let raw = shell_path.as_bytes();
-    if raw.len() < 3 || !raw[0].is_ascii_alphabetic()
-        || raw[1] != b':' || raw[2] != b'\\'
-    {
+    if raw.len() < 3 || !raw[0].is_ascii_alphabetic() || raw[1] != b':' || raw[2] != b'\\' {
         return Err(denied());
     }
     let mut process = Command::new(powershell);
     process
-        .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", SCRIPT])
+        .args([
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            SCRIPT,
+        ])
         .env("FLOWBRIDGE_SIGNED_SSH_CANDIDATE", shell_path)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -152,7 +162,8 @@ mod tests {
         );
         assert_eq!(
             verify_and_lock(Path::new("C:\\Windows\\fake-ssh.txt"))
-                .unwrap_err().kind(),
+                .unwrap_err()
+                .kind(),
             io::ErrorKind::PermissionDenied
         );
     }
