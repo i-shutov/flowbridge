@@ -1,0 +1,74 @@
+name: SSH diagnostics privacy regression — source-only next candidate
+on:
+  pull_request:
+    paths:
+      - 'crates/flowbridge-tunnel/src/lib.rs'
+      - 'native/windows/main.cpp'
+      - 'tests/test_ssh_snapshot_privacy_source.py'
+      - '.github/workflows/ssh-private-diagnostics.yml'
+      - 'docs/qa/release-1.0/checkpoints/SSH_PRIVATE_DIAGNOSTICS_FIX_20261117.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ssh-private-diagnostics-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  rust-and-source:
+    name: Rust SSH + C++ source privacy (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify Rustfmt and unmodified locked workspace dependency graph
+        run: cargo fmt --all -- --check
+      - name: SSH supervisor runtime regression with sanitized snapshots/events
+        run: cargo test --locked -p flowbridge-tunnel --lib -- --test-threads=2
+      - name: Refuse raw SSH stderr and GUI backend path in display/journal
+        run: python -m unittest discover -s tests -p 'test_ssh_snapshot_privacy_source.py' -v
+
+  native-win32:
+    name: Build Windows explicit-only GUI from changed source without packaging
+    runs-on: windows-2025
+    needs: rust-and-source
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build modified Rust FFI user-mode only, exact checked-out source
+        shell: pwsh
+        run: |
+          cargo build --locked --release -j 2 -p flowbridge-ffi
+          if($LASTEXITCODE -ne 0){throw 'Privacy FFI build failed'}
+      - name: Build Windows explicit GUI with WFP compile-time disabled
+        shell: pwsh
+        run: |
+          $lib="$env:GITHUB_WORKSPACE/target/release/flowbridge_ffi.dll.lib"
+          cmake -S native/windows -B build/ssh-private -A x64 -DFLOWBRIDGE_EXPLICIT_BETA_ONLY=ON -DFLOWBRIDGE_BUILD_NATIVE_TESTS=ON "-DFLOWBRIDGE_FFI_LIBRARY=$lib"
+          if($LASTEXITCODE -ne 0){throw 'CMake configure failed'}
+          cmake --build build/ssh-private --config Release --parallel 2
+          if($LASTEXITCODE -ne 0){throw 'Win32 GUI build failed'}
+          & build/ssh-private/Release/FlowBridgeSshStatusTest.exe
+          if($LASTEXITCODE -ne 0){throw 'SSH GUI presentation test failed'}
+          $cache=Get-Content build/ssh-private/CMakeCache.txt -Raw
+          if(-not $cache.Contains('FLOWBRIDGE_EXPLICIT_BETA_ONLY:BOOL=ON')){throw 'WFP compile scope NOT disabled'}
+      - name: Do not issue another beta.2 installer or release claim
+        shell: python
+        run: |
+          import pathlib
+          assert not list(pathlib.Path('build').rglob('*setup.exe'))
+          print('PRIVACY_SOURCE_COMPILED_NOT_FROZEN_BETA2_QA_NOT_RELEASED')
