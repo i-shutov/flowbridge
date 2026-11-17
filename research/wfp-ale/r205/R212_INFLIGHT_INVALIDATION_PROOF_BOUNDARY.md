@@ -1,0 +1,13 @@
+# R212 — post-ISSUE invalidation window: executable source-level negative
+
+Date: 2026-11-17. Research branch only. **NO-GO**. Neither a kernel execution nor proof of a successful post-STOP network connection, physical SSH, no-DIRECT/leak-free, or PacketBound/G2 PASS.
+
+Pinned source blobs: kernel-r19/kernel/src/redirect.rs `a093f049d162987981a957aac90db1014bc6ff09`; kernel-r19/kernel/src/lib.rs `53f5ce6faa0f9f591974287f38ea890cafeb0dd2`.
+
+**New, narrow gap.** `redirect::classify` executes `ready`, ledger owner lookup and `Book::issue` under `Guard::take()`, releases the lock, then allocates memory, writes `FWPS_CONNECT_REQUEST0` and sets `FWP_ACTION_PERMIT` before `Writable::drop` calls `FwpsApplyModifiedLayerData0`. Its successful continuation has no second health/process epoch gate. Independently `ioctl(STOP)` takes the lock and `lose()` kills the book; process death can mark the referenced owner dead. The code admits the *source-order interleaving* ISSUE -> STOP/OWNER_EXIT -> APPLY/PERMIT with invalidation between the source-visible check and action assignment.
+
+Python and independent Node truth-table oracles enumerate six ISSUE-before-APPLY orders for STOP and owner death: exactly two late APPLY negatives; normal order and pre-ISSUE invalidation are controls. v4/v6 variants are modeled as condition-independent. Optional --source enforces two Git blob SHA-1 pins and eight structural guards. Python/Node results are symbolic, not a Windows classify, socket or SSH observation.
+
+Reproduce with `python3 research/wfp-ale/r205/r212_inflight_invalidation_negative.py --source` and `node research/wfp-ale/r205/r212_inflight_invalidation_oracle.mjs --source`. The documented `FwpsAcquireWritableLayerDataPointer0` sets BLOCK and clears ACTION_WRITE; `FwpsApplyModifiedLayerData0` must follow, and the Rust destructor does this. See https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/fwpsk/nf-fwpsk-fwpsacquirewritablelayerdatapointer0 and https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/fwpsk/nf-fwpsk-fwpsapplymodifiedlayerdata0.
+
+**Next decisive experiment:** native user-mode/read-only R201/R202/R203v7 on an approved Win10 x64; physical kernel classify interleaving (ISSUE/invalidation/APPLY) only after separate owner, driver, VNC/SYSTEM rescue and rollback gates. A robust design needs a clear admission/invalidation linearization contract, synchronization or epoch fencing, plus proof at accepted socket, redirect records, terminal CLAIM and physical SSH. A post-ISSUE one-shot read alone is not atomic. PID/epoch and 5-tuple reuse, sibling DIRECT, DNS/UDP/QUIC, IPv4/v6 compartments and WFP/SSH loss remain open.
