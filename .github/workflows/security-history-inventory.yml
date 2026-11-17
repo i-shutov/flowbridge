@@ -4,6 +4,7 @@ on:
     paths:
       - 'tools/security/scan_public_history.py'
       - 'tools/windows/FlowBridge-Beta2-Win10-Internal-Preflight.ps1'
+      - 'tools/windows/FlowBridge-SignedOpenSSH-ReadOnly.ps1'
       - 'tests/test_security_public_history_scan.py'
       - '.github/workflows/security-history-inventory.yml'
       - 'docs/qa/release-1.0/checkpoints/SECURITY_INTERNAL_HISTORY_AUDIT_20261117.md'
@@ -97,3 +98,52 @@ jobs:
           # Hosted Server rejection is EXPECTED; overwrite native subcommand's
           # last exit code after verifying all denial/hash assertions above.
           exit 0
+
+  signed-ssh-negative:
+    name: Reject spoofed unsigned and relative SSH EXEs without executing them
+    runs-on: windows-2025
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read-only SSH backend trust negative and actual signed OS backend sample
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tool = 'tools/windows/FlowBridge-SignedOpenSSH-ReadOnly.ps1'
+          $relative = & powershell.exe -NoProfile -File $tool -SshExecutable 'ssh.exe'
+          $rcode = $LASTEXITCODE
+          $r = ($relative | Out-String).Trim() | ConvertFrom-Json
+          if ($rcode -eq 0 -or $r.error_code -ne 'NOT_LOCAL_ABSOLUTE_SSH_EXE' -or
+              $r.a7_internal_deployment_go -or $r.binary_executed) {
+              throw 'Relative PATH ssh.exe was wrongly trusted'
+          }
+          $parent = Join-Path $env:RUNNER_TEMP ('flowbridge-qa-unsigned-' + [guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $parent -Force | Out-Null
+          $fake = Join-Path $parent 'ssh.exe'
+          try {
+              [IO.File]::WriteAllBytes($fake, [Text.Encoding]::UTF8.GetBytes('NOT_A_SIGNED_EXECUTABLE'))
+              $output = & powershell.exe -NoProfile -File $tool -SshExecutable $fake
+              $code = $LASTEXITCODE
+              $result = ($output | Out-String).Trim() | ConvertFrom-Json
+              if ($code -eq 0 -or $result.microsoft_signer_verified -or
+                  $result.error_code -ne 'SSH_AUTHENTICODE_MICROSOFT_SIGNER_NOT_VERIFIED' -or
+                  $result.binary_executed -or $result.a7_internal_deployment_go) {
+                  throw 'Unsigned fake backend was wrongly accepted'
+              }
+          } finally {
+              Remove-Item -LiteralPath $parent -Force -Recurse -ErrorAction SilentlyContinue
+          }
+          # Hosted Windows Server may have a signed system ssh.exe; observing
+          # it does NOT attest the owner's Win10 machine or the product runtime.
+          $system = Join-Path $env:WINDIR 'System32\OpenSSH\ssh.exe'
+          if (Test-Path -LiteralPath $system -PathType Leaf) {
+              $sample = & powershell.exe -NoProfile -File $tool -SshExecutable $system
+              $sampleResult = ($sample | Out-String).Trim() | ConvertFrom-Json
+              if ($sampleResult.binary_executed -or $sampleResult.a7_internal_deployment_go) {
+                  throw 'Read-only signature probe attempted execution/release'
+              }
+              Write-Host ('HOSTED_SYSTEM_SSH_READ_ONLY_OBSERVATION: ' + $sampleResult.status)
+          }
+          Write-Host 'SSH_UNTRUSTED_BACKEND_NEGATIVES_PASS_NO_EXECUTION_NO_DEPLOYMENT_GO'
