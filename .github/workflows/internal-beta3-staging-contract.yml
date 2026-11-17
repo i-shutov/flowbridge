@@ -1,0 +1,43 @@
+name: Internal beta3 LOCAL source staging contract — no release artifacts
+on:
+  pull_request:
+    paths:
+      - 'tools/stage_internal_beta3.py'
+      - 'tests/test_stage_internal_beta3.py'
+      - '.github/workflows/internal-beta3-staging-contract.yml'
+      - 'docs/qa/release-1.0/checkpoints/BETA3_OFFLINE_PRIVATE_STAGE_20261117.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: internal-beta3-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-only:
+    name: Pure version and offline Git isolation tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify the existing beta.2 contract, not another binary candidate
+        run: python tools/explicit_beta_metadata.py check
+      - name: Prove version surgery, malicious ZIP rejection and NO-REMOTE private Git
+        run: python -m unittest discover -s tests -p 'test_stage_internal_beta3.py' -v
+      - name: Assert no installer or package generated or uploaded by staging test
+        shell: python
+        run: |
+          import pathlib
+          assert not list(pathlib.Path('.').rglob('*beta.3*setup.exe'))
+          assert not list(pathlib.Path('artifacts').glob('*.exe')) if pathlib.Path('artifacts').exists() else True
+          print('BETA3_STAGING_TESTS_ONLY_NO_INSTALLER_NO_RELEASE_NO_GITHUB_UPLOAD')
