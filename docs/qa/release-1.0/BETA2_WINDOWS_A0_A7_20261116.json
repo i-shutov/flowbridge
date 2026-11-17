@@ -68,7 +68,9 @@
       },
       "win11_owner_subgate": {
         "accepted": false,
-        "status": "NOT_RUN"
+        "status": "NOT_RUN",
+        "tracker": "https://github.com/i-shutov/flowbridge/issues/79",
+        "codex_runbook": "docs/qa/release-1.0/checkpoints/BETA2_WIN11_CODEX_NATIVE_ACCEPTANCE_20261117.md"
       }
     },
     {
@@ -101,14 +103,18 @@
         "result": "KNOWN_RUSTSEC_ADVISORIES_PASS",
         "workflow_url": "https://github.com/i-shutov/flowbridge/actions/runs/43935816560",
         "a5_accepted": false
-      }
+      },
+      "license_distribution_issue": "https://github.com/i-shutov/flowbridge/issues/78",
+      "pinned_original_cargo_audit_run": "https://github.com/i-shutov/flowbridge/actions/runs/43936785163",
+      "pinned_original_cargo_audit_status": "SUCCESS_4_OF_4_75_DEPENDENCIES_NO_KNOWN_RUSTSEC_VULNERABILITIES"
     },
     {
       "id": "A6",
       "status": "INDEPENDENT_RELEASE_QA_NO_GO_PENDING_A3_A5_WIN11",
       "accepted": false,
       "what": "Independent reviewer must verify final V5, owner Win11 and legal/security/publisher claims",
-      "evidence": []
+      "evidence": [],
+      "draft_review_packet": "docs/qa/release-1.0/checkpoints/BETA2_A6_RELEASE_REVIEW_PACKET_20261117.md"
     },
     {
       "id": "A7",
@@ -127,12 +133,9 @@
     "raw_512_ssh_universal_guarantee": true
   },
   "open_dependencies": [
-    "Win11 Pro x64 native installation/SSH/GUI acceptance",
-    "Issue #78 owner project distribution-license decision and legal/runtime review",
-    "RustSec locked advisory result and any resulting remediation",
-    "A6 independent all-gates review and A7 explicit publisher GO",
-    "Win10 V4+V5 accepted, Win11 Pro x64 target owner-native tests still open",
-    "Owner #78 LICENSE choice before public redistribution"
+    "Native real Windows 11 Pro x64 owner acceptance and independent original ZIP review (issue #79)",
+    "FlowBridge-specific project LICENSE choice and legal/native runtime audit (issue #78)",
+    "Independent beta A6 reviewer and explicit A7 publication approval"
   ],
   "windows_1_0_wfp_g2_accepted": false,
   "all_required_beta_gates_accepted": false,
