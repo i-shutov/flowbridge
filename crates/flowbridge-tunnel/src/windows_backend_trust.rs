@@ -93,9 +93,14 @@ fn verify_microsoft_signature(executable: &Path) -> io::Result<()> {
 $ErrorActionPreference = 'Stop'
 $p = $env:FLOWBRIDGE_SIGNED_SSH_CANDIDATE
 if ([string]::IsNullOrWhiteSpace($p)) { exit 14 }
+if (-not [System.IO.File]::Exists($p)) { exit 18 }
 try {
     $s = Get-AuthenticodeSignature -LiteralPath $p -ErrorAction Stop
 } catch {
+    # Return only a bounded exception category, never the path/message.
+    if ($_.Exception.GetType().Name -eq 'FileNotFoundException') { exit 19 }
+    if ($_.Exception.GetType().Name -eq 'UnauthorizedAccessException') { exit 20 }
+    if ($_.Exception.GetType().Name -eq 'IOException') { exit 21 }
     exit 17
 }
 if ($s.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or
