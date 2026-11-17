@@ -127,6 +127,10 @@ exit 0
             if result.success() {
                 return Ok(guard);
             }
+            // Test-only stage code, never certificate subject, executable
+            // paths or raw process output, in public GitHub Actions logs.
+            #[cfg(test)]
+            eprintln!("WIN_SSH_SIGNATURE_CHECK_STAGE_EXIT={:?}", result.code());
             return Err(denied());
         }
         if Instant::now() >= deadline {
@@ -172,6 +176,18 @@ mod tests {
     fn signed_builtin_microsoft_ssh_passes_when_installed() {
         match default_system_ssh() {
             Ok(path) => {
+                // Inspect safe stage outcomes, not paths/subjects/private
+                // metadata, to distinguish CI environment from policy.
+                assert!(
+                    reject_reparse_components(&path).is_ok(),
+                    "SYSTEM_SSH_REPARSE_COMPONENT_REJECTED"
+                );
+                let probe = OpenOptions::new()
+                    .read(true)
+                    .share_mode(0x0000_0001)
+                    .open(&path);
+                assert!(probe.is_ok(), "SYSTEM_SSH_LOCKED_FILE_OPEN_FAILED");
+                drop(probe);
                 // A packaged, signed Windows OpenSSH should be accepted. Do not
                 // run ssh.exe in this read-only test.
                 let _guard = verify_and_lock(&path).unwrap();
