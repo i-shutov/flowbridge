@@ -88,9 +88,9 @@
     },
     {
       "id": "A5",
-      "status": "TECHNICAL_AUDIT_PASS_LICENSE_SECURITY_OPEN",
+      "status": "INTERNAL_ONLY_TECHNICAL_AUDIT_PASS_INTERNAL_LICENSE_RUNTIME_SECURITY_REVIEW_OPEN_EXTERNAL_LICENSE_DEFERRED",
       "accepted": false,
-      "what": "Original immutable candidate hash/SBOM 3/3 CI PASS, license not selected, legal/runtime and RustSec advisory review separate",
+      "what": "Original immutable BOM/RustSec and PE metadata technical PASS; owner chose internal-only; public MIT/Apache/proprietary decision not required now, but third-party/internal use rights, native SDK/runtime and security reviews remain open",
       "evidence": [
         "https://github.com/i-shutov/flowbridge/pull/77",
         "https://github.com/i-shutov/flowbridge/actions/runs/43933964021",
@@ -110,13 +110,16 @@
       "license_distribution_issue": "https://github.com/i-shutov/flowbridge/issues/78",
       "pinned_original_cargo_audit_run": "https://github.com/i-shutov/flowbridge/actions/runs/43936785163",
       "pinned_original_cargo_audit_status": "SUCCESS_4_OF_4_75_DEPENDENCIES_NO_KNOWN_RUSTSEC_VULNERABILITIES",
-      "latest_license_decision_packet": "https://github.com/i-shutov/flowbridge/blob/qa/a6-win10-beta2-release-20261117/docs/qa/release-1.0/checkpoints/A5_LICENSE_NATIVE_RUNTIME_DECISION_PACKET_20261117.md"
+      "latest_license_decision_packet": "https://github.com/i-shutov/flowbridge/blob/qa/a6-win10-beta2-release-20261117/docs/qa/release-1.0/checkpoints/A5_LICENSE_NATIVE_RUNTIME_DECISION_PACKET_20261117.md",
+      "external_distribution_license_required_for_current_scope": false,
+      "external_distribution_license_decision_status": "DEFERRED_NEXT_EXTERNAL_RELEASE",
+      "internal_legal_runtime_security_accepted": false
     },
     {
       "id": "A6",
-      "status": "TECHNICAL_A6_4_OF_4_ORIGINAL_SOURCE_AND_PE_IMPORTS_PASS_FORMAL_GO_OPEN",
+      "status": "A6_TECHNICAL_4_OF_4_PASS_FORMAL_INTERNAL_SECURITY_PRIVACY_GO_OPEN",
       "accepted": false,
-      "what": "Win10 immutable beta2 original candidate and original V4+V5 files audited; exact latest A6 4/4 CI PASS incl direct PE imports; formal security/privacy/native legal/publisher A6 GO still OPEN",
+      "what": "Win10 beta2 original package and V4/V5 evidence audited; PE importer and ZIP 4/4 CI PASS; formal internal pilot P0/native C++/privacy security sign-off remains open",
       "evidence": [],
       "draft_review_packet": "docs/qa/release-1.0/checkpoints/BETA2_A6_RELEASE_REVIEW_PACKET_20261117.md",
       "technical_original_byte_review": {
@@ -148,14 +151,19 @@
         "direct_vcruntime_or_msvcp_imports_observed": false,
         "recursive_dll_dependency_and_linkage_proven": false,
         "independent_native_runtime_legal_review": false
-      }
+      },
+      "external_publication_part_of_current_scope": false,
+      "formal_internal_release_security_review_accepted": false
     },
     {
       "id": "A7",
-      "status": "NOT_AUTHORIZED_NOT_PUBLISHED",
+      "status": "INTERNAL_ONLY_POLICY_CONFIRMED_INTERNAL_DEPLOYMENT_GO_NOT_GRANTED_PUBLIC_RELEASE_PROHIBITED",
       "accepted": false,
-      "what": "Publisher/owner release GO NOT_GRANTED. Win10-only explicit SOCKS engineering prerelease may be considered after A5/A6; do not advertise Win11/macOS, no tag",
-      "evidence": []
+      "what": "Owner selected internal-only policy, NOT permission to distribute/test-install beyond pre-authorized QA hosts. No public GitHub Releases/tags, no signed production claims. A7 internal pilot deployment GO still open after security review",
+      "evidence": [],
+      "public_release_required_for_current_scope": false,
+      "internal_deployment_approved": false,
+      "owner_distribution_mode_confirmed": true
     }
   ],
   "scope_exclusions": {
@@ -169,9 +177,9 @@
     "win11_publication": true
   },
   "open_dependencies": [
-    "A5 own-code LICENSE and independent native SDK/runtime/legal/security sign-off (Issue #78)",
-    "A6 formal Windows 10 only privacy/native-security and distribution sign-off (technical original-byte/PE CI 4/4 PASS only)",
-    "A7 explicit owner publisher unsigned engineering prerelease GO; no tag/Release"
+    "A5 internal use: third-party component conditions, native SDK/runtime and locked dependency/security obligations for authorized pilot (not external own-code MIT/Apache selection)",
+    "A6 formal Windows 10-only internal security/privacy/P0 review and approved limits for internal deployment",
+    "A7 owner GO for any internal deployment beyond pre-authorized QA; external publication forbidden / not requested"
   ],
   "windows_1_0_wfp_g2_accepted": false,
   "all_required_beta_gates_accepted": false,
@@ -206,5 +214,28 @@
       "status": "DEFERRED_NOT_TESTED_NOT_PUBLISHED"
     }
   ],
-  "scope_decision_checkpoint": "docs/qa/release-1.0/checkpoints/WIN10_ONLY_SCOPE_DECISION_20261117.md"
+  "scope_decision_checkpoint": "docs/qa/release-1.0/checkpoints/WIN10_ONLY_SCOPE_DECISION_20261117.md",
+  "distribution_policy": {
+    "owner_decision": "USER_CONFIRMED_INTERNAL_ONLY_20261117",
+    "mode": "INTERNAL_ONLY",
+    "approved_as_policy": true,
+    "scope": "Windows 10 Pro 22H2 x64 explicit SOCKS beta.2, internal development and pre-authorized QA only",
+    "public_license_selection_required_for_current_internal_qa": false,
+    "public_license_selection_deferred": true,
+    "public_distribution_authorized": false,
+    "public_github_release_authorized": false,
+    "external_installers_offers_allowed": false,
+    "internal_pilot_distribution_approved": false,
+    "internal_deployment_go_granted": false,
+    "source_license_file_unmodified": true,
+    "own_code_license_not_selected": true,
+    "original_verified_candidate_source_unmodified": true,
+    "decision_checkpoint": "docs/qa/release-1.0/checkpoints/INTERNAL_ONLY_DISTRIBUTION_DECISION_20261117.md",
+    "public_repo_existing_content_privacy_not_changed": true,
+    "external_license_issue": "https://github.com/i-shutov/flowbridge/issues/78"
+  },
+  "public_release_approved": false,
+  "public_distribution_authorized": false,
+  "internal_only_accepted_as_policy": true,
+  "internal_deployment_approved": false
 }
