@@ -54,29 +54,7 @@ fn reject_reparse_components(path: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// Caller MUST keep the returned guard alive through Command::spawn.
-/// FILE_SHARE_READ disallows concurrent modification or deletion of the
-/// executable via ordinary file handles while its signature is checked.
-pub(super) fn verify_and_lock(executable: &Path) -> io::Result<File> {
-    const FILE_SHARE_READ: u32 = 0x0000_0001;
-    if !executable.is_absolute()
-        || executable
-            .extension()
-            .and_then(|s| s.to_str())
-            .is_none_or(|s| !s.eq_ignore_ascii_case("exe"))
-    {
-        return Err(denied());
-    }
-    reject_reparse_components(executable)?;
-    let guard = OpenOptions::new()
-        .read(true)
-        .share_mode(FILE_SHARE_READ)
-        .open(executable)
-        .map_err(|_| denied())?;
-    if !guard.metadata()?.is_file() {
-        return Err(denied());
-    }
-
+fn verify_microsoft_signature(executable: &Path) -> io::Result<()> {
     // Executed only from the kernel-resolved Windows system directory.
     // The PowerShell script is literal; the untrusted user path enters only
     // through an environment variable consumed by -LiteralPath, never as
@@ -125,7 +103,7 @@ exit 0
     loop {
         if let Some(result) = child.try_wait().map_err(|_| denied())? {
             if result.success() {
-                return Ok(guard);
+                return Ok(());
             }
             // Test-only stage code, never certificate subject, executable
             // paths or raw process output, in public GitHub Actions logs.
@@ -140,6 +118,33 @@ exit 0
         }
         thread::sleep(Duration::from_millis(25));
     }
+}
+
+/// Caller MUST keep the returned guard alive through Command::spawn.
+/// FILE_SHARE_READ disallows concurrent modification or deletion of the
+/// executable via ordinary file handles while its signature is checked.
+pub(super) fn verify_and_lock(executable: &Path) -> io::Result<File> {
+    const FILE_SHARE_READ: u32 = 0x0000_0001;
+    if !executable.is_absolute()
+        || executable
+            .extension()
+            .and_then(|s| s.to_str())
+            .is_none_or(|s| !s.eq_ignore_ascii_case("exe"))
+    {
+        return Err(denied());
+    }
+    reject_reparse_components(executable)?;
+    let guard = OpenOptions::new()
+        .read(true)
+        .share_mode(FILE_SHARE_READ)
+        .open(executable)
+        .map_err(|_| denied())?;
+    if !guard.metadata()?.is_file() {
+        return Err(denied());
+    }
+
+    verify_microsoft_signature(executable)?;
+    Ok(guard)
 }
 
 #[cfg(test)]
@@ -188,6 +193,12 @@ mod tests {
                     .open(&path);
                 assert!(probe.is_ok(), "SYSTEM_SSH_LOCKED_FILE_OPEN_FAILED");
                 drop(probe);
+                // Localize a potential PowerShell cmdlet/argument/chain
+                // failure separately from a guarded-open sharing failure.
+                assert!(
+                    verify_microsoft_signature(&path).is_ok(),
+                    "SYSTEM_SSH_UNGUARDED_POWERSHELL_SIGNATURE_CHECK_FAILED"
+                );
                 // A packaged, signed Windows OpenSSH should be accepted. Do not
                 // run ssh.exe in this read-only test.
                 let _guard = verify_and_lock(&path).unwrap();
