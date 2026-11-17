@@ -1,5 +1,14 @@
 # FlowBridge — исполнимый план до 1.0
 
+## Internal security audit — 17 November 2026, latest read-only CI
+
+[Win10 closed-source security checkpoint](qa/release-1.0/checkpoints/INTERNAL_WIN10_SECURITY_REVIEW_20261117.md), [QA PR #82](https://github.com/i-shutov/flowbridge/pull/82) exact head `ab7d0d56dfa6af0843c183497d455a6b67578ea1`, [GitHub Actions #44055935443](https://github.com/i-shutov/flowbridge/actions/runs/44055935443) **4/4 PASS**. **9,399 Git objects / 2,769 historical blobs** from fetched refs and PR heads, zero high-confidence PEM/token-pattern matches, zero skipped large blobs. Independently screened exact frozen beta.2 source ZIP **303/303 files**, original owner V5 **27**, V4 **100** plus nested CI ZIP **25** files (large binary separately inspected): zero matches under the narrow high-confidence rules. This is not a comprehensive secret/security audit and cannot undo public history or external clones.
+
+**P0 confidentiality:** repository remains **Public** although owner chose closed-source and internal-only; owner will privatize later. Track [#83](https://github.com/i-shutov/flowbridge/issues/83). Original NSIS still supports `AtLeastWin10` (does not forbid Win11), while scope is **Win10 Pro 22H2 x64 only**. [PowerShell 5.1 read-only pinned installer preflight](https://github.com/i-shutov/flowbridge/blob/qa/win10-internal-security-inventory-20261117/tools/windows/FlowBridge-Beta2-Win10-Internal-Preflight.ps1) verifies exact original EXE SHA256 and strict Win10 OS; hosted Windows Server 2025 expected negative CI PASS, **no installer executed**. No changes to frozen product source or binaries.
+
+**Current release GO remains false:** A0–A3 Win10 PASS on original evidence, A5 technical and A6 technical PASS; independent third-party/native SDK rights, Win32/SSH GUI log privacy/code security review, Win10 ESU status, and A7 explicit internal pilot deployment approval remain OPEN in [#81](https://github.com/i-shutov/flowbridge/issues/81). External/public distribution disabled, license proprietary, Win11/macOS deferred. **Win10 1.0 signed WFP/G2 physical proof remains NO-GO.**
+
+
 ## ПРАВЯЩЕЕ РЕШЕНИЕ ВЛАДЕЛЬЦА — 17.11.2026: ТОЛЬКО ВНУТРЕННЕЕ ИСПОЛЬЗОВАНИЕ
 
 Владелец прямо выбрал «пока только внутреннее». **Это не выбор MIT/Apache-2.0/проприетарной лицензии, не публичная публикация и не GO на развёртывание**. Допустима внутренняя разработка и ранее разрешённые тесты точного `0.3.0-beta.2` на Win10 Pro x64. Сохранены все original candidate SHA и доказательства A0–A3 PASS.
