@@ -3,6 +3,7 @@ from __future__ import annotations
 from io import BytesIO
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -12,16 +13,17 @@ import unittest
 from unittest.mock import patch
 from zipfile import ZipFile, ZipInfo
 
-ROOT = Path(__file__).resolve().parents[1]
+QA_ROOT = Path(__file__).resolve().parents[1]
+PRODUCT_ROOT = Path(os.environ.get('FLOWBRIDGE_BETA2_FIXTURE_ROOT', QA_ROOT))
 spec = importlib.util.spec_from_file_location(
-    'internal_beta3', ROOT / 'tools/stage_internal_beta3.py')
+    'internal_beta3', QA_ROOT / 'tools/stage_internal_beta3.py')
 s = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(s)
 
 class OfflinePrivateStaging(unittest.TestCase):
     def fixture(self) -> dict[str,bytes]:
         # Exercise actual beta.2 version sources, not mock versions.
-        return {n: (ROOT / n).read_bytes() for n in s.MODIFIED_FILES}
+        return {n: (PRODUCT_ROOT / n).read_bytes() for n in s.MODIFIED_FILES}
 
     def test_rewrite_exact_version_only_and_local_lockfile(self):
         fixture = self.fixture()
