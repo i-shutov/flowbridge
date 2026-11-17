@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'tools/security/scan_public_history.py'
+      - 'tools/windows/FlowBridge-Beta2-Win10-Internal-Preflight.ps1'
       - 'tests/test_security_public_history_scan.py'
       - '.github/workflows/security-history-inventory.yml'
       - 'docs/qa/release-1.0/checkpoints/SECURITY_INTERNAL_HISTORY_AUDIT_20261117.md'
@@ -58,3 +59,38 @@ jobs:
           path: build/security/history-secret-inventory.json
           if-no-files-found: warn
           retention-days: 15
+
+  win10-exact-installer-negative:
+    name: Reject hosted Win Server as Win10 and verify frozen setup hash
+    needs: negative
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: FlowBridge-Explicit-SOCKS-EngineeringCandidate-Windows-43883696169
+          run-id: 43883696169
+          github-token: ${{ github.token }}
+          path: build/original-windows
+      - name: Verify exact original beta2 setup, expect Windows Server 2025 refusal
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = 'build/original-windows/artifacts/FlowBridge-0.3.0-beta.2-windows-x64-setup.exe'
+          $out = & powershell.exe -NoProfile -File tools/windows/FlowBridge-Beta2-Win10-Internal-Preflight.ps1 -InstallerPath $installer
+          $code = $LASTEXITCODE
+          $data = ($out | Out-String).Trim() | ConvertFrom-Json
+          if ($data.installer_sha256_matches -ne $true) { throw 'Exact setup SHA check did not pass' }
+          if ($data.windows_10_pro_22h2_x64 -ne $false -or $code -eq 0) {
+            throw 'Hosted Windows Server incorrectly accepted as owner Windows 10 Pro'
+          }
+          if ($data.release_approved -or $data.internal_pilot_deployment_approved -or $data.public_distribution_approved) {
+            throw 'Read-only preflight promoted deployment or publication'
+          }
+          if ($data.error_code -ne 'WRONG_HOST_OS_EDITION_OR_BUILD') {
+            throw ('Unexpected failure mode: ' + $data.error_code)
+          }
+          Write-Host 'PINNED_BETA2_INSTALLER_SHA_PASS; NON_WIN10_SERVER_REJECTED; NO_INSTALL'
