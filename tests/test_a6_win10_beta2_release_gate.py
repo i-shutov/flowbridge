@@ -23,9 +23,19 @@ def make_zip(files: dict[str, bytes]) -> bytes:
 class TestA6HardGates(unittest.TestCase):
     def test_rejects_zip_traversal_and_drive_paths(self):
         for path in ("../escape","/abs/secret","./relative","sub/../escape",
-                     "C:/Windows/secret","dir\\secret"):
+                     "C:/Windows/secret"):
             with self.subTest(path=path), self.assertRaisesRegex(a6.GateError, "zip_path"):
                 a6.archive(make_zip({path: b"bad"}))
+
+    def test_rejects_true_raw_zip_entry_with_backslash_on_any_os(self):
+        # Python zipfile.writestr normalizes backslashes on Windows before
+        # serializing the name. Mutate the ORIGINAL ZIP header bytes instead
+        # so the Windows negative test contains an actual illegal ZIP name.
+        raw = make_zip({"dir/secret": b"bad"})
+        self.assertEqual(raw.count(b"dir/secret"), 2)
+        corrupt = raw.replace(b"dir/secret", b"dir\\secret")
+        with self.assertRaisesRegex(a6.GateError, "zip_path"):
+            a6.archive(corrupt)
 
     def test_duplicate_casefold_refused(self):
         data = make_zip({"ssh/Report.JSON": b"a", "ssh/report.json": b"b"})
