@@ -54,6 +54,36 @@ fn reject_reparse_components(path: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Windows PowerShell 5.1 expects UTF-16LE Base64 for -EncodedCommand.
+/// The only input is a compile-time constant; no untrusted value is encoded
+/// into the PowerShell program or injected through its command-line parser.
+fn encoded_powershell_command(script: &str) -> String {
+    const BASE64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut bytes = Vec::with_capacity(script.len() * 2);
+    for unit in script.encode_utf16() {
+        bytes.extend_from_slice(&unit.to_le_bytes());
+    }
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let a = chunk[0];
+        let b = *chunk.get(1).unwrap_or(&0);
+        let c = *chunk.get(2).unwrap_or(&0);
+        out.push(BASE64[(a >> 2) as usize] as char);
+        out.push(BASE64[(((a & 3) << 4) | (b >> 4)) as usize] as char);
+        out.push(if chunk.len() > 1 {
+            BASE64[(((b & 15) << 2) | (c >> 6)) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            BASE64[(c & 63) as usize] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
 fn verify_microsoft_signature(executable: &Path) -> io::Result<()> {
     // Executed only from the kernel-resolved Windows system directory.
     // The PowerShell script is literal; the untrusted user path enters only
@@ -63,7 +93,11 @@ fn verify_microsoft_signature(executable: &Path) -> io::Result<()> {
 $ErrorActionPreference = 'Stop'
 $p = $env:FLOWBRIDGE_SIGNED_SSH_CANDIDATE
 if ([string]::IsNullOrWhiteSpace($p)) { exit 14 }
-$s = Get-AuthenticodeSignature -LiteralPath $p
+try {
+    $s = Get-AuthenticodeSignature -LiteralPath $p -ErrorAction Stop
+} catch {
+    exit 17
+}
 if ($s.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or
     $null -eq $s.SignerCertificate) { exit 15 }
 if ($s.SignerCertificate.Subject -notmatch '(^|,\s*)O=Microsoft Corporation(,|$)') { exit 16 }
@@ -85,13 +119,14 @@ exit 0
         return Err(denied());
     }
     let mut process = Command::new(powershell);
+    let encoded = encoded_powershell_command(SCRIPT);
     process
         .args([
             "-NoLogo",
             "-NoProfile",
             "-NonInteractive",
-            "-Command",
-            SCRIPT,
+            "-EncodedCommand",
+            encoded.as_str(),
         ])
         .env("FLOWBRIDGE_SIGNED_SSH_CANDIDATE", shell_path)
         .stdin(Stdio::null())
@@ -175,6 +210,13 @@ mod tests {
                 .kind(),
             io::ErrorKind::PermissionDenied
         );
+    }
+
+    #[test]
+    fn powershell_encoding_contains_no_dynamic_backend_text() {
+        assert_eq!(encoded_powershell_command("A"), "QQA=");
+        assert_eq!(encoded_powershell_command(""), "");
+        assert_eq!(encoded_powershell_command("AB"), "QQBCAA==");
     }
 
     #[test]
