@@ -1210,9 +1210,16 @@ fn supervise(config: Config, state: Arc<Mutex<State>>, control: Arc<Control>, la
     // as readiness for our own child. OpenSSH also uses ExitOnForwardFailure.
     match TcpListener::bind(("127.0.0.1", config.local_port)) {
         Ok(probe) => drop(probe),
-        Err(_error) => {
+        Err(error) => {
+            // The preflight collision retry accepts a FIXED, path-free
+            // category and never retries unrelated SSH/health failures.
+            let reason = if error.kind() == io::ErrorKind::AddrInUse {
+                "Address already in use"
+            } else {
+                "OS bind failed"
+            };
             lock(&state).failed(format!(
-                "local SOCKS port {} is unavailable: OS bind failed; choose a free port",
+                "local SOCKS port {} is unavailable: {reason}; choose a free port",
                 config.local_port
             ));
             return;
@@ -1253,7 +1260,16 @@ fn supervise(config: Config, state: Arc<Mutex<State>>, control: Arc<Control>, la
         let mut child = match launched {
             Ok(child) => child,
             Err(error) => {
-                lock(&state).failed(format!("could not start OpenSSH (OS category: {:?}). Install OpenSSH or check the configured executable.", error.kind()));
+                let reason = if error.kind() == io::ErrorKind::InvalidData {
+                    // Keep the actionable closed-source backend rejection.
+                    "Explicit SSH backend did not identify itself as OpenSSH from -V; no fallback backend was launched".to_owned()
+                } else {
+                    format!(
+                        "could not start OpenSSH (OS category: {:?}). Install OpenSSH or check the configured executable.",
+                        error.kind()
+                    )
+                };
+                lock(&state).failed(reason);
                 return;
             }
         };
