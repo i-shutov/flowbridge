@@ -119,11 +119,13 @@
       }
     },
     "remaining_release_gates": [
-      "A0-A3 original Win10-only beta.2 technical evidence accepted for current exact source",
-      "A5 internal-only dependency notices, third-party rights, native SDK/runtime and security review OPEN; public own-code license choice deferred",
-      "A6 independent Windows 10 internal-use P0/privacy/native security sign-off OPEN",
-      "A7 formal authorization for internal pilot deployment beyond pre-authorized QA still NOT_GRANTED",
-      "Public GitHub Releases, tags and external binaries prohibited by owner; Win11/macOS deferred"
+      "Frozen beta2 Win10 A0–A3 original functional acceptance PASS, original installer unchanged",
+      "P1 #85: source-only privacy patch PR84 targeted 3/3 CI PASS; original frozen installer contains raw ssh stderr and GUI journal exposure; new exact beta3 candidate required",
+      "P1 #86: SSH backend signer and file provenance not runtime-trusted; read-only QA preflight not same as atomic launch",
+      "P0 #83: closed-source repository currently Public, owner intends future private move; no sensitive uploads",
+      "Win10 ESU Year2/patch status on actual QA VM NOT_VERIFIED, read-only Codex task pending",
+      "A5/A6: third-party/native security/privacy release signoff OPEN; A7 internal deployment GO NOT_GRANTED",
+      "Win11/macOS deferred, no public release or tag; Windows10 1.0 WFP G2 NO_GO"
     ],
     "codex_v3": {
       "source": "owner-forwarded Codex report, raw evidence ZIP local-only and not independently inspected",
@@ -344,7 +346,22 @@
       "distribution_mode": "INTERNAL_ONLY",
       "public_github_release_allowed": false,
       "external_license_choice_required_now": false,
-      "internal_pilot_authorized": false
+      "internal_pilot_authorized": false,
+      "security_blockers_asof_20261117": {
+        "source_confirmed_original_frozen_raw_ssh_stderr_p1": true,
+        "source_patch_pr": "https://github.com/i-shutov/flowbridge/pull/84",
+        "source_patch_sha": "6057ff9b76ebd1d3148ac806313dc0aec0bd9158",
+        "source_privacy_targeted_ci": "SUCCESS_3_OF_3",
+        "product_original_beta2_privacy_fixed": false,
+        "next_version_and_native_win10_acceptance_required": true,
+        "arbitrary_ssh_executable_trust_issue": "https://github.com/i-shutov/flowbridge/issues/86",
+        "runtime_authenticode_and_atomic_pin_accepted": false,
+        "owner_readonly_signature_and_esu_preflight_task": "https://github.com/i-shutov/flowbridge/blob/qa/win10-internal-security-inventory-20261117/docs/qa/release-1.0/checkpoints/WIN10_A5_A6_READONLY_SECURITY_PREFLIGHT_CODEX_20261117.md",
+        "win10_target_esu_actual_proof": false,
+        "closed_source_public_git_repo_issue": "https://github.com/i-shutov/flowbridge/issues/83",
+        "confidentiality_fixed": false,
+        "internal_deployment_go": false
+      }
     },
     "current_required_target_os": [
       "Windows 10 Pro 22H2 x64"
@@ -693,7 +710,7 @@
           "WIN-02",
           "WIN-03"
         ],
-        "status": "EXPLICIT_BETA2_WIN10_OWNER_GUI_SSH_EVIDENCE_ACCEPTED_1_0_FULL_RULE_EDITOR_OPEN_WIN11_DEFERRED",
+        "status": "FROZEN_BETA2_WIN10_GUI_SSH_FUNCTIONAL_ACCEPTED_PRIVACY_P1_PATCH_NEW_BINARY_NOT_ACCEPTED_WIN1_0_GUI_OPEN",
         "accepted": false,
         "evidence": [],
         "required_native_windows": true,
@@ -716,7 +733,9 @@
           "beta2_win10_v4_v5_owner_test_evidence_accepted": true,
           "beta2_win11_owner_test_evidence_accepted": false,
           "beta2_v5_original_sha256": "809dee21f0884e0d31dfa89a98033276cefaad859de1de64a87a2b90f454cb4c"
-        }
+        },
+        "beta_explicit_ssh_privacy_issue": "https://github.com/i-shutov/flowbridge/issues/85",
+        "beta_explicit_ssh_runtime_trust_issue": "https://github.com/i-shutov/flowbridge/issues/86"
       },
       {
         "id": "WIN-07",
@@ -729,10 +748,12 @@
           "WIN-01",
           "WIN-02"
         ],
-        "status": "NOT_ACCEPTED",
+        "status": "NATIVE_SIGNED_PACKAGE_SECURITY_AND_WIN10_ESU_OPEN",
         "accepted": false,
         "evidence": [],
-        "required_native_windows": true
+        "required_native_windows": true,
+        "closed_source_repo_visibility_issue": "https://github.com/i-shutov/flowbridge/issues/83",
+        "target_win10_esu_security_proof": false
       },
       {
         "id": "WIN-08",
