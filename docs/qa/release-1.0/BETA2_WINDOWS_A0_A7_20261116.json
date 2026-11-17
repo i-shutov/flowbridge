@@ -190,11 +190,11 @@
     "win11_publication": true
   },
   "open_dependencies": [
-    "P0 confidentiality: public closed-source repository remains owner-deferred (#83); no new proprietary installer distributed publicly",
-    "P1 #85+#86 source/build targeted CI PASS on exact 44e3ba9; no frozen beta.3 installer, no new owner Win10 native evidence, no A5/A6 GO",
-    "Win10 actual signed selected OpenSSH backend, Year2 ESU and update state remain NOT_RUN on owner host; read-only handoff available",
-    "A5/A6: independent native Windows security, privacy and third-party runtime review not accepted; A7 owner internal deployment GO NOT_GRANTED",
-    "Separate physical WFP/G2 1.0 remains NO-GO; Windows 11/macOS deferred"
+    "P0: repository public while own-code proprietary — owner-controlled private switch pending #83; next product EXE must remain local-only",
+    "Source/blockers #85 and #86 reviewed by targeted 3/3 and portable 5/5 on SHA 44e3ba9; local private beta3 source cutter CI 2/2 PASS, but no signed/unsigned beta3 EXE built",
+    "Actual owner Win10 signed SSH backend/ESU preflight and beta3 native GUI/SSH/negative/rollback acceptance remain NOT_RUN for new bytes",
+    "A5 internal rights/native security, A6 formal privacy/security and A7 owner pilot GO all OPEN; no public tags/releases or Win11/macOS QA",
+    "Windows 1.0 protected WFP/G2 independent kernel evidence remains NO_GO"
   ],
   "windows_1_0_wfp_g2_accepted": false,
   "all_required_beta_gates_accepted": false,
@@ -325,7 +325,7 @@
   "latest_security_findings_checkpoint": "docs/qa/release-1.0/checkpoints/SECURITY_P1_FINDINGS_AND_BETA_NEXT_GATE_20261117.md",
   "security_next_candidate": {
     "proposed_version": "0.3.0-beta.3",
-    "status": "PRIVACY_AND_SIGNED_SSH_SOURCE_BUILD_EXACT_CI_PASS_PRIVATE_BETA3_CANDIDATE_NOT_BUILT",
+    "status": "EXACT_SECURITY_SOURCE_ALL_PORTABLE_CI_PASS_PRIVATE_BETA3_STAGING_TOOL_CI_PASS_INSTALLER_NOT_BUILT",
     "tracker": "https://github.com/i-shutov/flowbridge/issues/87",
     "privacy_source_pr": "https://github.com/i-shutov/flowbridge/pull/84",
     "privacy_source_ci": "https://github.com/i-shutov/flowbridge/actions/runs/44061327017",
@@ -376,6 +376,29 @@
     "old_beta2_installer_unmodified": true,
     "old_beta2_runtime_fix_present": false,
     "a6_security_accepted": false,
-    "a7_internal_deployment_go": false
+    "a7_internal_deployment_go": false,
+    "offline_private_stage": {
+      "pr": "https://github.com/i-shutov/flowbridge/pull/89",
+      "code_head_at_first_green": "5808ee5b16ed56b1a030fea74175dd4ab4cab3b3",
+      "exact_original_security_source_sha": "44e3ba988ac5a9f7cf2d25b16d46c432ff3d8c38",
+      "ci": "https://github.com/i-shutov/flowbridge/actions/runs/44087645948",
+      "linux_windows_jobs": "SUCCESS_2_OF_2",
+      "product_source_checkout_independent_of_qa_tooling": true,
+      "verified_beta3_contract_and_local_Cargo_lock": true,
+      "new_standalone_local_git_has_no_remote": true,
+      "public_ci_proprietary_binary_uploaded": false,
+      "local_installer_built": false,
+      "owner_win10_installer_acceptance": false,
+      "source_tool_script": "https://github.com/i-shutov/flowbridge/blob/qa/internal-beta3-offline-cutter-20261117/tools/stage_internal_beta3.py",
+      "source_tool_checkpoint": "https://github.com/i-shutov/flowbridge/blob/qa/internal-beta3-offline-cutter-20261117/docs/qa/release-1.0/checkpoints/BETA3_OFFLINE_PRIVATE_STAGE_20261117.md",
+      "a5_a6_a7_accepted": false
+    },
+    "source_all_portable_ci_run": "https://github.com/i-shutov/flowbridge/actions/runs/44076875466",
+    "source_all_portable_ci_attempt": 2,
+    "source_all_portable_ci_status": "SUCCESS_5_OF_5",
+    "windows_actual_open_ssh_ci": "https://github.com/i-shutov/flowbridge/actions/runs/44076875435",
+    "windows_actual_open_ssh_status": "MANAGED_AND_RAW_SUCCESS",
+    "source_sha_pinned_for_offline_beta3": "44e3ba988ac5a9f7cf2d25b16d46c432ff3d8c38",
+    "private_local_beta3_owner_win10_a3_accepted": false
   }
 }
