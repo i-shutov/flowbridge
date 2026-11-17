@@ -114,9 +114,9 @@
     },
     {
       "id": "A6",
-      "status": "A6_TECHNICAL_EVIDENCE_PASS_RELEASE_GO_BLOCKED_BY_A5_LEGAL_SECURITY_AND_A7",
+      "status": "TECHNICAL_A6_4_OF_4_ORIGINAL_SOURCE_AND_PE_IMPORTS_PASS_FORMAL_GO_OPEN",
       "accepted": false,
-      "what": "Win10-only immutable beta2 original candidate and owner Win10 V4/V5 technical QA independently reaudited, A6 QA CI 3/3 green; full independent native C++/privacy/legal release approval still OPEN, A5 license unselected",
+      "what": "Win10 immutable beta2 original candidate and original V4+V5 files audited; exact latest A6 4/4 CI PASS incl direct PE imports; formal security/privacy/native legal/publisher A6 GO still OPEN",
       "evidence": [],
       "draft_review_packet": "docs/qa/release-1.0/checkpoints/BETA2_A6_RELEASE_REVIEW_PACKET_20261117.md",
       "technical_original_byte_review": {
@@ -124,13 +124,14 @@
         "exact_candidate_source_sha": "86583a1a0487b9d383c0122b24558e620bde5b9c",
         "original_11_job_candidate_success": "https://github.com/i-shutov/flowbridge/actions/runs/43883696169",
         "independent_a6_pr": "https://github.com/i-shutov/flowbridge/pull/80",
-        "exact_review_sha": "ff3cae712ad9ea65f2f4efcd95a3e3ff6bab7a90",
-        "exact_a6_ci": "https://github.com/i-shutov/flowbridge/actions/runs/44040978619",
-        "a6_ci_jobs": "3/3 SUCCESS",
+        "exact_review_sha": "6cbebe418eeb88539dff86054332ee46f6801127",
+        "exact_a6_ci": "https://github.com/i-shutov/flowbridge/actions/runs/44041579615",
+        "a6_ci_jobs": "4/4 SUCCESS",
         "ci_tests": [
-          "Linux adversarial ZIP/manifest/SSH/no-release mutations",
-          "Windows adversarial ZIP/manifest/SSH/no-release mutations",
-          "original immutable candidate ZIP/source/manifest/license/FFI SHA verification"
+          "Linux adversarial ZIP/manifest/SSH/rollback/no-release mutants",
+          "Windows adversarial ZIP/manifest/SSH/rollback/no-release mutants including raw ZIP backslash normalization",
+          "original immutable candidate ZIP/source/manifest/own-license/FFI SHA verification",
+          "independent read-only original Windows PE direct import inspection with binary SHA pins"
         ],
         "original_owner_v4_evidence_manifest": "100/100 passed offline",
         "original_owner_v5_evidence_manifest": "26/26 passed offline",
@@ -140,7 +141,13 @@
         "native_cpp_security_comprehensive": false,
         "license_legal_and_runtime_review": false,
         "accepted": false,
-        "explicitly_preserves_release_no_go": true
+        "explicitly_preserves_release_no_go": true,
+        "pe_original_audit_artifact_id": 14309039018,
+        "pe_original_audit_artifact_sha256": "817d939f4e0b1041f179ec3ee7064441a8ce5508e901a11f061a627ecf7acd23",
+        "pe_original_audit_status": "DIRECT_PE_IMPORTS_TECHNICAL_PASS",
+        "direct_vcruntime_or_msvcp_imports_observed": false,
+        "recursive_dll_dependency_and_linkage_proven": false,
+        "independent_native_runtime_legal_review": false
       }
     },
     {
@@ -162,9 +169,9 @@
     "win11_publication": true
   },
   "open_dependencies": [
-    "A5: explicitly choose FlowBridge own-code license/copyright owner and approve legal, native runtime/SDK distribution and security review (#78)",
-    "A6: complete independent Win10-only P0/native C++/privacy and distribution sign-off (technical original-byte CI 3/3 PASS; not final GO)",
-    "A7: explicit owner approval and publisher/unsigned engineering prerelease decision; no tag or release"
+    "A5 own-code LICENSE and independent native SDK/runtime/legal/security sign-off (Issue #78)",
+    "A6 formal Windows 10 only privacy/native-security and distribution sign-off (technical original-byte/PE CI 4/4 PASS only)",
+    "A7 explicit owner publisher unsigned engineering prerelease GO; no tag/Release"
   ],
   "windows_1_0_wfp_g2_accepted": false,
   "all_required_beta_gates_accepted": false,
