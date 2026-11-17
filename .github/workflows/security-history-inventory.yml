@@ -5,6 +5,7 @@ on:
       - 'tools/security/scan_public_history.py'
       - 'tools/windows/FlowBridge-Beta2-Win10-Internal-Preflight.ps1'
       - 'tools/windows/FlowBridge-SignedOpenSSH-ReadOnly.ps1'
+      - 'tools/windows/FlowBridge-Win10-ESU-ReadOnly.ps1'
       - 'tests/test_security_public_history_scan.py'
       - '.github/workflows/security-history-inventory.yml'
       - 'docs/qa/release-1.0/checkpoints/SECURITY_INTERNAL_HISTORY_AUDIT_20261117.md'
@@ -147,3 +148,29 @@ jobs:
               Write-Host ('HOSTED_SYSTEM_SSH_READ_ONLY_OBSERVATION: ' + $sampleResult.status)
           }
           Write-Host 'SSH_UNTRUSTED_BACKEND_NEGATIVES_PASS_NO_EXECUTION_NO_DEPLOYMENT_GO'
+
+  win10-esu-negative:
+    name: Reject hosted Windows Server as supported Win10 ESU environment
+    runs-on: windows-2025
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read-only OS/ESU inventory must not confer security or release GO
+        shell: pwsh
+        run: |
+          $output = & powershell.exe -NoProfile -File tools/windows/FlowBridge-Win10-ESU-ReadOnly.ps1
+          $code = $LASTEXITCODE
+          $r = ($output | Out-String).Trim() | ConvertFrom-Json
+          if ($code -eq 0 -or $r.error_code -ne 'WRONG_OS_NOT_WIN10_PRO_22H2_X64') {
+              throw 'Windows Server incorrectly accepted as Windows 10 Pro with ESU'
+          }
+          if ($r.os_supported_for_current_flowbridge_scope -or
+              $r.full_esu_entitlement_and_securing_proven -or
+              $r.patches_current_as_of_today_proven -or
+              $r.a6_internal_security_go -or $r.a7_internal_deployment_go) {
+              throw 'Read-only ESU scan promoted unsupported security or release status'
+          }
+          Write-Host 'WIN10_ESU_READONLY_NON_WIN10_HOST_REJECTED; NO_KEYS_NO_MUTATIONS'
+          exit 0
