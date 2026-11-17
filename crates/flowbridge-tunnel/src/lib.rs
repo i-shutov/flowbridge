@@ -1984,6 +1984,35 @@ mod tests {
         }
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn windows_signed_system_backend_is_not_taken_from_path_and_stays_locked_during_version_probe()
+    {
+        let cfg = config();
+        assert!(cfg.ssh_executable.is_none());
+        let expected = match windows_backend_trust::default_system_ssh() {
+            Ok(path) => path,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                eprintln!("SYSTEM_OPENSSH_NOT_INSTALLED_SIGNED_TEST_DEFERRED");
+                return;
+            }
+            Err(_) => panic!("SYSTEM_OPENSSH_LOOKUP_FAILED"),
+        };
+        let resolved = resolve_ssh(&cfg).unwrap();
+        assert!(
+            resolved == expected,
+            "Windows default backend must ignore arbitrary PATH executable locations"
+        );
+        let lock = windows_backend_trust::verify_and_lock(&resolved)
+            .expect("SYSTEM_OPENSSH_SIGNED_LOCKED_FILE_REQUIRED");
+        let control = Control::new();
+        assert!(
+            backend_version(resolved.as_os_str(), &control).is_some(),
+            "Microsoft-signed SSH executable must permit -V while the file guard is held"
+        );
+        drop(lock);
+    }
+
     #[test]
     fn strict_config_and_arguments_do_not_allow_shell_or_host_key_overrides() {
         let config=Config::from_json(r#"{"host":"server.example","user":"alice","identity_file":"/keys/with space/key","known_hosts_file":"/keys/known hosts","compression":true}"#).unwrap();
