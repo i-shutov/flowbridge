@@ -119,11 +119,11 @@
       }
     },
     "remaining_release_gates": [
-      "A0/A1/A2/A3: Win10-only accepted on exact immutable beta2 and original V4/V5 evidence",
-      "A5: own-code LICENSE and independent native SDK/runtime/legal/C++ security review still OPEN (Issue #78)",
-      "A6: technical SHA/ZIP/PE-source audit 4/4 PASS, formal Win10 privacy/security/distribution release sign-off OPEN",
-      "A7: owner GO and explicit unsigned engineering prerelease distribution approval NOT_GRANTED",
-      "Win11/macOS native testing/deployment DEFERRED to later releases and not counted PASS"
+      "A0-A3 original Win10-only beta.2 technical evidence accepted for current exact source",
+      "A5 internal-only dependency notices, third-party rights, native SDK/runtime and security review OPEN; public own-code license choice deferred",
+      "A6 independent Windows 10 internal-use P0/privacy/native security sign-off OPEN",
+      "A7 formal authorization for internal pilot deployment beyond pre-authorized QA still NOT_GRANTED",
+      "Public GitHub Releases, tags and external binaries prohibited by owner; Win11/macOS deferred"
     ],
     "codex_v3": {
       "source": "owner-forwarded Codex report, raw evidence ZIP local-only and not independently inspected",
@@ -340,14 +340,25 @@
         "a7_publisher_go": false,
         "beta2_release_accepted": false,
         "checkpoint": "docs/qa/release-1.0/checkpoints/BETA2_A6_RELEASE_REVIEW_PACKET_20261117.md"
-      }
+      },
+      "distribution_mode": "INTERNAL_ONLY",
+      "public_github_release_allowed": false,
+      "external_license_choice_required_now": false,
+      "internal_pilot_authorized": false
     },
     "current_required_target_os": [
       "Windows 10 Pro 22H2 x64"
     ],
     "win11_native_release_deferred": true,
     "win11_future_release_issue": "https://github.com/i-shutov/flowbridge/issues/79",
-    "win11_unavailability_blocks_current_release": false
+    "win11_unavailability_blocks_current_release": false,
+    "distribution_mode": "INTERNAL_ONLY",
+    "public_license_not_required_for_current_internal_qa": true,
+    "public_distribution_authorized": false,
+    "internal_deployment_approved": false,
+    "publication_and_tag_prohibited": true,
+    "own_code_license_unselected": true,
+    "external_license_choice_deferred_issue": "https://github.com/i-shutov/flowbridge/issues/78"
   },
   "windows_1_0": {
     "required_gate_ids": [
@@ -768,7 +779,10 @@
         "status": "DEFERRED_NOT_TESTED_NOT_PUBLISHED",
         "future_issue": "https://github.com/i-shutov/flowbridge/issues/79"
       }
-    ]
+    ],
+    "distribution_mode": "INTERNAL_ONLY",
+    "publication_authorized": false,
+    "wfp_g2_accepted": false
   },
   "macos_after_windows_first": {
     "deferred_not_accepted": true,
@@ -824,5 +838,10 @@
   "deferred_platform_release_targets": [
     "Windows 11 Pro x64",
     "macOS Apple Silicon and Intel"
-  ]
+  ],
+  "distribution_mode": "INTERNAL_ONLY_OWNER_CONFIRMED_20261117",
+  "distribution_decision_checkpoint": "docs/qa/release-1.0/checkpoints/INTERNAL_ONLY_DISTRIBUTION_DECISION_20261117.md",
+  "public_distribution_authorized": false,
+  "public_license_choice_deferred_to_future_external_release": true,
+  "internal_pilot_deployment_approved": false
 }
