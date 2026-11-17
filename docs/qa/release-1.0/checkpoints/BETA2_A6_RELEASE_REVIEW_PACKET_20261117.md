@@ -1,6 +1,6 @@
 # FlowBridge Windows 0.3.0-beta.2 — A6 independent release-review packet (NOT GO)
 
-**Prepared 17 November 2026.** The following is the **technical pre-review**, not a distribution authorization, release note publication, or merge/tag. Product remains an **unsigned Windows engineering prerelease, explicit SOCKS-only**. `release_accepted=false`, `publisher_release_approved=false`.
+**Scope amendment 17 November 2026:** owner explicitly selected **Windows 10 Pro 22H2 x64 only** for the current beta.2 and Windows 1.0 release plan. Windows 11 native QA, support announcement and publication are **DEFERRED to later releases; not PASS and NOT a current blocker**. [Decision and scope contract](WIN10_ONLY_SCOPE_DECISION_20261117.md). This is a technical pre-review, not a distribution authorization, release note publication, or merge/tag. Product remains an **unsigned Windows engineering prerelease, explicit SOCKS-only**. `release_accepted=false`, `publisher_release_approved=false`.
 
 ## 1. Exact immutable candidate identity and verified source chain
 
@@ -25,10 +25,10 @@
 | A1 frozen candidate | **PASS**: one original source, 11/11 CI, independently reviewed Windows manifest 13/13 and candidate ZIP | Pin these hashes in every release output |
 | A2 managed SSH | **PASS within bounded 128-flow product scope**: known-host, SSH-owned 1–4 workers, 10k churn, negative no-implicit-DIRECT, all-down; no guarantee for independent raw OpenSSH 512 | Do not assert 512 capacity or universal host limitations |
 | A3 Win10 | **REVIEWED OWNER-ORIGINAL V4+V5 EVIDENCE ACCEPTED:** V4 100/100, GUI 17 PNG, 6/6 native install/upgrade/uninstall, real SOCKS5h/Stop/all-down; V5 26/26, 6 PNG, 23 UI actions, final beta.2 missing-key denial, healthy 10-byte control, stop and escrow restoration. [V5 checkpoint](BETA2_WIN10_A3_V5_INDEPENDENT_REVIEW_20261117.md). Owner host identity is asserted, not cryptographically attested; reviewer did not physically rerun tests | No further Win10 testing needed unless exact candidate changes |
-| A3 Win11 | **NOT_RUN**: separate real Windows 11 Pro x64 owner QA not supplied; hosted Windows Server 2025 cannot replace it | [P0 #79 native Win11 operator run](https://github.com/i-shutov/flowbridge/issues/79), original evidence and independent review |
+| A3 Win11 | **DEFERRED_NOT_REQUIRED_FOR_CURRENT_WIN10_RELEASE**; no native Win11 test executed or accepted | Future platform release backlog [#79](https://github.com/i-shutov/flowbridge/issues/79); **do not test or advertise Win11 in this release** |
 | A4 macOS | Native acceptance **DEFERRED** under Windows-first owner decision; hosted universal package passed but does not grant Mac release | Do not publish a Mac SKU as accepted |
 | A5 technical | **PASS only for provenance/dependency metadata**: original kit 21 files + index/sums, 71 Windows and 37 Mac BOM; [QA PR #77](https://github.com/i-shutov/flowbridge/pull/77), [pinned A5 CI #43936785163](https://github.com/i-shutov/flowbridge/actions/runs/43936785163) 4/4 SUCCESS. RustSec original Cargo.lock, 75 dependencies, 0 known vulnerabilities at scanned DB version; native C++/security not covered | Complete owner own-code `LICENSE`, legal/redistributable Windows/MSVC/NSIS/SSH and native runtime/code security review, [issue #78](https://github.com/i-shutov/flowbridge/issues/78) |
-| A6 formal independence | **NOT_APPROVED**: technical review documents exist but complete Win11/A5/P0 outcomes not met | Independent review per actual exact-bin matrix; zero P0 FAIL/SKIP/UNKNOWN |
+| A6 formal independence | **NOT_APPROVED**: Win10 current-scope A3 original owner V4+V5 evidence accepted; A5 legal/native runtime, P0 and publisher review still outstanding. Win11 is not in current scope | Independent Win10-only exact-source review with no P0 FAIL/SKIP/UNKNOWN and complete A5 |
 | A7 owner/publication | **NOT_APPROVED**: no selected own-code license, no release authorization or publisher signing, no tag | Explicit owner decision on Windows-only unsigned engineering prerelease vs signed distribution; confirm all release claims and checksum |
 
 **No part of this A6 memo confers legal, supply-chain security or publisher approval.**
@@ -39,7 +39,7 @@
 
 - Scope: native Windows UI, explicit local SOCKS5/SOCKS5h TCP to configured clients, external proxy support and supervised OpenSSH with strict host-key checking, 1–4 SSH workers and bounded capacity; the app must be configured to use the SOCKS proxy.
 - GUI status display now uses one concise connection headline; diagnostic text remains visible in journal. Added exact-beta GUI and SSH-negative regressions.
-- Install/upgrade/uninstall are per-user and preserve separate user settings from stable FlowBridge; native Win10 owner record reviewed, Win11 target still pending.
+- Install/upgrade/uninstall are per-user and preserve separate user settings from stable FlowBridge; native Win10 owner original V4+V5 records reviewed. Windows 11 is not included or advertised for this release.
 - **Do not use as protected transparent traffic interception.** No selected-app transparent interception, WFP/NDISRD driver, system kill switch or system-wide DNS no-leak guarantee. No UDP/QUIC-over-SSH, no restoration of existing TCP sessions after SSH break; browsers using own DoH/DoT or applications not configured for local SOCKS may use other routes.
 - Publisher signing not complete. Both binary provenance via original GitHub Actions hashes and separate Windows OS/SmartScreen trust decisions matter. Do not tell users to disable Defender/SmartScreen or security controls to install an unsigned test build.
 - Cross-platform source/build CI includes macOS but Mac native product support is not part of the Windows-first release.
@@ -49,7 +49,7 @@
 
 ## 4. Explicit release decision dependency
 
-**A6 reviewer cannot issue GO until [#79 Win11](https://github.com/i-shutov/flowbridge/issues/79) and [#78 license/legal/runtime](https://github.com/i-shutov/flowbridge/issues/78) are closed on original evidence and approved terms.** After those, perform final A6 P0/security/privacy audit, require explicit A7 owner approval and only then publish a prerelease. Do not merge a WFP driver stack into beta to satisfy unrelated product needs. Windows 1.0 WFP/ALE physical G2 is an independent mandatory release track and remains `NO_GO`.
+**A6 reviewer cannot issue GO until [#78 license/legal/runtime](https://github.com/i-shutov/flowbridge/issues/78) and the remaining Win10-only security/release gates are accepted.** [Win11 #79](https://github.com/i-shutov/flowbridge/issues/79) was explicitly deferred and **must not block the current Windows 10 release**. Perform final A6 Win10-only P0/security/privacy audit, require explicit A7 owner approval and only then consider publishing a Win10-only prerelease. Do not merge a WFP driver stack into beta to satisfy unrelated product needs. Windows 1.0 WFP/ALE physical G2 is an independent mandatory release track and remains `NO_GO`.
 
 ## 5. Distinct WFP/1.0 blocker (not a beta release gate)
 
