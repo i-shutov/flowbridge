@@ -1,0 +1,98 @@
+{
+  "schema": "flowbridge-win01-wfp-ale-kernel-epoch-v3-product-checkpoint-v1",
+  "as_of": "2026-11-15",
+  "status": "WFP_ALE_PRODUCT_SOURCE_WDK_AND_HOSTED_SECURITY_PASS_NATIVE_G2_NO_GO",
+  "first_release": "FlowBridge 1.0 Windows-first",
+  "authorized_backend": "WFP/ALE product development and testing; signed native deployment separate",
+  "owner_permission_explicit": true,
+  "owner_permission_date": "2026-11-15",
+  "product_pr": "https://github.com/i-shutov/flowbridge/pull/69",
+  "exact_pr_source_sha": "d242c3726904eed1bf5b5eb9998bc37d02ac90ba",
+  "stacked_base_pr": "https://github.com/i-shutov/flowbridge/pull/67",
+  "product_main_sha_unchanged": "5b5afc2feeda2195f302380e615ba003d4906e09",
+  "beta_source_unchanged": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+  "changes": {
+    "wfp_device_abi": 3,
+    "redirect_context_version": 3,
+    "redirect_context_bytes": 2136,
+    "kernel_witness": "PsSetCreateProcessNotifyRoutineEx, PsGetProcessCreateTimeQuadPart, PsGetProcessStartKey, WFP transportEndpointHandle",
+    "process_ledger": "fixed 4096-entry, spinlock-owned, fail closed for duplicate PID/epoch mismatch/unknown process/saturation",
+    "no_user_pid_snapshot_attestation": true,
+    "disabled_selected_flow_blocked": true,
+    "foreign_redirect_coexistence_blocked": true,
+    "accepted_winsock_context_requires_birth_start_key_endpoint": true,
+    "rust_ffi_direct_with_wfp_records_forbidden_before_socket": true,
+    "rust_ffi_zero_upstream_route_forbidden_before_socket": true,
+    "explicit_socks_no_wfp_records_direct_unchanged": true,
+    "force_integrity_pe_flag_set": true,
+    "signed_release_package": false
+  },
+  "ci": {
+    "native_epoch_and_mutations": {
+      "workflow_run": 43713831922,
+      "jobs": "1/1 SUCCESS",
+      "production_c_ledger_cases": 6,
+      "source_suite_cases": 4,
+      "source_mutants_rejected": 9,
+      "artifact_id": 14161458866,
+      "artifact_sha256": "49b0b932e9952728dc7785d9bfa7b371c8946a7d657bbc338877dafa251a00f4",
+      "original_zip_crc": "PASS",
+      "original_json_status": "real C production ledger, callback not executed, native G2 not accepted"
+    },
+    "windows_wdk": {
+      "workflow_run": 43713831976,
+      "jobs": "1/1 SUCCESS",
+      "unsigned_wdk_sys_sha256": "51f931967ef32e84a9fc591235ca9bf22e29877851bbbf8d6879ef7ab95e2319",
+      "unsigned_wdk_sys_bytes": 27136,
+      "architecture": "x86_64",
+      "pe_force_integrity": true,
+      "signed": false,
+      "driver_loaded": false,
+      "artifact_id": 14161284274,
+      "zip_sha256": "704fc5149a07c45a4f9db1dc88b25a89d7068abb3f6fe5f888ab7b2755d3fbc6",
+      "original_zip_crc": "PASS"
+    },
+    "general_native": {
+      "workflow_run": 43713831970,
+      "jobs": "5/5 SUCCESS",
+      "operating_systems": [
+        "Windows 2025",
+        "Ubuntu 24.04",
+        "macOS 15"
+      ],
+      "actual_windows_installer_GUI_smoke": true,
+      "rust_wfp_selected_direct_and_invalid_records_negative_tests_passed": true
+    },
+    "actual_bfe_scope": {
+      "workflow_run": 43713831985,
+      "jobs": "1/1 SUCCESS",
+      "real_windows_kernel_filter_selection": true,
+      "custom_kernel_driver_loaded": false
+    },
+    "dns_code": {
+      "workflow_run": 43713832030,
+      "jobs": "3/3 SUCCESS",
+      "physical_dns_leak_free_proved": false
+    }
+  },
+  "blocked": {
+    "signed_wfp_driver_loaded_on_win10": false,
+    "signed_wfp_driver_loaded_on_win11": false,
+    "kernel_process_notification_executed": false,
+    "ale_auth_connect_selected_original_and_physical_ssh_verified": false,
+    "competing_bfe_hard_permit_prevented": false,
+    "selected_ipv4_ipv6_redirect_context_accepted_socket_verified": false,
+    "one_use_claim_and_redirect_record_replay_resistance_verified": false,
+    "real_outbound_managed_ssh_selected_traffic_verified": false,
+    "native_selected_no_direct_verified": false,
+    "dns_udp_quic_ipv6_physical_verified": false,
+    "independent_pcap_and_rollback_verified": false,
+    "publisher_signature_and_license_approved": false,
+    "original_auth_appid_external_ssh_collision_r198_resolved": false,
+    "native_g2_accepted": false,
+    "windows_1_0_accepted": false
+  },
+  "packet_to_process_trust_boundary": "Source WFP kernel witness exists in v3 code; no signed kernel runtime, no physical end-to-end G2 evidence",
+  "no_owner_machine_or_security_mutation": true,
+  "no_main_merge_or_release": true
+}

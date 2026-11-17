@@ -1,0 +1,240 @@
+name: FlowBridge W2b2 exact-beta Windows GUI + installer QA
+on:
+  push:
+    branches:
+      - docs/release-win10-vm910136-20261110
+    paths:
+      - .github/workflows/flowbridge-win10-w2b2-exact-gui-installer.yml
+      - tools/windows/FlowBridge-Win10-W2B2-GUIInstaller.ps1
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  PYTHONUTF8: '1'
+  PYTHONIOENCODING: utf-8
+jobs:
+  exact-beta-gui-installer:
+    runs-on: windows-2025
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact approved beta PR source (NOT branch tip or test merge)
+        uses: actions/checkout@v4
+        with:
+          ref: c339df2e4d20edf1d11d45786581a68451a71929
+          persist-credentials: false
+      - name: Reject source drift and inspect the protected beta scope
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $actual=(git rev-parse HEAD).Trim()
+          $expected='c339df2e4d20edf1d11d45786581a68451a71929'
+          if($actual -cne $expected){throw 'Source pin mismatch'}
+          New-Item -ItemType Directory -Force 'build/w2b2-qa'|Out-Null
+          $actual|Set-Content 'build/w2b2-qa/source-commit.txt' -Encoding ascii
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Exact-source Rust user-mode FFI + CLI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          cargo build --locked --release -j 2 -p flowbridge-ffi -p flowbridge-cli
+          if($LASTEXITCODE -ne 0){throw 'Rust build failed'}
+      - name: Build exact C++ Win32 GUI and real native test harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          cmake -S native/windows -B build/windows -A x64 -DFLOWBRIDGE_BUILD_NATIVE_TESTS=ON -DFLOWBRIDGE_FFI_LIBRARY="$env:GITHUB_WORKSPACE/target/release/flowbridge_ffi.dll.lib"
+          if($LASTEXITCODE -ne 0){throw 'CMake configure GUI failed'}
+          cmake --build build/windows --config Release --parallel 2
+          if($LASTEXITCODE -ne 0){throw 'CMake native GUI build failed'}
+          Copy-Item target/release/flowbridge_ffi.dll build/windows/Release/
+          New-Item -ItemType Directory -Force build/windows/Release/resources|Out-Null
+          Copy-Item resources/presets.json build/windows/Release/resources/
+          & ./build/windows/Release/FlowBridgeRuleModelTest.exe
+          if($LASTEXITCODE -ne 0){throw 'Native rule model tests failed'}
+          & ./build/windows/Release/FlowBridgeNativeSmoke.exe "$env:GITHUB_WORKSPACE/build/windows/Release/FlowBridge.exe" "$env:GITHUB_WORKSPACE/build/w2b2-qa/standalone-ui.bmp"
+          if($LASTEXITCODE -ne 0){throw 'Native GUI runtime smoke failed'}
+      - name: Compile capture GUI helper without any driver installation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          cmake -S native/windows/wfp -B build/windows-capture -A x64 -DFLOWBRIDGE_FFI_LIBRARY="$env:GITHUB_WORKSPACE/target/release/flowbridge_ffi.dll.lib"
+          if($LASTEXITCODE -ne 0){throw 'Capture helper configure failed'}
+          cmake --build build/windows-capture --config Release --parallel 2
+          if($LASTEXITCODE -ne 0){throw 'Capture helper build failed'}
+      - name: Stage pinned portable NSIS compiler (no global installation)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          ./scripts/ci-setup-nsis.ps1
+          if($LASTEXITCODE -ne 0){throw 'NSIS bootstrap failed'}
+      - name: Build exact-source Windows installer with file hashes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          python packaging/windows/build-installer.py --skip-build
+          if($LASTEXITCODE -ne 0){throw 'NSIS package build failed'}
+      - name: Real silent installed GUI + upgrade + uninstall on disposable Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          python tests/windows_installer_native.py --manifest docs/verification/windows-package.json --harness build/windows/Release/FlowBridgeNativeSmoke.exe --output build/verification/windows
+          if($LASTEXITCODE -ne 0){throw 'Native Windows installer acceptance failed'}
+      - name: On installer failure, capture read-only native uninstall state
+        if: failure()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Continue'
+          $root=Join-Path $env:RUNNER_TEMP 'flowbridge-install-*'
+          $found=@(Get-ChildItem $root -Directory -ErrorAction SilentlyContinue)
+          $installations=@()
+          foreach($base in $found){
+            foreach($path in @(Get-ChildItem $base.FullName -Directory -ErrorAction SilentlyContinue)){
+              $list=@(Get-ChildItem $path.FullName -File -ErrorAction SilentlyContinue|Select-Object -ExpandProperty Name)
+              $installations+=@{path=$path.FullName;files=$list;uninstall_exists=(Test-Path (Join-Path $path.FullName 'Uninstall.exe'));GUI_exists=(Test-Path (Join-Path $path.FullName 'FlowBridge.exe'))}
+            }
+          }
+          $settings=Get-ItemProperty 'HKCU:\Software\FlowBridge' -ErrorAction SilentlyContinue
+          $uninstall=Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\FlowBridge' -ErrorAction SilentlyContinue
+          $shortcuts=@(Get-ChildItem (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\FlowBridge') -ErrorAction SilentlyContinue|Select-Object -ExpandProperty Name)
+          $procs=@(Get-Process -ErrorAction SilentlyContinue|Where-Object {$_.ProcessName -match '(?i)flowbridge|uninstall|nsis'}|Select-Object ProcessName,Id)
+          $mutex_exists=$false
+          try {
+            $mutex=[Threading.Mutex]::OpenExisting('Local\FlowBridge.NativeUI.v02')
+            $mutex_exists=$true;$mutex.Dispose()
+          }catch{}
+          $state=[ordered]@{
+            schema='flowbridge-w2b2-hosted-uninstall-readonly-diagnostics-v1'
+            host_windows_runner=$true;diagnostics_only=$true
+            installations=$installations
+            registered_user_install_directory=$settings.InstallDir
+            registered_uninstall_display_name=$uninstall.DisplayName
+            registered_uninstall_path=$uninstall.InstallLocation
+            shortcuts=$shortcuts;matching_processes=$procs
+            running_gui_mutex_exists=$mutex_exists
+            did_not_relaunch_uninstaller=$true
+            network_or_host_security_mutation=$false
+          }
+          New-Item -ItemType Directory -Force build/w2b2-qa|Out-Null
+          $state|ConvertTo-Json -Depth 10|Set-Content build/w2b2-qa/uninstall-failure-diagnostic.json -Encoding utf8
+          Write-Output ($state|ConvertTo-Json -Depth 10)
+      - name: Emit immutable target QA manifest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $source='c339df2e4d20edf1d11d45786581a68451a71929'
+          $manifest=Get-Content docs/verification/windows-package.json -Raw|ConvertFrom-Json
+          $installer=(Get-ChildItem artifacts -File -Filter 'FlowBridge-*-windows-x64-setup.exe' |Select-Object -First 1)
+          if(-not $installer){throw 'No installer output'}
+          $sha=(Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($sha -cne $manifest.sha256){throw 'NSIS installer SHA mismatch'}
+          $status=Get-Content build/verification/windows/native-installer-result.json -Raw|ConvertFrom-Json
+          if(-not $status.passed -or $status.installer_sha256 -cne $sha){throw 'Native installer acceptance mismatch'}
+          $items=@(
+            'build/windows/Release/FlowBridge.exe',
+            'build/windows/Release/FlowBridgeNativeSmoke.exe',
+            'build/windows/Release/FlowBridgeRuleModelTest.exe',
+            'build/windows/Release/flowbridge_ffi.dll',
+            'build/windows/Release/resources/presets.json',
+            'target/release/flowbridge.exe',
+            ('artifacts/'+$installer.Name)
+          )
+          $files=@($items |ForEach-Object {
+            if(-not(Test-Path -LiteralPath $_ -PathType Leaf)){throw ('Expected package file missing: '+$_)}
+            [ordered]@{path=$_;sha256=(Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash.ToLowerInvariant();bytes=(Get-Item -LiteralPath $_).Length}
+          })
+          [ordered]@{
+            schema='flowbridge-exact-beta-win10-gui-installer-v1'
+            source_sha=$source
+            signed=$false
+            native_windows_hosted_qa=$true
+            target_win10_physically_tested=$false
+            transparent_interception=$false
+            driver_installed=$false
+            target_g2='NO_GO'
+            installer_sha256=$sha
+            files=$files
+          }|ConvertTo-Json -Depth 8|Set-Content build/w2b2-qa/bundle-manifest.json -Encoding utf8
+      - name: Upload exact-source Win10 QA bundle for independent physical Win10 testing
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-W2b2-ExactBeta-GUI-Installer-${{ github.run_id }}
+          path: |
+            build/w2b2-qa/source-commit.txt
+            build/w2b2-qa/bundle-manifest.json
+            build/w2b2-qa/standalone-ui.bmp
+            build/windows/Release/FlowBridge.exe
+            build/windows/Release/FlowBridgeNativeSmoke.exe
+            build/windows/Release/FlowBridgeRuleModelTest.exe
+            build/windows/Release/flowbridge_ffi.dll
+            build/windows/Release/resources/presets.json
+            target/release/flowbridge.exe
+            artifacts/FlowBridge-*-windows-x64-setup.exe
+            artifacts/FlowBridge-*-windows-x64-setup.exe.sha256
+            docs/verification/windows-package.json
+            build/verification/windows/native-installer-result.json
+          retention-days: 30
+          if-no-files-found: error
+      - name: Preserve failed build/QA evidence separately (no binaries)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-W2b2-Failure-Evidence-${{ github.run_id }}
+          path: |
+            build/w2b2-qa/
+            build/verification/windows/
+          retention-days: 14
+          if-no-files-found: warn
+
+  independent-hosted-ps5-target-harness:
+    needs: exact-beta-gui-installer
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Download exact-source package from first completed job
+        uses: actions/download-artifact@v4
+        with:
+          name: FlowBridge-W2b2-ExactBeta-GUI-Installer-${{ github.run_id }}
+          path: bundle
+      - name: PowerShell 5.1 parse and execute isolated target-style GUI/NSIS regression
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $script='tools/windows/FlowBridge-Win10-W2B2-GUIInstaller.ps1'
+          $tokens=$null;$issues=$null
+          [void][Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script),[ref]$tokens,[ref]$issues)
+          if(@($issues).Count){
+             $issues|ForEach-Object { Write-Output ($_.Extent.StartLineNumber.ToString()+': '+$_.Message) }
+             throw 'W2b2 PS5 syntax invalid'
+          }
+          & $script -ExpectedComputerName 'THIS-IS-NOT-THE-WIN10-VM' -AllowHostedCI -BundleDirectory bundle -ReportRoot build/w2b2-native-replay
+          $reports=@(Get-ChildItem build/w2b2-native-replay -Recurse -Filter w2b2-report.json -File)
+          if($reports.Count -ne 1){throw 'Expected exactly one W2b2 report'}
+          $report=Get-Content -LiteralPath $reports[0].FullName -Raw|ConvertFrom-Json
+          Write-Output ($report|ConvertTo-Json -Depth 8)
+          if($report.W2b2 -ne 'PASS_HOSTED_NON_TARGET_GUI_INSTALL_UPGRADE_UNINSTALL' -or
+              $report.target_win10 -or $report.source_sha_verified -ne $true -or
+              -not $report.real_installed_gui_tcp_pass -or
+              -not $report.installer_hashes_match -or $report.ui_full_screenshots -ne 5 -or
+              -not $report.upgrade_kept_registered_dir -or -not $report.uninstaller_removed_payload -or
+              -not $report.profile_preserved_after_uninstall -or -not $report.user_note_preserved -or
+              $report.driver_loaded -or $report.service_installed -or
+              $report.release_accepted -or $report.G2 -ne 'NO_GO'){
+            throw 'W2b2 hosted target-style PowerShell acceptance failed'
+          }
+      - name: Upload independent target-style GUI/installer reports, logs and GUI BMP
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-W2b2-Hosted-PS5-Independent-${{ github.run_id }}
+          path: |
+            build/w2b2-native-replay/**/w2b2-report.json
+            build/w2b2-native-replay/**/*.log
+            build/w2b2-native-replay/**/*.bmp
+          retention-days: 30
+          if-no-files-found: warn

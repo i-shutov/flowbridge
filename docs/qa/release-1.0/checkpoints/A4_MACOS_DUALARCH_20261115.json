@@ -1,0 +1,73 @@
+{
+  "schema": "flowbridge-release-a4-dualarch-checkpoint-v1",
+  "date_utc": "2026-11-15",
+  "status": "HOSTED_MAC_INTEL_ARM_6_6_PASS_OWNER_NOT_RUN",
+  "release_1_0_accepted": false,
+  "beta_released": false,
+  "a4_owner_accepted": false,
+  "a4_hosted_native_architecture_verified": true,
+  "product_binary_source_sha": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+  "original_candidate_run_id": 43407093536,
+  "original_candidate_artifact_id": 14028139291,
+  "original_candidate_inner_zip_sha256": "4b51d4136878476b48946361ce1635cb6d630e62b50ca82c73df28a5902ed8b8",
+  "original_macos_pkg_sha256": "7eb645e227442ba5a2d12bc1b9c5853212baf8a3d28e7215640f0e3e2ec0453c",
+  "original_mac_manifest_sha256": "ed00c3257a4b5f1db453169fc802c3ba85215265bb2dce783d79275cbb386a03",
+  "original_operator_tool_sha256": "faf62aabeea95ef316f5c0935177a65820ea4679ac94afe8b5461138dd17a33c",
+  "qa_pull_request": "https://github.com/i-shutov/flowbridge/pull/65",
+  "exact_qa_head_sha": "3510cb9db7bee3100df81c4bf67911115c47bba6",
+  "workflow_run_id": 43676247783,
+  "workflow_url": "https://github.com/i-shutov/flowbridge/actions/runs/43676247783",
+  "workflow_jobs_passed": 3,
+  "workflow_jobs_total": 3,
+  "synthetic_negative_tests_passed": 9,
+  "native_hosted_phases_total": 12,
+  "host_results": {
+    "apple_silicon": {
+      "runner": "macos-15",
+      "architecture": "arm64",
+      "lifecycle_steps_passed": 6,
+      "status": "CI_AUTOMATED_CHECKS_PASS",
+      "github_artifact_id": 14146717484,
+      "evidence_zip_sha256": "883d41f46dc40286aee4a768cbe676015b4c475a1d3408f6d4290656d4bfcf45",
+      "evidence_zip_crc": "PASS",
+      "entries": 4,
+      "owner_native": false
+    },
+    "intel": {
+      "runner": "macos-15-intel",
+      "architecture": "x86_64",
+      "lifecycle_steps_passed": 6,
+      "status": "CI_AUTOMATED_CHECKS_PASS",
+      "github_artifact_id": 14145964268,
+      "evidence_zip_sha256": "ca3620629845c854cbf1d406fb63b76c4433a91d4bdaf57ec3dda891b26ce5b1",
+      "evidence_zip_crc": "PASS",
+      "entries": 4,
+      "owner_native": false
+    }
+  },
+  "independent_comparison": {
+    "status": "HOSTED_MAC_INTEL_AND_ARM_6_6_OWNER_OPEN",
+    "github_artifact_id": 14145529135,
+    "evidence_zip_sha256": "ad10b02846dc2532f886e26543d22e38080f074bdcf7e57aa47d6333188dd2db",
+    "evidence_zip_crc": "PASS",
+    "entries": 1
+  },
+  "blocked": {
+    "owner_apple_silicon_native_qa": true,
+    "owner_intel_native_qa": true,
+    "real_managed_ssh_and_hostkey": true,
+    "interactive_gui_keyboard_review": true,
+    "macos_signed_ne_activation": true,
+    "physical_egress_no_direct": true,
+    "physical_dns_udp_quic_containment": true,
+    "publisher_signature_notarization": true,
+    "independent_legal_review": true,
+    "independent_release_review": true
+  },
+  "prohibited_credit": [
+    "No transfer from hosted Mac to owner Mac A4 acceptance",
+    "No Mac NE/transparent routing/no-DIRECT claim",
+    "No release tag or beta publication",
+    "No Windows G2 PacketBound proof"
+  ]
+}

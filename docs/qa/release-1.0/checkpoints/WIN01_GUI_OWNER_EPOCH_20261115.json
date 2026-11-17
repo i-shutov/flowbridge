@@ -1,0 +1,138 @@
+{
+  "schema": "flowbridge-windows-win01-gui-owner-epoch-checkpoint-v1",
+  "date_utc": "2026-11-15",
+  "project": "i-shutov/flowbridge",
+  "status": "HOSTED_WIN32_GUI_HELPER_OWNER_EPOCH_PASS_PACKET_G2_NO_GO",
+  "release_accepted": false,
+  "windows_1_0_accepted": false,
+  "beta_release_accepted": false,
+  "native_ndisrd_g2_accepted": false,
+  "native_wfp_g2_accepted": false,
+  "physical_selected_no_direct_proved": false,
+  "product_main_sha": "5b5afc2feeda2195f302380e615ba003d4906e09",
+  "product_main_unchanged": true,
+  "frozen_original_beta_source": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+  "frozen_beta_binaries_changed": false,
+  "draft_pr": "https://github.com/i-shutov/flowbridge/pull/67",
+  "source_head_sha": "fd8eb07705456528fc2c95b389eac029bab647ce",
+  "pr_test_merge_sha": "48d49c19ee907523b7ac078933b857a791bf159d",
+  "exact_shared_git_tree_sha": "c9efdd04867042a4937b7f6ac573795c9103741a",
+  "work_package": "WIN-01_HELPER_OWNER_LIFETIME_SUBGATE_ONLY",
+  "fixed": {
+    "prior_gap": "Privileged WFP helper accepted GUI owner PID without checking OS process creation time before driver setup; listener ownership checked separately by TCP endpoint->PID snapshot",
+    "production_files": [
+      "native/windows/gui_owner_epoch.hpp",
+      "native/windows/capture_launcher.hpp",
+      "native/windows/wfp/service.cpp"
+    ],
+    "guard": "GetProcessTimes FILETIME 64-bit creation epoch and GetProcessId and live process handle, retained by helper while capture active",
+    "gui_transmits": [
+      "GUI PID",
+      "GUI process creation FILETIME",
+      "random stop event",
+      "SHA256 of verified GUI-owned profile"
+    ],
+    "negative_guards": [
+      "wrong process PID",
+      "incorrect/missing creation epoch",
+      "terminated process with valid retained handle",
+      "malformed/zero/overflow epoch",
+      "privileged GUI-owned SSH run",
+      "wrong listener owner PID",
+      "modified profile hash"
+    ],
+    "no_preflight_driver_access": true,
+    "trust_limitations": [
+      "Caller-supplied PID/epoch plus a process handle does not cryptographically authenticate the UAC requestor",
+      "TCP listener PID snapshot is not a kernel network packet owner witness",
+      "Original WFP research driver and NDISRD have no accepted packet process creation epoch common origin",
+      "Different genuine selected process instances and packet-to-app ownership remain unproved"
+    ]
+  },
+  "verification": {
+    "focused_actual_win32": {
+      "run_id": 43692346319,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/43692346319",
+      "jobs": "1/1 SUCCESS",
+      "mutants_rejected": 3,
+      "real_windows_api": true,
+      "reported_status": "PASS_REAL_WIN32_GUI_OWNER_ONLY",
+      "artifact_id": 14152683736,
+      "zip_sha256": "02442c77dac0b71cf01813e5bad73945ffa061a30ea1a0ba7c1113bb8bd014a2",
+      "zip_crc": "PASS",
+      "entries": 5,
+      "production_header_sha256": "47d85ee2964c37b8e311516171bd608fe28c3dc78a5b82c7aa644f5f9af51417"
+    },
+    "compiled_helper": {
+      "run_id": 43692346177,
+      "result": "PASS_USERMODE_PROCESS_HANDSHAKE_ONLY",
+      "negative_cases_passed": 7,
+      "compiled_helper_sha256": "d6ff6f53cacd403b833d5431255eb4cba2e8b5c1a2fd61dd0ff9825dc325ba03",
+      "driver_loaded": false,
+      "wfp_changed": false,
+      "release_accepted": false
+    },
+    "windows_installer": {
+      "run_id": 43692346177,
+      "windows_job": "SUCCESS",
+      "engineering_0_2_0_installer_sha256": "a7e48b6bbd455bc13d035ebd10839229b39e3f410c03abb9307fb74e9a2a3b86",
+      "original_artifact_id": 14152659335,
+      "artifact_sha256": "3620e1e41765957eba5822b0f200568d1e9988cb9d8ad3b745f55e7d81c21454",
+      "zip_crc": "PASS",
+      "entries": 14,
+      "native_installer_checkpoints_passed": 11,
+      "real_gui_bmps": 7,
+      "five_unique_compact_views_dimensions": [
+        964,
+        641
+      ],
+      "all_five_compact_view_hashes_unique": true,
+      "signed": false,
+      "user_profile_preserved": true,
+      "driver_in_package": false
+    },
+    "real_bfe_scope": {
+      "run_id": 43692346264,
+      "jobs": "1/1 SUCCESS",
+      "artifact_id": 14152384949,
+      "zip_sha256": "6d82811484be01a2d1f2b1209728cceda49511fef719bad8b301e2b1a3f6150a",
+      "zip_crc": "PASS",
+      "driver_loaded": false
+    },
+    "general_platform": {
+      "run_id": 43692346177,
+      "jobs": "5/5 SUCCESS",
+      "windows_application": "SUCCESS",
+      "rust_windows": "SUCCESS",
+      "rust_linux": "SUCCESS",
+      "rust_macos": "SUCCESS",
+      "macos_application": "SUCCESS"
+    },
+    "dns": {
+      "run_id": 43692346214,
+      "jobs": "3/3 SUCCESS"
+    },
+    "wdk": {
+      "run_id": 43692346190,
+      "jobs": "1/1 SUCCESS",
+      "development_unsigned_build_only": true,
+      "driver_installed_or_loaded": false
+    }
+  },
+  "historical_failed_attempts": {
+    "summary": "Initial MSVC /WX macro duplication; valid GetCurrentProcess() pseudo handle incorrectly rejected as INVALID_HANDLE_VALUE; existing installer QA missing new required GUI epoch. Failures retained, each corrected and full final SHA rerun.",
+    "all_previous_failures_reclassified_as_pass": false
+  },
+  "remaining": {
+    "ndisrd_kernel_connection_owner_common_token": "NOT_AVAILABLE_NOT_PROVED",
+    "owner_win10_native": "NOT_RUN",
+    "owner_win11_native": "NOT_RUN",
+    "kernel_driver_signing_approved_product": "NOT_APPROVED",
+    "signed_driver_native_loaded": "NOT_RUN",
+    "no_direct_packet_capture": "NOT_RUN",
+    "os_dns_udp_quic_native": "NOT_RUN",
+    "g2_native_release_status": "NO_GO",
+    "allowed_product_ndisrd_only_owner_scope_unchanged": true,
+    "wfp_product_backend_change_authorized": false
+  }
+}

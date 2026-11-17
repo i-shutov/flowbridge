@@ -1,0 +1,139 @@
+{
+  "schema": "flowbridge-win01-wfp-terminal-claim-abi4-checkpoint-v1",
+  "date_utc": "2026-11-15",
+  "product": "FlowBridge 1.0 Windows-first",
+  "status": "HOSTED_WDK_TERMINAL_CLAIM_ABI4_SOURCE_AND_APPLICATION_PASS_NATIVE_G2_NO_GO",
+  "code": {
+    "product_pr": "https://github.com/i-shutov/flowbridge/pull/71",
+    "exact_head": "391316368470f0a9f6fe85eb302d54a6afaeb5f8",
+    "base_pr": "https://github.com/i-shutov/flowbridge/pull/70",
+    "main_unchanged": "5b5afc2feeda2195f302380e615ba003d4906e09",
+    "frozen_explicit_beta_source_unchanged": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+    "driver_control_abi": 4,
+    "redirect_context_version": 3,
+    "context_bytes": 2136,
+    "claim_input_bytes": 2144,
+    "claim_ioctl": "FB_IOCTL_CLAIM METHOD_BUFFERED FILE_WRITE_DATA",
+    "exact_control_header": "native/windows/wfp/control.h",
+    "kernel_auth_book": "native/windows/wfp/auth_receipt.h",
+    "kernel_claim_dispatch": "native/windows/wfp/driver/driver.c",
+    "win32_exclusive_owner": "native/windows/wfp/capture.cpp",
+    "accepted_socket_path": "native/windows/wfp/service.cpp",
+    "actual_accept_order": [
+      "WSAIoctl query WFP redirect context",
+      "WSAIoctl query opaque redirect records",
+      "getsockname accepted socket family, loopback, broker port",
+      "exclusive-kernel-handle terminal CLAIM",
+      "Rust WFP-records-gated non-DIRECT outbound"
+    ],
+    "auth_ticket_state_flow": "1 issued in kernel redirect -> 2 consumed by OS ALE_AUTH_CONNECT -> 3 terminal claim before Rust",
+    "fail_closed": [
+      "missing WSA WFP context or records",
+      "wrong local accepted socket family/port/loopback",
+      "unknown or expired/retired OS process epoch",
+      "missing authorized initial WFP AUTH",
+      "wrong original flow or endpoint",
+      "replay of terminal claim",
+      "driver stopped or poisoned",
+      "native policy selects DIRECT with WFP records"
+    ],
+    "stop_claim_driver_handle_mutex": true,
+    "no_unconditional_broker_pid_allow": true,
+    "no_source_process_tuple_guess": true,
+    "legacy_v3_helper_rejected_by_abi4": true
+  },
+  "exact_source_checks": {
+    "native_ms_vs": {
+      "workflow": "https://github.com/i-shutov/flowbridge/actions/runs/43739267311",
+      "jobs": "1/1 SUCCESS",
+      "production_C_auth_claim_scenarios": 13,
+      "production_C_os_epoch_scenarios": 6,
+      "new_terminal_claim_source_mutations": 11,
+      "inherited_source_mutations": 17,
+      "source_suite_files": [
+        "tests/test_windows_wfp_claim_source.py",
+        "tests/test_windows_wfp_auth_r198_source.py",
+        "tests/test_windows_wfp_epoch_source.py"
+      ],
+      "original_artifact_id": 14171931082,
+      "original_zip_sha256": "8a8a851dca3bec2f40919e1f59144d198a43c3f039118eadb5b1dc16565dae6b",
+      "zip_crc": "PASS",
+      "original_json": [
+        "auth-r198.json",
+        "epoch-native.json"
+      ],
+      "source_report_explicit_native_g2_accepted": false
+    },
+    "wdk": {
+      "workflow": "https://github.com/i-shutov/flowbridge/actions/runs/43739267383",
+      "jobs": "1/1 SUCCESS",
+      "original_artifact_id": 14172175340,
+      "artifact_sha256": "e39694404a9e9dd0914f1a6b6ab41196c3e880fa9c1a06ee90a796acc28abcb3",
+      "artifact_zip_crc": "PASS",
+      "unsigned_driver_sha256": "0fae76a8336220d91ecb4cfba9e75357ece5e9dc9fd613673268f31dc3800528",
+      "driver_bytes": 30720,
+      "pe_machine": "0x8664",
+      "pe_force_integrity": true,
+      "pe_certificate_directory_bytes": 0,
+      "driver_signed": false,
+      "driver_installed_or_loaded": false
+    },
+    "full_portable": {
+      "workflow": "https://github.com/i-shutov/flowbridge/actions/runs/43739267354",
+      "jobs": "5/5 SUCCESS",
+      "platforms": [
+        "Windows x64",
+        "Linux x64",
+        "macOS arm64"
+      ],
+      "actual_windows_native_executable_compiled": true,
+      "windows_installer_and_GUI_lifecycle_passed": true,
+      "rust_portability_pass": true
+    },
+    "real_windows_bfe_scope": {
+      "workflow": "https://github.com/i-shutov/flowbridge/actions/runs/43739267305",
+      "jobs": "1/1 SUCCESS",
+      "no_custom_driver_loaded": true
+    },
+    "gui_owner_incarnation": {
+      "workflow": "https://github.com/i-shutov/flowbridge/actions/runs/43739267350",
+      "jobs": "1/1 SUCCESS",
+      "no_packet_owner_claim": true
+    },
+    "dns": {
+      "workflow": "https://github.com/i-shutov/flowbridge/actions/runs/43739267519",
+      "jobs": "3/3 SUCCESS",
+      "no_physical_dns_proof": true
+    }
+  },
+  "historical_failed_ci": {
+    "old_head": "170078abc48c0e88e98c1d9a73a9a61eed1a9b05",
+    "failing_workflow": "https://github.com/i-shutov/flowbridge/actions/runs/43738736079",
+    "failure": "Windows capture.cpp lacked ws2tcpip.h for sockaddr_in6 and in6addr_loopback; corrected before full exact-head rerun",
+    "old_failure_not_relabelled_pass": true
+  },
+  "security_limits": {
+    "kernel_ioctl_does_not_independently_attest_exact_accepted_AFD_socket_object": true,
+    "privileged_helper_context_copies_are_not_cryptographic_socket_proof": true,
+    "physical_signed_kernel_callback_on_win10_or_win11_executed": false,
+    "actual_WFP_redirect_context_and_records_to_ssh_native_proved": false,
+    "original_current_AppId_external_SSH_native_collision_resolved": false,
+    "reauthorization_native_accepted": false,
+    "auth_book_terminal_slot_capacity": 512,
+    "generation_safe_reclamation_or_10k_wfp_churn_proved": false,
+    "competing_BFE_sublayers_hard_permit_fail_closed_proved": false,
+    "selected_ipv4_ipv6_no_direct_egress_proved": false,
+    "dns_udp_quic_doh_no_leak_proved": false,
+    "publisher_driver_signing_and_rollback_accepted": false,
+    "owner_win10_and_win11_physical_accepted": false
+  },
+  "release": {
+    "windows_WIN01_accepted": false,
+    "old_R01_G2_accepted": false,
+    "packet_bound_G2_proved": false,
+    "beta_release_accepted": false,
+    "version_1_0_accepted": false,
+    "native_driver_deployed": false,
+    "public_release_created": false
+  }
+}

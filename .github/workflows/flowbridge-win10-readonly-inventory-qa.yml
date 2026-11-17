@@ -1,0 +1,105 @@
+name: FlowBridge Windows target inventory — read-only code QA
+on:
+  push:
+    branches:
+      - docs/release-win10-vm910136-20261110
+    paths:
+      - tools/windows/flowbridge-win10-readonly-inventory.ps1
+      - tools/windows/FlowBridge-Win10-R39-Admin.ps1
+      - .github/workflows/flowbridge-win10-readonly-inventory-qa.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preflight-static-and-nonprivileged-smoke:
+    name: PowerShell 5 and 7 inventory parse and read-only behavior
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Parse PowerShell AST; reject privileged commands
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $script='tools/windows/flowbridge-win10-readonly-inventory.ps1'
+          $tokens=$null
+          $errors=$null
+          $tree=[System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script),[ref]$tokens,[ref]$errors)
+          if(@($errors).Count -gt 0){$errors|ForEach-Object {Write-Output $_.Message};throw 'PowerShell parse errors'}
+          $forbidden=@('bcdedit.exe','sc.exe','pnputil.exe','netsh.exe','New-SelfSignedCertificate',
+              'New-VM','Set-VMFirmware','Set-NetFirewallRule','Start-Service','Stop-Service',
+              'Restart-Service','Set-Service','New-Service','Import-Certificate','Set-MpPreference')
+          $commands=$tree.FindAll({
+              param($node)
+              $node -is [System.Management.Automation.Language.CommandAst]
+            },$true)
+          foreach($node in $commands){
+            if($node.GetCommandName() -in $forbidden){throw "Privileged command in read-only inventory: $($node.GetCommandName())"}
+          }
+          $source=Get-Content -LiteralPath $script -Raw
+          foreach($needle in @('g2_pass = $false','release_accepted = $false',
+              'wfp_runtime_eligibility = ''NOT_ADMITTED''')){
+            if(-not $source.Contains($needle)){throw "Source safety gate missing: $needle"}
+          }
+      - name: Run Windows PowerShell 5.1 actual read-only inventory
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Path build/flowbridge-preflight -Force | Out-Null
+          & tools/windows/flowbridge-win10-readonly-inventory.ps1 -ExpectedHost 'CI-NOT-THE-REAL-TARGET' -OutputPath 'build/flowbridge-preflight/ps5.json' | Out-Null
+          $report=Get-Content 'build/flowbridge-preflight/ps5.json' -Raw | ConvertFrom-Json
+          if($report.schema -ne 'flowbridge-windows10-lab-inventory-v1' -or
+             $report.expected_host_matched -ne $false -or
+             $report.g2_pass -ne $false -or
+             $report.any_driver_loaded_by_this_script -ne $false -or
+             $report.wfp_or_bfe_changed_by_this_script -ne $false){
+             throw 'PowerShell 5.1 hosted smoke did not fail closed'
+          }
+      - name: Run PowerShell 7 inventory and check Windows Server is NOT native Win10 gate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          & tools/windows/flowbridge-win10-readonly-inventory.ps1 -ExpectedHost 'CI-NOT-THE-REAL-TARGET' -OutputPath 'build/flowbridge-preflight/ps7.json' | Out-Null
+          $report=Get-Content 'build/flowbridge-preflight/ps7.json' -Raw | ConvertFrom-Json
+          if($report.expected_host_matched -or $report.wfp_runtime_eligibility -ne 'NOT_ADMITTED' -or
+             $report.g2_pass -or $report.release_accepted){throw 'Hosted Windows is not a real native target'}
+          if(@($report.problems) -notcontains 'unexpected_hostname'){
+             throw 'Wrong host did not trigger explicit nonadmission'
+          }
+          Write-Output "PowerShell 5.1/7 read-only inventory PASS; target Win10/native gates remain NOT_ACCEPTED"
+      - name: Parse and execute full admin preflight on disposable hosted Windows, PS5
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $script='tools/windows/FlowBridge-Win10-R39-Admin.ps1'
+          $t=$null;$e=$null
+          [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script),[ref]$t,[ref]$e)
+          if(@($e).Count){$e|ForEach-Object {Write-Output ('ParseError line='+$_.Extent.StartLineNumber+' column='+$_.Extent.StartColumnNumber+' text='+$_.Extent.Text+' message='+$_.Message)};throw 'Invalid PS5 script'}
+          & $script -ExpectedComputerName 'NOT-THE-HOSTED-RUNNER' -ReportRoot 'build/flowbridge-admin-smoke'
+          $candidate=@(Get-ChildItem 'build/flowbridge-admin-smoke' -Filter inventory.json -Recurse)
+          if($candidate.Count -ne 1){throw 'JSON not produced exactly once'}
+          $r=Get-Content $candidate[0].FullName -Raw | ConvertFrom-Json
+          if($r.schema -ne 'flowbridge-win10-r39-admin-evidence-v3' -or $r.hostname_match -or
+            $r.gates.W0 -ne 'NOT_ACCEPTED' -or
+            $r.guardrails.driver_loaded -or $r.guardrails.wfp_filters_modified -or
+            $r.gates.release -ne 'NO_GO'){throw 'Hosted admin preflight guards failed'}
+          if(@($r.loopback).Count -ne 2){throw 'Expected both loopback tests'}
+      - name: Repeat full admin preflight with PowerShell 7
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          & tools/windows/FlowBridge-Win10-R39-Admin.ps1 -ExpectedComputerName 'NOT-THE-HOSTED-RUNNER' -ReportRoot 'build/flowbridge-admin-smoke-ps7'
+          $c=@(Get-ChildItem 'build/flowbridge-admin-smoke-ps7' -Filter inventory.json -Recurse)
+          if($c.Count -ne 1){throw 'PS7 JSON not produced exactly once'}
+          $r=Get-Content $c[0].FullName -Raw|ConvertFrom-Json
+          if($r.gates.W0 -ne 'NOT_ACCEPTED' -or $r.gates.W3 -ne 'NO_GO' -or $r.gates.G2 -ne 'NO_GO'){throw 'PS7 guard failed'}
+      - name: Keep only hosted smoke proof, not the user's Windows inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-Win10-Inventory-ReadOnly-Hosted-${{ github.run_id }}
+          path: build/flowbridge-preflight/*.json
+          retention-days: 14
+          if-no-files-found: warn

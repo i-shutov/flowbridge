@@ -1,5 +1,121 @@
 # FlowBridge — исполнимый план до 1.0
 
+
+## Latest completed milestone, 17.11 — private beta3 source+locked Rust build prepared, not publicly distributed
+
+- The immutable secure product-source HEAD `44e3ba988ac5a9f7cf2d25b16d46c432ff3d8c38` has **[SSH/Win32 targeted 3/3 PASS](https://github.com/i-shutov/flowbridge/actions/runs/44076875289)**, **[portable Rust/native 5/5 PASS on attempt 2](https://github.com/i-shutov/flowbridge/actions/runs/44076875466)** after rerunning only a canceled macOS Rust job, and **[real Windows managed+raw OpenSSH jobs PASS](https://github.com/i-shutov/flowbridge/actions/runs/44076875435)**. Still no physical G2 WFP protected routing proof.
+- [**QA PR #89**](https://github.com/i-shutov/flowbridge/pull/89) offers an offline local private beta3 source cutter with no Git remote and explicit **Win10 x64-only** NSIS build option. [**Exact-source QA CI #44088189435, SUCCESS 2/2 Windows/Linux**](https://github.com/i-shutov/flowbridge/actions/runs/44088189435): stage the FULL exact security source, rewrite 9 version carriers and 7 own Cargo.lock packages to `0.3.0-beta.3` without changing any external dependency, validate `tools/explicit_beta_metadata.py::check_versions`, and actually run **`cargo check --locked --workspace`** plus **`cargo test --locked -p flowbridge-tunnel --lib`** on the NEW private source on both platforms. No proprietary binary, EXE, installer or public artifact created.
+- [Detailed source and verification checkpoint](qa/release-1.0/checkpoints/BETA3_OFFLINE_SOURCE_CUT_ACCEPTANCE_20261117.md) contains the two-checkout Codex runbook. **Next release-dependent step** is the actual **LOCAL** Windows 10 Pro 22H2 x64 opt-in build (tool's `--build-windows`), then independent new original installer/exe/dll SHA, A3 Win10 6/6 lifecycle + real SSH/GUI negative/positive, Stop, ACL/registry restore and redacted privacy logs. **Old beta2 A3 is not inherited.**
+- **Current hard blockers:** proprietary repo still PUBLIC until owner changes it [#83](https://github.com/i-shutov/flowbridge/issues/83) (do NOT upload new executable to public Actions); actual Win10 signed SSH+ESU/patch original host facts NOT_RUN; A5 third-party/native rights/security, A6 native C++/privacy/security signoff, and A7 explicit scoped internal pilot approval NOT_GRANTED. Win11/macOS deferred, public release/tag forbidden. Full Windows 10 `1.0` signed WFP/G2 physical no-DIRECT/DNS remains **NO-GO**.
+
+
+
+## Актуальная инженерная точка 17.11.2026 — исправление SSH runtime P1, source/build PASS
+
+**Ветка [PR #88](https://github.com/i-shutov/flowbridge/pull/88)** поверх приватности [PR #84](https://github.com/i-shutov/flowbridge/pull/84), точный source **`44e3ba988ac5a9f7cf2d25b16d46c432ff3d8c38`**. [**CI #44076875289](https://github.com/i-shutov/flowbridge/actions/runs/44076875289) 3/3 SUCCESS**: Rust/Linux+Windows реальный подписанный Microsoft OpenSSH и unsigned fake `ssh.exe` отрицательный тест, no-PATH системный OpenSSH, `-V` при блокировке изменения файла, no raw stderr в FFI/GUI, native Win32 GUI/FFI explicit-only build. Source/build результат только, **не** новый проверенный installer. В расширенном [Rust/native CI #44076875466](https://github.com/i-shutov/flowbridge/actions/runs/44076875466) последние наблюдения: Windows app + Rust Windows/Ubuntu PASS, macOS jobs queued; полное workflow GO не приписывать до завершения.
+
+**Старый `beta.2` остается точным неизменным комплектом** installer SHA256 `0699bed4acaa1b9df9b63c658808b08fd65b5953cacdaaddb7a13953389e19f4` и **НЕ содержит** новых P1 исправлений. Следующий `0.3.0-beta.3` пока **планируемый, не собран**: сначала защищённая/private доставка бинарников (репозиторий всё ещё Public и владелец отложил приватизацию [#83](https://github.com/i-shutov/flowbridge/issues/83)), затем новый pinned source+installer SHA, новая Win10 owner/native GUI+SSH/negative+Stop/restore и независимая оригинальная приёмка. Не переносить A3 старой beta.2 на новый EXE. Реальный Win10 ESU/signature preflight не исполнялся на host; [read-only Codex runbook](https://github.com/i-shutov/flowbridge/blob/qa/win10-internal-security-inventory-20261117/docs/qa/release-1.0/checkpoints/WIN10_A5_A6_READONLY_SECURITY_PREFLIGHT_CODEX_20261117.md).
+
+[Подробный source/CI checkpoint](qa/release-1.0/checkpoints/WIN10_SSH_TRUST_SOURCE_BUILD_REBASELINE_20261117.md). **A5/A6 internal privacy+native security, A7 internal pilot GO OPEN**; no public release/tag, no own-code license grant. Windows 11/macOS отложены. Полноценный Windows 10 `1.0` WFP/G2 (подписанный native socket authority, физический no-DIRECT/DNS/UDP) всё ещё `NO-GO`.
+
+
+## ПРИОРИТЕТ 17.11: реальные P1 безопасности до любого нового внутреннего кандидата
+
+**Frozen `0.3.0-beta.2` не изменён**: source `86583a1a0487b9d383c0122b24558e620bde5b9c`; original Win10 A0–A3 пользовательские доказательства приняты по V4 100/100 + V5 26/26, CI 11/11 PASS. Однако **обнаружено реальное P1 раскрытие путей/hostname через OpenSSH stderr** в `Snapshot.stderr` и `Snapshot.events`/GUI journal. Старый installer **не содержит** патч.
+
+- [P1 privacy #85](https://github.com/i-shutov/flowbridge/issues/85), исправление [Draft PR #84](https://github.com/i-shutov/flowbridge/pull/84), exact source `6057ff9b76ebd1d3148ac806313dc0aec0bd9158`. [Targeted CI #44061327017](https://github.com/i-shutov/flowbridge/actions/runs/44061327017) **3/3 SUCCESS**: Rust SSH на Linux/Windows, synthetic secret/host/path omissions из serialized snapshot, нативная компиляция Win32 GUI `FLOWBRIDGE_EXPLICIT_BETA_ONLY=ON`. Это **source/build PASS**, НЕ тест нового installer и НЕ общий A6 GO.
+- [P1 executable trust #86](https://github.com/i-shutov/flowbridge/issues/86): существующий SSH backend разрешает explicit absolute path и PATH-lookup без runtime Microsoft Authenticode/pin доверия. [QA PR #82](https://github.com/i-shutov/flowbridge/pull/82) содержит read-only Authenticode + SHA + reparse проверку, но остаётся TOCTOU/непроверенный runtime. [Win10 owner Codex read-only A5/A6 preflight](https://github.com/i-shutov/flowbridge/blob/qa/win10-internal-security-inventory-20261117/docs/qa/release-1.0/checkpoints/WIN10_A5_A6_READONLY_SECURITY_PREFLIGHT_CODEX_20261117.md) нужно выполнить на реальной машине; не считать hosted Windows Server доказательством Win10.
+- **P0 confidentiality** [#83](https://github.com/i-shutov/flowbridge/issues/83): repo остаётся Public при закрытой лицензии; пользователь приватизирует позже. Запросов на автоматическую смену visibility нет.
+- **Win10 ESU**: read-only Year2/licensing/patch floor на фактической Win10 машине не проверен. Никаких MAK/ключей или личных путей в публичный GitHub.
+
+[Интегральный P0/P1 checkpoint](qa/release-1.0/checkpoints/SECURITY_P1_FINDINGS_AND_BETA_NEXT_GATE_20261117.md). При принятии приватности SSH **собрать новый уникальный кандидат** (возможное имя `0.3.0-beta.3`) со своими SHA/manifest и Win10 native GUI/SSH негативами+позитивами, а не переписывать прошедший beta.2. **A5/A6 formal и A7 внутреннее развёртывание OPEN**. Win11/macOS отложены. **Защищённый Win10 1.0 WFP/G2 NO-GO**, никакой физический WFP-драйвер на owner VPS не ставился.
+
+
+## Internal security audit — 17 November 2026, latest read-only CI
+
+[Win10 closed-source security checkpoint](qa/release-1.0/checkpoints/INTERNAL_WIN10_SECURITY_REVIEW_20261117.md), [QA PR #82](https://github.com/i-shutov/flowbridge/pull/82) exact head `ab7d0d56dfa6af0843c183497d455a6b67578ea1`, [GitHub Actions #44055935443](https://github.com/i-shutov/flowbridge/actions/runs/44055935443) **4/4 PASS**. **9,399 Git objects / 2,769 historical blobs** from fetched refs and PR heads, zero high-confidence PEM/token-pattern matches, zero skipped large blobs. Independently screened exact frozen beta.2 source ZIP **303/303 files**, original owner V5 **27**, V4 **100** plus nested CI ZIP **25** files (large binary separately inspected): zero matches under the narrow high-confidence rules. This is not a comprehensive secret/security audit and cannot undo public history or external clones.
+
+**P0 confidentiality:** repository remains **Public** although owner chose closed-source and internal-only; owner will privatize later. Track [#83](https://github.com/i-shutov/flowbridge/issues/83). Original NSIS still supports `AtLeastWin10` (does not forbid Win11), while scope is **Win10 Pro 22H2 x64 only**. [PowerShell 5.1 read-only pinned installer preflight](https://github.com/i-shutov/flowbridge/blob/qa/win10-internal-security-inventory-20261117/tools/windows/FlowBridge-Beta2-Win10-Internal-Preflight.ps1) verifies exact original EXE SHA256 and strict Win10 OS; hosted Windows Server 2025 expected negative CI PASS, **no installer executed**. No changes to frozen product source or binaries.
+
+**Current release GO remains false:** A0–A3 Win10 PASS on original evidence, A5 technical and A6 technical PASS; independent third-party/native SDK rights, Win32/SSH GUI log privacy/code security review, Win10 ESU status, and A7 explicit internal pilot deployment approval remain OPEN in [#81](https://github.com/i-shutov/flowbridge/issues/81). External/public distribution disabled, license proprietary, Win11/macOS deferred. **Win10 1.0 signed WFP/G2 physical proof remains NO-GO.**
+
+
+## ПРАВЯЩЕЕ РЕШЕНИЕ ВЛАДЕЛЬЦА — 17.11.2026: ТОЛЬКО ВНУТРЕННЕЕ ИСПОЛЬЗОВАНИЕ
+
+Владелец прямо выбрал «пока только внутреннее». **Это не выбор MIT/Apache-2.0/проприетарной лицензии, не публичная публикация и не GO на развёртывание**. Допустима внутренняя разработка и ранее разрешённые тесты точного `0.3.0-beta.2` на Win10 Pro x64. Сохранены все original candidate SHA и доказательства A0–A3 PASS.
+
+**Публичная дистрибуция, внешние установщики, маркетинговые релизы, GitHub Releases и release tags запрещены/не запрошены.** Собственная публичная лицензия FlowBridge не выбирается сейчас, это [будущий backlog #78](https://github.com/i-shutov/flowbridge/issues/78). Сторонние лицензии, фактические native SDK/runtime условия использования и security/privacy остаются важными даже внутри организации.
+
+**Текущий путь:** `A5_INTERNAL_DEPENDENCY_RUNTIME_REVIEW_OPEN` → `A6_INTERNAL_SECURITY_PRIVACY_P0_GO_OPEN` → `A7_INTERNAL_DEPLOYMENT_GO_NOT_GRANTED`, см. [активную задачу #81](https://github.com/i-shutov/flowbridge/issues/81). A0–A3 Win10 приняты на оригинальных доказательствах, технический A5 и A6 CI PASS. Никакой live VM/driver/пакетной установки в этом изменении не выполнялось. Windows `1.0` WFP/G2 NO-GO. Windows 11/macOS отложены на следующие платформенные релизы.
+
+[Машинная политика и точный checkpoint](https://github.com/i-shutov/flowbridge/blob/docs/release-win10-vm910136-20261110/docs/qa/release-1.0/checkpoints/INTERNAL_ONLY_DISTRIBUTION_DECISION_20261117.md). **Все прежние формулировки этого документа о необходимости сейчас выбрать публичную лицензию — исторические, заменены данным решением.**
+
+
+> **ФАКТИЧЕСКИЙ СРЕЗ 17.11.2026 — ПОСЛЕ A6 4/4 CI.** Текущий продукт: **`0.3.0-beta.2`, только Windows 10 Pro 22H2 x64**. Источник `86583a1a0487b9d383c0122b24558e620bde5b9c`, весь candidate [11/11 PASS](https://github.com/i-shutov/flowbridge/actions/runs/43883696169); оригиналы owner Win10 A3 V4/V5 приняты по независимо проверенным SHA. **Технический A5** оригинальный пакет/SBOM/RustSec 4/4 PASS; **технический A6** [новый PR #80](https://github.com/i-shutov/flowbridge/pull/80), [CI #44041579615](https://github.com/i-shutov/flowbridge/actions/runs/44041579615) **4/4 PASS** включая проверку исходных PE импорта `FlowBridge.exe`/`FFI`/NSIS, без прямых `VCRUNTIME140.dll`/`MSVCP140.dll` зависимостей. Это **не юридический/полный native security review** и не release GO.
+>
+> **Текущие блокеры публикации:** [#78 выбор собственной LICENSE/copyright + independent native redistribution/security/legal](https://github.com/i-shutov/flowbridge/issues/78) (**A5 OPEN**); формальное независимое privacy/security заключение (**A6 OPEN**); отдельный явный Publisher/Owner GO (**A7 OPEN**). [Текущий A6 checkpoint](qa/release-1.0/checkpoints/BETA2_A6_RELEASE_REVIEW_PACKET_20261117.md), [A0–A7 machine](qa/release-1.0/BETA2_WINDOWS_A0_A7_20261116.json). **Никакого тега, Release, смены LICENSE, подписанного бинарника или main merge.** Win11/macOS только в следующих релизах. Защищённый Win10 `1.0` WFP/G2 по-прежнему `NO_GO`.
+
+
+> **РЕШЕНИЕ 17.11.2026, ПРЕИМУЩЕСТВО НАД ПРЕЖНИМИ ПЛАНАМИ:** первый выпускаемый продукт — **Windows 10 Pro 22H2 x64 ТОЛЬКО**. Windows 11 Pro x64 **не тестировать и не публиковать сейчас**, перенос в следующие релизы; macOS также отложена. Историческое утверждение ниже «Windows 10 + Windows 11 first» **устарело**. См. [точный scope checkpoint](qa/release-1.0/checkpoints/WIN10_ONLY_SCOPE_DECISION_20261117.md), [Win10-only roadmap](qa/release-1.0/WINDOWS_FIRST_1_0_ROADMAP_20261115.md) и [A0–A7 matrix](qa/release-1.0/BETA2_WINDOWS_A0_A7_20261116.json).
+>
+> Текущий `0.3.0-beta.2` Windows 10 A3 **PASS on independently audited original V4+V5 evidence**, общий A0/A1/A2/A3 PASS. **A5/A6/A7 ещё открыты**: [LICENSE/legal/native runtime #78](https://github.com/i-shutov/flowbridge/issues/78), независимое Win10-only review, явное решение владельца на публикацию. Win11 [#79](https://github.com/i-shutov/flowbridge/issues/79) — **future backlog, не текущий P0**. `Windows 1.0` по-прежнему `NO_GO` из-за signed native WFP/G2, fail-closed и остальных P0. Никакого Win11 PASS, тега или GitHub Release эта корректировка не создаёт.
+
+
+## 17 November 2026 — owner V5 independently reviewed; Win10 A3 subgate accepted
+
+Original owner Win10 beta.2 V5 ZIP SHA256 `809dee21f0884e0d31dfa89a98033276cefaad859de1de64a87a2b90f454cb4c` was uploaded and independently audited: ZIP CRC, 26/26 file hashes, six real GUI images, 23 UI actions on the exact final installer/GUI/DLL bytes, missing-key OpenSSH denial without a listener or DIRECT on localhost, a healthy-key 10-byte bidirectional SOCKS5h control and Stop/restore all internally consistent. The prior V4 100/100 evidence was already audited. **[Win10 A3 reviewed evidence accepted](https://github.com/i-shutov/flowbridge/blob/docs/release-win10-vm910136-20261110/docs/qa/release-1.0/checkpoints/BETA2_WIN10_A3_V5_INDEPENDENT_REVIEW_20261117.md)**, with the explicit limitation that the host was not independently physically rerun/cryptographically attested. Note V5 `SOCKS_REP=null` because the local listener **never opened**, not `REP=01`.
+
+**Windows target A3 overall remains OPEN** for independent real Win11 Pro x64. [Autonomous Win11 Codex exact-byte runbook](https://github.com/i-shutov/flowbridge/blob/docs/release-win10-vm910136-20261110/docs/qa/release-1.0/checkpoints/BETA2_WIN11_CODEX_NATIVE_ACCEPTANCE_20261117.md), no new Win10 GUI runs needed for unchanged beta.2. Original candidate [CI #43883696169](https://github.com/i-shutov/flowbridge/actions/runs/43883696169) attempt 2 11/11 SUCCESS; independent A5/SBOM and pinned RustSec [CI #43936785163](https://github.com/i-shutov/flowbridge/actions/runs/43936785163) 4/4 SUCCESS (0 known advisories in 75 locked Rust dependencies). **License of FlowBridge-specific code unselected**, and legal/SDK/native-runtime/security [issue #78](https://github.com/i-shutov/flowbridge/issues/78), A6/A7 independent GO, unsigned package approval remain OPEN. WFP G2 / Windows 1.0 NO-GO. No tag or published release.
+
+
+> **Машинный gate-срез Windows beta.2 (A0–A7):** [BETA2_WINDOWS_A0_A7_20261116.json](qa/release-1.0/BETA2_WINDOWS_A0_A7_20261116.json). A0/A1/A2 PASS в пределах explicit SOCKS; **A3/A5/A6/A7 не приняты**, Win11 native открыт. Дата 16.11, оригинальный Source SHA `86583a1a...`; признак `windows_beta2_release_accepted=false`. Полное состояние: [blocker execution](qa/release-1.0/checkpoints/BETA2_RELEASE_BLOCKERS_EXECUTION_20261116.md).
+
+> **16 ноября, новый checkpoint выполнения блокеров:** [beta.2 A3/A5/WFP release-blockers](qa/release-1.0/checkpoints/BETA2_RELEASE_BLOCKERS_EXECUTION_20261116.md). Оригинальный beta.2 CI `11/11 PASS`, Win10 V4 original evidence `100/100` integrity reviewed. **A3**: для финального EXE остался ровно один тест `INVALID_KEY_PATH_FINAL_BETA2`, [автономная задача для Codex V5](qa/release-1.0/checkpoints/A3_BETA2_CODEX_V5_MISSING_IDENTITY_NEGATIVE_20261116.md). **A5**: [PR #77](https://github.com/i-shutov/flowbridge/pull/77) source+artifact technical auditor `3/3 PASS`, но [owner license decision #78](https://github.com/i-shutov/flowbridge/issues/78), independent legal/runtime/vulnerability audit не закрыты. **WIN-01**: WFP [PR #72](https://github.com/i-shutov/flowbridge/pull/72) exact `f1ac3b0` WDK/source PASS, общие CI ещё не завершены; физический signed G2 NO-GO. `release_accepted=false`, `publisher_release_approved=false`, тег отсутствует.
+
+
+> **НОВАЯ ОПОРНАЯ ТОЧКА 16.11 (после V4 review):** реальный владелец передал оригинальный архив A3 Codex beta.2; независимо проверены **100/100 SHA**, **41/41 V3**, **13/13 Windows payload**, **17 GUI screenshots**, оригинальные loopback SSH/Stop/negative JSON. Полный beta.2 candidate CI #43883696169 **attempt 2 SUCCESS 11/11**. [Проверяемый аудит Win10](qa/release-1.0/checkpoints/BETA2_OWNER_WIN10_A3_V4_INDEPENDENT_REVIEW_20261116.md). **Открыты** один beta.2 invalid-key-path negative case, независимое финальное A3-решение, Win11 owner QA, лицензия/A5, A6/A7. `1.0` WFP G2 остаётся NO-GO; публикации нет.
+
+
+> **Source audit update, 16 November 2026 — Windows beta.2**: [PR #76](https://github.com/i-shutov/flowbridge/pull/76) exact head `86583a1a0487b9d383c0122b24558e620bde5b9c`. **Original GitHub Actions Windows artifact #14233377409 independently verified**: ZIP SHA/CRC PASS, 13/13 manifest payloads, final installer/GUI/FFI SHA256 match report; exact final GUI SHA in hosted installed-product JSON. [Independent audit checkpoint](https://github.com/i-shutov/flowbridge/blob/docs/release-win10-vm910136-20261110/docs/qa/release-1.0/checkpoints/BETA2_WINDOWS_GITHUB_ARTIFACT_INDEPENDENT_AUDIT_20261116.md). **Owner native V4 ZIP is NOT independently received/reviewed** (local owner-reported SHA `23844631907f96063f0b13db73a835b92c386a4be3ed13a174c484c3139606e2`); new beta A3 full remains OPEN. Unified candidate workflow #43883696169 attempt 1 FAILURE due cancelled macOS universal-package; targeted attempt 2 MAC queued. Windows-only release must use honest, separate Windows gate; no universal CI green claim. Raw SSH 512 not proved (peak 246, baseline 128). A5 LICENSE/legal, A6/A7, separate Win11 QA and Windows 1.0 WFP/G2 remain open.
+
+
+> **Коррекция Codex A3 от 16.11:** первый реальный проход Codex вернул `BLOCKED_PROFILE_ISOLATION` и `BLOCKED_SIGNED_SSHD_UNAVAILABLE` (положительный GUI и SSH не исполнялись). Доказанный RCA: frozen GUI штатно хранит `profile.json` + `desktop-settings.json` в Known Folder текущего **Admin**; ранее принятый W2b1 уже умеет получить pinned Microsoft-signed portable `sshd.exe` без Windows Feature/service. Исправленное [Codex V2 задание](https://github.com/i-shutov/flowbridge/blob/8c23e10819e200e7bf38e596490fba2c1113cf37/docs/qa/release-1.0/checkpoints/A3_WIN10_CODEX_AUTONOMOUS_GUI_SSH_TASK_20261116.md) разрешает транзакционный Admin profile escrow/restore и pinned portable SSHD; [RCA](https://github.com/i-shutov/flowbridge/blob/ef1277d1bcc6ede436cc5800048d088d534c7b90/docs/qa/release-1.0/checkpoints/A3_CODEX_FIRST_PASS_BLOCKER_RCA_20261116.md). Нового пользователя/чистой VM/ручного GUI не требуется. **Это задача на повторный прогон, а не PASS.**
+
+
+> **СВЕЖИЙ СРЕЗ — 16 ноября 2026:** [Windows-first 1.0 rebaseline](qa/release-1.0/checkpoints/WINDOWS_FIRST_RELEASE_REBASELINE_20261116.md), [актуализированный roadmap](qa/release-1.0/WINDOWS_FIRST_1_0_ROADMAP_20261115.md) и [машинный реестр gates](qa/release-1.0/WINDOWS_FIRST_GATES_20261115.json).
+>
+> - Windows `0.3.0-beta.1`: **Win10 original frozen automated A3 6/6 PASS, оригинальный JSON/5 BMP независимо проверены**. Интерактивные GUI+exact-kit SSH/SOCKS5h **не зачтены**, их выполнение делегировано [Codex на Win10](https://github.com/i-shutov/flowbridge/blob/8c23e10819e200e7bf38e596490fba2c1113cf37/docs/qa/release-1.0/checkpoints/A3_WIN10_CODEX_AUTONOMOUS_GUI_SSH_TASK_20261116.md) и пока не подтверждено оригинальными результатами. Остаются Win11 QA, LICENSE/A5, A6 и A7.
+> - Windows `1.0.0`: **строго NO-GO**. WFP/ALE source/WDK-сборки и ABI4 CLAIM не заменяют signed native Win10/11 G2. P0: accepted-socket kernel authority, ticket lifecycle/reauthorization, no-DIRECT, DNS/UDP, ресурсная/24h SSH QA, Win10/11 RC, подписи/безопасность.
+> - macOS NE/физическая Mac-приёмка перенесены после Windows 1.0 решением от 15 ноября; перенос не означает PASS. Русло Rust остаётся кроссплатформенным.
+> - `main` не является 1.0 release, теги/публикация не создавались. Не устанавливать WFP-драйвер на пользовательскую VM в рамках beta GUI/SSH тестов.
+
+
+> **ИСТОРИЧЕСКОЕ РЕШЕНИЕ — 15 ноября 2026: WINDOWS-FIRST 1.0, ЗАМЕНЕНО 17.11.**
+> Тогда планировались **Windows 10 Pro 22H2 x64 + Windows 11 Pro x64**; **текущий релиз — только Win10**, Win11 отложена.
+> macOS Network Extension, DNS, подписанные пакеты и ручная Apple Silicon/Intel QA
+> перенесены на следующий платформенный релиз. Код macOS и единый Rust-core
+> сохраняются и продолжают проходить portable-core CI.
+> **Канонический текущий план**: [WINDOWS_FIRST_1_0_ROADMAP_20261115.md](qa/release-1.0/WINDOWS_FIRST_1_0_ROADMAP_20261115.md).
+> **Машинный Windows-only контракт выпуска**: [WINDOWS_FIRST_GATES_20261115.json](qa/release-1.0/WINDOWS_FIRST_GATES_20261115.json).
+> Прежний текст ниже (включая формулировку «обе ОС в 1.0»)
+> — сохранённый исторический план, **не актуальная целевая матрица**.
+> Ничего из прежних macOS PASS не засчитывается как Windows proof:
+> Windows G2 kernel-origin connection provenance, native Win10/Win11 и fail-closed
+> остаются обязательными. `windows_1_0_accepted=false`, `version_1_0_accepted=false`.
+
+
+> **Актуальный срез на 13 ноября 2026:** [FlowBridge 1.0 — release rebaseline, beta/RC/G0–G6/R00–R10](qa/FLOWBRIDGE_RELEASE_REBASELINE_20261113.md).
+> [19 машиночитаемых gate-решений](qa/release-1.0/gate_status_20261113.json) — RELEASE NO-GO.
+> Следующий текст — **история и исходный контракт**, не текущая приёмка. Ветка main не меняется.
+
+> **Актуальная контрольная точка на 10 ноября 2026:**
+> [Единый план beta → WFP/ALE → 1.0 и новая целевая Win10 x64](qa/FLOWBRIDGE_RELEASE_ROUTE_20261110.md).
+> Ниже сохранена историческая последовательность прежних gate-решений;
+> статусы на старых source SHA не являются актуальной приёмкой.
+> Новый план отдельно выделяет ограниченную SOCKS-only beta, read-only
+> испытания реальной Win10 Pro и native kernel gates с обязательным rollback.
+
+
 **Срез:** 30 октября 2026. **Исходная база:** `main` @ `6401b40b02fa00d5ae3f84aec2ac1916c266e6ea`.
 **Текущий подтверждённый уровень:** локальная SOCKS5-бета, Windows x64 + macOS universal, собственные GUI, управляемый SSH-пул 1–4 процесса; проверенные 5/5 native/Rust jobs и 3/3 DNS jobs на exact PR head `a38fd84e`. [Checkpoint](qa/NATIVE_BETA_CHECKPOINT_20261030.md), [CI](https://github.com/i-shutov/flowbridge/actions/runs/41005277502), [DNS](https://github.com/i-shutov/flowbridge/actions/runs/41005277446).
 

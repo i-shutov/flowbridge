@@ -1,0 +1,81 @@
+name: FlowBridge Win10 W2b1 isolated real SSH on hosted Windows (non-target)
+on:
+  push:
+    branches:
+      - docs/release-win10-vm910136-20261110
+    paths:
+      - tools/windows/FlowBridge-Win10-W2B1-RealSSH.ps1
+      - .github/workflows/flowbridge-win10-w2b1-real-ssh.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-windows-ssh:
+    runs-on: windows-2025
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check W2b1 PS5 parser and safety guards
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $s='tools/windows/FlowBridge-Win10-W2B1-RealSSH.ps1'
+          $tok=$null;$err=$null
+          [void][Management.Automation.Language.Parser]::ParseFile((Resolve-Path $s),[ref]$tok,[ref]$err)
+          if(@($err).Count){
+            $err|ForEach-Object {Write-Output ($_.Extent.StartLineNumber.ToString()+': '+$_.Message)}
+            throw 'W2b1 PowerShell 5.1 syntax failure'
+          }
+          $content=Get-Content $s -Raw
+          foreach($guard in @('G2=''NO_GO''','W3=''NO_GO''','driver_loaded=$false',
+            'system_service_modified=$false','host_firewall_changed=$false',
+            'release_accepted=$false')){
+            if(-not $content.Contains($guard)){throw ('Safety guard not found: '+$guard)}
+          }
+      - name: Reproduce exact-source W2a CLI and 4 real SOCKS tests
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          & tools/windows/FlowBridge-Win10-W2A-SocksSmoke.ps1 -AllowHostedCI -ExpectedComputerName 'NON-TARGET-CI' -ForcePowerShellSmoke -EvidenceRoot build/w2a-stage
+          $files=@(Get-ChildItem build/w2a-stage -Recurse -File -Filter w2a-report.json)
+          if($files.Count -ne 1){throw 'W2a fixture not found'}
+          $report=Get-Content $files[0].FullName -Raw|ConvertFrom-Json
+          if($report.W2a -ne 'PASS_HOSTED_NON_TARGET_ONLY' -or
+             $report.smoke_tests_run -ne 4 -or -not $report.source_exact){
+             throw 'Pinned W2a user-mode fixture is not accepted'
+          }
+      - name: Isolated portable Microsoft sshd and real managed SSH data
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          & tools/windows/FlowBridge-Win10-W2B1-RealSSH.ps1 -AllowHostedCI -ExpectedComputerName 'NON-TARGET-CI' -W2aEvidenceRoot build/w2a-stage -ReportRoot build/w2b1-hosted
+          $files=@(Get-ChildItem build/w2b1-hosted -Recurse -File -Filter w2b1-report.json)
+          if($files.Count -ne 1){throw 'Expected W2b1 report'}
+          $r=Get-Content $files[0].FullName -Raw|ConvertFrom-Json
+          Write-Output ($r|ConvertTo-Json -Depth 8)
+          if($r.W2b1 -ne 'PASS_HOSTED_NON_TARGET_REAL_SSH_LOOPBACK_ONLY' -or
+             $r.target_admitted -or
+             -not $r.w2a_receipt_verified -or
+             -not $r.microsoft_signatures_checked -or
+             -not $r.isolated_sshd_listening -or
+             -not $r.real_ssh_authenticated -or
+             $r.bytes_returned -lt 1 -or
+             -not $r.ephemeral_keys_deleted -or
+             $r.managed_owner_shutdown_cleanup -ne 'SOCKS_LISTENER_CLOSED' -or
+             $r.driver_loaded -or $r.system_service_modified -or $r.host_firewall_changed -or
+             $r.release_accepted -or $r.G2 -ne 'NO_GO'){
+             throw 'W2b1 failed exact-source real-SSH hosted contract'
+          }
+      - name: Preserve evidence reports and logs only, never credentials
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-W2b1-RealSSH-Hosted-${{ github.run_id }}
+          path: |
+            build/w2b1-hosted/**/w2b1-report.json
+            build/w2b1-hosted/**/*.log
+          retention-days: 14
+          if-no-files-found: warn

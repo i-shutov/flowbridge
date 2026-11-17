@@ -1,0 +1,14 @@
+# FlowBridge — closed-source / proprietary owner decision
+
+**Owner statement (17 November 2026):** «не хочу, пока закрытый продукт».
+
+**Authoritative policy for the current work:** keep FlowBridge's **original own code proprietary / closed-source**, **without granting MIT or Apache-2.0 rights**. Continue **internal-only** operation for Windows 10 Pro 22H2 x64 and authorized engineering QA, using the original frozen beta.2 source/installer. No public installer distribution or formal public release is authorized by this choice. This complements, rather than cancels, the earlier [internal-only decision](INTERNAL_ONLY_DISTRIBUTION_DECISION_20261117.md).
+
+- **No owner-selected open-source license.** Keep the existing development-deliverable `LICENSE` unchanged until a separately approved ownership/rights/redistribution review; don't silently write an MIT/Apache license or assume an EULA has been finalized. Retain distinct third-party licenses and required notices.
+- **Source code visibility is an independent security question.** As verified during this decision, the GitHub repository [`i-shutov/flowbridge`](https://github.com/i-shutov/flowbridge) currently reports `visibility: public`, `private: false`. **Closed-source licensing does not make published GitHub source private.** The user should switch the repo to Private if confidentiality is intended; this QA checkpoint itself **does not and cannot change repository visibility**. Previously downloaded/cloned source, exposed Actions artifacts and third-party mirrors cannot be made private retroactively by changing GitHub settings.
+- **Frozen candidate**: `0.3.0-beta.2` source `86583a1a0487b9d383c0122b24558e620bde5b9c`, installer SHA256 `0699bed4acaa1b9df9b63c658808b08fd65b5953cacdaaddb7a13953389e19f4`, original candidate run [#43883696169](https://github.com/i-shutov/flowbridge/actions/runs/43883696169) 11/11 SUCCESS. Unchanged by this policy decision.
+- **Internal QA**: A0–A3 accepted on owner Win10 original V4/V5 evidence. A5 internal component license/runtime/rights and independent security review, A6 formal Win10 privacy/security, and A7 express internal-pilot deployment approval remain OPEN; no public release tag/installer posting. Win11 and macOS deferred.
+- **Windows 10 protected 1.0**: signed WFP/G2, physical no-DIRECT and DNS/UDP, kernel socket attribution and signed release remain NO-GO, even for internal users.
+- External proprietary distribution, if later requested, needs a separate explicit EULA/commercial permission and legal compliance check. MIT/Apache-2.0 should not be reconsidered without a new owner decision.
+
+**Strict flags:** `code_licensing_model=PROPRIETARY_CLOSED_SOURCE_NO_PUBLIC_GRANT`, `distribution_mode=INTERNAL_ONLY`, `repository_is_currently_public=true`, `repository_visibility_changed=false`, `open_source_license_selected=false`, `internal_deployment_go=false`, `public_distribution_authorized=false`, `release_accepted=false`.

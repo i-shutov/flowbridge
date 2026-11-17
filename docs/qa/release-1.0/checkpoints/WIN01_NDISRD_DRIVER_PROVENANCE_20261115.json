@@ -1,0 +1,82 @@
+{
+  "schema": "flowbridge-win01-ndisrd-driver-provenance-checkpoint-v1",
+  "date_utc": "2026-11-15",
+  "status": "HOSTED_READONLY_DRIVER_PROVENANCE_PASS_R1_OWNER_OPEN_G2_NO_GO",
+  "release_windows_1_0_accepted": false,
+  "product_main_sha": "5b5afc2feeda2195f302380e615ba003d4906e09",
+  "original_beta_binary_source": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+  "frozen_beta_changed": false,
+  "scope": "Windows 10 Pro 22H2 x64 and Windows 11 Pro x64 first; shared Rust core stays portable",
+  "draft_pr": "https://github.com/i-shutov/flowbridge/pull/68",
+  "base_branch": "integration/windows-rust-capture-agent-20261031",
+  "source_head": "5528fb5962fcb6e1bd008d2f42debef6dd95f967",
+  "code": {
+    "read_only_operator": "tools/windows/FlowBridge-NDISRD-DriverProvenance-ReadOnly.ps1",
+    "product_rust": "crates/flowbridge-capture/src/windows_ndisrd_image.rs",
+    "status_wiring": "crates/flowbridge-capture/src/windows_ndisrd_service.rs",
+    "purpose": "SCM service image configuration + bounded read-only driver file SHA and Authenticode, with optional external SHA reference comparison",
+    "prohibited_actions": [
+      "driver install/load",
+      "BFE/WFP filters",
+      "adapter mode",
+      "service start/stop/configure",
+      "firewall/Defender/BCD",
+      "user networks"
+    ]
+  },
+  "ci": {
+    "focused": {
+      "run_id": 43706911211,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/43706911211",
+      "jobs": "1/1 SUCCESS",
+      "source_machine": "GitHub-hosted Windows Server 2025",
+      "native_ps51_and_ps7": true,
+      "hostile_path_rejections": 6,
+      "mismatch_hostname_rejected": true,
+      "correct_reference_hash_case": true,
+      "incorrect_reference_hash_rejected": true,
+      "malformed_reference_hash_rejected": true,
+      "authenticode_actual_system_file": "Valid",
+      "actual_control_service": "Tcpip",
+      "actual_control_file": "tcpip.sys",
+      "control_file_sha256": "a160eb06c856a9cd392df50782df2c21564f7c8a4dda4eeb0a79aca0e7aa23bf",
+      "product_ndisrd_service_observed": "NOT_INSTALLED",
+      "artifact_id": 14159275280,
+      "artifact_zip_sha256": "18ade9427ae8b18e26f15d3b4c1f541988b89706f7f7d8282c2703357496bf59",
+      "artifact_zip_crc": "PASS",
+      "original_json_reports": 6
+    },
+    "rust_portable": {
+      "run_id": 43706911213,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/43706911213",
+      "jobs": "5/5 SUCCESS",
+      "native_windows_scm_config_reader_compiled": true,
+      "cross_platform_core_regression_pass": true
+    },
+    "full_capture_integration": {
+      "run_id": 43706911217,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/43706911217",
+      "g2_kernel_owner": "FAIL",
+      "g2_failure_label": "G2_ETW_CONNECTION_EVIDENCE=FAIL; G2_PACKET_BOUND=UNPROVED",
+      "g2_status_is_not_waived": true
+    }
+  },
+  "owner_labs": {
+    "win10_vm910136_ndisrd_vendor_image_proved": false,
+    "win11_ndisrd_vendor_image_proved": false,
+    "actual_vendor_signature_and_hash_pin": false,
+    "actual_loaded_driver_image_attested": false,
+    "native_packet_process_epoch_attested": false,
+    "packet_bound_g2_proved": false,
+    "selected_exe_no_direct_physical_proved": false
+  },
+  "governance": {
+    "approved_production_backend": "Separately installed official signed NDISRD + independent Rust user mode",
+    "owner_authorization": "https://github.com/i-shutov/flowbridge/issues/41",
+    "approved_wfp_product_switch": false,
+    "native_kernel_identity_ticket_missing": true,
+    "g2_exit_criterion_unchanged": true,
+    "win01_accepted": false,
+    "windows_release_accepted": false
+  }
+}

@@ -1,0 +1,102 @@
+{
+  "schema": "flowbridge-release-r02-ssh-carrier-checkpoint-v1",
+  "date_utc": "2026-11-15",
+  "product_main_sha": "5b5afc2feeda2195f302380e615ba003d4906e09",
+  "product_main_modified": false,
+  "beta_original_source": "f5ecd48d8f81c594f755a55e7969b57d20903020",
+  "frozen_beta_modified": false,
+  "research_windows_g2_last_verified_branch_sha": "893dcfdf6a8144f671241e3175c473ec21898eba",
+  "windows_g2_native_accepted": false,
+  "code_product_branch": "fix/macos-ssh-carrier-exact-endpoint-20261115",
+  "draft_pr": "https://github.com/i-shutov/flowbridge/pull/66",
+  "stacked_on": "https://github.com/i-shutov/flowbridge/pull/63",
+  "exact_code_head": "328768f064994eb2797f128460d78a025e9c6032",
+  "status": "HOSTED_SECURITY_SOURCE_AND_NATIVE_BUILD_PASS_PHYSICAL_NE_OPEN",
+  "fixed": {
+    "original_defect": "All /usr/bin/ssh signing-ID flows previously returned DIRECT without checking remote endpoint",
+    "new_runtime_guard": "Allow carrier bypass only for Apple-anchored /usr/bin/ssh signing ID and exact original literal IPv4/IPv6 and TCP server port",
+    "default_unknown_identity": "DENY_BEFORE_POLICY_DIRECT",
+    "managed_ssh_requirement": "Nonempty exact owned managed endpoint required",
+    "invalid_cases": "Wrong signing ID, different SSH server IP, different port, untrusted missing signing ID, hostname-based bypass, zero/invalid port, missing owned managed SSH are refused or not exempted",
+    "provider_apply_source_inherited": "PR #63 R02/R06 lifecycle and policy-Apply protection retained",
+    "shared_production_code": "native/macos/Shared/SystemSSHCarrierIdentity.swift",
+    "actual_test_only_identity_flag": "FLOWBRIDGE_PROVIDER_TEST",
+    "native_product_flag_must_not_enable_test_identity": true
+  },
+  "tests": {
+    "actual_provider_method_regressions": {
+      "workflow_id": 43681078817,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/43681078817",
+      "jobs": "1/1 SUCCESS",
+      "tests_passed": 32,
+      "historical_failures_reproduced": 5,
+      "deliberate_mutations_rejected": 5,
+      "source_provider_sha256": "eeed9a40ca2957f51352989be918584845a516eb325edd291927a988c9b8b90b",
+      "original_artifact_id": 14147893527,
+      "original_artifact_sha256": "c83da88a4da8fecbb57d34c80135011235584af21ddb7e9c4b3777260fa01b5c",
+      "original_artifact_crc": "PASS",
+      "live_network_extension_activated": false
+    },
+    "actual_apple_system_ssh_signature": {
+      "workflow_id": 43681078771,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/43681078771",
+      "jobs": "2/2 SUCCESS",
+      "apple_verified_requirement": "anchor apple",
+      "apple_system_ssh_signing_id_both_platforms": "com.apple.ssh",
+      "platforms": [
+        {
+          "arch": "arm64",
+          "artifact_id": 14148123414,
+          "original_zip_sha256": "36e325bdce340bec3e2fe250ba8e6dbffc7a8ff86743fc541f87634acec0a1fe",
+          "zip_crc": "PASS"
+        },
+        {
+          "arch": "x86_64",
+          "artifact_id": 14147734396,
+          "original_zip_sha256": "2249bdcad278858bbcdbbca4a38ed1a63eced59d3c1ab2685e444ef10a7db23b",
+          "zip_crc": "PASS"
+        }
+      ],
+      "real_security_framework_executed": true,
+      "owned_ssh_process_instance_proved": false
+    },
+    "general_native_ci": {
+      "workflow_id": 43681078874,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/43681078874",
+      "jobs": "5/5 SUCCESS",
+      "platform_jobs": [
+        "macos-application",
+        "windows-application",
+        "rust (ubuntu-24.04)",
+        "rust (windows-2025)",
+        "rust (macos-15)"
+      ],
+      "apple_sdk_network_extension_target_compiled": true,
+      "code_signing_enabled": false,
+      "native_activation_accepted": false
+    },
+    "dns_regression": {
+      "workflow_id": 43681078758,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/43681078758",
+      "jobs": "3/3 SUCCESS",
+      "physical_dns_no_leak_proved": false
+    }
+  },
+  "limitations": {
+    "genuine_second_ssh_process_same_exact_server_ip_port_still_indistinguishable": true,
+    "process_audit_token_reliably_available_for_transparent_flow": false,
+    "selected_app_physical_no_direct_proved": false,
+    "actual_owner_intel_arm_signed_ne_not_run": true,
+    "no_physical_tun_or_kernel_redirect_traffic": true,
+    "no_os_protection_or_network_changes": true,
+    "no_public_release": true
+  },
+  "acceptance": {
+    "r02_mac_ne_accepted": false,
+    "r06_atomic_selected_rules_accepted": false,
+    "a3_owner_windows_accepted": false,
+    "a4_owner_macos_accepted": false,
+    "beta_release_accepted": false,
+    "version_1_0_accepted": false
+  }
+}

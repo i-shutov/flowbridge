@@ -1,0 +1,62 @@
+name: FlowBridge R39 W1 source-pinned user-mode Rust on hosted Windows
+on:
+  push:
+    branches:
+      - docs/release-win10-vm910136-20261110
+    paths:
+      - tools/windows/FlowBridge-Win10-R39-W1-Usermode.ps1
+      - .github/workflows/flowbridge-r39-win10-w1-usermode.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-user-mode-only:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Parse the source script with Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $script='tools/windows/FlowBridge-Win10-R39-W1-Usermode.ps1'
+          $t=$null;$e=$null
+          [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script),[ref]$t,[ref]$e)
+          if(@($e).Count){$e|ForEach-Object{Write-Output ($_.Extent.StartLineNumber.ToString()+': '+$_.Message)};throw 'PS5 syntax failure'}
+          $body=Get-Content $script -Raw
+          foreach($needle in @('G2=''NO_GO''','W3=''NO_GO''','sys_installed_or_loaded=$false',
+                     'wfp_filters_modified=$false','bcd_modified=$false')){
+            if(-not $body.Contains($needle)){throw "Missing source fail-closed guard $needle"}
+          }
+      - name: Execute exact source Rust tests on hosted Windows but REFUSE native Win10 acceptance
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          & tools/windows/FlowBridge-Win10-R39-W1-Usermode.ps1 -ExpectedComputerName 'NOT-A-REAL-WIN10-TARGET' -EvidenceRoot 'build/r39-w1-test'
+          $r=@(Get-ChildItem 'build/r39-w1-test' -Filter w1-report.json -File -Recurse)
+          if($r.Count -ne 1){throw 'One W1 report required'}
+          $report=Get-Content $r[0].FullName -Raw|ConvertFrom-Json
+          Write-Output ("W1 result "+$report.W1)
+          $report.suites|ForEach-Object {Write-Output ("$($_.name) compile=$($_.compile_pass) test=$($_.test_pass) n=$($_.passed_count) note=$($_.notes)")}
+          if($report.W1 -ne 'PASS_NON_TARGET_HOST_ONLY' -or $report.target_win10_admitted -or
+             $report.G2 -ne 'NO_GO' -or $report.release_accepted -or
+             $report.sys_installed_or_loaded -or $report.wfp_filters_modified -or
+             @($report.suites).Count -ne 4){
+             throw 'W1 CI suite or native guard not accepted'
+          }
+          foreach($suite in @($report.suites)){
+            if(-not $suite.source_verified -or -not $suite.compile_pass -or -not $suite.test_pass -or $suite.passed_count -le 0){
+               throw ("Failed exact-source Rust suite "+$suite.name)
+            }
+          }
+      - name: Preserve hosted user-mode evidence only, not any kernel driver
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-R39-W1-Hosted-Windows-${{ github.run_id }}
+          path: build/r39-w1-test/**/w1-report.json
+          retention-days: 14
+          if-no-files-found: warn
