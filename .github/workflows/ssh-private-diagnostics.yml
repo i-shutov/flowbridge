@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'crates/flowbridge-tunnel/src/lib.rs'
+      - 'crates/flowbridge-tunnel/src/windows_backend_trust.rs'
+      - 'crates/flowbridge-tunnel/Cargo.toml'
       - 'native/windows/main.cpp'
       - 'tests/test_ssh_snapshot_privacy_source.py'
       - '.github/workflows/ssh-private-diagnostics.yml'
