@@ -3,6 +3,8 @@
 //! process death can leave OpenSSH running. Windows uses a kill-on-close job.
 pub mod banner_gate;
 pub mod handshake_diagnostic;
+#[cfg(windows)]
+mod windows_backend_trust;
 
 use serde::{Deserialize, Serialize};
 use std::{
@@ -545,20 +547,26 @@ pub struct Supervisor {
     operation: Mutex<()>,
     running: Mutex<Option<Running>>,
     launcher: Launcher,
+    // True for the actual production OpenSSH launcher; false only for
+    // synthetic test launchers that cannot carry a Microsoft signature.
+    signed_backend_required: bool,
 }
 impl Supervisor {
     pub fn new(config: Config) -> Result<Self, TunnelError> {
-        Self::with_launcher(
+        let mut supervisor = Self::with_launcher(
             config,
             Arc::new(|config| {
-                // Native macOS capture exempts the observed code-signing ID of
-                // this exact system client; PATH lookup could select a different
-                // binary and invalidate that loop-prevention rule.
+                // On Windows choose only the system OpenSSH binary by default.
+                // A portable backend requires an explicit absolute local path.
+                // The production worker checks Microsoft Authenticode before
+                // any -V invocation or SSH child process creation.
                 let mut command = Command::new(resolve_ssh(config)?);
                 command.args(config.arguments());
                 Ok(command)
             }),
-        )
+        )?;
+        supervisor.signed_backend_required = cfg!(windows);
+        Ok(supervisor)
     }
     fn with_launcher(config: Config, launcher: Launcher) -> Result<Self, TunnelError> {
         config.validate()?;
@@ -597,6 +605,7 @@ impl Supervisor {
             operation: Mutex::new(()),
             running: Mutex::new(None),
             launcher,
+            signed_backend_required: false,
         })
     }
     pub fn from_json(text: &str) -> Result<Self, TunnelError> {
@@ -617,9 +626,21 @@ impl Supervisor {
             .as_ref()
             .map(|worker| worker.control.clone())
             .ok_or_else(|| TunnelError("SSH is stopped".into()))?;
-        let mut command = Command::new(executable);
+        let mut command = Command::new(&executable);
         command.args(self.config.dns_discovery_arguments());
+        // DNS discovery launches an additional SSH process; it must not bypass
+        // the same publisher verification and guarded file identity.
+        #[cfg(windows)]
+        let signed_guard = if self.signed_backend_required {
+            Some(windows_backend_trust::verify_and_lock(std::path::Path::new(
+                &executable,
+            ))?)
+        } else {
+            None
+        };
         let mut child = ChildGuard::spawn(command)?;
+        #[cfg(windows)]
+        drop(signed_guard);
         let mut pipe = child
             .child
             .stderr
@@ -714,12 +735,19 @@ impl Supervisor {
         let control = Arc::new(Control::new());
         let task_control = control.clone();
         let launcher = self.launcher.clone();
+        let signed_backend_required = self.signed_backend_required;
         let worker = thread::Builder::new()
             .name("flowbridge-ssh".into())
             .spawn(move || {
                 let failure_state = state.clone();
                 if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    supervise(config, state, task_control, launcher)
+                    supervise(
+                        config,
+                        state,
+                        task_control,
+                        launcher,
+                        signed_backend_required,
+                    )
                 }))
                 .is_err()
                 {
@@ -1157,20 +1185,30 @@ fn resolve_ssh(config: &Config) -> io::Result<std::path::PathBuf> {
     if cfg!(target_os = "macos") {
         return std::fs::canonicalize("/usr/bin/ssh");
     }
-    let name = if cfg!(windows) { "ssh.exe" } else { "ssh" };
-    for directory in std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()) {
-        if !directory.is_absolute() {
-            continue;
-        }
-        let path = directory.join(name);
-        if path.is_file() {
-            return std::fs::canonicalize(path);
-        }
+    #[cfg(windows)]
+    {
+        // Do not trust the first executable in a user-writable PATH.
+        // The only implicit Windows choice is System32/OpenSSH/ssh.exe.
+        return windows_backend_trust::default_system_ssh();
     }
-    Err(io::Error::new(
-        io::ErrorKind::NotFound,
-        "OpenSSH was not found in an absolute PATH directory",
-    ))
+    #[cfg(not(windows))]
+    let name = "ssh";
+    #[cfg(not(windows))]
+    {
+        for directory in std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()) {
+            if !directory.is_absolute() {
+                continue;
+            }
+            let path = directory.join(name);
+            if path.is_file() {
+                return std::fs::canonicalize(path);
+            }
+        }
+        Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "OpenSSH was not found in an absolute PATH directory",
+        ))
+    }
 }
 
 fn backend_version(executable: &std::ffi::OsStr, control: &Control) -> Option<String> {
@@ -1205,7 +1243,13 @@ fn backend_version(executable: &std::ffi::OsStr, control: &Control) -> Option<St
         .map(|line| line.chars().filter(|c| !c.is_control()).take(256).collect())
 }
 
-fn supervise(config: Config, state: Arc<Mutex<State>>, control: Arc<Control>, launcher: Launcher) {
+fn supervise(
+    config: Config,
+    state: Arc<Mutex<State>>,
+    control: Arc<Control>,
+    launcher: Launcher,
+    signed_backend_required: bool,
+) {
     // Refuse an existing service rather than falsely identifying its SOCKS reply
     // as readiness for our own child. OpenSSH also uses ExitOnForwardFailure.
     match TcpListener::bind(("127.0.0.1", config.local_port)) {
@@ -1235,8 +1279,23 @@ fn supervise(config: Config, state: Arc<Mutex<State>>, control: Arc<Control>, la
         }
         let launched = launcher(&config).and_then(|command| {
             let executable = command.get_program().to_owned();
+            // IMPORTANT: this lock must survive the signature check, -V child,
+            // and the real SSH CreateProcess to guard against ordinary
+            // replace/delete attempts between verification and execution.
+            #[cfg(windows)]
+            let signed_guard = if signed_backend_required {
+                Some(windows_backend_trust::verify_and_lock(std::path::Path::new(
+                    &executable,
+                ))?)
+            } else {
+                None
+            };
+            #[cfg(not(windows))]
+            let _ = signed_backend_required;
             let version = backend_version(&executable, &control);
-            if config.ssh_executable.is_some() && version.is_none() {
+            if (config.ssh_executable.is_some() || signed_backend_required)
+                && version.is_none()
+            {
                 return Err(io::Error::new(io::ErrorKind::InvalidData,
                     "Explicit SSH backend did not identify itself as OpenSSH from -V; no fallback backend was launched"));
             }
@@ -1255,13 +1314,19 @@ fn supervise(config: Config, state: Arc<Mutex<State>>, control: Arc<Control>, la
                     "SSH start cancelled",
                 ));
             }
-            ChildGuard::spawn(command)
+            let spawned = ChildGuard::spawn(command);
+            #[cfg(windows)]
+            drop(signed_guard);
+            spawned
         });
         let mut child = match launched {
             Ok(child) => child,
             Err(error) => {
-                let reason = if error.kind() == io::ErrorKind::InvalidData {
-                    // Keep the actionable closed-source backend rejection.
+                let reason = if error.kind() == io::ErrorKind::PermissionDenied
+                    && signed_backend_required
+                {
+                    "SSH backend is not a trusted Microsoft-signed local executable; no fallback launched".to_owned()
+                } else if error.kind() == io::ErrorKind::InvalidData {
                     "Explicit SSH backend did not identify itself as OpenSSH from -V; no fallback backend was launched".to_owned()
                 } else {
                     format!(
