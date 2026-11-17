@@ -734,7 +734,7 @@ impl Supervisor {
                 })
             }
             Err(error) => {
-                lock(&self.state).failed(format!("could not launch SSH supervisor: {error}"));
+                lock(&self.state).failed(format!("could not launch SSH supervisor (OS category: {:?})", error.kind()));
                 return Err(error.into());
             }
         }
@@ -767,6 +767,37 @@ impl Supervisor {
 impl Drop for Supervisor {
     fn drop(&mut self) {
         let _ = self.stop();
+    }
+}
+
+// OpenSSH stderr is untrusted process output. It may include local usernames,
+// private-key paths, hostnames, control sequences and arbitrary text from a
+// nonstandard backend. FFI snapshots and GUI events must never retain it.
+// Classify using raw bytes in memory, but export only fixed diagnostic labels.
+fn safe_ssh_stderr_summary(lower: &str) -> &'static str {
+    if lower.contains("host key verification failed")
+        || lower.contains("remote host identification has changed")
+        || lower.contains("strict checking")
+    {
+        "OpenSSH host-key verification failed"
+    } else if lower.contains("permission denied (")
+        || lower.contains("no supported authentication methods")
+    {
+        "OpenSSH public-key authentication failed"
+    } else if lower.contains("identity file") && lower.contains("not accessible")
+        || lower.contains("no such file or directory")
+    {
+        "OpenSSH configured identity or file unavailable"
+    } else if lower.contains("could not resolve hostname") {
+        "OpenSSH hostname resolution failed"
+    } else if lower.contains("connection refused") {
+        "OpenSSH connection refused"
+    } else if lower.contains("connection timed out") {
+        "OpenSSH connection timed out"
+    } else if lower.contains("no route to host") {
+        "OpenSSH network route unavailable"
+    } else {
+        "OpenSSH diagnostic suppressed (paths and hosts hidden)"
     }
 }
 
@@ -853,8 +884,9 @@ fn stderr_line(state: &Arc<Mutex<State>>, bytes: &[u8]) {
     if s.stderr.len() == MAX_STDERR_LINES {
         s.stderr.pop_front();
     }
-    s.stderr.push_back(text.clone());
-    s.event("warn", format!("ssh: {text}"));
+    let safe = safe_ssh_stderr_summary(&lower);
+    s.stderr.push_back(safe.into());
+    s.event("warn", format!("ssh: {safe}"));
 }
 #[cfg(unix)]
 fn prepare_stderr(pipe: &ChildStderr) -> io::Result<()> {
@@ -1175,9 +1207,9 @@ fn supervise(config: Config, state: Arc<Mutex<State>>, control: Arc<Control>, la
     // as readiness for our own child. OpenSSH also uses ExitOnForwardFailure.
     match TcpListener::bind(("127.0.0.1", config.local_port)) {
         Ok(probe) => drop(probe),
-        Err(error) => {
+        Err(_error) => {
             lock(&state).failed(format!(
-                "local SOCKS port {} is unavailable: {error}; choose a free port",
+                "local SOCKS port {} is unavailable: OS bind failed; choose a free port",
                 config.local_port
             ));
             return;
@@ -1218,7 +1250,7 @@ fn supervise(config: Config, state: Arc<Mutex<State>>, control: Arc<Control>, la
         let mut child = match launched {
             Ok(child) => child,
             Err(error) => {
-                lock(&state).failed(format!("could not start OpenSSH: {error}. Install the OpenSSH client and make ssh available on PATH."));
+                lock(&state).failed(format!("could not start OpenSSH (OS category: {:?}). Install OpenSSH or check the configured executable.", error.kind()));
                 return;
             }
         };
@@ -1234,7 +1266,7 @@ fn supervise(config: Config, state: Arc<Mutex<State>>, control: Arc<Control>, la
         let output = if let Some(pipe) = child.child.stderr.take() {
             if let Err(error) = prepare_stderr(&pipe) {
                 child.terminate();
-                lock(&state).failed(format!("could not prepare SSH diagnostics: {error}"));
+                lock(&state).failed(format!("could not prepare SSH diagnostics (OS category: {:?})", error.kind()));
                 return;
             }
             match thread::Builder::new()
@@ -1247,7 +1279,7 @@ fn supervise(config: Config, state: Arc<Mutex<State>>, control: Arc<Control>, la
                 Ok(worker) => Some(worker),
                 Err(error) => {
                     child.terminate();
-                    lock(&state).failed(format!("could not capture SSH diagnostics: {error}"));
+                    lock(&state).failed(format!("could not capture SSH diagnostics (OS category: {:?})", error.kind()));
                     return;
                 }
             }
@@ -1664,6 +1696,35 @@ mod tests {
         assert_eq!(recovered.status.resource_exhaustion_count, 10000);
         assert!(recovered.status.last_resource_error_unix_ms.is_some());
         supervisor.stop().unwrap();
+    }
+
+    #[test]
+    fn arbitrary_openssh_stderr_never_leaks_paths_hosts_or_credentials_in_snapshot() {
+        let supervisor = Supervisor::new(config()).unwrap();
+        let examples: &[&[u8]] = &[
+            b"Warning: Identity file C:\\Users\\SensitiveUser\\.ssh\\private_identity not accessible: No such file or directory.",
+            b"ssh: Could not resolve hostname private-office.example.internal: Name or service not known",
+            b"Connection to 10.99.88.77 port 22: Connection refused",
+            b"employee@secret-ssh.internal: Permission denied (publickey).",
+            b"UNTRUSTED backend diagnostic ghp_SYNTHETICSECRETDO_NOT_LOG_THIS_VALUE123456789",
+            b"Host key verification failed for confidential.internal",
+        ];
+        for message in examples {
+            stderr_line(&supervisor.state, message);
+        }
+        let snapshot = supervisor.snapshot();
+        assert_eq!(snapshot.stderr.len(), examples.len());
+        let json = serde_json::to_string(&snapshot).unwrap();
+        for sensitive in [
+            "SensitiveUser", "private_identity", "private-office", "10.99.88.77",
+            "employee@", "secret-ssh", "ghp_SYNTHETICSECRET",
+            "confidential.internal", "C:\\\\Users",
+        ] {
+            assert!(!json.contains(sensitive), "Leaked untrusted stderr: {sensitive}");
+        }
+        assert!(snapshot.stderr.iter().all(|s| s.starts_with("OpenSSH ")));
+        assert!(snapshot.events.iter().all(|event| !event.message.contains("private")));
+        assert!(snapshot.stderr.iter().any(|s| s.contains("public-key authentication failed")));
     }
 
     #[test]
@@ -2085,7 +2146,7 @@ mod tests {
         wait(&supervisor, |s| {
             s.stderr
                 .iter()
-                .any(|line| line.contains("descendant diagnostic writer is alive"))
+                .any(|line| line.contains("OpenSSH diagnostic suppressed"))
         });
         let started = Instant::now();
         let stopped = supervisor.stop().unwrap();
