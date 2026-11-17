@@ -1,5 +1,12 @@
 # FlowBridge — Windows-first релиз 1.0: актуальный план
 
+> **САМОЕ НОВОЕ РЕШЕНИЕ ВЛАДЕЛЬЦА — 17 НОЯБРЯ 2026: WINDOWS 10 ONLY.** Текущая `0.3.0-beta.2` и первый выпуск `1.0` ориентируются **только на Windows 10 Pro 22H2 x64**. **Windows 11 пока не тестируем, не публикуем и не заявляем как поддерживаемую ОС**; её принимаем отдельно в следующих релизах. macOS также отложена. Это заменяет прежнюю матрицу «Win10 + Win11» от 15 ноября и все повторения требования Win11 ниже по документу. Старые разделы сохраняются как **исторические**, а не текущие release-gates. [Решение 17.11](checkpoints/WIN10_ONLY_SCOPE_DECISION_20261117.md) · [машинный реестр beta.2 A0–A7](BETA2_WINDOWS_A0_A7_20261116.json) · [машинные WIN-00–09](WINDOWS_FIRST_GATES_20261115.json).
+
+**Текущий beta.2:** `A0–A3 PASS` в утверждённом **Win10-only** объёме (Win10 V4+V5 оригиналы проверены); `A5/A6/A7 OPEN` из-за собственного LICENSE, независимого legal/native/security review и отдельного publisher GO. [Выпускное A6 pre-review](checkpoints/BETA2_A6_RELEASE_REVIEW_PACKET_20261117.md) теперь не требует Win11. **Не создавать tag/Release автоматически.**
+
+**Текущий Windows 1.0:** Win11 исключена из текущего GO-контракта, но **все WIN-00…09 остаются `accepted=false`**: подписанный WFP, native kernel socket authority, реальный TCP IPv4/v6, отказоустойчивый no-DIRECT, DNS/UDP, подписанный Win10 RC и физический G2 не доказаны. Windows 10 стандартная поддержка завершена; безопасность стенда/ESU проверяется отдельно.
+
+
 ## 17 November 2026 — owner V5 independently reviewed; Win10 A3 subgate accepted
 
 Original owner Win10 beta.2 V5 ZIP SHA256 `809dee21f0884e0d31dfa89a98033276cefaad859de1de64a87a2b90f454cb4c` was uploaded and independently audited: ZIP CRC, 26/26 file hashes, six real GUI images, 23 UI actions on the exact final installer/GUI/DLL bytes, missing-key OpenSSH denial without a listener or DIRECT on localhost, a healthy-key 10-byte bidirectional SOCKS5h control and Stop/restore all internally consistent. The prior V4 100/100 evidence was already audited. **[Win10 A3 reviewed evidence accepted](https://github.com/i-shutov/flowbridge/blob/docs/release-win10-vm910136-20261110/docs/qa/release-1.0/checkpoints/BETA2_WIN10_A3_V5_INDEPENDENT_REVIEW_20261117.md)**, with the explicit limitation that the host was not independently physically rerun/cryptographically attested. Note V5 `SOCKS_REP=null` because the local listener **never opened**, not `REP=01`.
@@ -7,7 +14,7 @@ Original owner Win10 beta.2 V5 ZIP SHA256 `809dee21f0884e0d31dfa89a98033276cefaa
 **Windows target A3 overall remains OPEN** for independent real Win11 Pro x64. [Autonomous Win11 Codex exact-byte runbook](https://github.com/i-shutov/flowbridge/blob/docs/release-win10-vm910136-20261110/docs/qa/release-1.0/checkpoints/BETA2_WIN11_CODEX_NATIVE_ACCEPTANCE_20261117.md), no new Win10 GUI runs needed for unchanged beta.2. Original candidate [CI #43883696169](https://github.com/i-shutov/flowbridge/actions/runs/43883696169) attempt 2 11/11 SUCCESS; independent A5/SBOM and pinned RustSec [CI #43936785163](https://github.com/i-shutov/flowbridge/actions/runs/43936785163) 4/4 SUCCESS (0 known advisories in 75 locked Rust dependencies). **License of FlowBridge-specific code unselected**, and legal/SDK/native-runtime/security [issue #78](https://github.com/i-shutov/flowbridge/issues/78), A6/A7 independent GO, unsigned package approval remain OPEN. WFP G2 / Windows 1.0 NO-GO. No tag or published release.
 
 
-> Решение владельца от **15 ноября 2026**: первый полноценный релиз FlowBridge ориентирован на **Windows 10 Pro 22H2 x64 и Windows 11 Pro x64**. Кроссплатформенная архитектура обязательна; выпуск macOS и физическая macOS NE-приёмка переносятся в отдельный последующий платформенный релиз. Это изменение *приоритетов и обязательной матрицы выпуска*, не признание невыполненных macOS тестов успешными.
+> **Историческое решение 15 ноября (заменено 17 ноября):** тогда рассматривались Windows 10 Pro 22H2 x64 **и** Windows 11 Pro x64. **Актуально только Windows 10 Pro 22H2 x64**, Win11/macOS — следующие релизы. Кроссплатформенная архитектура Rust сохраняется; невыполненная Win11/macOS QA не становится PASS.
 
 **Актуальный статус: Windows 1.0 NO-GO; Windows beta 0.3.0-beta.1 NOT_RELEASED.** Для всех защищённых режимов требуются реальные native доказательства. Исторический общий 19-gate реестр сохраняется: [gate_status_20261113.json](gate_status_20261113.json). Новый независимый Windows-gate реестр: [WINDOWS_FIRST_GATES_20261115.json](WINDOWS_FIRST_GATES_20261115.json).
 
@@ -59,7 +66,7 @@ WFP signed native kernel socket authority → реальный IPv4/v6 selected 
 
 | Параметр | Windows 1.0 |
 | --- | --- |
-| ОС | Windows 10 Pro 22H2 x64 (с явной оговоркой о жизненном цикле Windows 10), Windows 11 Pro x64; обе требуют отдельных нативных испытаний |
+| ОС | **Текущий выпуск: только Windows 10 Pro 22H2 x64**, с оговоркой об ESU/жизненном цикле. Win11 Pro x64 **отложена**, не тестируется/не публикуется в текущем релизе |
 | Назначение | Нативный пользовательский GUI и **прозрачный TCP-перехват выбранных процессов** без ручного SOCKS в каждом приложении |
 | Маршруты | Proxy / Chain / Direct / Block и объяснение причины выбора, первое совпадение правил, выбранное приложение × host/CIDR × port |
 | Транспорт | Общий Rust: SOCKS5/SOCKS4a/HTTP CONNECT, проверенный SSH SOCKS5 через управляемый OpenSSH 1–4 процесса |
