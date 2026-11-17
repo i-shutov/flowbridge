@@ -49,13 +49,27 @@
     },
     {
       "id": "A3",
-      "status": "EVIDENCE_REVIEW_PASS_WITH_MISSING_FINAL_NEGATIVE",
+      "status": "WIN10_OWNER_ORIGINAL_V4_V5_ACCEPTED_WIN11_NATIVE_OPEN",
       "accepted": false,
-      "what": "Owner Win10 real GUI/SSH original V4 ZIP 100/100 audited; beta2 missing private key file path case NOT_RUN; separate Win11 native OPEN",
+      "what": "Independent review: owner Win10 exact final beta2 GUI/SSH V4 100/100 + V5 26/26 with missing key rejection, positive control and cleanup, Win10 subgate ACCEPTED; Win11 owner native still missing. No cryptographic host attestation",
       "evidence": [
         "https://github.com/i-shutov/flowbridge/blob/docs/release-win10-vm910136-20261110/docs/qa/release-1.0/checkpoints/BETA2_OWNER_WIN10_A3_V4_INDEPENDENT_REVIEW_20261116.md",
-        "https://github.com/i-shutov/flowbridge/blob/docs/release-win10-vm910136-20261110/docs/qa/release-1.0/checkpoints/A3_BETA2_CODEX_V5_MISSING_IDENTITY_NEGATIVE_20261116.md"
-      ]
+        "https://github.com/i-shutov/flowbridge/blob/docs/release-win10-vm910136-20261110/docs/qa/release-1.0/checkpoints/A3_BETA2_CODEX_V5_MISSING_IDENTITY_NEGATIVE_20261116.md",
+        "https://github.com/i-shutov/flowbridge/blob/docs/release-win10-vm910136-20261110/docs/qa/release-1.0/checkpoints/BETA2_WIN10_A3_V5_INDEPENDENT_REVIEW_20261117.md"
+      ],
+      "win10_owner_subgate": {
+        "accepted": true,
+        "basis": "V4 100/100 + V5 26/26 original-byte integrity and GUI/SSH recorded outcomes, matched exact installer GUI/FFI SHA; human visual review; no physical rerun",
+        "v4_original_zip_sha256": "23844631907f96063f0b13db73a835b92c386a4be3ed13a174c484c3139606e2",
+        "v5_original_zip_sha256": "809dee21f0884e0d31dfa89a98033276cefaad859de1de64a87a2b90f454cb4c",
+        "v5_last_negative_missing_key": "PASS_WITH_NO_SOCKS_LISTENER_NOT_REP_01",
+        "host_cryptographically_attested": false,
+        "reviewer_physically_reran": false
+      },
+      "win11_owner_subgate": {
+        "accepted": false,
+        "status": "NOT_RUN"
+      }
     },
     {
       "id": "A4",
@@ -113,11 +127,12 @@
     "raw_512_ssh_universal_guarantee": true
   },
   "open_dependencies": [
-    "Codex V5 one-case final beta2 invalid key-path original evidence ZIP",
     "Win11 Pro x64 native installation/SSH/GUI acceptance",
     "Issue #78 owner project distribution-license decision and legal/runtime review",
     "RustSec locked advisory result and any resulting remediation",
-    "A6 independent all-gates review and A7 explicit publisher GO"
+    "A6 independent all-gates review and A7 explicit publisher GO",
+    "Win10 V4+V5 accepted, Win11 Pro x64 target owner-native tests still open",
+    "Owner #78 LICENSE choice before public redistribution"
   ],
   "windows_1_0_wfp_g2_accepted": false,
   "all_required_beta_gates_accepted": false,
@@ -125,5 +140,6 @@
   "publisher_release_approved": false,
   "github_release_created": false,
   "tag_created": false,
-  "link_to_integral_checkpoint": "docs/qa/release-1.0/checkpoints/BETA2_RELEASE_BLOCKERS_EXECUTION_20261116.md"
+  "link_to_integral_checkpoint": "docs/qa/release-1.0/checkpoints/BETA2_RELEASE_BLOCKERS_EXECUTION_20261116.md",
+  "date_last_reviewed": "2026-11-17"
 }
