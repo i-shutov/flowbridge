@@ -27,6 +27,16 @@ class TestSecurityInventory(unittest.TestCase):
             self.assertNotIn(fake.decode(),json.dumps(r))
             self.assertNotIn("fake-token.txt",json.dumps(r))
 
+    def test_only_exact_synthetic_fixture_is_exempt_not_generic_token_patterns(self):
+        # Construct synthetic fixture bytes dynamically; never add a
+        # complete token-looking literal to the public source tree.
+        fixture = b"gh" + b"p_SYNTHETICSECRETDO_NOT_LOG_THIS_VALUE123456789"
+        real_shape = b"gh" + b"p_" + b"Z" * 36
+        self.assertEqual(audit.match_kinds(fixture), [])
+        self.assertEqual(audit.match_kinds(fixture + b" " + real_shape),
+                         ["github_token_classic"])
+        self.assertEqual(fixture, audit.EXACT_SYNTHETIC_FIXTURE)
+
     def test_detects_deleted_old_git_blob_without_outputting_value(self):
         with tempfile.TemporaryDirectory() as temp:
             repo=Path(temp)
