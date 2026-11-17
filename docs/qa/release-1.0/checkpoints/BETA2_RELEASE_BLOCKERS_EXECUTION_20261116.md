@@ -1,5 +1,16 @@
 # FlowBridge Windows beta.2 → 1.0: blocker execution checkpoint — 16 Nov 2026
 
+## ПРАВЯЩЕЕ РЕШЕНИЕ ВЛАДЕЛЬЦА — 17.11.2026: ТОЛЬКО ВНУТРЕННЕЕ ИСПОЛЬЗОВАНИЕ
+
+Владелец прямо выбрал «пока только внутреннее». **Это не выбор MIT/Apache-2.0/проприетарной лицензии, не публичная публикация и не GO на развёртывание**. Допустима внутренняя разработка и ранее разрешённые тесты точного `0.3.0-beta.2` на Win10 Pro x64. Сохранены все original candidate SHA и доказательства A0–A3 PASS.
+
+**Публичная дистрибуция, внешние установщики, маркетинговые релизы, GitHub Releases и release tags запрещены/не запрошены.** Собственная публичная лицензия FlowBridge не выбирается сейчас, это [будущий backlog #78](https://github.com/i-shutov/flowbridge/issues/78). Сторонние лицензии, фактические native SDK/runtime условия использования и security/privacy остаются важными даже внутри организации.
+
+**Текущий путь:** `A5_INTERNAL_DEPENDENCY_RUNTIME_REVIEW_OPEN` → `A6_INTERNAL_SECURITY_PRIVACY_P0_GO_OPEN` → `A7_INTERNAL_DEPLOYMENT_GO_NOT_GRANTED`, см. [активную задачу #81](https://github.com/i-shutov/flowbridge/issues/81). A0–A3 Win10 приняты на оригинальных доказательствах, технический A5 и A6 CI PASS. Никакой live VM/driver/пакетной установки в этом изменении не выполнялось. Windows `1.0` WFP/G2 NO-GO. Windows 11/macOS отложены на следующие платформенные релизы.
+
+[Машинная политика и точный checkpoint](https://github.com/i-shutov/flowbridge/blob/docs/release-win10-vm910136-20261110/docs/qa/release-1.0/checkpoints/INTERNAL_ONLY_DISTRIBUTION_DECISION_20261117.md). **Все прежние формулировки этого документа о необходимости сейчас выбрать публичную лицензию — исторические, заменены данным решением.**
+
+
 > **ПЕРЕОПРЕДЕЛЕНО РЕШЕНИЕМ ВЛАДЕЛЬЦА 17.11.2026:** текущие beta.2 и Windows 1.0 — **Win10 Pro 22H2 x64 ONLY**. Win11 native QA и публикация перенесены на следующие релизы; это **DEFERRED_NOT_TESTED**, не PASS и не текущий P0. Все упоминания обязательного Win11 QA ниже — **исторические**, не текущие требования. [Новое решение](WIN10_ONLY_SCOPE_DECISION_20261117.md), [машинный A0–A7](../BETA2_WINDOWS_A0_A7_20261116.json). У Win10 beta.2 `A0–A3 PASS` по принятым V4+V5 оригиналам; A5 LICENSE/legal, A6 и A7 остаются OPEN, `release_accepted=false`; Win10 1.0 WFP/G2 NO-GO. Никакой публикации не выполнялось.
 
 ## 17 November 2026 — owner V5 independently reviewed; Win10 A3 subgate accepted
