@@ -1,6 +1,23 @@
 # FlowBridge Windows 0.3.0-beta.2 — A6 independent release-review packet (NOT GO)
 
 
+## Актуальный A6 technical checkpoint — exact-head 4/4 CI от 17.11.2026
+
+[**Draft PR #80**](https://github.com/i-shutov/flowbridge/pull/80) на `qa/a6-win10-beta2-release-20261117` exact HEAD `6cbebe418eeb88539dff86054332ee46f6801127`; [GitHub Actions #44041579615](https://github.com/i-shutov/flowbridge/actions/runs/44041579615) **COMPLETED SUCCESS 4/4**:
+
+1. Windows and Linux adversarial tests for original ZIP names/paths, manifest tampering, SSH/cleanup result falsification and illegal release flag promotion.
+2. Independent GitHub Actions job fetching **original unchanged** beta.2 verified candidate `0.3.0-beta.2` source `86583a1a...` and checking original ZIP/SHA/manifest/own-code unselected LICENSE; [original sanitized artifact #14308749465](https://github.com/i-shutov/flowbridge/actions/runs/44041579615/artifacts/14308749465) ZIP SHA256 `f06b4376098bb92a2a8ff65f7349c85ad73cb6b92bed2c1f82de30e789de3d9a`.
+3. **New independent original Windows binary PE import audit**, original [artifact #14309039018](https://github.com/i-shutov/flowbridge/actions/runs/44041579615/artifacts/14309039018) ZIP SHA256 `817d939f4e0b1041f179ec3ee7064441a8ce5508e901a11f061a627ecf7acd23`. Original installer `0699bed4...`, GUI `0cf1749e...`, FFI `23b62d54...` exactly match frozen user/CI; parsed direct imports:
+   - GUI `advapi32, comctl32, comdlg32, flowbridge_ffi, gdi32, kernel32, ntdll, ole32, shell32, user32` (all DLL names).
+   - FFI `advapi32, api-ms-win-core-synch-l1-2-0, bcryptprimitives, iphlpapi, kernel32, ntdll, ws2_32`.
+   - Installer `advapi32, comctl32, gdi32, kernel32, ole32, shell32, user32`.
+   - `VCRUNTIME140.dll`/`MSVCP140.dll` **не обнаружены как прямые импорты** этих трёх файлов. **Рекурсивное дерево зависимостей, фактическая статическая линковка, лицензирование MSVC/SDK, независимая Win32/C++ security/privacy проверка не приняты**.
+4. Сравнение оригинальных приватных V4 100/100 и V5 26/26 предоставленных владельцем Win10 ZIP с позитивными/негативными SSH/GUI, исходными source/exe/dll/installer SHA и восстановлением профиля проведено **отдельным локальным офлайн аудитом**; GitHub CI не получает и не публикует эти приватные исходники. Итог `A6_TECHNICAL_EVIDENCE_PASS_RELEASE_GO_BLOCKED` — **не** формальное A6 GO.
+
+Указанные ниже прежние `3/3` — исторический промежуточный CI-срез (до добавления PE-аудита). **Новый актуальный технический CI — 4/4**. В едином машинном реестре A0/A1/A2/A3 PASS для Win10, **A5/A6/A7 false**, `windows_beta2_release_accepted=false`, `publisher_release_approved=false`. Win11/macOS отложены; Windows 1.0 WFP/G2 NO-GO. Лицензионное решение [#78](https://github.com/i-shutov/flowbridge/issues/78) остаётся внешним обязательным условием.
+
+
+
 ## 17 November — independently executed A6 original-byte gate
 
 - [Independent read-only A6 QA PR #80](https://github.com/i-shutov/flowbridge/pull/80), final exact review HEAD `ff3cae712ad9ea65f2f4efcd95a3e3ff6bab7a90`: [Actions #44040978619](https://github.com/i-shutov/flowbridge/actions/runs/44040978619) **3/3 SUCCESS** (Windows and Linux adversarial ZIP/provenance/no-release tests; third job re-downloads and validates **original unchanged** candidate kit and source ZIP from run #43883696169). Original A6 CI verdict `ORIGINAL_CANDIDATE_PASS_PRIVATE_A3_REVIEW_NOT_RUN` is intentional: GitHub CI does **not** possess or upload the user's original private V4+V5 evidence.
