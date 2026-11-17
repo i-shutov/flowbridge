@@ -1,5 +1,10 @@
 # FlowBridge — исполнимый план до 1.0
 
+> **РЕШЕНИЕ 17.11.2026, ПРЕИМУЩЕСТВО НАД ПРЕЖНИМИ ПЛАНАМИ:** первый выпускаемый продукт — **Windows 10 Pro 22H2 x64 ТОЛЬКО**. Windows 11 Pro x64 **не тестировать и не публиковать сейчас**, перенос в следующие релизы; macOS также отложена. Историческое утверждение ниже «Windows 10 + Windows 11 first» **устарело**. См. [точный scope checkpoint](qa/release-1.0/checkpoints/WIN10_ONLY_SCOPE_DECISION_20261117.md), [Win10-only roadmap](qa/release-1.0/WINDOWS_FIRST_1_0_ROADMAP_20261115.md) и [A0–A7 matrix](qa/release-1.0/BETA2_WINDOWS_A0_A7_20261116.json).
+>
+> Текущий `0.3.0-beta.2` Windows 10 A3 **PASS on independently audited original V4+V5 evidence**, общий A0/A1/A2/A3 PASS. **A5/A6/A7 ещё открыты**: [LICENSE/legal/native runtime #78](https://github.com/i-shutov/flowbridge/issues/78), независимое Win10-only review, явное решение владельца на публикацию. Win11 [#79](https://github.com/i-shutov/flowbridge/issues/79) — **future backlog, не текущий P0**. `Windows 1.0` по-прежнему `NO_GO` из-за signed native WFP/G2, fail-closed и остальных P0. Никакого Win11 PASS, тега или GitHub Release эта корректировка не создаёт.
+
+
 ## 17 November 2026 — owner V5 independently reviewed; Win10 A3 subgate accepted
 
 Original owner Win10 beta.2 V5 ZIP SHA256 `809dee21f0884e0d31dfa89a98033276cefaad859de1de64a87a2b90f454cb4c` was uploaded and independently audited: ZIP CRC, 26/26 file hashes, six real GUI images, 23 UI actions on the exact final installer/GUI/DLL bytes, missing-key OpenSSH denial without a listener or DIRECT on localhost, a healthy-key 10-byte bidirectional SOCKS5h control and Stop/restore all internally consistent. The prior V4 100/100 evidence was already audited. **[Win10 A3 reviewed evidence accepted](https://github.com/i-shutov/flowbridge/blob/docs/release-win10-vm910136-20261110/docs/qa/release-1.0/checkpoints/BETA2_WIN10_A3_V5_INDEPENDENT_REVIEW_20261117.md)**, with the explicit limitation that the host was not independently physically rerun/cryptographically attested. Note V5 `SOCKS_REP=null` because the local listener **never opened**, not `REP=01`.
@@ -29,8 +34,8 @@ Original owner Win10 beta.2 V5 ZIP SHA256 `809dee21f0884e0d31dfa89a98033276cefaa
 > - `main` не является 1.0 release, теги/публикация не создавались. Не устанавливать WFP-драйвер на пользовательскую VM в рамках beta GUI/SSH тестов.
 
 
-> **РЕШЕНИЕ ВЛАДЕЛЬЦА — 15 ноября 2026: WINDOWS-FIRST 1.0.**
-> Текущий приоритет: **Windows 10 Pro 22H2 x64 + Windows 11 Pro x64**;
+> **ИСТОРИЧЕСКОЕ РЕШЕНИЕ — 15 ноября 2026: WINDOWS-FIRST 1.0, ЗАМЕНЕНО 17.11.**
+> Тогда планировались **Windows 10 Pro 22H2 x64 + Windows 11 Pro x64**; **текущий релиз — только Win10**, Win11 отложена.
 > macOS Network Extension, DNS, подписанные пакеты и ручная Apple Silicon/Intel QA
 > перенесены на следующий платформенный релиз. Код macOS и единый Rust-core
 > сохраняются и продолжают проходить portable-core CI.
