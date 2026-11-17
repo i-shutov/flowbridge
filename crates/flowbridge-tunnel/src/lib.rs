@@ -734,7 +734,10 @@ impl Supervisor {
                 })
             }
             Err(error) => {
-                lock(&self.state).failed(format!("could not launch SSH supervisor (OS category: {:?})", error.kind()));
+                lock(&self.state).failed(format!(
+                    "could not launch SSH supervisor (OS category: {:?})",
+                    error.kind()
+                ));
                 return Err(error.into());
             }
         }
@@ -1266,7 +1269,10 @@ fn supervise(config: Config, state: Arc<Mutex<State>>, control: Arc<Control>, la
         let output = if let Some(pipe) = child.child.stderr.take() {
             if let Err(error) = prepare_stderr(&pipe) {
                 child.terminate();
-                lock(&state).failed(format!("could not prepare SSH diagnostics (OS category: {:?})", error.kind()));
+                lock(&state).failed(format!(
+                    "could not prepare SSH diagnostics (OS category: {:?})",
+                    error.kind()
+                ));
                 return;
             }
             match thread::Builder::new()
@@ -1279,7 +1285,10 @@ fn supervise(config: Config, state: Arc<Mutex<State>>, control: Arc<Control>, la
                 Ok(worker) => Some(worker),
                 Err(error) => {
                     child.terminate();
-                    lock(&state).failed(format!("could not capture SSH diagnostics (OS category: {:?})", error.kind()));
+                    lock(&state).failed(format!(
+                        "could not capture SSH diagnostics (OS category: {:?})",
+                        error.kind()
+                    ));
                     return;
                 }
             }
@@ -1716,15 +1725,30 @@ mod tests {
         assert_eq!(snapshot.stderr.len(), examples.len());
         let json = serde_json::to_string(&snapshot).unwrap();
         for sensitive in [
-            "SensitiveUser", "private_identity", "private-office", "10.99.88.77",
-            "employee@", "secret-ssh", "ghp_SYNTHETICSECRET",
-            "confidential.internal", "C:\\\\Users",
+            "SensitiveUser",
+            "private_identity",
+            "private-office",
+            "10.99.88.77",
+            "employee@",
+            "secret-ssh",
+            "ghp_SYNTHETICSECRET",
+            "confidential.internal",
+            "C:\\\\Users",
         ] {
-            assert!(!json.contains(sensitive), "Leaked untrusted stderr: {sensitive}");
+            assert!(
+                !json.contains(sensitive),
+                "Leaked untrusted stderr: {sensitive}"
+            );
         }
         assert!(snapshot.stderr.iter().all(|s| s.starts_with("OpenSSH ")));
-        assert!(snapshot.events.iter().all(|event| !event.message.contains("private")));
-        assert!(snapshot.stderr.iter().any(|s| s.contains("public-key authentication failed")));
+        assert!(snapshot
+            .events
+            .iter()
+            .all(|event| !event.message.contains("private")));
+        assert!(snapshot
+            .stderr
+            .iter()
+            .any(|s| s.contains("public-key authentication failed")));
     }
 
     #[test]
