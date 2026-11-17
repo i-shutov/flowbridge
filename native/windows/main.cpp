@@ -697,8 +697,9 @@ void showSsh(const Json& ssh,bool waiting){
             text+=std::to_string(worker.value("local_port",0))+
                 (worker.value("state",std::string())=="ready"?"✓ ":"× ");
     }
-    if(status.contains("backend_path")&&!status["backend_path"].is_null())text+=" · "+status["backend_path"].get<std::string>();
-    if(status.contains("backend_version")&&!status["backend_version"].is_null())text+=" · "+status["backend_version"].get<std::string>();
+    // Full FFI snapshots carry backend_path for internal process authority.
+    // Never echo a local executable path or arbitrary backend -V text to the
+    // human-readable SSH health banner or retained GUI event journal.
     const auto pool=latestEngineSnapshot.value("managed_pool",Json());
     if(pool.is_object()) {
         uint64_t active=0,queued=0,rejected=0;
