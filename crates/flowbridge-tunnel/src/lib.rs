@@ -632,9 +632,9 @@ impl Supervisor {
         // the same publisher verification and guarded file identity.
         #[cfg(windows)]
         let signed_guard = if self.signed_backend_required {
-            Some(windows_backend_trust::verify_and_lock(std::path::Path::new(
-                &executable,
-            ))?)
+            Some(windows_backend_trust::verify_and_lock(
+                std::path::Path::new(&executable),
+            )?)
         } else {
             None
         };
