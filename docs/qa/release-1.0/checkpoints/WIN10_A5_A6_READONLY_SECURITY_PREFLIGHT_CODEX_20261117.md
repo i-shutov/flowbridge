@@ -1,0 +1,23 @@
+# FlowBridge Win10 — автономная read-only A5/A6 предполётная проверка Codex
+
+**Дата:** 17 ноября 2026. **Режим:** строго READONLY, только уже используемая Windows 10 Pro 22H2 x64 под текущей учётной записью Admin. **НЕ устанавливать/обновлять FlowBridge, SSH, Windows и лицензии**, не менять PATH, Defender, firewall, DNS, BFE, WFP, драйверы, UAC, ESU или сертификаты. Не отключать SmartScreen и не запускать неподписанный installer. Никакой Windows 11/macOS QA — владелец перенёс эти платформы на будущие релизы.
+
+## Замороженная точка
+
+- Текущий продукт `0.3.0-beta.2` **explicit SOCKS-only**, source SHA `86583a1a0487b9d383c0122b24558e620bde5b9c`, original [CI #43883696169](https://github.com/i-shutov/flowbridge/actions/runs/43883696169) 11/11 PASS.
+- Installer `FlowBridge-0.3.0-beta.2-windows-x64-setup.exe`, SHA256 `0699bed4acaa1b9df9b63c658808b08fd65b5953cacdaaddb7a13953389e19f4`. GUI EXE `0cf1749e7531659b1f5a42433818ecf31fe517d6815d11faeca6e04f9821325e`, FFI DLL `23b62d54a89feea53331f3ac68fe7c3d348ca99ed72d816f3dcfbc94ef3fd2b4`.
+- На frozen beta.2 исходный SSH `stderr` сохраняется в raw FFI snapshot/journal: [P1 issue #85](https://github.com/i-shutov/flowbridge/issues/85), исходный [patch #84](https://github.com/i-shutov/flowbridge/pull/84) **НЕ присутствует в установщике beta.2**. Путь к `ssh.exe` и проверка подписи — [P1 #86](https://github.com/i-shutov/flowbridge/issues/86). Никакого A7 internal deployment GO пока нет.
+- `i-shutov/flowbridge` остаётся Public до отдельного действия владельца [#83](https://github.com/i-shutov/flowbridge/issues/83). Не выкладывать личные логи/конфиги/пути в публичный репозиторий.
+
+## Блок проверки без взаимодействия с интерфейсом
+
+Запускать только read-only скрипты из [QA PR #82](https://github.com/i-shutov/flowbridge/pull/82) с точного HEAD, после ручной/автоматической сверки источника с GitHub:
+
+1. `tools/windows/FlowBridge-Beta2-Win10-Internal-Preflight.ps1 -InstallerPath <existing verified installer>`. Он только проверяет SHA-256, Win10 Pro 22H2 x64 и Authenticode установки, не запускает EXE. `EXACT_INSTALLER_AND_WIN10_HOST_PREFLIGHT_PASS_NOT_DEPLOYMENT_GO` — допустимый preflight PASS.
+2. `tools/windows/FlowBridge-SignedOpenSSH-ReadOnly.ps1 -SshExecutable <actual configured SSH exe> [-ExpectedSha256 <pinned hash>]`. Определить фактический `ssh_executable` из профиля FlowBridge, при `null` пометить **`UNPINNED_PATH_LOOKUP`** и не подбирать произвольный бинарник из PATH как «доверенный». Скрипт проверяет абсолютный локальный путь, отсутствие reparse-components, Authenticode Valid и Microsoft signer, SHA при наличии pin; ничего не исполняет. Вердикт `READ_ONLY_SIGNED_SSH_FILE_PASS_RUNTIME_TOCTOU_NOT_PROVED` **не гарантирует**, что runtime запускает тот же файл в момент OpenSSH Start.
+3. `tools/windows/FlowBridge-Win10-ESU-ReadOnly.ps1`. Считать только сборку Win10 и UBR, наличие официально документированных подготовительных KB и статус Year2 ESU activation ID через **read-only** WMI. **Не передавать/печатать product key или activation installation ID.** По состоянию на 17 ноября 2026 для коммерческого ESU Microsoft указывает предварительные `KB5066791`, `KB5072653` и Year2 activation ID `1043add5-23b1-4afb-9a0f-64343c8f3f8d`. Источники: https://learn.microsoft.com/windows/whats-new/enable-extended-security-updates и https://learn.microsoft.com/windows/release-health/release-information. Отсутствие нужных прав WMI = `UNKNOWN`, а не PASS. Даже отмеченный лицензированный Year2 и UBR≥7811 — только исторический минимум на 26.10.2026, **не доказательство актуальности всех обновлений на день аудита**.
+4. Не раскрывать полный путь к ключам/SSH, имя компьютера/пользователя, IP/host, серийные номера, ESU MAK, первоначальные локальные профили, теги сертификатов и сырой OpenSSH stderr в публичном GitHub.
+
+Сохранить только санитизированные JSON этих трёх скриптов, SHA-256 EXE, SHA-256 самого исходного скрипта, реальную версию Win10/системный UBR/обезличенные коды статуса и короткий `CHECKPOINT.md` в отдельный **приватный** `Win10-A5-A6-ReadOnly-<UTC>.zip`. Приложить внешний SHA-256 и внутренний `sha256-manifest.json`. Не пушить оригинальные QA ZIP в публичный repo. Если лог содержит путь, удалить/обезличить перед передачей.
+
+**Результат:** `PREVIEW_READY_FOR_INDEPENDENT_A5_A6_REVIEW` только при корректных исходных SHA и выполненных скриптах; `BLOCKED_OS_PATCH_STATUS`, `BLOCKED_UNTRUSTED_SSH_BACKEND`, `BLOCKED_UNPINNED_PATH_LOOKUP`, `BLOCKED_SOURCE_NOT_VERIFIED` при соответствующих случаях. Ни один исход не даёт `A6_security_go=true` или `A7_deployment_go=true`. Испытания beta.2 V4/V5 повторять не требуется, пока бинарники неизменны.
