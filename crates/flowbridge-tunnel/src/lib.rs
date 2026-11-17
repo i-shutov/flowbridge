@@ -1728,7 +1728,11 @@ mod tests {
         let supervisor = Supervisor::new(config()).unwrap();
         // Construct token-shaped test input at runtime so no complete
         // token-looking literal is stored in Git source history.
-        let token_like = [b"UNTRUSTED backend diagnostic gh".as_slice(), b"p_SYNTHETICSECRETDO_NOT_LOG_THIS_VALUE123456789".as_slice()].concat();
+        let token_like = [
+            b"UNTRUSTED backend diagnostic gh".as_slice(),
+            b"p_SYNTHETICSECRETDO_NOT_LOG_THIS_VALUE123456789".as_slice(),
+        ]
+        .concat();
         let examples: &[&[u8]] = &[
             b"Warning: Identity file C:\\Users\\SensitiveUser\\.ssh\\private_identity not accessible: No such file or directory.",
             b"ssh: Could not resolve hostname private-office.example.internal: Name or service not known",
