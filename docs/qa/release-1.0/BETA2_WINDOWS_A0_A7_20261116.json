@@ -1,7 +1,7 @@
 {
   "schema": "flowbridge-windows-beta2-release-gates-v1",
   "date": "2026-11-16",
-  "scope": "Windows-only explicit SOCKS5/SOCKS5h engineering prerelease, no system transparent interception",
+  "scope": "Win10 Pro 22H2 x64 ONLY — explicit SOCKS5/SOCKS5h beta.2 engineering prerelease, no system transparent interception; Win11/macOS deferred",
   "version": "0.3.0-beta.2",
   "candidate": {
     "source_sha": "86583a1a0487b9d383c0122b24558e620bde5b9c",
@@ -49,9 +49,9 @@
     },
     {
       "id": "A3",
-      "status": "WIN10_OWNER_ORIGINAL_V4_V5_ACCEPTED_WIN11_NATIVE_OPEN",
-      "accepted": false,
-      "what": "Independent review: owner Win10 exact final beta2 GUI/SSH V4 100/100 + V5 26/26 with missing key rejection, positive control and cleanup, Win10 subgate ACCEPTED; Win11 owner native still missing. No cryptographic host attestation",
+      "status": "PASS_EXACT_BETA2_WIN10_OWNER_ORIGINAL_EVIDENCE_V4_V5",
+      "accepted": true,
+      "what": "Current release only Win10 Pro 22H2 x64: original V4 100/100 and V5 26/26 reviewed, final native GUI/SSH positive and negative accepted on evidence. Win11 explicitly outside current matrix, not PASS",
       "evidence": [
         "https://github.com/i-shutov/flowbridge/blob/docs/release-win10-vm910136-20261110/docs/qa/release-1.0/checkpoints/BETA2_OWNER_WIN10_A3_V4_INDEPENDENT_REVIEW_20261116.md",
         "https://github.com/i-shutov/flowbridge/blob/docs/release-win10-vm910136-20261110/docs/qa/release-1.0/checkpoints/A3_BETA2_CODEX_V5_MISSING_IDENTITY_NEGATIVE_20261116.md",
@@ -68,20 +68,23 @@
       },
       "win11_owner_subgate": {
         "accepted": false,
-        "status": "NOT_RUN",
+        "status": "DEFERRED_TO_NEXT_RELEASES_NOT_TESTED_NOT_PUBLISHED",
         "tracker": "https://github.com/i-shutov/flowbridge/issues/79",
-        "codex_runbook": "docs/qa/release-1.0/checkpoints/BETA2_WIN11_CODEX_NATIVE_ACCEPTANCE_20261117.md"
+        "codex_runbook": "docs/qa/release-1.0/checkpoints/BETA2_WIN11_CODEX_NATIVE_ACCEPTANCE_20261117.md",
+        "required_for_current_release": false,
+        "blocked_current_release": false
       }
     },
     {
       "id": "A4",
-      "status": "HOSTED_PASS_NATIVE_DEFERRED_FOR_WINDOWS_ONLY",
+      "status": "MACOS_DEFERRED_TO_NEXT_RELEASE_NOT_TESTED_OR_PUBLISHED",
       "accepted": false,
       "required_for_windows_only": false,
       "what": "Mac universal hosted CI passes, owner native Mac target not accepted; deferred to later platform release",
       "evidence": [
         "https://github.com/i-shutov/flowbridge/actions/runs/43883696169"
-      ]
+      ],
+      "required_for_win10_current": false
     },
     {
       "id": "A5",
@@ -110,9 +113,9 @@
     },
     {
       "id": "A6",
-      "status": "INDEPENDENT_RELEASE_QA_NO_GO_PENDING_A3_A5_WIN11",
+      "status": "INDEPENDENT_RELEASE_QA_NO_GO_PENDING_A5_SECURITY_LICENSE_AND_A7",
       "accepted": false,
-      "what": "Independent reviewer must verify final V5, owner Win11 and legal/security/publisher claims",
+      "what": "Current target Win10-only A3 PASS on evidence; A6 independent P0/privacy/security/legal release review remains OPEN pending A5 and explicit publisher GO, not Win11",
       "evidence": [],
       "draft_review_packet": "docs/qa/release-1.0/checkpoints/BETA2_A6_RELEASE_REVIEW_PACKET_20261117.md"
     },
@@ -120,7 +123,7 @@
       "id": "A7",
       "status": "NOT_AUTHORIZED_NOT_PUBLISHED",
       "accepted": false,
-      "what": "Explicit owner release GO, label unsigned engineering prerelease if approved, original sha-signoff and publication only after A0–A6",
+      "what": "Publisher/owner release GO NOT_GRANTED. Win10-only explicit SOCKS engineering prerelease may be considered after A5/A6; do not advertise Win11/macOS, no tag",
       "evidence": []
     }
   ],
@@ -130,12 +133,14 @@
     "wfp_ndisrd": true,
     "system_dns_leak_proof": true,
     "udp_quic_proxying": true,
-    "raw_512_ssh_universal_guarantee": true
+    "raw_512_ssh_universal_guarantee": true,
+    "win11_native_qa_and_support": true,
+    "win11_publication": true
   },
   "open_dependencies": [
-    "Native real Windows 11 Pro x64 owner acceptance and independent original ZIP review (issue #79)",
-    "FlowBridge-specific project LICENSE choice and legal/native runtime audit (issue #78)",
-    "Independent beta A6 reviewer and explicit A7 publication approval"
+    "FlowBridge-specific project LICENSE choice, independent legal/native SDK runtime and security review (issue #78)",
+    "Independent exact-source Win10-only beta.2 A6 release review",
+    "Explicit A7 owner approval and truthful unsigned engineering prerelease distribution decision"
   ],
   "windows_1_0_wfp_g2_accepted": false,
   "all_required_beta_gates_accepted": false,
@@ -144,5 +149,31 @@
   "github_release_created": false,
   "tag_created": false,
   "link_to_integral_checkpoint": "docs/qa/release-1.0/checkpoints/BETA2_RELEASE_BLOCKERS_EXECUTION_20261116.md",
-  "date_last_reviewed": "2026-11-17"
+  "date_last_reviewed": "2026-11-17",
+  "scope_owner_decision": "USER_CONFIRMED_WIN10_ONLY_WIN11_DEFERRED_20261117",
+  "current_release_targets": [
+    {
+      "platform": "windows",
+      "family": "Windows 10 Pro",
+      "build": "19045",
+      "release": "22H2",
+      "arch": "x86_64",
+      "required": true
+    }
+  ],
+  "deferred_targets": [
+    {
+      "platform": "windows",
+      "family": "Windows 11 Pro",
+      "required_for_current_release": false,
+      "status": "DEFERRED_NOT_TESTED_NOT_PUBLISHED",
+      "future_issue": "https://github.com/i-shutov/flowbridge/issues/79"
+    },
+    {
+      "platform": "macos",
+      "required_for_current_release": false,
+      "status": "DEFERRED_NOT_TESTED_NOT_PUBLISHED"
+    }
+  ],
+  "scope_decision_checkpoint": "docs/qa/release-1.0/checkpoints/WIN10_ONLY_SCOPE_DECISION_20261117.md"
 }
