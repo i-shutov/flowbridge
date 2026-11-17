@@ -1,5 +1,15 @@
 # FlowBridge — исполнимый план до 1.0
 
+
+## Актуальная инженерная точка 17.11.2026 — исправление SSH runtime P1, source/build PASS
+
+**Ветка [PR #88](https://github.com/i-shutov/flowbridge/pull/88)** поверх приватности [PR #84](https://github.com/i-shutov/flowbridge/pull/84), точный source **`44e3ba988ac5a9f7cf2d25b16d46c432ff3d8c38`**. [**CI #44076875289](https://github.com/i-shutov/flowbridge/actions/runs/44076875289) 3/3 SUCCESS**: Rust/Linux+Windows реальный подписанный Microsoft OpenSSH и unsigned fake `ssh.exe` отрицательный тест, no-PATH системный OpenSSH, `-V` при блокировке изменения файла, no raw stderr в FFI/GUI, native Win32 GUI/FFI explicit-only build. Source/build результат только, **не** новый проверенный installer. В расширенном [Rust/native CI #44076875466](https://github.com/i-shutov/flowbridge/actions/runs/44076875466) последние наблюдения: Windows app + Rust Windows/Ubuntu PASS, macOS jobs queued; полное workflow GO не приписывать до завершения.
+
+**Старый `beta.2` остается точным неизменным комплектом** installer SHA256 `0699bed4acaa1b9df9b63c658808b08fd65b5953cacdaaddb7a13953389e19f4` и **НЕ содержит** новых P1 исправлений. Следующий `0.3.0-beta.3` пока **планируемый, не собран**: сначала защищённая/private доставка бинарников (репозиторий всё ещё Public и владелец отложил приватизацию [#83](https://github.com/i-shutov/flowbridge/issues/83)), затем новый pinned source+installer SHA, новая Win10 owner/native GUI+SSH/negative+Stop/restore и независимая оригинальная приёмка. Не переносить A3 старой beta.2 на новый EXE. Реальный Win10 ESU/signature preflight не исполнялся на host; [read-only Codex runbook](https://github.com/i-shutov/flowbridge/blob/qa/win10-internal-security-inventory-20261117/docs/qa/release-1.0/checkpoints/WIN10_A5_A6_READONLY_SECURITY_PREFLIGHT_CODEX_20261117.md).
+
+[Подробный source/CI checkpoint](qa/release-1.0/checkpoints/WIN10_SSH_TRUST_SOURCE_BUILD_REBASELINE_20261117.md). **A5/A6 internal privacy+native security, A7 internal pilot GO OPEN**; no public release/tag, no own-code license grant. Windows 11/macOS отложены. Полноценный Windows 10 `1.0` WFP/G2 (подписанный native socket authority, физический no-DIRECT/DNS/UDP) всё ещё `NO-GO`.
+
+
 ## ПРИОРИТЕТ 17.11: реальные P1 безопасности до любого нового внутреннего кандидата
 
 **Frozen `0.3.0-beta.2` не изменён**: source `86583a1a0487b9d383c0122b24558e620bde5b9c`; original Win10 A0–A3 пользовательские доказательства приняты по V4 100/100 + V5 26/26, CI 11/11 PASS. Однако **обнаружено реальное P1 раскрытие путей/hostname через OpenSSH stderr** в `Snapshot.stderr` и `Snapshot.events`/GUI journal. Старый installer **не содержит** патч.
