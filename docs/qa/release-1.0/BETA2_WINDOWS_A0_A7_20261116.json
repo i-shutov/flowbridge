@@ -116,7 +116,8 @@
       "internal_legal_runtime_security_accepted": false,
       "security_redacted_history_screen": "HISTORY_SCREEN_HIGH_CONFIDENCE_PASS_WITH_EXPLICIT_SCOPE_LIMITS",
       "closed_source_repo_currently_public": true,
-      "public_repo_confidentiality_p0_status": "OWNER_WILL_PRIVATIZE_LATER"
+      "public_repo_confidentiality_p0_status": "OWNER_WILL_PRIVATIZE_LATER",
+      "known_high_confidence_secret_history_scan": "CI_6_OF_6_WITH_3_EXACT_SYNTHETIC_TEST_FIXTURES_SUPPRESSED"
     },
     {
       "id": "A6",
@@ -163,7 +164,9 @@
         "#85 original beta2 raw SSH stderr FFI/GUI",
         "#86 SSH backend PATH/executable signer verification",
         "#83 public closed-source repository"
-      ]
+      ],
+      "privacy_patch_targeted_source_build_ci": "https://github.com/i-shutov/flowbridge/actions/runs/44061327017",
+      "privacy_patch_source_build_status": "SUCCESS_3_OF_3_BETA2_INSTALLER_UNPATCHED"
     },
     {
       "id": "A7",
@@ -249,16 +252,16 @@
   "internal_only_accepted_as_policy": true,
   "internal_deployment_approved": false,
   "security_inventory": {
-    "status": "HISTORY_SCREEN_HIGH_CONFIDENCE_PASS_WITH_EXPLICIT_SCOPE_LIMITS",
+    "status": "HISTORY_HIGH_CONFIDENCE_SCREEN_PASS_ONLY_WITH_KNOWN_SYNTHETIC_FIXTURE_EXCLUSION",
     "source_commit": "86583a1a0487b9d383c0122b24558e620bde5b9c",
     "review_pr": "https://github.com/i-shutov/flowbridge/pull/82",
-    "review_head": "ab7d0d56dfa6af0843c183497d455a6b67578ea1",
-    "ci": "https://github.com/i-shutov/flowbridge/actions/runs/44055935443",
-    "ci_status": "SUCCESS_4_OF_4",
-    "history_artifact_id": 14315793075,
-    "history_artifact_sha256": "d49087b8fb9691c5896b9a93446e642d9b8335d146154cc1bec1758ffad1128d",
-    "git_objects_seen": 9399,
-    "git_blobs_screened": 2769,
+    "review_head": "976dff7ebd1e8ff61ad88ee5bb5dc2332e34d8c5",
+    "ci": "https://github.com/i-shutov/flowbridge/actions/runs/44061793218",
+    "ci_status": "SUCCESS_6_OF_6",
+    "history_artifact_id": 14317389918,
+    "history_artifact_sha256": "e5d174a6787327ed287dd4a76ddb8bae87c46f45006e7531bbca77e741861d3f",
+    "git_objects_seen": 9514,
+    "git_blobs_screened": 2789,
     "large_git_blobs_skipped": 0,
     "high_confidence_secret_pattern_hits": 0,
     "original_beta2_source_zip_files_screened": 303,
@@ -282,7 +285,12 @@
     "readonly_checkpoint": "docs/qa/release-1.0/checkpoints/INTERNAL_WIN10_SECURITY_REVIEW_20261117.md",
     "a5_native_security_accepted": false,
     "a6_formal_privacy_go": false,
-    "a7_internal_pilot_go": false
+    "a7_internal_pilot_go": false,
+    "exact_synthetic_ssh_privacy_history_fixtures_suppressed": 3,
+    "actual_owner_windows_sha_signature_and_esu_checks_executed": false,
+    "hosted_ssh_signer_and_wrong_path_negatives_pass": true,
+    "hosted_win10_esu_wrong_host_negative_pass": true,
+    "scope_complete_secret_forensics": false
   },
   "product_security_findings": {
     "raw_ssh_diagnostics_snapshot_and_gui_p1": {
@@ -307,5 +315,6 @@
       "issue": "https://github.com/i-shutov/flowbridge/issues/83",
       "confidentiality_mitigation_complete": false
     }
-  }
+  },
+  "latest_security_findings_checkpoint": "docs/qa/release-1.0/checkpoints/SECURITY_P1_FINDINGS_AND_BETA_NEXT_GATE_20261117.md"
 }
