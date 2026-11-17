@@ -2,8 +2,8 @@
   "schema": "flowbridge-windows-first-1.0-gates-v1",
   "date": "2026-11-15",
   "project": "i-shutov/flowbridge",
-  "release_id": "FlowBridge 1.0 Windows x64",
-  "scope_decision": "USER_CONFIRMED_WINDOWS_FIRST",
+  "release_id": "FlowBridge 1.0 Windows 10 Pro x64 (Windows 11 deferred)",
+  "scope_decision": "USER_CONFIRMED_WIN10_ONLY_CURRENT_RELEASE_WIN11_DEFERRED_20261117",
   "scope_decision_is_not_release_acceptance": true,
   "windows_1_0_accepted": false,
   "publisher_release_approved": false,
@@ -17,7 +17,8 @@
       "build": "19045",
       "release": "22H2",
       "arch": "x86_64",
-      "native_owner_acceptance": false
+      "native_owner_acceptance": false,
+      "required_for_current_release": true
     },
     {
       "platform": "windows",
@@ -25,7 +26,10 @@
       "build": "owner-target",
       "release": "x64",
       "arch": "x86_64",
-      "native_owner_acceptance": false
+      "native_owner_acceptance": false,
+      "required_for_current_release": false,
+      "status": "DEFERRED_NOT_TESTED_NOT_PUBLISHED",
+      "future_issue": "https://github.com/i-shutov/flowbridge/issues/79"
     }
   ],
   "release_scope": {
@@ -59,7 +63,7 @@
     "authorized_code_branch": "https://github.com/i-shutov/flowbridge/pull/69"
   },
   "windows_beta_0_3_0": {
-    "scope": "Windows only optional prerelease preceding Windows 1.0; preserve unchanged original cross-platform candidate",
+    "scope": "Windows 10 Pro 22H2 x64 only engineering prerelease; Win11 and macOS native release QA deferred; preserve unchanged cross-platform original candidate",
     "original_immutable_kit_sha256": "4b51d4136878476b48946361ce1635cb6d630e62b50ca82c73df28a5902ed8b8",
     "hosted_windows_6_of_6": true,
     "owner_win10_exact_kit_accepted": false,
@@ -115,11 +119,11 @@
       }
     },
     "remaining_release_gates": [
-      "A3 Windows 10 owner-native subgate accepted on independently reviewed original V4+V5 evidence; no repeat required for unchanged bytes",
-      "A3 Windows target matrix: separate Win11 Pro x64 owner-native GUI/SSH/install/upgrade/uninstall remains NOT_RUN",
-      "A5: original source/kit hashes, 71/37 SBOM and RustSec 0 known advisories PASS; project-specific LICENSE, native/runtime legal review and security approval remain open",
-      "A6: formal independent Windows beta release P0/privacy/security decision OPEN",
-      "A7: explicit publisher GO, distribution terms, unsigned engineering prerelease caveats and tag/release NOT_GRANTED"
+      "A0-A3 Win10-only exact beta.2 source and owner V4+V5 evidence accepted; no further Win10 tests for unchanged bytes",
+      "A5: choose own-code LICENSE and independent legal/native runtime/security distribution review",
+      "A6: formal independent P0/privacy/security Win10-only release decision",
+      "A7: explicit owner Win10-only unsigned engineering prerelease publication approval; no tag or release",
+      "Win11 Pro x64 QA/publication explicitly DEFERRED to subsequent releases and NOT accepted, not current blocker"
     ],
     "codex_v3": {
       "source": "owner-forwarded Codex report, raw evidence ZIP local-only and not independently inspected",
@@ -308,8 +312,18 @@
       },
       "owner_win11_native_acceptance_issue": "https://github.com/i-shutov/flowbridge/issues/79",
       "owner_win11_codex_task": "docs/qa/release-1.0/checkpoints/BETA2_WIN11_CODEX_NATIVE_ACCEPTANCE_20261117.md",
-      "a6_independent_pre_review_packet": "docs/qa/release-1.0/checkpoints/BETA2_A6_RELEASE_REVIEW_PACKET_20261117.md"
-    }
+      "a6_independent_pre_review_packet": "docs/qa/release-1.0/checkpoints/BETA2_A6_RELEASE_REVIEW_PACKET_20261117.md",
+      "owner_win11_status": "DEFERRED_NOT_TESTED_NOT_PUBLISHED",
+      "owner_win11_required_for_current_release": false,
+      "win10_only_a3_full_current_scope_pass": true,
+      "win11_not_a_current_release_blocker": true
+    },
+    "current_required_target_os": [
+      "Windows 10 Pro 22H2 x64"
+    ],
+    "win11_native_release_deferred": true,
+    "win11_future_release_issue": "https://github.com/i-shutov/flowbridge/issues/79",
+    "win11_unavailability_blocks_current_release": false
   },
   "windows_1_0": {
     "required_gate_ids": [
@@ -333,9 +347,9 @@
         "legacy_gate_mapping": [
           "R00"
         ],
-        "exit_criterion": "Decision confirmed: Windows 10 Pro 22H2 x64 + Windows 11 Pro x64 first; Rust core cross-platform",
+        "exit_criterion": "Owner decision confirmed: current release Windows 10 Pro 22H2 x64 ONLY; Win11/macOS deferred and not advertised; Rust core remains cross-platform",
         "depends_on": [],
-        "status": "SCOPE_DEFINED_EXECUTION_OPEN",
+        "status": "WIN10_ONLY_SCOPE_DEFINED_EXECUTION_OPEN_NO_RELEASE_APPROVAL",
         "accepted": false,
         "evidence": [],
         "required_native_windows": true
@@ -569,7 +583,7 @@
         "legacy_gate_mapping": [
           "R01"
         ],
-        "exit_criterion": "Native Win10 and Win11 selected vs unselected EXE IPv4/v6 through actual approved backend/Rust/SSH with original packet and byte parity",
+        "exit_criterion": "Real native Windows 10 selected vs unselected EXE IPv4/v6 via signed approved backend/Rust/SSH with source/original packet and byte parity; Win11 deferred",
         "depends_on": [
           "WIN-01"
         ],
@@ -644,7 +658,7 @@
           "WIN-02",
           "WIN-03"
         ],
-        "status": "EXPLICIT_BETA2_WIN10_GUI_SSH_ORIGINAL_EVIDENCE_ACCEPTED_WIN11_AND_1_0_FULL_RULE_EDITOR_OPEN",
+        "status": "EXPLICIT_BETA2_WIN10_OWNER_GUI_SSH_EVIDENCE_ACCEPTED_1_0_FULL_RULE_EDITOR_OPEN_WIN11_DEFERRED",
         "accepted": false,
         "evidence": [],
         "required_native_windows": true,
@@ -691,7 +705,7 @@
         "legacy_gate_mapping": [
           "R09"
         ],
-        "exit_criterion": "Same exact signed bits source SHA on native owner Win10 and Win11, original JSON/PCAP/BMP, physical fail-closed, no P0 SKIP",
+        "exit_criterion": "Same exact signed RC source/payload bytes accepted on native owner Windows 10 Pro 22H2 x64, original JSON/PCAP/BMP, physical protected fail-closed, zero P0 SKIP; Win11 future",
         "depends_on": [
           "WIN-03",
           "WIN-04",
@@ -699,7 +713,7 @@
           "WIN-06",
           "WIN-07"
         ],
-        "status": "NOT_ACCEPTED",
+        "status": "NOT_ACCEPTED_WIN10_FROZEN_SIGNED_RC_OPEN_WIN11_DEFERRED",
         "accepted": false,
         "evidence": [],
         "required_native_windows": true
@@ -718,6 +732,17 @@
         "accepted": false,
         "evidence": [],
         "required_native_windows": true
+      }
+    ],
+    "current_required_target_os": [
+      "Windows 10 Pro 22H2 x64"
+    ],
+    "deferred_os": [
+      {
+        "family": "Windows 11 Pro x64",
+        "required_now": false,
+        "status": "DEFERRED_NOT_TESTED_NOT_PUBLISHED",
+        "future_issue": "https://github.com/i-shutov/flowbridge/issues/79"
       }
     ]
   },
@@ -739,14 +764,20 @@
   "go_policy": {
     "deny_if_any_gate_false": true,
     "deny_if_native_packet_origin_missing": true,
-    "deny_if_native_win10_or_win11_missing": true,
+    "deny_if_native_win10_or_win11_missing": false,
     "deny_if_unsigned_or_unaccepted_kernel_backend": true,
     "deny_if_selected_direct_evidence_missing": true,
     "deny_if_independent_evidence_missing": true,
     "deny_if_exact_binary_sha_and_test_source_sha_disagree": true,
     "hosted_only_is_not_native_pass": true,
     "model_only_is_not_driver_pass": true,
-    "legacy_macos_R02_R04_not_required_for_windows_1_0_but_still_unaccepted": true
+    "legacy_macos_R02_R04_not_required_for_windows_1_0_but_still_unaccepted": true,
+    "deny_if_native_win10_missing": true,
+    "deny_if_native_win11_missing": false,
+    "windows11_qa_required_for_current_release": false,
+    "win11_deferral_is_not_pass": true,
+    "current_release_scope": "Win10 Pro 22H2 x64 ONLY; no Win11 publication claim",
+    "scope_decision_supersedes": "USER_CONFIRMED_WINDOWS_FIRST_WIN10_AND_WIN11_20261115"
   },
   "checkpoint_path": "docs/qa/release-1.0/WINDOWS_FIRST_1_0_ROADMAP_20261115.md",
   "windows10_security_lifecycle": {
@@ -761,5 +792,13 @@
     ]
   },
   "last_status_update": "2026-11-17",
-  "current_rebaseline_checkpoint": "docs/qa/release-1.0/checkpoints/WINDOWS_FIRST_RELEASE_REBASELINE_20261116.md"
+  "current_rebaseline_checkpoint": "docs/qa/release-1.0/checkpoints/WINDOWS_FIRST_RELEASE_REBASELINE_20261116.md",
+  "scope_decision_checkpoint": "docs/qa/release-1.0/checkpoints/WIN10_ONLY_SCOPE_DECISION_20261117.md",
+  "current_platform_release_targets": [
+    "Windows 10 Pro 22H2 x64"
+  ],
+  "deferred_platform_release_targets": [
+    "Windows 11 Pro x64",
+    "macOS Apple Silicon and Intel"
+  ]
 }
