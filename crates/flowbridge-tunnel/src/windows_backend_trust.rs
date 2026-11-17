@@ -98,9 +98,17 @@ try {
     $s = Get-AuthenticodeSignature -LiteralPath $p -ErrorAction Stop
 } catch {
     # Return only a bounded exception category, never the path/message.
-    if ($_.Exception.GetType().Name -eq 'FileNotFoundException') { exit 19 }
-    if ($_.Exception.GetType().Name -eq 'UnauthorizedAccessException') { exit 20 }
-    if ($_.Exception.GetType().Name -eq 'IOException') { exit 21 }
+    $name = $_.Exception.GetType().Name
+    if ($name -eq 'FileNotFoundException') { exit 19 }
+    if ($name -eq 'UnauthorizedAccessException') { exit 20 }
+    if ($name -eq 'IOException') { exit 21 }
+    if ($name -eq 'CommandNotFoundException') { exit 22 }
+    if ($name -eq 'ParameterBindingException') { exit 23 }
+    if ($name -eq 'ProviderInvocationException') { exit 24 }
+    if ($name -eq 'InvalidOperationException') { exit 25 }
+    if ($name -eq 'RuntimeException') { exit 26 }
+    if ($name -eq 'ActionPreferenceStopException') { exit 27 }
+    if ($name -eq 'SecurityException') { exit 28 }
     exit 17
 }
 if ($s.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or
