@@ -1,5 +1,14 @@
 # FlowBridge Win10 — signed OpenSSH runtime + privacy source CI checkpoint
 
+## Latest security source checkpoint (supersedes previous build SHA)
+
+[Draft PR #88](https://github.com/i-shutov/flowbridge/pull/88) current exact source `44e3ba988ac5a9f7cf2d25b16d46c432ff3d8c38`. [**Targeted CI #44076875289**](https://github.com/i-shutov/flowbridge/actions/runs/44076875289): **3/3 SUCCESS** (Windows signed Microsoft OpenSSH positive and fake unsigned negative; locked real `-V` execution without using `PATH`, mock port regression, Linux SSH regression and Windows CMake FFI/GUI explicit-only compile). The earlier `0a0addce...` source / `44075525234` CI record below is historical, also 3/3 PASS.
+
+Extended [rust-and-native-applications #44076875466](https://github.com/i-shutov/flowbridge/actions/runs/44076875466) is **not declared fully green until each hosted OS job completes**. An earlier exact SHA `0a0...` run failed due to a `clippy::needless_return` on Windows and a **test-only pre-child localhost bind collision** in the Linux dead-child reconnect test. The current source removes that Clippy warning and bounds retries to verified pre-child `Address already in use` only — never retries real authentication, overload, or changed SSH failure behaviour. Do not infer signed kernel driver/WFP G2 from any user-mode test.
+
+**Still not accepted:** no beta.3 frozen installer source/binary hashes, no original owner Win10 native QA for new bytes, no independent Windows 10 ESU/pinned selected SSH runtime result, repository still public despite owner closed-source requirement, A5/A6 formal security and A7 internal pilot GO remain false. No installer released, no tag, no main merge.
+
+
 **As of 17 November 2026.** Owner decision: `PROPRIETARY / INTERNAL_ONLY / WIN10_PRO_22H2_X64_ONLY`. **Current `0.3.0-beta.2` original installer is unchanged/unfixed.** This document is a **source/build** checkpoint for proposed future `0.3.0-beta.3`, not a publisher GO, signed product or private installer.
 
 ## Exact unchanged original beta.2
