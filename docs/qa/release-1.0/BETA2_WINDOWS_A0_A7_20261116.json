@@ -109,15 +109,39 @@
       },
       "license_distribution_issue": "https://github.com/i-shutov/flowbridge/issues/78",
       "pinned_original_cargo_audit_run": "https://github.com/i-shutov/flowbridge/actions/runs/43936785163",
-      "pinned_original_cargo_audit_status": "SUCCESS_4_OF_4_75_DEPENDENCIES_NO_KNOWN_RUSTSEC_VULNERABILITIES"
+      "pinned_original_cargo_audit_status": "SUCCESS_4_OF_4_75_DEPENDENCIES_NO_KNOWN_RUSTSEC_VULNERABILITIES",
+      "latest_license_decision_packet": "https://github.com/i-shutov/flowbridge/blob/qa/a6-win10-beta2-release-20261117/docs/qa/release-1.0/checkpoints/A5_LICENSE_NATIVE_RUNTIME_DECISION_PACKET_20261117.md"
     },
     {
       "id": "A6",
-      "status": "INDEPENDENT_RELEASE_QA_NO_GO_PENDING_A5_SECURITY_LICENSE_AND_A7",
+      "status": "A6_TECHNICAL_EVIDENCE_PASS_RELEASE_GO_BLOCKED_BY_A5_LEGAL_SECURITY_AND_A7",
       "accepted": false,
-      "what": "Current target Win10-only A3 PASS on evidence; A6 independent P0/privacy/security/legal release review remains OPEN pending A5 and explicit publisher GO, not Win11",
+      "what": "Win10-only immutable beta2 original candidate and owner Win10 V4/V5 technical QA independently reaudited, A6 QA CI 3/3 green; full independent native C++/privacy/legal release approval still OPEN, A5 license unselected",
       "evidence": [],
-      "draft_review_packet": "docs/qa/release-1.0/checkpoints/BETA2_A6_RELEASE_REVIEW_PACKET_20261117.md"
+      "draft_review_packet": "docs/qa/release-1.0/checkpoints/BETA2_A6_RELEASE_REVIEW_PACKET_20261117.md",
+      "technical_original_byte_review": {
+        "status": "A6_TECHNICAL_EVIDENCE_PASS_RELEASE_GO_BLOCKED",
+        "exact_candidate_source_sha": "86583a1a0487b9d383c0122b24558e620bde5b9c",
+        "original_11_job_candidate_success": "https://github.com/i-shutov/flowbridge/actions/runs/43883696169",
+        "independent_a6_pr": "https://github.com/i-shutov/flowbridge/pull/80",
+        "exact_review_sha": "ff3cae712ad9ea65f2f4efcd95a3e3ff6bab7a90",
+        "exact_a6_ci": "https://github.com/i-shutov/flowbridge/actions/runs/44040978619",
+        "a6_ci_jobs": "3/3 SUCCESS",
+        "ci_tests": [
+          "Linux adversarial ZIP/manifest/SSH/no-release mutations",
+          "Windows adversarial ZIP/manifest/SSH/no-release mutations",
+          "original immutable candidate ZIP/source/manifest/license/FFI SHA verification"
+        ],
+        "original_owner_v4_evidence_manifest": "100/100 passed offline",
+        "original_owner_v5_evidence_manifest": "26/26 passed offline",
+        "offline_private_handoff_zip_sha256": "2864c7d9c0905126219bbd45a56021d5dc07e5f4029ee09369f91d39a6918112",
+        "user_owner_host_cryptographically_attested": false,
+        "physical_reviewer_gui_ssh_rerun": false,
+        "native_cpp_security_comprehensive": false,
+        "license_legal_and_runtime_review": false,
+        "accepted": false,
+        "explicitly_preserves_release_no_go": true
+      }
     },
     {
       "id": "A7",
@@ -138,9 +162,9 @@
     "win11_publication": true
   },
   "open_dependencies": [
-    "FlowBridge-specific project LICENSE choice, independent legal/native SDK runtime and security review (issue #78)",
-    "Independent exact-source Win10-only beta.2 A6 release review",
-    "Explicit A7 owner approval and truthful unsigned engineering prerelease distribution decision"
+    "A5: explicitly choose FlowBridge own-code license/copyright owner and approve legal, native runtime/SDK distribution and security review (#78)",
+    "A6: complete independent Win10-only P0/native C++/privacy and distribution sign-off (technical original-byte CI 3/3 PASS; not final GO)",
+    "A7: explicit owner approval and publisher/unsigned engineering prerelease decision; no tag or release"
   ],
   "windows_1_0_wfp_g2_accepted": false,
   "all_required_beta_gates_accepted": false,
