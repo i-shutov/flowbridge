@@ -95,7 +95,8 @@ $p = $env:FLOWBRIDGE_SIGNED_SSH_CANDIDATE
 if ([string]::IsNullOrWhiteSpace($p)) { exit 14 }
 if (-not [System.IO.File]::Exists($p)) { exit 18 }
 try {
-    $s = Get-AuthenticodeSignature -LiteralPath $p -ErrorAction Stop
+    Import-Module Microsoft.PowerShell.Security -ErrorAction Stop
+    $s = Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $p -ErrorAction Stop
 } catch {
     # Return only a bounded exception category, never the path/message.
     $name = $_.Exception.GetType().Name
