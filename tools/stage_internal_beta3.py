@@ -186,6 +186,11 @@ def stage(source: Path, destination: Path, *, build: bool = False) -> dict:
     destination = destination.absolute()
     must(not destination.exists() and destination != source and source not in destination.parents,
          'destination_must_be_new_outside_source')
+    if build:
+        must(sys.platform == 'win32' and sys.getwindowsversion().build == 19045
+             and sys.maxsize > 2**32, 'build_requires_native_win10_x64_19045')
+        must(shutil.which('cargo') and shutil.which('cmake') and shutil.which('python'),
+             'build_prerequisites_missing')
     root_guard(source)
     archive = subprocess.check_output(['git', '-C', str(source), 'archive',
                                        '--format=zip', 'HEAD'], timeout=120)
@@ -218,10 +223,6 @@ def stage(source: Path, destination: Path, *, build: bool = False) -> dict:
         status = 'PRIVATE_SOURCE_ONLY_READY_NOT_BUILT'
         installer = None
         if build:
-            must(sys.platform == 'win32' and sys.getwindowsversion().build == 19045
-                 and sys.maxsize > 2**32, 'build_requires_native_win10_x64_19045')
-            must(shutil.which('cargo') and shutil.which('cmake') and shutil.which('python'),
-                 'build_prerequisites_missing')
             subprocess.run([sys.executable, 'tools/explicit_beta_metadata.py', 'check'],
                            cwd=destination, check=True, timeout=90)
             subprocess.run([sys.executable, 'packaging/windows/build-explicit-beta.py'],
