@@ -1189,7 +1189,7 @@ fn resolve_ssh(config: &Config) -> io::Result<std::path::PathBuf> {
     {
         // Do not trust the first executable in a user-writable PATH.
         // The only implicit Windows choice is System32/OpenSSH/ssh.exe.
-        return windows_backend_trust::default_system_ssh();
+        windows_backend_trust::default_system_ssh()
     }
     #[cfg(not(windows))]
     let name = "ssh";
@@ -2174,24 +2174,47 @@ mod tests {
     }
     #[test]
     fn dead_child_reconnects_and_new_child_becomes_ready() {
-        let calls = Arc::new(AtomicUsize::new(0));
-        let count = calls.clone();
-        let supervisor = Supervisor::with_launcher(
-            config(),
-            Arc::new(move |config| {
-                let mode = if count.fetch_add(1, Ordering::SeqCst) == 0 {
-                    "exit_after_ready"
-                } else {
-                    "healthy"
-                };
-                Ok(command(config, mode))
-            }),
-        )
-        .unwrap();
-        supervisor.start().unwrap();
-        let first = wait(&supervisor, |s| {
-            s.status.state == "ready" && s.status.attempt == 1
-        });
+        // Hosted parallel tests can win the config() bind/release window
+        // before the first mock child is spawned. Retry only an independently
+        // confirmed pre-child bind collision; never retry real SSH failures.
+        const MAX_PREFLIGHT_RETRIES: usize = 3;
+        let mut cfg = config();
+        let mut retries = 0;
+        let (supervisor, first) = loop {
+            let calls = Arc::new(AtomicUsize::new(0));
+            let count = calls.clone();
+            let candidate = Supervisor::with_launcher(
+                cfg.clone(),
+                Arc::new(move |config| {
+                    let mode = if count.fetch_add(1, Ordering::SeqCst) == 0 {
+                        "exit_after_ready"
+                    } else {
+                        "healthy"
+                    };
+                    Ok(command(config, mode))
+                }),
+            )
+            .unwrap();
+            candidate.start().unwrap();
+            let result = wait(&candidate, |s| {
+                s.status.state == "ready" || s.status.state == "failed"
+            });
+            if result.status.state == "ready" {
+                break (candidate, result);
+            }
+            assert!(
+                mock_preflight_bind_collision(&result, cfg.local_port),
+                "real/mock SSH failure must not be retried: {result:?}"
+            );
+            assert!(
+                retries < MAX_PREFLIGHT_RETRIES,
+                "pre-child mock SSH bind collisions exceeded retry budget"
+            );
+            retries += 1;
+            drop(candidate);
+            cfg.local_port = config().local_port;
+        };
+        assert_eq!(first.status.attempt, 1);
         let second = wait(&supervisor, |s| {
             s.status.state == "ready" && s.status.attempt == 2
         });
