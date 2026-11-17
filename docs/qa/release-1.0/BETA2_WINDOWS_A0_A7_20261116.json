@@ -88,7 +88,7 @@
     },
     {
       "id": "A5",
-      "status": "INTERNAL_ONLY_TECHNICAL_AUDIT_PASS_INTERNAL_LICENSE_RUNTIME_SECURITY_REVIEW_OPEN_EXTERNAL_LICENSE_DEFERRED",
+      "status": "TECHNICAL_PROVENANCE_AND_RUSTSEC_PASS_P0_REPO_PUBLIC_P1_SSH_EXECUTABLE_TRUST_OPEN",
       "accepted": false,
       "what": "Original immutable BOM/RustSec and PE metadata technical PASS; owner chose internal-only; public MIT/Apache/proprietary decision not required now, but third-party/internal use rights, native SDK/runtime and security reviews remain open",
       "evidence": [
@@ -120,7 +120,7 @@
     },
     {
       "id": "A6",
-      "status": "A6_TECHNICAL_4_OF_4_PASS_FORMAL_INTERNAL_SECURITY_PRIVACY_GO_OPEN",
+      "status": "SOURCE_CONFIRMED_P1_RAW_SSH_SNAPSHOT_PRIVACY_LEAK_FORMAL_GO_BLOCKED",
       "accepted": false,
       "what": "Win10 beta2 original package and V4/V5 evidence audited; PE importer and ZIP 4/4 CI PASS; formal internal pilot P0/native C++/privacy security sign-off remains open",
       "evidence": [],
@@ -158,7 +158,12 @@
       "external_publication_part_of_current_scope": false,
       "formal_internal_release_security_review_accepted": false,
       "redacted_secret_scan_and_win10_installer_hosted_negative_ci": "SUCCESS_4_OF_4",
-      "original_beta2_product_binary_modified": false
+      "original_beta2_product_binary_modified": false,
+      "security_privacy_open_findings": [
+        "#85 original beta2 raw SSH stderr FFI/GUI",
+        "#86 SSH backend PATH/executable signer verification",
+        "#83 public closed-source repository"
+      ]
     },
     {
       "id": "A7",
@@ -182,9 +187,9 @@
     "win11_publication": true
   },
   "open_dependencies": [
-    "A5: internal third-party license/native SDK runtime and security review; closed-source repo still public pending owner action #83",
-    "A6: formal Win10 native C++/SSH/diagnostics privacy and no-P0 security acceptance; history scanner is bounded screening only",
-    "A7: explicit owner GO for internal pilot beyond existing QA; no public installer/release/tag"
+    "A5: internal third-party/runtime rights plus SSH backend trust verification (#86); repository proprietary but public (#83) awaiting owner action",
+    "A6: original frozen beta2 raw OpenSSH stderr/log P1 (#85) source patch PR #84 requires new exact candidate/retested Win10 evidence; full native C++/privacy sign-off not granted",
+    "A7: explicit internal pilot deployment GO NOT_GRANTED; no public release/tag or binary replacement"
   ],
   "windows_1_0_wfp_g2_accepted": false,
   "all_required_beta_gates_accepted": false,
@@ -278,5 +283,29 @@
     "a5_native_security_accepted": false,
     "a6_formal_privacy_go": false,
     "a7_internal_pilot_go": false
+  },
+  "product_security_findings": {
+    "raw_ssh_diagnostics_snapshot_and_gui_p1": {
+      "status": "CONFIRMED_IN_ORIGINAL_FROZEN_BETA2_NOT_FIXED_IN_PACKAGED_BINARY",
+      "tracked_issue": "https://github.com/i-shutov/flowbridge/issues/85",
+      "source_privacy_fix_pr": "https://github.com/i-shutov/flowbridge/pull/84",
+      "original_beta2_source_sha": "86583a1a0487b9d383c0122b24558e620bde5b9c",
+      "safe_ffi_diagnostic_json_does_not_sanitize_raw_ssh_snapshot": true,
+      "privacy_patch_requires_new_version_and_full_qa": true,
+      "frozen_beta2_binary_patch_pass": false
+    },
+    "ssh_executable_origin_trust_p1": {
+      "status": "NO_RUNTIME_AUTHENTICODE_ENFORCEMENT_IN_ORIGINAL_BETA2",
+      "issue": "https://github.com/i-shutov/flowbridge/issues/86",
+      "original_behavior": "explicit local path or first ssh.exe from PATH; -V OpenSSH_ prefix not signature proof",
+      "read_only_signed_backend_preflight_source": "https://github.com/i-shutov/flowbridge/blob/qa/win10-internal-security-inventory-20261117/tools/windows/FlowBridge-SignedOpenSSH-ReadOnly.ps1",
+      "runtime_binary_pin_to_launch_proved": false,
+      "internal_go": false
+    },
+    "closed_source_repo_visibility_p0": {
+      "status": "OWNER_TO_PRIVATIZE_LATER_CURRENTLY_PUBLIC",
+      "issue": "https://github.com/i-shutov/flowbridge/issues/83",
+      "confidentiality_mitigation_complete": false
+    }
   }
 }
