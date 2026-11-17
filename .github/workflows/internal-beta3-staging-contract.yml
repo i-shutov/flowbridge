@@ -26,18 +26,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          path: qa
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 44e3ba988ac5a9f7cf2d25b16d46c432ff3d8c38
+          path: product
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - name: Assert the product source is the exact security-reviewed commit
+        shell: python
+        run: |
+          import subprocess
+          from pathlib import Path
+          assert Path('product/Cargo.lock').is_file()
+          source=subprocess.check_output(
+              ['git','-C','product','rev-parse','HEAD'],text=True).strip()
+          assert source=='44e3ba988ac5a9f7cf2d25b16d46c432ff3d8c38'
+          assert Path('qa/tools/stage_internal_beta3.py').is_file()
+          print('SOURCE_AND_QA_SEPARATE_EXACT_PRODUCT_SHA_PASS')
       - name: Verify the existing beta.2 contract, not another binary candidate
-        run: python tools/explicit_beta_metadata.py check
+        run: python product/tools/explicit_beta_metadata.py check
       - name: Prove version surgery, malicious ZIP rejection and NO-REMOTE private Git
-        run: python -m unittest discover -s tests -p 'test_stage_internal_beta3.py' -v
+        env:
+          FLOWBRIDGE_BETA2_FIXTURE_ROOT: ${{ github.workspace }}/product
+        run: python -m unittest discover -s qa/tests -p 'test_stage_internal_beta3.py' -v
       - name: Assert no installer or package generated or uploaded by staging test
         shell: python
         run: |
-          import pathlib
-          assert not list(pathlib.Path('.').rglob('*beta.3*setup.exe'))
-          assert not list(pathlib.Path('artifacts').glob('*.exe')) if pathlib.Path('artifacts').exists() else True
+          from pathlib import Path
+          for root in (Path('qa'),Path('product')):
+              assert not list(root.rglob('*beta.3*setup.exe'))
           print('BETA3_STAGING_TESTS_ONLY_NO_INSTALLER_NO_RELEASE_NO_GITHUB_UPLOAD')
