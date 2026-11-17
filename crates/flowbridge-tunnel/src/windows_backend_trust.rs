@@ -94,8 +94,15 @@ $ErrorActionPreference = 'Stop'
 $p = $env:FLOWBRIDGE_SIGNED_SSH_CANDIDATE
 if ([string]::IsNullOrWhiteSpace($p)) { exit 14 }
 if (-not [System.IO.File]::Exists($p)) { exit 18 }
+# Never load a user-writable module named Microsoft.PowerShell.Security.
+# PSHOME is the directory containing the trusted System32 PowerShell binary.
+$env:PSModulePath = [System.IO.Path]::Combine($PSHOME, 'Modules')
 try {
     Import-Module Microsoft.PowerShell.Security -ErrorAction Stop
+} catch {
+    exit 29
+}
+try {
     $s = Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $p -ErrorAction Stop
 } catch {
     # Return only a bounded exception category, never the path/message.
