@@ -1,5 +1,17 @@
 # FlowBridge — исполнимый план до 1.0
 
+## ПРИОРИТЕТ 17.11: реальные P1 безопасности до любого нового внутреннего кандидата
+
+**Frozen `0.3.0-beta.2` не изменён**: source `86583a1a0487b9d383c0122b24558e620bde5b9c`; original Win10 A0–A3 пользовательские доказательства приняты по V4 100/100 + V5 26/26, CI 11/11 PASS. Однако **обнаружено реальное P1 раскрытие путей/hostname через OpenSSH stderr** в `Snapshot.stderr` и `Snapshot.events`/GUI journal. Старый installer **не содержит** патч.
+
+- [P1 privacy #85](https://github.com/i-shutov/flowbridge/issues/85), исправление [Draft PR #84](https://github.com/i-shutov/flowbridge/pull/84), exact source `6057ff9b76ebd1d3148ac806313dc0aec0bd9158`. [Targeted CI #44061327017](https://github.com/i-shutov/flowbridge/actions/runs/44061327017) **3/3 SUCCESS**: Rust SSH на Linux/Windows, synthetic secret/host/path omissions из serialized snapshot, нативная компиляция Win32 GUI `FLOWBRIDGE_EXPLICIT_BETA_ONLY=ON`. Это **source/build PASS**, НЕ тест нового installer и НЕ общий A6 GO.
+- [P1 executable trust #86](https://github.com/i-shutov/flowbridge/issues/86): существующий SSH backend разрешает explicit absolute path и PATH-lookup без runtime Microsoft Authenticode/pin доверия. [QA PR #82](https://github.com/i-shutov/flowbridge/pull/82) содержит read-only Authenticode + SHA + reparse проверку, но остаётся TOCTOU/непроверенный runtime. [Win10 owner Codex read-only A5/A6 preflight](https://github.com/i-shutov/flowbridge/blob/qa/win10-internal-security-inventory-20261117/docs/qa/release-1.0/checkpoints/WIN10_A5_A6_READONLY_SECURITY_PREFLIGHT_CODEX_20261117.md) нужно выполнить на реальной машине; не считать hosted Windows Server доказательством Win10.
+- **P0 confidentiality** [#83](https://github.com/i-shutov/flowbridge/issues/83): repo остаётся Public при закрытой лицензии; пользователь приватизирует позже. Запросов на автоматическую смену visibility нет.
+- **Win10 ESU**: read-only Year2/licensing/patch floor на фактической Win10 машине не проверен. Никаких MAK/ключей или личных путей в публичный GitHub.
+
+[Интегральный P0/P1 checkpoint](qa/release-1.0/checkpoints/SECURITY_P1_FINDINGS_AND_BETA_NEXT_GATE_20261117.md). При принятии приватности SSH **собрать новый уникальный кандидат** (возможное имя `0.3.0-beta.3`) со своими SHA/manifest и Win10 native GUI/SSH негативами+позитивами, а не переписывать прошедший beta.2. **A5/A6 formal и A7 внутреннее развёртывание OPEN**. Win11/macOS отложены. **Защищённый Win10 1.0 WFP/G2 NO-GO**, никакой физический WFP-драйвер на owner VPS не ставился.
+
+
 ## Internal security audit — 17 November 2026, latest read-only CI
 
 [Win10 closed-source security checkpoint](qa/release-1.0/checkpoints/INTERNAL_WIN10_SECURITY_REVIEW_20261117.md), [QA PR #82](https://github.com/i-shutov/flowbridge/pull/82) exact head `ab7d0d56dfa6af0843c183497d455a6b67578ea1`, [GitHub Actions #44055935443](https://github.com/i-shutov/flowbridge/actions/runs/44055935443) **4/4 PASS**. **9,399 Git objects / 2,769 historical blobs** from fetched refs and PR heads, zero high-confidence PEM/token-pattern matches, zero skipped large blobs. Independently screened exact frozen beta.2 source ZIP **303/303 files**, original owner V5 **27**, V4 **100** plus nested CI ZIP **25** files (large binary separately inspected): zero matches under the narrow high-confidence rules. This is not a comprehensive secret/security audit and cannot undo public history or external clones.
