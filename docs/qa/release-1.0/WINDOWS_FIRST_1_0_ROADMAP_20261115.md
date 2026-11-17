@@ -1,5 +1,16 @@
 # FlowBridge — Windows-first релиз 1.0: актуальный план
 
+## ПРАВЯЩЕЕ РЕШЕНИЕ ВЛАДЕЛЬЦА — 17.11.2026: ТОЛЬКО ВНУТРЕННЕЕ ИСПОЛЬЗОВАНИЕ
+
+Владелец прямо выбрал «пока только внутреннее». **Это не выбор MIT/Apache-2.0/проприетарной лицензии, не публичная публикация и не GO на развёртывание**. Допустима внутренняя разработка и ранее разрешённые тесты точного `0.3.0-beta.2` на Win10 Pro x64. Сохранены все original candidate SHA и доказательства A0–A3 PASS.
+
+**Публичная дистрибуция, внешние установщики, маркетинговые релизы, GitHub Releases и release tags запрещены/не запрошены.** Собственная публичная лицензия FlowBridge не выбирается сейчас, это [будущий backlog #78](https://github.com/i-shutov/flowbridge/issues/78). Сторонние лицензии, фактические native SDK/runtime условия использования и security/privacy остаются важными даже внутри организации.
+
+**Текущий путь:** `A5_INTERNAL_DEPENDENCY_RUNTIME_REVIEW_OPEN` → `A6_INTERNAL_SECURITY_PRIVACY_P0_GO_OPEN` → `A7_INTERNAL_DEPLOYMENT_GO_NOT_GRANTED`, см. [активную задачу #81](https://github.com/i-shutov/flowbridge/issues/81). A0–A3 Win10 приняты на оригинальных доказательствах, технический A5 и A6 CI PASS. Никакой live VM/driver/пакетной установки в этом изменении не выполнялось. Windows `1.0` WFP/G2 NO-GO. Windows 11/macOS отложены на следующие платформенные релизы.
+
+[Машинная политика и точный checkpoint](https://github.com/i-shutov/flowbridge/blob/docs/release-win10-vm910136-20261110/docs/qa/release-1.0/checkpoints/INTERNAL_ONLY_DISTRIBUTION_DECISION_20261117.md). **Все прежние формулировки этого документа о необходимости сейчас выбрать публичную лицензию — исторические, заменены данным решением.**
+
+
 > **САМОЕ НОВОЕ РЕШЕНИЕ ВЛАДЕЛЬЦА — 17 НОЯБРЯ 2026: WINDOWS 10 ONLY.** Текущая `0.3.0-beta.2` и первый выпуск `1.0` ориентируются **только на Windows 10 Pro 22H2 x64**. **Windows 11 пока не тестируем, не публикуем и не заявляем как поддерживаемую ОС**; её принимаем отдельно в следующих релизах. macOS также отложена. Это заменяет прежнюю матрицу «Win10 + Win11» от 15 ноября и все повторения требования Win11 ниже по документу. Старые разделы сохраняются как **исторические**, а не текущие release-gates. [Решение 17.11](checkpoints/WIN10_ONLY_SCOPE_DECISION_20261117.md) · [машинный реестр beta.2 A0–A7](BETA2_WINDOWS_A0_A7_20261116.json) · [машинные WIN-00–09](WINDOWS_FIRST_GATES_20261115.json).
 
 **Текущий beta.2:** `A0–A3 PASS` в утверждённом **Win10-only** объёме (Win10 V4+V5 оригиналы проверены); `A5/A6/A7 OPEN` из-за собственного LICENSE, независимого legal/native/security review и отдельного publisher GO. [Выпускное A6 pre-review](checkpoints/BETA2_A6_RELEASE_REVIEW_PACKET_20261117.md) теперь не требует Win11. **Не создавать tag/Release автоматически.**
