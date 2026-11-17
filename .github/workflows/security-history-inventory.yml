@@ -1,0 +1,60 @@
+name: Internal-only release security history inventory (read-only)
+on:
+  pull_request:
+    paths:
+      - 'tools/security/scan_public_history.py'
+      - 'tests/test_security_public_history_scan.py'
+      - '.github/workflows/security-history-inventory.yml'
+      - 'docs/qa/release-1.0/checkpoints/SECURITY_INTERNAL_HISTORY_AUDIT_20261117.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  negative:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Redaction, deleted historical blob and unsafe ZIP negative tests
+        run: python -m unittest discover -s tests -p 'test_security_public_history_scan.py' -v
+
+  git-history:
+    needs: negative
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Fetch all currently publicly reachable PR heads for scope inventory
+        run: |
+          git -c protocol.version=2 fetch --no-tags origin \
+            '+refs/pull/*/head:refs/remotes/audit-pr/*'
+          echo "Fetch completed. Only redacted findings are retained."
+      - name: Screen all fetched Git-history blobs, NEVER emit matched values
+        run: |
+          python tools/security/scan_public_history.py \
+            --git-repo . \
+            --out build/security/history-secret-inventory.json
+      - name: Retain redacted finding categories only, even if scan fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-InternalSecurity-History-Sanitized-${{ github.run_id }}
+          path: build/security/history-secret-inventory.json
+          if-no-files-found: warn
+          retention-days: 15
