@@ -1970,11 +1970,15 @@ mod tests {
             let supervisor = Supervisor::new(cfg).unwrap();
             supervisor.start().unwrap();
             let failed = wait(&supervisor, |s| s.status.state == "failed");
-            assert!(failed
-                .status
-                .last_error
-                .as_deref()
-                .is_some_and(|message| message.contains("did not identify itself as OpenSSH")));
+            assert!(failed.status.last_error.as_deref().is_some_and(|message| {
+                if cfg!(windows) {
+                    // The real launcher now checks Microsoft Authenticode
+                    // before running even the fake executable with -V.
+                    message.contains("trusted Microsoft-signed")
+                } else {
+                    message.contains("did not identify itself as OpenSSH")
+                }
+            }));
             assert_eq!(failed.status.restarts, 0);
             assert_eq!(failed.status.pid, None);
         }
