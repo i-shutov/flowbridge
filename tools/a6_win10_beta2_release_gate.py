@@ -57,7 +57,11 @@ def archive(data: bytes, *, directories=False, max_count=400, max_bytes=70_000_0
             seen = set()
             items = {}
             for info in infos:
-                name = info.filename[:-1] if info.is_dir() else info.filename
+                # On Windows zipfile normalizes backslashes in .filename.
+                # .orig_filename retains the untrusted raw ZIP entry name.
+                # Reject any normalization, including backslashes and NUL.
+                need(info.orig_filename == info.filename, "zip_path")
+                name = info.orig_filename[:-1] if info.is_dir() else info.orig_filename
                 p = PurePosixPath(name)
                 need((not info.is_dir() or directories) and name == p.as_posix()
                      and not name.startswith(("/", "./"))
