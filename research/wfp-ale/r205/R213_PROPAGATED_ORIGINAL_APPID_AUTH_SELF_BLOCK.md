@@ -2,6 +2,10 @@
 
 2026-11-17. Independent branch only. **Architectural NO-GO / native proof pending.** This is a source-and-documentation-derived **conditional** liveness blocker, not an observed Windows failure, direct-route leak, or PacketBound/G2 pass. Nothing was installed, activated, or connected.
 
+## Scientific novelty correction — R198/R209 predate R213
+
+Independent readback on 2026-11-17 found that R213 is **not a new architectural self-block hypothesis**. The same conditional ORIGINAL_APP_ID / redirect-record-tagged physical SSH / terminating AUTH collision was already documented in `research/wfp-ale/r198/R198_PROXY_EGRESS_AUTH_COLLISION_NO_GO.md` and again in `research/wfp-ale/r209/R209_PROXY_AUTH_SELF_BLOCK_NO_GO.md`. All three reports pin the same unchanged R19 `policy_windows.rs` blob `acf60334320d970f58af3349ee75fbaa59826602`, `broker_windows.rs` blob `329ef14b63e70226bfad7372b0014559213abd04`, and `kernel/src/redirect.rs` blob `a093f049d162987981a957aac90db1014bc6ff09`. R213's Python/Node cases are an additional **offline replication**, not fresh kernel evidence, a newly identified defect, or a new GO/NO-GO transition. The previously documented conditional NO-GO remains unchanged; no native WFP classify values have been obtained. Do not count R198, R209 and R213 as three independent architectural findings.
+
 ## Four pinned source boundaries
 
 - `kernel-r19/policy_plan.rs` Git blob `0c3d0e88eb9d06f4030131d9533da2d629dbdab0`: a terminating selected-app AUTH filter is installed for V4 and V6, with a separate redirect filter.
