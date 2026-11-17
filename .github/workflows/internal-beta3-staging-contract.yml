@@ -36,6 +36,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - uses: dtolnay/rust-toolchain@stable
       - name: Assert the product source is the exact security-reviewed commit
         shell: python
         run: |
@@ -79,8 +80,22 @@ jobs:
               meta_spec.loader.exec_module(meta)
               check=meta.check_versions(out)
               assert check['version']=='0.3.0-beta.3'
+              # Build the newly staged/committed beta3 lockfile itself,
+              # not just the old beta2 source or a hand-maintained fixture.
+              # No package / proprietary binary is uploaded or retained.
+              import os
+              from subprocess import DEVNULL
+              subprocess.run(['cargo','check','--locked','--workspace'],
+                             cwd=out,check=True,timeout=900,
+                             stdout=DEVNULL)
+              subprocess.run(['cargo','test','--locked','-p','flowbridge-tunnel',
+                              '--lib','--','--test-threads=2'],
+                             cwd=out,check=True,timeout=900,
+                             stdout=DEVNULL)
               assert not list(out.rglob('*beta.3*setup.exe'))
-          print('EXACT_PINNED_SECURITY_SOURCE_TO_PRIVATE_BETA3_STAGING_PASS_NO_INSTALLER_NO_REMOTE')
+              assert subprocess.check_output(['git','-C',str(out),
+                                              'status','--porcelain']).strip()==b''
+          print('EXACT_PINNED_SECURITY_SOURCE_TO_PRIVATE_BETA3_STAGING_CARGO_CHECK_AND_SSH_TEST_PASS_NO_INSTALLER_NO_REMOTE')
       - name: Assert no installer or package generated or uploaded by staging test
         shell: python
         run: |
