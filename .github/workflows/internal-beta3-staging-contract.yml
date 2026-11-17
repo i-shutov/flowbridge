@@ -53,6 +53,34 @@ jobs:
         env:
           FLOWBRIDGE_BETA2_FIXTURE_ROOT: ${{ github.workspace }}/product
         run: python -m unittest discover -s qa/tests -p 'test_stage_internal_beta3.py' -v
+      - name: Stage the ACTUAL exact pinned security tree with no remotes or installers
+        shell: python
+        run: |
+          import importlib.util, json, pathlib, subprocess, tempfile
+          source=pathlib.Path('product').resolve()
+          for k,v in [('user.name','CI Beta3 Safety Fixture'),('user.email','qa@example.invalid')]:
+              subprocess.run(['git','-C',str(source),'config',k,v],check=True)
+          spec=importlib.util.spec_from_file_location('stage', 'qa/tools/stage_internal_beta3.py')
+          stage=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(stage)
+          with tempfile.TemporaryDirectory() as tmp:
+              out=pathlib.Path(tmp)/'offline-private'
+              result=stage.stage(source,out)
+              assert result['status']=='PRIVATE_SOURCE_ONLY_READY_NOT_BUILT'
+              assert result['original_verified_source_sha']=='44e3ba988ac5a9f7cf2d25b16d46c432ff3d8c38'
+              assert not result['installer_built'] and not result['a7_internal_deployment_approved']
+              assert not result['public_release_or_upload_performed']
+              assert subprocess.check_output(['git','-C',str(out),'remote']).strip()==b''
+              contract=json.loads((out/'packaging/explicit-beta.json').read_text())
+              assert contract['version']=='0.3.0-beta.3' and contract['release_approved'] is False
+              from importlib.util import spec_from_file_location, module_from_spec
+              meta_spec=spec_from_file_location('beta_metadata', out/'tools/explicit_beta_metadata.py')
+              meta=module_from_spec(meta_spec)
+              meta_spec.loader.exec_module(meta)
+              check=meta.check_versions(out)
+              assert check['version']=='0.3.0-beta.3'
+              assert not list(out.rglob('*beta.3*setup.exe'))
+          print('EXACT_PINNED_SECURITY_SOURCE_TO_PRIVATE_BETA3_STAGING_PASS_NO_INSTALLER_NO_REMOTE')
       - name: Assert no installer or package generated or uploaded by staging test
         shell: python
         run: |
