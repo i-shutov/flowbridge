@@ -351,7 +351,6 @@
         "source_confirmed_original_frozen_raw_ssh_stderr_p1": true,
         "source_patch_pr": "https://github.com/i-shutov/flowbridge/pull/84",
         "source_patch_sha": "6057ff9b76ebd1d3148ac806313dc0aec0bd9158",
-        "source_privacy_targeted_ci": "SUCCESS_3_OF_3",
         "product_original_beta2_privacy_fixed": false,
         "next_version_and_native_win10_acceptance_required": true,
         "arbitrary_ssh_executable_trust_issue": "https://github.com/i-shutov/flowbridge/issues/86",
@@ -360,7 +359,9 @@
         "win10_target_esu_actual_proof": false,
         "closed_source_public_git_repo_issue": "https://github.com/i-shutov/flowbridge/issues/83",
         "confidentiality_fixed": false,
-        "internal_deployment_go": false
+        "internal_deployment_go": false,
+        "source_privacy_targeted_ci_url": "https://github.com/i-shutov/flowbridge/actions/runs/44061327017",
+        "source_privacy_targeted_ci_status": "SUCCESS_3_OF_3"
       }
     },
     "current_required_target_os": [
