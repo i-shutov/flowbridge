@@ -90,10 +90,22 @@ exit 0
     let powershell = system_directory()?
         .join("WindowsPowerShell").join("v1.0").join("powershell.exe");
     reject_reparse_components(&powershell)?;
+    // std::fs::canonicalize yields an extended \\?\C:\ path on Windows.
+    // Windows PowerShell 5.1 providers are not required to accept that
+    // prefix, so pass the equivalent local drive path as literal data.
+    // Reject UNC and invalid/unpaired UTF-16 paths rather than guessing.
+    let name = executable.to_str().ok_or_else(denied)?;
+    let shell_path = name.strip_prefix(r"\\?\").unwrap_or(name);
+    let raw = shell_path.as_bytes();
+    if raw.len() < 3 || !raw[0].is_ascii_alphabetic()
+        || raw[1] != b':' || raw[2] != b'\\'
+    {
+        return Err(denied());
+    }
     let mut process = Command::new(powershell);
     process
         .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", SCRIPT])
-        .env("FLOWBRIDGE_SIGNED_SSH_CANDIDATE", executable)
+        .env("FLOWBRIDGE_SIGNED_SSH_CANDIDATE", shell_path)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
