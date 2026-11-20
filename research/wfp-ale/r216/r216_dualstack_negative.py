@@ -78,6 +78,12 @@ class R216Tests(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main(exit=False, verbosity=2)
+    # The process status is part of the evidence contract: never print a
+    # positive transcript after a failed unit test. unittest.main(exit=False)
+    # would otherwise return exit code 0 on failing assertions.
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(R216Tests)
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    if not result.wasSuccessful():
+        raise SystemExit(1)
     data = transcript().encode('ascii')
     print('R216 rows=12 sha256=' + hashlib.sha256(data).hexdigest())
