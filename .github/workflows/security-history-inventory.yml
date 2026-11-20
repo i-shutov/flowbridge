@@ -1,0 +1,176 @@
+name: Internal-only release security history inventory (read-only)
+on:
+  pull_request:
+    paths:
+      - 'tools/security/scan_public_history.py'
+      - 'tools/windows/FlowBridge-Beta2-Win10-Internal-Preflight.ps1'
+      - 'tools/windows/FlowBridge-SignedOpenSSH-ReadOnly.ps1'
+      - 'tools/windows/FlowBridge-Win10-ESU-ReadOnly.ps1'
+      - 'tests/test_security_public_history_scan.py'
+      - '.github/workflows/security-history-inventory.yml'
+      - 'docs/qa/release-1.0/checkpoints/SECURITY_INTERNAL_HISTORY_AUDIT_20261117.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  negative:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Redaction, deleted historical blob and unsafe ZIP negative tests
+        run: python -m unittest discover -s tests -p 'test_security_public_history_scan.py' -v
+
+  git-history:
+    needs: negative
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Fetch all currently publicly reachable PR heads for scope inventory
+        run: |
+          git -c protocol.version=2 fetch --no-tags origin \
+            '+refs/pull/*/head:refs/remotes/audit-pr/*'
+          echo "Fetch completed. Only redacted findings are retained."
+      - name: Screen all fetched Git-history blobs, NEVER emit matched values
+        run: |
+          python tools/security/scan_public_history.py \
+            --git-repo . \
+            --out build/security/history-secret-inventory.json
+      - name: Retain redacted finding categories only, even if scan fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowBridge-InternalSecurity-History-Sanitized-${{ github.run_id }}
+          path: build/security/history-secret-inventory.json
+          if-no-files-found: warn
+          retention-days: 15
+
+  win10-exact-installer-negative:
+    name: Reject hosted Win Server as Win10 and verify frozen setup hash
+    needs: negative
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: FlowBridge-Explicit-SOCKS-EngineeringCandidate-Windows-43883696169
+          run-id: 43883696169
+          github-token: ${{ github.token }}
+          path: build/original-windows
+      - name: Verify exact original beta2 setup, expect Windows Server 2025 refusal
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = 'build/original-windows/artifacts/FlowBridge-0.3.0-beta.2-windows-x64-setup.exe'
+          $out = & powershell.exe -NoProfile -File tools/windows/FlowBridge-Beta2-Win10-Internal-Preflight.ps1 -InstallerPath $installer
+          $code = $LASTEXITCODE
+          $data = ($out | Out-String).Trim() | ConvertFrom-Json
+          if ($data.installer_sha256_matches -ne $true) { throw 'Exact setup SHA check did not pass' }
+          if ($data.windows_10_pro_22h2_x64 -ne $false -or $code -eq 0) {
+            throw 'Hosted Windows Server incorrectly accepted as owner Windows 10 Pro'
+          }
+          if ($data.release_approved -or $data.internal_pilot_deployment_approved -or $data.public_distribution_approved) {
+            throw 'Read-only preflight promoted deployment or publication'
+          }
+          if ($data.error_code -ne 'WRONG_HOST_OS_EDITION_OR_BUILD') {
+            throw ('Unexpected failure mode: ' + $data.error_code)
+          }
+          Write-Host 'PINNED_BETA2_INSTALLER_SHA_PASS; NON_WIN10_SERVER_REJECTED; NO_INSTALL'
+          # Hosted Server rejection is EXPECTED; overwrite native subcommand's
+          # last exit code after verifying all denial/hash assertions above.
+          exit 0
+
+  signed-ssh-negative:
+    name: Reject spoofed unsigned and relative SSH EXEs without executing them
+    runs-on: windows-2025
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read-only SSH backend trust negative and actual signed OS backend sample
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tool = 'tools/windows/FlowBridge-SignedOpenSSH-ReadOnly.ps1'
+          $relative = & powershell.exe -NoProfile -File $tool -SshExecutable 'ssh.exe'
+          $rcode = $LASTEXITCODE
+          $r = ($relative | Out-String).Trim() | ConvertFrom-Json
+          if ($rcode -eq 0 -or $r.error_code -ne 'NOT_LOCAL_ABSOLUTE_SSH_EXE' -or
+              $r.a7_internal_deployment_go -or $r.binary_executed) {
+              throw 'Relative PATH ssh.exe was wrongly trusted'
+          }
+          $parent = Join-Path $env:RUNNER_TEMP ('flowbridge-qa-unsigned-' + [guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $parent -Force | Out-Null
+          $fake = Join-Path $parent 'ssh.exe'
+          try {
+              [IO.File]::WriteAllBytes($fake, [Text.Encoding]::UTF8.GetBytes('NOT_A_SIGNED_EXECUTABLE'))
+              $output = & powershell.exe -NoProfile -File $tool -SshExecutable $fake
+              $code = $LASTEXITCODE
+              $result = ($output | Out-String).Trim() | ConvertFrom-Json
+              if ($code -eq 0 -or $result.microsoft_signer_verified -or
+                  $result.error_code -ne 'SSH_AUTHENTICODE_MICROSOFT_SIGNER_NOT_VERIFIED' -or
+                  $result.binary_executed -or $result.a7_internal_deployment_go) {
+                  throw 'Unsigned fake backend was wrongly accepted'
+              }
+          } finally {
+              Remove-Item -LiteralPath $parent -Force -Recurse -ErrorAction SilentlyContinue
+          }
+          # Hosted Windows Server may have a signed system ssh.exe; observing
+          # it does NOT attest the owner's Win10 machine or the product runtime.
+          $system = Join-Path $env:WINDIR 'System32\OpenSSH\ssh.exe'
+          if (Test-Path -LiteralPath $system -PathType Leaf) {
+              $sample = & powershell.exe -NoProfile -File $tool -SshExecutable $system
+              $sampleResult = ($sample | Out-String).Trim() | ConvertFrom-Json
+              if ($sampleResult.binary_executed -or $sampleResult.a7_internal_deployment_go) {
+                  throw 'Read-only signature probe attempted execution/release'
+              }
+              Write-Host ('HOSTED_SYSTEM_SSH_READ_ONLY_OBSERVATION: ' + $sampleResult.status)
+          }
+          Write-Host 'SSH_UNTRUSTED_BACKEND_NEGATIVES_PASS_NO_EXECUTION_NO_DEPLOYMENT_GO'
+
+  win10-esu-negative:
+    name: Reject hosted Windows Server as supported Win10 ESU environment
+    runs-on: windows-2025
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read-only OS/ESU inventory must not confer security or release GO
+        shell: pwsh
+        run: |
+          $output = & powershell.exe -NoProfile -File tools/windows/FlowBridge-Win10-ESU-ReadOnly.ps1
+          $code = $LASTEXITCODE
+          $r = ($output | Out-String).Trim() | ConvertFrom-Json
+          if ($code -eq 0 -or $r.error_code -ne 'WRONG_OS_NOT_WIN10_PRO_22H2_X64') {
+              throw 'Windows Server incorrectly accepted as Windows 10 Pro with ESU'
+          }
+          if ($r.os_supported_for_current_flowbridge_scope -or
+              $r.full_esu_entitlement_and_securing_proven -or
+              $r.patches_current_as_of_today_proven -or
+              $r.a6_internal_security_go -or $r.a7_internal_deployment_go) {
+              throw 'Read-only ESU scan promoted unsupported security or release status'
+          }
+          Write-Host 'WIN10_ESU_READONLY_NON_WIN10_HOST_REJECTED; NO_KEYS_NO_MUTATIONS'
+          exit 0

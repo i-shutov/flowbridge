@@ -1,0 +1,27 @@
+# FlowBridge 0.3.0-beta.2 — independent internal-only security inventory
+
+**Date 17 November 2026. Scope: exact frozen Win10 x64 explicit SOCKS beta.2, internal use, closed own code; no public Release/driver load.**
+
+## Grounded facts, not inferred security approvals
+
+| Risk | Current observation | Severity / response |
+| --- | --- | --- |
+| Closed product hosted in **public** GitHub repository | GitHub API verified `i-shutov/flowbridge` has `private=false`, `visibility=public`, `allow_forking=true`; full main and beta.2 Git trees readable | **P0 confidentiality**. Owner plans to switch Private later; **not done by agent**. Treat already fetched source, existing public CI artifacts, forks/clones as potentially copied. Privatizing later cannot revoke them |
+| Whole Git/PR history | Existing main code search for common tokens and current 187 main/303 beta source blob filename scan found no high-confidence indications | **NOT exhaustive**. New CI scans **fetched Git history and PR refs**. No PASS until actual job, only redacted categories/object IDs. Do not paste raw findings in GitHub |
+| Unsigned Windows installer | Original NSIS setup `0699bed4...` is publisher-unsigned, exact GitHub CI source `86583a1a...`; prior A0–A3 Win10 owner evidence accepted | **P1 authenticity risk** outside pin chain. New Windows PowerShell **read-only** preflight verifies fixed file hash, exact Win10 Pro 22H2 x64, signature status and refuses Windows 11/Server; no SmartScreen/Defender bypass, no installation |
+| Installer does **not itself reject Windows 11** | Frozen `packaging/windows/FlowBridgeExplicitBeta.nsi` uses `AtLeastWin10`, not equality to Win10 | **P2 support scope** for Win10-only. Historical beta.2 binaries must not be silently modified; use read-only wrapper gate for internal QA; if hard install-time exclusion is required, issue new candidate and redo exact SHA/native A3 |
+| GUI journals and SSH diagnostics | `native/windows/main.cpp` displays raw engine/SSH event messages, status, host/path strings; FFI `diagnostics.rs` has explicit allowlist and original Rust privacy-negative test | **P1 privacy operational**. Screenshots/raw GUI journal may reveal internal paths/hostnames even if standard diagnostics JSON is safe. Never post original V4/V5 outside private reviewer context; independent binary/raw output redaction still needs audit |
+| Original V4/V5 ZIPs | Offline high-confidence regex scan on owner original V5 27 entries: **0 matching rules, 0 oversized exclusions**. V4: scanned 100 safe entries; 0 matches, **1 large nested ZIP excluded** by bounded text scanner | **PARTIAL only**, no claim that full nested archives or git history are clean. Previous V4 100/100 and V5 26/26 SHA checks remain valid; those checks do not replace secret inventory |
+| Windows 10 patch state | No independent proof of target Win10 Pro 22H2 security / ESU update status; standard support ended 2025 | **P1 deployment risk**: verify actual ESU/patch status, mitigate or confine to isolated QA; do not assert secure production host |
+| Protected Windows 1.0 | Physical signed WFP/G2 and selected TCP/IPv4/v6 no-DIRECT/DNS protection NOT accepted | **Separate NO-GO**; never claim SOCKS-only beta provides transparent interception/system kill switch |
+
+## New reproducible controls, no product change
+
+- `tools/security/scan_public_history.py`: Python stdlib scanner for all **locally fetched** Git refs, including deleted historical blobs, and read-only bounded ZIP scans. It checks only a few **high-confidence patterns**: PEM private key headers, GitHub PATs, AWS access-key IDs, Slack and Stripe live tokens. It never prints matched values or private paths; output has only finding types and hashed Git-object prefixes, with incomplete/oversized scope marked partial instead of PASS. A scan with no hits is **not** proof that no secrets are present.
+- `tests/test_security_public_history_scan.py`: safe synthetic token/Pem samples assembled at runtime, deleted Git history and traversed ZIP fixtures, ensure matched values never appear in report.
+- `.github/workflows/security-history-inventory.yml`: Linux/Windows negative tests, a Git checkout with full history plus publicly reachable PR head refs, a sanitized-only artifact; failed fetch or skipped-large blobs may not silently be called green. It does **not** read the private owner Win10 V4/V5 archive.
+- `tools/windows/FlowBridge-Beta2-Win10-Internal-Preflight.ps1`: **read-only** PowerShell 5.1 offline exact installer SHA256 and Win10 Pro 22H2 x64 preflight. Prints only metadata and hardcoded source SHA, no local paths, no install, no global OS/security changes, no internal-pilot GO. GitHub CI downloads original immutable Windows setup and on hosted Windows Server **requires refusal** after successful hash verification.
+
+## Remaining release constraints
+
+A0–A3 Win10 exact owner evidence PASS, original beta.2 build [#43883696169](https://github.com/i-shutov/flowbridge/actions/runs/43883696169) 11/11, A5 original RustSec and A6 original binary/PE checks 4/4 CI. **This scan does not replace A5 internal dependency/native SDK/runtime rights, A6 native Win32 security/privacy final sign-off, or A7 owner's explicit internal deployment permission** (tracked in [issue #81](https://github.com/i-shutov/flowbridge/issues/81)). User-selected closed product, internal use only; repository becoming truly private is **owner-controlled**. Current exact beta.2 binary unchanged. No GitHub Release/tag, no public installers, no WFP driver actions.
