@@ -1,0 +1,520 @@
+name: Win11 original beta.4 managed SSH pool 512
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+concurrency:
+  group: win11-vps-smoke-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  managed-pool-512:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'i-shutov/flowbridge' }}
+    runs-on: [self-hosted, Windows, X64, win11-flowbridge]
+    timeout-minutes: 25
+    steps:
+      - name: Run exact beta.4 release FFI pool gate privately
+        shell: cmd
+        working-directory: C:\
+        env:
+          NoDefaultCurrentDirectoryInExePath: '1'
+          FLOWBRIDGE_NATIVE_POOL_PREFLIGHT: |
+            import csv
+            import ctypes
+            from ctypes import wintypes
+            import hashlib
+            from io import BytesIO
+            import json
+            import os
+            from pathlib import Path
+            import re
+            import shutil
+            import stat
+            import subprocess
+            import sys
+            import time
+            from zipfile import ZipFile
+
+            QA_SHA = 'c45fce1675706bcf5612f7b5fceeea54a1d56594'
+            QA_TREE = '233f794cdc09bdc1c5614bfc358584131effe6f8'
+            CANDIDATE_TREE = 'ce336e83bb724a65bf512e79e286c97fb0cb3190'
+            BUILD_RUN = 'run-beta4-46040903481-1'
+            CANDIDATE_SHA = 'c8881dada43e3183a0340dc823105bdcdac71171'
+            MANIFEST_SHA = '3542633d089aff80e379f30db8be6f301edae462f38f70ea07c5b8ba76011703'
+            FFI_SHA = 'a193b8c9e96ecbcd5c2a79722a09e7ca3a822ce406ec997c9ab475f022f2469a'
+            INSTALLER_SHA = 'e0e4491cd97b30aa52b52ce89a7a8396a2fc11902bec3e70bed8ebfd722450b0'
+            BASE = Path(r'C:\FlowBridge\private-candidates')
+            BUILD = BASE / BUILD_RUN
+            CANDIDATE = BUILD / 'candidate'
+            PYTHON = BASE / 'toolchain-45986630920-1' / 'python/tools/python.exe'
+            PYTHON_ARCHIVE_SHA512 = (
+                '0e667928bb4f19573c6cd88f65133b2e07b243a5c716f335b56aa66bb9ec6f82328'
+                '256d22c3a29e23a0276ac5c6a6d786211feab524890ad1e56629196c6b29c'
+            )
+            FIXTURE_URL = ('https://github.com/PowerShell/Win32-OpenSSH/releases/download/'
+                           '10.4.0.0p1-Preview/OpenSSH-Win64.zip')
+            FIXTURE_SHA = 'b67ff8becd203502190ec42ac7787c24c2cd3325ed7700485fe7a1c83d2a7957'
+            RESULT = {'schema': 'flowbridge-native-win11-candidate-managed-pool-512-v1',
+                      'status': 'BLOCKED', 'phase': 'BOOTSTRAP',
+                      'qa_sha': QA_SHA, 'qa_tree': QA_TREE, 'candidate_tree': CANDIDATE_TREE,
+                      'managed_pool_512_proved': False, 'interactive_gui_tested': False,
+                      'candidate_installed_by_probe': False, 'raw_single_backend_512_tested': False}
+            local = log = None
+
+            class Blocked(Exception):
+                pass
+
+            def require(condition, code):
+                if not condition:
+                    raise Blocked(code)
+
+            def digest(path):
+                with path.open('rb') as stream:
+                    return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+            def check_path(path):
+                for part in (*reversed(path.parents), path):
+                    if os.path.lexists(part):
+                        flags = part.lstat().st_file_attributes
+                        require(not flags & stat.FILE_ATTRIBUTE_REPARSE_POINT, 'LOCAL_PATH_REPARSE_POINT')
+
+            def run(args, *, capture=False, timeout=60, env=None, cwd=None):
+                proc = subprocess.run(args, check=True, timeout=timeout, env=env, cwd=cwd,
+                                      stdout=subprocess.PIPE if capture else log or subprocess.DEVNULL,
+                                      stderr=log or subprocess.DEVNULL)
+                return proc.stdout.decode('utf-8', 'replace').strip() if capture else None
+
+            def check_host(system):
+                v = sys.getwindowsversion()
+                require(sys.maxsize > 2**32 and v.product_type == 1 and v.build >= 22000
+                        and os.environ.get('COMPUTERNAME', '').casefold() == 'vm-326272'
+                        and os.environ.get('RUNNER_NAME') == 'win11-flowbridge'
+                        and os.environ.get('RUNNER_ENVIRONMENT') == 'self-hosted'
+                        and ctypes.windll.shell32.IsUserAnAdmin(), 'UNEXPECTED_NATIVE_WIN11_RUNNER')
+                kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+                kernel.GetCurrentProcess.restype = wintypes.HANDLE
+                kernel.IsWow64Process2.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.USHORT),
+                                                  ctypes.POINTER(wintypes.USHORT))
+                kernel.IsWow64Process2.restype = wintypes.BOOL
+                machine, hardware = wintypes.USHORT(), wintypes.USHORT()
+                require(kernel.IsWow64Process2(kernel.GetCurrentProcess(), ctypes.byref(machine),
+                                               ctypes.byref(hardware))
+                        and machine.value == 0 and hardware.value == 0x8664, 'NATIVE_X64_WINDOWS_REQUIRED')
+                session = wintypes.DWORD()
+                require(kernel.ProcessIdToSessionId(os.getpid(), ctypes.byref(session))
+                        and session.value == 0, 'UNEXPECTED_SERVICE_SESSION')
+                who = run([str(system / 'whoami.exe'), '/user', '/fo', 'csv', '/nh'], capture=True)
+                name, sid = next(csv.reader([who]))
+                require(name.casefold() == r'vm-326272\admin'
+                        and re.fullmatch(r'S-1-[0-9]+(?:-[0-9]+)+', sid), 'UNEXPECTED_RUNNER_ACCOUNT')
+                powershell = system / 'WindowsPowerShell/v1.0/powershell.exe'
+                policy = run([str(powershell), '-NoProfile', '-NonInteractive',
+                              '-Command', 'Get-ExecutionPolicy'], capture=True)
+                require(policy == 'Restricted', 'EXPECTED_RESTRICTED_EXECUTION_POLICY')
+                RESULT.update(windows_build=v.build, service_session=session.value)
+                return sid
+
+            def check_python():
+                check_path(PYTHON)
+                require(Path(sys.executable) == PYTHON and sys.version_info[:3] == (3, 13, 17),
+                        'PINNED_PYTHON_PATH_OR_VERSION_MISMATCH')
+                archive = PYTHON.parents[2] / 'python.nupkg'
+                check_path(archive)
+                with archive.open('rb') as stream:
+                    data = stream.read(40_000_001)
+                require(len(data) <= 40_000_000 and hashlib.sha512(data).hexdigest() == PYTHON_ARCHIVE_SHA512,
+                        'PINNED_PYTHON_ARCHIVE_MISMATCH')
+                with ZipFile(BytesIO(data)) as package:
+                    for name in ('python.exe', 'python313.dll'):
+                        part = PYTHON.parent / name
+                        check_path(part)
+                        require(part.read_bytes() == package.read('tools/' + name), 'PINNED_PYTHON_BINARY_MISMATCH')
+
+            def check_candidate():
+                require(re.fullmatch(r'run-beta4-[0-9]+-[0-9]+', BUILD_RUN)
+                        and re.fullmatch('[0-9a-f]{40}', CANDIDATE_SHA)
+                        and all(re.fullmatch('[0-9a-f]{64}', value)
+                                for value in (MANIFEST_SHA, FFI_SHA, INSTALLER_SHA)),
+                        'REQUIRED_CANDIDATE_PINS_UNAVAILABLE')
+                checkpoint = BUILD / 'candidate-CHECKPOINT.json'
+                runner_result = BUILD / 'runner-result.json'
+                manifest = CANDIDATE / 'build/verification/explicit-beta-package.json'
+                dll = CANDIDATE / 'build/explicit-beta-payload/flowbridge_ffi.dll'
+                import_lib = CANDIDATE / 'target/release/flowbridge_ffi.dll.lib'
+                installer = CANDIDATE / 'artifacts/FlowBridge-0.3.0-beta.4-windows-x64-setup.exe'
+                for path in (checkpoint, runner_result, manifest, dll, import_lib, installer):
+                    check_path(path)
+                    require(path.is_file(), 'CANDIDATE_INPUT_MISSING')
+                build = json.loads(checkpoint.read_text(encoding='utf-8'))
+                attestation = json.loads(runner_result.read_text(encoding='utf-8'))
+                require(attestation['schema'] == 'flowbridge-private-beta4-runner-v1'
+                        and attestation['status'] == 'PRIVATE_LOCAL_INSTALLER_BUILT_QA_NOT_ACCEPTED'
+                        and attestation['phase'] == 'PACKAGE_EVIDENCE'
+                        and attestation['candidate'] == '0.3.0-beta.4'
+                        and attestation['installer_built'] is True
+                        and attestation['installer_installed'] is False
+                        and attestation['driver_included'] is False
+                        and attestation['staged_payload_allowlist_verified'] is True
+                        and attestation['new_private_git_commit'] == CANDIDATE_SHA
+                        and attestation['new_private_git_tree'] == CANDIDATE_TREE
+                        and attestation['package_manifest_sha256'] == MANIFEST_SHA
+                        and attestation['ffi_sha256'] == FFI_SHA
+                        and attestation['installer_sha256'] == build['installer_sha256'] == INSTALLER_SHA,
+                        'PRIVATE_BUILD_RUNNER_RESULT_MISMATCH')
+                require(build['status'] == 'PRIVATE_LOCAL_INSTALLER_BUILT_QA_NOT_ACCEPTED'
+                        and build['new_private_git_commit'] == CANDIDATE_SHA
+                        and build['new_private_git_tree'] == CANDIDATE_TREE
+                        and build['package_manifest_sha256'] == MANIFEST_SHA
+                        and build['ffi_sha256'] == FFI_SHA and build['new_version'] == '0.3.0-beta.4',
+                        'PRIVATE_BUILD_ATTESTATION_MISMATCH')
+                require(digest(manifest) == MANIFEST_SHA and digest(dll) == FFI_SHA, 'CANDIDATE_BYTES_MISMATCH')
+                data = json.loads(manifest.read_text(encoding='utf-8'))
+                require(data['source_sha'] == CANDIDATE_SHA and data['source_tree_sha'] == CANDIDATE_TREE
+                        and data['candidate'] == '0.3.0-beta.4' and data['explicit_socks_only'] is True
+                        and data['driver_included'] is False
+                        and data['installer_sha256'] == INSTALLER_SHA == digest(installer),
+                        'CANDIDATE_MANIFEST_OR_INSTALLER_MISMATCH')
+                RESULT.update(candidate_build_runner_result_verified=True,
+                              candidate_sha=CANDIDATE_SHA, candidate_manifest_sha256=MANIFEST_SHA,
+                              candidate_ffi_sha256=FFI_SHA, candidate_installer_sha256=build['installer_sha256'])
+                return manifest, dll, import_lib
+
+            def discover_tools():
+                programs = Path(os.environ['ProgramFiles'])
+                app = Path(os.environ['LOCALAPPDATA'])
+                git_paths = (programs / 'Git/cmd/git.exe', app / 'Programs/Git/cmd/git.exe')
+                cmake_paths = [programs / 'CMake/bin/cmake.exe', app / 'Programs/CMake/bin/cmake.exe']
+                vswhere = Path(os.environ['ProgramFiles(x86)']) / 'Microsoft Visual Studio/Installer/vswhere.exe'
+                check_path(vswhere)
+                install = Path(run([str(vswhere), '-latest', '-products', '*', '-requires',
+                                    'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
+                                    '-property', 'installationPath'], capture=True))
+                require(install.is_absolute(), 'NATIVE_MSVC_INSTALLATION_MISSING')
+                check_path(install)
+                cmake_paths.append(install / 'Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe')
+                git = next((path for path in git_paths if path.is_file()), None)
+                cmake = next((path for path in cmake_paths if path.is_file()), None)
+                require(git and cmake, 'NATIVE_GIT_OR_CMAKE_MISSING')
+                check_path(git)
+                check_path(cmake)
+                return git, cmake, install
+
+            def checkout(git, path, env):
+                run([str(git), 'init', '-q', '--template=', str(path)], env=env)
+                run([str(git), '-C', str(path), 'fetch', '--no-tags', '--depth=1',
+                     'https://github.com/i-shutov/flowbridge.git', QA_SHA], env=env, timeout=180)
+                run([str(git), '-C', str(path), 'checkout', '-q', '--detach', QA_SHA], env=env)
+                require(run([str(git), '-C', str(path), 'rev-parse', 'HEAD'], capture=True, env=env) == QA_SHA
+                        and run([str(git), '-C', str(path), 'rev-parse', 'HEAD^{tree}'], capture=True, env=env) == QA_TREE
+                        and not run([str(git), '-C', str(path), 'status', '--porcelain', '--untracked-files=all'],
+                                    capture=True, env=env), 'QA_CHECKOUT_SHA_TREE_OR_CLEANLINESS_MISMATCH')
+
+            def fetch_fixture(system, folder, env):
+                folder.mkdir()
+                archive = folder / 'OpenSSH-Win64.zip'
+                run([str(system / 'curl.exe'), '--disable', '--proto', '=https', '--proto-redir', '=https',
+                     '--location', '--fail', '--silent', '--show-error', '--max-time', '90', '--max-filesize',
+                     '12000000', '--output', str(archive), FIXTURE_URL], env=env, timeout=100)
+                require(archive.stat().st_size <= 12_000_000 and digest(archive) == FIXTURE_SHA,
+                        'OFFICIAL_PORTABLE_SSH_ZIP_SHA256_MISMATCH')
+                with ZipFile(archive) as package:
+                    package.extractall(folder)
+                RESULT['fixture_archive_sha256'] = FIXTURE_SHA
+                return archive
+          FLOWBRIDGE_NATIVE_POOL_RUN: |
+            class BasicJobLimits(ctypes.Structure):
+                _fields_ = [
+                    ('process_time', ctypes.c_int64), ('job_time', ctypes.c_int64),
+                    ('flags', wintypes.DWORD), ('min_working_set', ctypes.c_size_t),
+                    ('max_working_set', ctypes.c_size_t), ('max_processes', wintypes.DWORD),
+                    ('affinity', ctypes.c_size_t), ('priority', wintypes.DWORD), ('scheduling', wintypes.DWORD),
+                ]
+
+            class ExtendedJobLimits(ctypes.Structure):
+                _fields_ = [
+                    ('basic', BasicJobLimits), ('io', ctypes.c_uint64 * 6),
+                    ('process_memory', ctypes.c_size_t), ('job_memory', ctypes.c_size_t),
+                    ('peak_process_memory', ctypes.c_size_t), ('peak_job_memory', ctypes.c_size_t),
+                ]
+
+            class JobAccounting(ctypes.Structure):
+                _fields_ = [
+                    ('times', ctypes.c_int64 * 4), ('page_faults', wintypes.DWORD),
+                    ('total_processes', wintypes.DWORD), ('active_processes', wintypes.DWORD),
+                    ('terminated_processes', wintypes.DWORD),
+                ]
+
+            def run_fixture(args, env, cwd, output):
+                kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+                types = {
+                    'CreateJobObjectW': ((ctypes.c_void_p, wintypes.LPCWSTR), wintypes.HANDLE),
+                    'SetInformationJobObject': ((wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD), wintypes.BOOL),
+                    'QueryInformationJobObject': ((wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD,
+                                                  ctypes.POINTER(wintypes.DWORD)), wintypes.BOOL),
+                    'AssignProcessToJobObject': ((wintypes.HANDLE, wintypes.HANDLE), wintypes.BOOL),
+                    'OpenProcess': ((wintypes.DWORD, wintypes.BOOL, wintypes.DWORD), wintypes.HANDLE),
+                    'TerminateJobObject': ((wintypes.HANDLE, wintypes.UINT), wintypes.BOOL),
+                    'CloseHandle': ((wintypes.HANDLE,), wintypes.BOOL),
+                }
+                for name, (arguments, result) in types.items():
+                    api = getattr(kernel, name)
+                    api.argtypes, api.restype = arguments, result
+
+                def active_processes():
+                    accounting = JobAccounting()
+                    require(kernel.QueryInformationJobObject(job, 1, ctypes.byref(accounting),
+                                                             ctypes.sizeof(accounting), None),
+                            'FIXTURE_JOB_ACCOUNTING_FAILED')
+                    return accounting.active_processes
+
+                # The Python child waits on stdin before any fixture code or daemon can run.
+                # The wrapper controls only this run's kernel job and cannot hit reused PIDs.
+                gate = (
+                    'import runpy, sys; '
+                    'permit = sys.stdin.buffer.read(1); '
+                    'permit == b"1" or sys.exit(125); '
+                    'sys.argv = sys.argv[1:]; '
+                    'sys.path.insert(0, str(__import__("pathlib").Path(sys.argv[0]).parent)); '
+                    'runpy.run_path(sys.argv[0], run_name="__main__")'
+                )
+                job = kernel.CreateJobObjectW(None, None)
+                require(job, 'FIXTURE_JOB_CREATE_FAILED')
+                process = None
+                try:
+                    limits = ExtendedJobLimits()
+                    limits.basic.flags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+                    require(kernel.SetInformationJobObject(job, 9, ctypes.byref(limits), ctypes.sizeof(limits)),
+                            'FIXTURE_JOB_LIMIT_SETUP_FAILED')
+                    with output.open('xb') as stream:
+                        process = subprocess.Popen([str(PYTHON), '-I', '-X', 'utf8', '-c', gate, *args],
+                                                   stdin=subprocess.PIPE, stdout=stream,
+                                                   stderr=subprocess.STDOUT, env=env, cwd=cwd)
+                        # Process handles used to assign jobs need SET_QUOTA and TERMINATE.
+                        handle = kernel.OpenProcess(0x0100 | 0x0001, False, process.pid)
+                        require(handle, 'FIXTURE_PROCESS_HANDLE_FAILED')
+                        try:
+                            require(kernel.AssignProcessToJobObject(job, handle), 'FIXTURE_JOB_ASSIGN_FAILED')
+                        finally:
+                            kernel.CloseHandle(handle)
+                        process.stdin.write(b'1')
+                        process.stdin.close()
+                        try:
+                            status = process.wait(timeout=240)
+                        except subprocess.TimeoutExpired:
+                            raise Blocked('MANAGED_POOL_PROBE_TIMED_OUT') from None
+                        RESULT['probe_exit_code'] = status
+                        deadline = time.monotonic() + 2
+                        while active_processes() and time.monotonic() < deadline:
+                            time.sleep(0.05)
+                        RESULT['fixture_job_empty_after_probe'] = active_processes() == 0
+                        require(RESULT['fixture_job_empty_after_probe'], 'MANAGED_POOL_PROBE_LEFT_FIXTURE_PROCESSES')
+                        return status
+                finally:
+                    try:
+                        if process is not None and process.stdin and not process.stdin.closed:
+                            process.stdin.close()
+                        if active_processes():
+                            require(kernel.TerminateJobObject(job, 1), 'FIXTURE_JOB_TERMINATION_FAILED')
+                            deadline = time.monotonic() + 10
+                            while active_processes() and time.monotonic() < deadline:
+                                time.sleep(0.05)
+                            require(not active_processes(), 'FIXTURE_JOB_PROCESS_DRAIN_FAILED')
+                        if process is not None:
+                            process.wait(timeout=10)
+                        RESULT['fixture_job_cleanup_verified'] = True
+                    finally:
+                        kernel.CloseHandle(job)
+
+            def collect_stop_observations(state, name, integer_keys, boolean_keys, *, optional_codes=False):
+                roles = ['engine', *(f'ssh_worker_{index}' for index in range(1, 5))]
+                entries = state.get(name)
+                if (isinstance(entries, list) and all(isinstance(item, dict) for item in entries)
+                        and [item.get('role') for item in entries] == roles):
+                    safe = []
+                    for item in entries:
+                        row = {'role': item['role']}
+                        for key in integer_keys:
+                            value = item.get(key)
+                            if type(value) is int and 0 <= value <= 65535 or optional_codes and value is None:
+                                row[key] = value
+                        for key in boolean_keys:
+                            if type(item.get(key)) is bool:
+                                row[key] = item[key]
+                        safe.append(row)
+                    RESULT[name] = safe
+
+            def collect_probe_result(folder, status):
+                summary = folder / 'summary.json'
+                detail = folder / 'managed-pool-512.json'
+                state = json.loads(detail.read_text(encoding='utf-8')) if detail.is_file() else {}
+                stage = state.get('stage')
+                if stage in ('setup', 'starting_owned_children', 'holding_512', 'overload', 'release',
+                             'recovery_and_pause', 'stop', 'complete'):
+                    RESULT['probe_stage'] = stage
+                for name, cap in {'target_held': 512, 'peak_held': 512, 'verified_under_overload': 512,
+                                  'overload_replies': 80, 'recovery_successes': 16}.items():
+                    value = state.get(name)
+                    if type(value) is int and 0 <= value <= cap:
+                        RESULT[name] = value
+                children = state.get('children')
+                if isinstance(children, list) and len(children) <= 4:
+                    RESULT['worker_count'] = len(children)
+                peak = state.get('admission_peak')
+                if isinstance(peak, dict) and len(peak) == 4:
+                    counts = [item.get('active_including_opening') for item in peak.values()]
+                    if all(type(count) is int and 0 <= count <= 128 for count in counts):
+                        RESULT['peak_active_flows_per_worker'] = sorted(counts)
+                for name in ('release_zero_permits', 'paused_admission_failed_closed', 'stop_zero_permits',
+                             'stop_cleared_pool', 'stop_original_children_exited', 'stop_listeners_closed'):
+                    RESULT[name] = state.get(name) is True
+                for phase in ('listeners_before_stop', 'listeners_after_stop'):
+                    collect_stop_observations(state, phase, ('ipv4_listeners', 'ipv6_listeners'),
+                                              ('expected_ipv4_loopback_owner', 'unexpected_owner_or_address'))
+                collect_stop_observations(state, 'tcp_connections_after_stop',
+                                          ('initial_socket_code', 'final_socket_code'),
+                                          ('connect_timed_out',), optional_codes=True)
+                require(status == 0 and summary.is_file(), 'MANAGED_POOL_NATIVE_PROBE_FAILED')
+                top = json.loads(summary.read_text(encoding='utf-8'))
+                require(top['passed'] is True and top['managed_pool_512_proved'] is True
+                        and top['source_commit'] == QA_SHA and top['source_tree_sha'] == QA_TREE
+                        and top['native_windows_11_pool_probe'] is True and top['hosted_windows_runner'] is False
+                        and top['scenario'] == 'managed-pool-512'
+                        and top['candidate_source_commit'] == CANDIDATE_SHA
+                        and top['candidate_manifest_sha256'] == MANIFEST_SHA and top['ffi_sha256'] == FFI_SHA
+                        and top['pinned_fixture_archive_sha256'] == FIXTURE_SHA
+                        and top['wfp_driver_loaded'] is False and top['system_configuration_modified'] is False
+                        and top['microsoft_fixture_signatures_valid'] is True
+                        and re.fullmatch('[0-9a-f]{64}', top['compiled_win32_pool_policy_sha256']),
+                        'MANAGED_POOL_PROVENANCE_MISMATCH')
+                require(state.get('passed') is True and RESULT.get('probe_stage') == 'complete'
+                        and RESULT.get('peak_held') == RESULT.get('verified_under_overload') == 512
+                        and RESULT.get('overload_replies') == 80 and RESULT.get('worker_count') == 4
+                        and RESULT.get('peak_active_flows_per_worker') == [128] * 4
+                        and RESULT.get('recovery_successes') == 16
+                        and all(RESULT[key] is True for key in
+                                ('release_zero_permits', 'paused_admission_failed_closed', 'stop_zero_permits',
+                                 'stop_cleared_pool', 'stop_original_children_exited', 'stop_listeners_closed')),
+                        'MANAGED_POOL_CAPACITY_OR_LIFECYCLE_MISMATCH')
+                require(all(key in RESULT for key in ('listeners_before_stop', 'listeners_after_stop',
+                                                      'tcp_connections_after_stop'))
+                        and all(row.get('expected_ipv4_loopback_owner') is True
+                                and row.get('unexpected_owner_or_address') is False
+                                for row in RESULT['listeners_before_stop'])
+                        and all(row.get('ipv4_listeners') == row.get('ipv6_listeners') == 0
+                                for row in RESULT['listeners_after_stop'])
+                        and all(row.get('final_socket_code') == 10061 and row.get('connect_timed_out') is False
+                                for row in RESULT['tcp_connections_after_stop']),
+                        'MANAGED_POOL_LISTENER_CLOSURE_EVIDENCE_MISMATCH')
+                RESULT['compiled_win32_pool_policy_sha256'] = top['compiled_win32_pool_policy_sha256']
+                RESULT['microsoft_fixture_signatures_valid'] = True
+
+            def main():
+                global local, log
+                system = Path(os.environ['SystemRoot']) / 'System32'
+                sid = check_host(system)
+                RESULT['phase'] = 'PINNED_PYTHON'
+                check_python()
+                RESULT['phase'] = 'EXACT_CANDIDATE'
+                manifest, dll, import_lib = check_candidate()
+                RESULT['phase'] = 'PRIVATE_RUN_PATH'
+                run_id = '-'.join(os.environ[k] for k in ('GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT'))
+                require(re.fullmatch(r'[0-9]+-[0-9]+', run_id), 'INVALID_RUN_ID')
+                folder = BASE / ('run-beta4-managed-pool-512-' + run_id)
+                check_path(folder)
+                workspace = Path(os.environ['GITHUB_WORKSPACE']).resolve()
+                require(not folder.is_relative_to(workspace) and not folder.is_relative_to(BUILD)
+                        and not os.path.lexists(folder), 'UNSAFE_OR_EXISTING_PRIVATE_RUN_DIRECTORY')
+                folder.mkdir()
+                run([str(system / 'icacls.exe'), str(folder), '/inheritance:r', '/grant:r',
+                     f'*{sid}:(OI)(CI)F', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F'])
+                local = folder
+                log = (local / 'private-run.log').open('xb')
+
+                RESULT['phase'] = 'TRUSTED_NATIVE_TOOLS'
+                git, cmake, msvc = discover_tools()
+                temp = local / 'temp'
+                temp.mkdir()
+                env_keys = (
+                    'SystemRoot', 'WINDIR', 'ComSpec', 'USERPROFILE', 'USERNAME', 'USERDOMAIN',
+                    'LOCALAPPDATA', 'APPDATA', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramData',
+                    'ProgramW6432', 'HOMEDRIVE', 'HOMEPATH', 'COMPUTERNAME', 'NUMBER_OF_PROCESSORS',
+                    'PROCESSOR_ARCHITECTURE',
+                )
+                clean = {key: os.environ[key] for key in env_keys if key in os.environ}
+                clean.update(PATH=os.pathsep.join(str(p) for p in (system, git.parent, cmake.parent, PYTHON.parent)),
+                             TMP=str(temp), TEMP=str(temp), TMPDIR=str(temp), PYTHONUTF8='1',
+                             GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull, GIT_TERMINAL_PROMPT='0',
+                             GIT_CONFIG_COUNT='2', GIT_CONFIG_KEY_0='core.autocrlf', GIT_CONFIG_VALUE_0='false',
+                             GIT_CONFIG_KEY_1='credential.helper', GIT_CONFIG_VALUE_1='',
+                             NoDefaultCurrentDirectoryInExePath='1')
+                RESULT['phase'] = 'EXACT_QA_CHECKOUT'
+                qa = local / 'qa'
+                checkout(git, qa, clean)
+                RESULT['phase'] = 'COMPILED_WIN32_POLICY'
+                build = local / 'build'
+                run([str(cmake), '-S', str(qa / 'native/windows'), '-B', str(build), '-A', 'x64',
+                     f'-DCMAKE_GENERATOR_INSTANCE={msvc}', '-DFLOWBRIDGE_BUILD_NATIVE_TESTS=ON',
+                     f'-DFLOWBRIDGE_FFI_LIBRARY={import_lib}'], env=clean, cwd=local, timeout=180)
+                run([str(cmake), '--build', str(build), '--config', 'Release', '--target',
+                     'FlowBridgeSshPoolRequest'], env=clean, cwd=local, timeout=180)
+                policy = build / 'Release/FlowBridgeSshPoolRequest.exe'
+                check_path(policy)
+                require(policy.is_file(), 'COMPILED_WIN32_POLICY_MISSING')
+
+                fixture = local / 'fixture'
+                try:
+                    RESULT['phase'] = 'PINNED_SSH_FIXTURE'
+                    archive = fetch_fixture(system, fixture, clean)
+                    RESULT['phase'] = 'NATIVE_MANAGED_POOL_512'
+                    probe_env = dict(clean, GITHUB_ACTIONS='true', RUNNER_ENVIRONMENT='self-hosted',
+                                     GITHUB_RUN_ID=os.environ['GITHUB_RUN_ID'], FLOWBRIDGE_NATIVE_WINDOWS_SSH='1')
+                    reports = local / 'private-probe-evidence'
+                    require(digest(manifest) == MANIFEST_SHA and digest(dll) == FFI_SHA, 'CANDIDATE_BYTES_CHANGED')
+                    status = run_fixture([
+                        str(qa / 'tests/windows_real_ssh_hosted.py'), '--scenario', 'managed-pool-512',
+                        '--ssh', str(system / 'OpenSSH/ssh.exe'), '--keygen', str(system / 'OpenSSH/ssh-keygen.exe'),
+                        '--sshd', str(fixture / 'OpenSSH-Win64/sshd.exe'), '--fixture-archive', str(archive),
+                        '--library', str(dll), '--candidate-manifest', str(manifest), '--pool-policy', str(policy),
+                        '--expect-source-sha', QA_SHA, '--expect-candidate-source', CANDIDATE_SHA,
+                        '--expect-ffi-sha256', FFI_SHA, '--output', str(reports),
+                    ], probe_env, qa, local / 'private-probe.log')
+                    collect_probe_result(reports, status)
+                    require(digest(manifest) == MANIFEST_SHA and digest(dll) == FFI_SHA, 'CANDIDATE_BYTES_CHANGED')
+                    require(digest(policy) == RESULT['compiled_win32_pool_policy_sha256'], 'WIN32_POLICY_BYTES_CHANGED')
+                finally:
+                    for directory in (fixture, temp):
+                        if directory.exists():
+                            shutil.rmtree(directory)
+                    RESULT['run_only_fixture_files_removed'] = True
+                RESULT.update(status='PASS', phase='COMPLETE', managed_pool_512_proved=True)
+
+            try:
+                main()
+            except Blocked as exc:
+                RESULT.update(reason=str(exc))
+            except Exception as exc:
+                public_errors = (OSError, FileNotFoundError, PermissionError, ValueError,
+                                 KeyError, json.JSONDecodeError, subprocess.CalledProcessError,
+                                 subprocess.TimeoutExpired)
+                category = type(exc).__name__ if type(exc) in public_errors else 'UnexpectedError'
+                RESULT.update(reason='NATIVE_POOL_WRAPPER_FAILURE', error_type=category)
+                if log:
+                    import traceback
+                    log.write(traceback.format_exc().encode('utf-8'))
+            finally:
+                if log:
+                    log.close()
+                if local:
+                    try:
+                        with (local / 'runner-result.json').open('x', encoding='utf-8') as summary:
+                            json.dump(RESULT, summary, sort_keys=True)
+                    except OSError:
+                        RESULT.update(status='BLOCKED', reason='PRIVATE_SUMMARY_WRITE_FAILED',
+                                      managed_pool_512_proved=False)
+                print('FLOWBRIDGE_NATIVE_MANAGED_POOL_512_RESULT ' + json.dumps(RESULT, sort_keys=True))
+            sys.exit(0 if RESULT['status'] == 'PASS' else 1)
+        run: |
+          @echo off
+          "C:\FlowBridge\private-candidates\toolchain-45986630920-1\python\tools\python.exe" -I -X utf8 -c "import os; exec(os.environ.pop('FLOWBRIDGE_NATIVE_POOL_PREFLIGHT') + '\n' + os.environ.pop('FLOWBRIDGE_NATIVE_POOL_RUN'))" 2>nul
+          exit /b %ERRORLEVEL%

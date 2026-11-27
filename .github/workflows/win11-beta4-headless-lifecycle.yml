@@ -1,0 +1,87 @@
+name: Win11 beta.4 headless installer lifecycle
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+concurrency:
+  group: win11-vps-smoke-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  lifecycle:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'i-shutov/flowbridge' }}
+    runs-on: [self-hosted, Windows, X64, win11-flowbridge]
+    timeout-minutes: 10
+    steps:
+      - name: Exercise original beta.4 installer in Session 0
+        shell: cmd
+        working-directory: C:\
+        env:
+          FLOWBRIDGE_WIN11_LIFECYCLE_LAUNCH: |
+            import hashlib
+            import os
+            import re
+            import socket
+            import sys
+            import types
+            import urllib.request
+
+            CANDIDATE_RUN_ID = "46040903481"
+            CANDIDATE_RUN_ATTEMPT = "1"
+            PINS = {
+                "source": "c8881dada43e3183a0340dc823105bdcdac71171",
+                "tree": "ce336e83bb724a65bf512e79e286c97fb0cb3190",
+                "installer-sha256": "e0e4491cd97b30aa52b52ce89a7a8396a2fc11902bec3e70bed8ebfd722450b0",
+                "manifest-sha256": "3542633d089aff80e379f30db8be6f301edae462f38f70ea07c5b8ba76011703",
+                "harness-sha256": "46cd8970cf669e0be3493998aeec6ba30ecb464dd399d0c3cdd972444e193a32",
+                "tool-sha256": "faf62aabeea95ef316f5c0935177a65820ea4679ac94afe8b5461138dd17a33c",
+            }
+
+            def load(source, name, expected):
+                url = f"https://raw.githubusercontent.com/i-shutov/flowbridge/{source}/tools/{name}.py"
+                with urllib.request.urlopen(url, timeout=15) as response:
+                    contents = response.read(65537)
+                if not 0 < len(contents) <= 65536 or hashlib.sha256(contents).hexdigest() != expected:
+                    raise RuntimeError("QA source integrity check failed")
+                return compile(contents, f"<pinned-{name}>", "exec")
+
+            phase = "HOST"
+            try:
+                if (sys.platform != "win32" or sys.maxsize <= 2**32
+                        or sys.getwindowsversion().build != 22631
+                        or socket.gethostname().casefold() != "vm-326272"
+                        or os.environ.get("RUNNER_NAME") != "win11-flowbridge"):
+                    raise RuntimeError("Wrong runner")
+                phase = "EXTERNAL_CANDIDATE_PINS"
+                if not all(re.fullmatch(r"[1-9][0-9]*", value)
+                           for value in (CANDIDATE_RUN_ID, CANDIDATE_RUN_ATTEMPT)):
+                    raise RuntimeError("Missing successful candidate run")
+                for key, pin in PINS.items():
+                    length = 40 if key in ("source", "tree") else 64
+                    if re.fullmatch(f"[0-9a-f]{{{length}}}", pin) is None:
+                        raise RuntimeError("Missing independent candidate pins")
+                phase = "PINNED_SOURCE"
+                preflight = types.ModuleType("win11_explicit_beta_preflight")
+                sys.modules[preflight.__name__] = preflight
+                exec(load("562ac8fb5087d820a4b213b08dffb24c4ed1680e", preflight.__name__,
+                          "89fcff121b1cd12c6b8a0e315bfdf73599157dd1d11e79cc713a90a73230e858"),
+                     preflight.__dict__)
+                lifecycle = load("65898a7da16a54c5f845938213bffcbab551bc74",
+                                 "win11_beta4_headless_lifecycle",
+                                 "319e8308ce1eea80890f7479c6a3771618591fbc37c0a73769dce16e7a9de722")
+                phase = "LIFECYCLE"
+                candidate = (r"C:\FlowBridge\private-candidates"
+                             + rf"\run-beta4-{CANDIDATE_RUN_ID}-{CANDIDATE_RUN_ATTEMPT}\candidate")
+                sys.argv = ["win11_beta4_headless_lifecycle", "--candidate-root", candidate]
+                for key, pin in PINS.items():
+                    sys.argv.extend(("--expected-" + key, pin))
+                exec(lifecycle, {"__name__": "__main__"})
+            except Exception:
+                print("WIN11_BETA4_HEADLESS_LAUNCH_BLOCKED=" + phase)
+                sys.exit(1)
+        run: |
+          @echo off
+          set "FLOWBRIDGE_PRIVATE_PY=C:\"
+          "%FLOWBRIDGE_PRIVATE_PY%FlowBridge\private-candidates\toolchain-45986630920-1\python\tools\python.exe" -I -X utf8 -B -c "import os; exec(os.environ['FLOWBRIDGE_WIN11_LIFECYCLE_LAUNCH'])" 2>nul
+          exit /b %ERRORLEVEL%
