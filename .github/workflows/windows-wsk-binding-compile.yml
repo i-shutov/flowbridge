@@ -1,0 +1,70 @@
+name: Windows WSK accepted-socket prototype compile
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile-prototype:
+    if: ${{ github.repository == 'i-shutov/flowbridge' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      WSK_SOURCE_SHA: '229e37263b5927167795eb2f76097299e4b9770a'
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.WSK_SOURCE_SHA }}
+          persist-credentials: false
+      - name: Verify exact source and provider call-site mutations
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $head = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $head -cne $env:WSK_SOURCE_SHA) {
+            throw 'WDK prototype source mismatch'
+          }
+          python tests/wsk_binding/test_object_source.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'WSK call-site controls failed' }
+      - name: Build and run native C++ authority logic fixtures
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $build = Join-Path $env:RUNNER_TEMP 'wsk-claim-fixtures'
+          cmake -S tests/wsk_binding -B $build -A x64
+          if ($LASTEXITCODE -ne 0) { throw 'WSK fixture configuration failed' }
+          cmake --build $build --config Release
+          if ($LASTEXITCODE -ne 0) { throw 'WSK fixture compilation failed' }
+          $result = & (Join-Path $build 'Release/FlowBridgeWskClaimTest.exe')
+          if ($LASTEXITCODE -ne 0 -or $result -cne 'WSK_BINDING_AUTHORITY_CASES_PASS=9') {
+            throw 'WSK authority fixtures failed'
+          }
+          Write-Host $result
+      - name: Compile the prototype object with pinned Microsoft SDK and WDK
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = $env:GITHUB_WORKSPACE
+          $project = Join-Path $root 'tests/wsk_binding/FlowBridgeWskBinding.vcxproj'
+          $driver = Join-Path $root 'native/windows/wfp/driver'
+          nuget restore (Join-Path $driver 'packages.config') -PackagesDirectory (Join-Path $driver 'packages') -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned SDK/WDK restore failed' }
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $msbuild = & $vswhere -latest -products '*' -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\amd64\MSBuild.exe' | Select-Object -First 1
+          if (-not $msbuild) { throw 'x64 MSBuild missing' }
+          $objdir = Join-Path $env:RUNNER_TEMP 'wsk-binding-obj'
+          New-Item -ItemType Directory -Path $objdir -Force | Out-Null
+          & $msbuild $project /m /t:ClCompile /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off "/p:IntDir=$objdir/"
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $objdir 'wsk_binding.obj'))) {
+            throw 'WSK prototype object compilation failed'
+          }
+          @'
+          WSK_PROTOTYPE_OBJECT_COMPILED=true
+          G2_ACCEPTED=false
+          ORIGIN_PROCESS_BOUND=false
+          PACKET_OWNER_BOUND=false
+          DRIVER_RUNTIME_EXECUTED=false
+          PUBLISHED_BINARY=false
+          '@ | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
