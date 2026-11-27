@@ -1,5 +1,5 @@
 # This privileged runner accepts only a manual dispatch from trusted main.
-name: Windows 11 private beta.4 build failure diagnostics
+name: Windows 11 private beta.4 NSIS failure diagnostics
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ jobs:
     runs-on: [self-hosted, Windows, X64, win11-flowbridge]
     timeout-minutes: 5
     steps:
-      - name: Read bounded failure signals from run 46037525707 attempt 1
+      - name: Read bounded NSIS failure details from run 46037525707 attempt 1
         shell: cmd
         working-directory: C:\
         env:
@@ -43,6 +43,7 @@ jobs:
                           '256d22c3a29e23a0276ac5c6a6d786211feab524890ad1e56629196c6b29c')
             os.environ.pop('FLOWBRIDGE_LOG_GUARD', None)
             os.environ.pop('FLOWBRIDGE_LOG_SCAN', None)
+            os.environ.pop('FLOWBRIDGE_NSIS_SCAN', None)
 
             class Blocked(Exception):
                 pass
@@ -202,6 +203,80 @@ jobs:
                         'subprocess_exit_codes': exit_codes[-8:], 'compiler_error_codes': compiler_codes,
                         'windows_error_codes': windows_codes[:16]}
 
+          FLOWBRIDGE_NSIS_SCAN: |
+            NSIS_FLAGS = ('/NOCONFIG', '/V4', '/INPUTCHARSET', '/DPAYLOAD_DIR',
+                          '/DOUTPUT_FILE', '/DVERSION', '/DFILE_VERSION')
+            NSIS_WORDS = set("""
+                a abbreviations abort aborted aborting access adding all already an and ansi arguments
+                as at bad because bmp cannot can't change character charset code command commands
+                compile compiler compiling compressor configuration conflict could couldn't create created
+                creating creation current data debug denied directory disk dll does duplicate edit empty
+                end error errors except exist exists failed failure fatal file filename files finished
+                found from generated has header help id in include including incompatible incorrect
+                initialization input installer insufficient internal invalid is item key language last
+                line literal load loading lock locked lzma macro makensis mandatory memory missing must
+                name no noconfig non not nsis object of on one only open opening option options or
+                output out outfile overwritten parameter parameters parsing path permission plugin
+                plugins plugin:: possible preprocessor privileges process processed processing read readable
+                reading requires reserved resource resources returning script scripts size skipped
+                specify starting string stub stubs supported syntax target the to too true unable
+                unexpected unicode uninstaller unknown unsupported usage use used using utf8 utf-8
+                valid value variable version warning was while windows with write writing written
+                x64 x86 x86-unicode zip !addincludedir !addplugindir !error !include !insertmacro
+            """.split())
+            NSIS_NAMES = (
+                'FlowBridgeExplicitBeta.nsi', 'MUI2.nsh', 'LogicLib.nsh', 'x64.nsh', 'WinVer.nsh',
+                'nsisconf.nsh', 'System.dll', 'LangDLL.dll', 'nsDialogs.dll', 'lzma_solid-x86-unicode',
+                'LICENSE', 'BUILD-METADATA.json', 'SBOM.cdx.json', 'THIRD_PARTY_NOTICES.txt',
+                'FlowBridge-0.3.0-beta.4-windows-x64-setup.exe', 'FlowBridge.exe', 'flowbridge_ffi.dll',
+                'PAYLOAD_DIR', 'OUTPUT_FILE', 'FILE_VERSION', 'VERSION', 'NSISDIR',
+            )
+            NSIS_CANONICAL = {name.lower(): name for name in (*NSIS_NAMES, *NSIS_FLAGS)}
+            NSIS_IMPORTANT = re.compile(r"""(?i)\b(?:error|fatal|warning|usage|can't|cannot|failed|
+                failure|invalid|unknown|unable|not\s+found|could\s+not|access\s+denied|aborting|missing)\b""", re.X)
+
+            def redact_nsis_line(line):
+                shown = []
+                for token in line[:1024].split()[:64]:
+                    value = token.strip(' \'"`.,;:?!()[]{}<>').lower()
+                    if value in NSIS_CANONICAL:
+                        word = NSIS_CANONICAL[value]
+                    elif value in NSIS_WORDS:
+                        word = value
+                    elif re.fullmatch(r'(?:warning|error)?[0-9]{1,6}', value):
+                        word = value
+                    else:
+                        word = '[redacted]'
+                    if word != '[redacted]' or not shown or shown[-1] != word:
+                        shown.append(word)
+                return ' '.join(shown)[:420]
+
+            def nsis_details(content):
+                lines = content.splitlines()
+                start = next((i for i, line in enumerate(lines)
+                              if re.match(r'(?i)^\+ .*makensis\.exe\b', line)), None)
+                if start is None:
+                    return {'logged_nsis_call': False}
+                command = lines[start].upper()
+                end = next((i for i in range(start + 1, len(lines))
+                            if lines[i].startswith('Traceback (most recent call last):')), len(lines))
+                details = [line for line in lines[start + 1:end] if line.strip()]
+                excerpts = [line for line in details if NSIS_IMPORTANT.search(line)][-12:]
+                if not excerpts:
+                    excerpts = details[-10:]
+                named = [name for name in NSIS_NAMES if any(name.casefold() in line.casefold()
+                         for line in details)]
+                markers = {
+                    'processing_script': any('processing script file' in line.lower() for line in details),
+                    'writing_output': any('output:' in line.lower() or 'writing output' in line.lower() for line in details),
+                    'showed_usage': any(re.search(r'(?i)\busage\b', line) for line in details),
+                    'contains_error': any(NSIS_IMPORTANT.search(line) for line in details),
+                }
+                return {'logged_nsis_call': True, 'logged_compiler_flags': [flag for flag in NSIS_FLAGS if flag in command],
+                        'compiler_output_lines': len(details), 'known_files_or_symbols': named,
+                        'compiler_markers': markers,
+                        'sanitized_compiler_excerpts': [redact_nsis_line(line) for line in excerpts]}
+
             def main():
                 guard()
                 log = RUN / 'private-build.log'
@@ -227,9 +302,10 @@ jobs:
                         presence[name] = False
                     else:
                         presence[name] = True
+                decoded = content.decode('utf-8', 'replace')
                 return {'status': 'DIAGNOSTIC_READ', 'log_bytes': size,
                         'sample_bytes': len(content), 'whole_log_read': len(content) == size,
-                        'private_build_files_present': presence, **scan(content.decode('utf-8', 'replace'))}
+                        'private_build_files_present': presence, **scan(decoded), 'nsis': nsis_details(decoded)}
 
             summary = {'schema': 'flowbridge-private-beta4-build-diagnostic-v1', 'source_run': 46037525707,
                        'source_attempt': 1}
@@ -243,5 +319,5 @@ jobs:
             sys.exit(0 if summary['status'] == 'DIAGNOSTIC_READ' else 1)
         run: |
           @echo off
-          "C:\FlowBridge\private-candidates\toolchain-45986630920-1\python\tools\python.exe" -I -B -c "import os; exec(os.environ['FLOWBRIDGE_LOG_GUARD'] + os.environ['FLOWBRIDGE_LOG_SCAN'])" 2>nul
+          "C:\FlowBridge\private-candidates\toolchain-45986630920-1\python\tools\python.exe" -I -B -c "import os; exec(os.environ['FLOWBRIDGE_LOG_GUARD'] + os.environ['FLOWBRIDGE_LOG_SCAN'] + os.environ['FLOWBRIDGE_NSIS_SCAN'])" 2>nul
           exit /b %ERRORLEVEL%
