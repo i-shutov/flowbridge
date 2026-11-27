@@ -1,5 +1,5 @@
 # This privileged runner accepts only a manual dispatch from trusted main.
-name: Windows 11 private beta.4 NSIS failure diagnostics
+name: Windows 11 private beta.4 NSIS compiler diagnosis and replay
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ jobs:
     runs-on: [self-hosted, Windows, X64, win11-flowbridge]
     timeout-minutes: 5
     steps:
-      - name: Read bounded NSIS failure details from run 46037525707 attempt 1
+      - name: Inspect retained inputs and replay only NSIS into a new private directory
         shell: cmd
         working-directory: C:\
         env:
@@ -44,6 +44,10 @@ jobs:
             os.environ.pop('FLOWBRIDGE_LOG_GUARD', None)
             os.environ.pop('FLOWBRIDGE_LOG_SCAN', None)
             os.environ.pop('FLOWBRIDGE_NSIS_SCAN', None)
+            os.environ.pop('FLOWBRIDGE_NSIS_VERIFY', None)
+            os.environ.pop('FLOWBRIDGE_NSIS_PROBES', None)
+            os.environ.pop('FLOWBRIDGE_NSIS_REPLAY', None)
+            os.environ.pop('FLOWBRIDGE_NSIS_RESULT', None)
 
             class Blocked(Exception):
                 pass
@@ -156,13 +160,18 @@ jobs:
                 'error in script': 'nsis_script_error',
                 'system cannot find the path specified': 'system_path_missing',
                 'not recognized as an internal or external command': 'command_not_found',
+                'character maps to <undefined>': 'log_codepage_character_unmapped',
+                "codec can't encode character": 'log_codec_cannot_encode_character',
+                "codec can't encode characters": 'log_codec_cannot_encode_characters',
+                'ordinal not in range': 'log_codec_ordinal_out_of_range',
             }
             SOURCES = ('stage_internal_beta4.py', 'stage_internal_beta3.py', 'internal_windows_build_preflight.py',
                        'build-explicit-beta.py', 'explicit_beta_metadata.py', 'subprocess.py', 'pathlib.py',
                        'explicit_beta_acceptance.py', '__init__.py', '_local.py')
             ERRORS = ('StagingError', 'WindowsBuildPreflightError', 'CalledProcessError', 'TimeoutExpired',
                       'FileNotFoundError', 'FileExistsError', 'PermissionError', 'OSError', 'ValueError',
-                      'RuntimeError', 'KeyError', 'UnicodeDecodeError', 'TypeError', 'ImportError',
+                      'RuntimeError', 'KeyError', 'UnicodeDecodeError', 'UnicodeEncodeError',
+                      'BrokenPipeError', 'TypeError', 'ImportError',
                       'ModuleNotFoundError', 'ParseError', 'AttributeError', 'Rejected')
             PATHS = {
                 'candidate_source': 'candidate',
@@ -172,6 +181,7 @@ jobs:
                 'ffi_binary': 'candidate/target/release/flowbridge_ffi.dll',
                 'native_cmake_cache': 'candidate/build/windows-explicit-beta/CMakeCache.txt',
                 'native_gui': 'candidate/build/windows-explicit-beta/Release/FlowBridge.exe',
+                'installer_output': 'candidate/artifacts/FlowBridge-0.3.0-beta.4-windows-x64-setup.exe',
                 'package_metadata': 'candidate/build/explicit-beta-payload/BUILD-METADATA.json',
                 'package_manifest': 'candidate/build/verification/explicit-beta-package.json',
                 'checkpoint': 'candidate-CHECKPOINT.json',
@@ -277,6 +287,267 @@ jobs:
                         'compiler_markers': markers,
                         'sanitized_compiler_excerpts': [redact_nsis_line(line) for line in excerpts]}
 
+          FLOWBRIDGE_NSIS_VERIFY: |
+            import ast
+            from pathlib import PurePosixPath
+
+            BUILDER_REL = 'packaging/windows/build-explicit-beta.py'
+            BUILDER_SHA = 'd41bb18dd2009243e3d1995e77a58e988bf13380cc88e739bb9e3cd9a1f18350'
+            BUILDER_BLOB = 'a1e726201812afc1e73d1adcaf5361f5708fc41c'
+            CANDIDATE_TREE = 'ce336e83bb724a65bf512e79e286c97fb0cb3190'
+            NSIS_ARCHIVE_SHA = 'ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8'
+            NSIS_RESOURCE_MEMBERS = (
+                'COPYING', 'Include/MUI2.nsh', 'Stubs/lzma_solid-x86-unicode',
+                'Plugins/x86-unicode/System.dll', 'Plugins/x86-unicode/LangDLL.dll',
+                'Plugins/x86-unicode/nsDialogs.dll',
+            )
+
+            def describe_builder():
+                source = RUN / 'candidate'
+                builder = source / BUILDER_REL
+                info = check_path(builder)
+                require(stat.S_ISREG(info.st_mode) and info.st_size < 100_000, 'INVALID_RETAINED_BUILDER_FILE')
+                data = builder.read_bytes()
+                lines = data.decode('utf-8').splitlines()
+                statements = {
+                    'print(proc.stdout': 'print_compiler_stdout',
+                    'print(proc.stderr': 'print_compiler_stderr',
+                    'proc.check_returncode(': 'check_subprocess_exit_status',
+                    'proc = subprocess.run(': 'invoke_subprocess',
+                    'run([str(nsis)': 'invoke_nsis',
+                }
+                names = {}
+                for number in (36, 37, 39, 40, 41, 42, 43, 143, 191):
+                    line = lines[number - 1] if number <= len(lines) else ''
+                    names[str(number)] = next((name for needle, name in statements.items() if needle in line), 'other')
+                report = {
+                    'retained_builder_bytes': len(data),
+                    'retained_builder_sha256': hashlib.sha256(data).hexdigest(),
+                    'retained_builder_matches_tree_blob': hashlib.sha256(data).hexdigest() == BUILDER_SHA,
+                    'computed_git_blob_matches': hashlib.sha1(
+                        f'blob {len(data)}\0'.encode() + data, usedforsecurity=False).hexdigest() == BUILDER_BLOB,
+                    'retained_builder_line_classification': names,
+                    'git_audit_available': False,
+                }
+                for prefix in (Path(os.environ['ProgramFiles']), Path(os.environ['LOCALAPPDATA']) / 'Programs'):
+                    git = prefix / 'Git/cmd/git.exe'
+                    try:
+                        check_path(git)
+                    except FileNotFoundError:
+                        continue
+                    env = {key: value for key, value in os.environ.items() if not key.startswith(('GIT_', 'ACTIONS_'))}
+                    env.update(GIT_OPTIONAL_LOCKS='0', GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull,
+                               GIT_TERMINAL_PROMPT='0')
+                    startup = [str(git), '-C', str(source)]
+                    index = subprocess.check_output(startup + ['ls-files', '--stage', '--', BUILDER_REL],
+                                                    env=env, timeout=15).decode('ascii').strip().split()
+                    tree = subprocess.check_output(startup + ['rev-parse', 'HEAD^{tree}'],
+                                                   env=env, timeout=15).decode('ascii').strip()
+                    report.update(git_audit_available=True, head_tree_matches=tree == CANDIDATE_TREE,
+                                  index_builder_matches=index == ['100644', BUILDER_BLOB, '0', BUILDER_REL])
+                    break
+                return report
+
+            def classify_failed_command(raw, compiler):
+                result = {}
+                for line in raw.splitlines():
+                    if 'CalledProcessError:' not in line or len(line) > 8192:
+                        continue
+                    match = re.search(r"Command '(\[.*\])' returned non-zero exit status ([0-9]{1,10})\.", line)
+                    if not match:
+                        continue
+                    try:
+                        arguments = ast.literal_eval(match[1])
+                    except (ValueError, SyntaxError):
+                        continue
+                    if not isinstance(arguments, list) or not arguments or not all(isinstance(arg, str) for arg in arguments):
+                        continue
+                    exe = Path(arguments[0])
+                    if exe.name.casefold() != 'makensis.exe':
+                        continue
+                    result = {
+                        'exact_pinned_nsis_binary': exe == compiler,
+                        'exit_code': int(match[2]),
+                        'flag_sequence': [arg.split('=', 1)[0] for arg in arguments[1:]
+                                          if arg.split('=', 1)[0] in NSIS_FLAGS],
+                        'utf8_input_requested': 'UTF8' in arguments[1:],
+                        'expected_nsi_script': arguments[-1].replace('\\', '/') == 'packaging/windows/FlowBridgeExplicitBeta.nsi',
+                    }
+                return result
+
+          FLOWBRIDGE_NSIS_PROBES: |
+            def inspect_verified_compiler(raw):
+                archive_file = None
+                for path in (BASE.parent / 'toolchains/nsis-3.13.zip',
+                             BASE / 'run-45986630920-1/nsis-3.13.zip', RUN / 'nsis-3.13.zip'):
+                    try:
+                        check_path(path)
+                    except FileNotFoundError:
+                        continue
+                    archive_file = path
+                    break
+                require(archive_file is not None, 'LOCAL_PINNED_NSIS_ARCHIVE_MISSING')
+                with archive_file.open('rb') as stream:
+                    data = stream.read(10_000_001)
+                require(len(data) <= 10_000_000 and hashlib.sha256(data).hexdigest() == NSIS_ARCHIVE_SHA,
+                        'NSIS_ARCHIVE_SHA_MISMATCH')
+                distribution = RUN / 'candidate-nsis-toolchain'
+                with ZipFile(BytesIO(data)) as archive:
+                    entries = [PurePosixPath(name) for name in archive.namelist()
+                               if PurePosixPath(name).parts[-2:] == ('Bin', 'makensis.exe')]
+                    require(len(entries) == 1 and not entries[0].is_absolute() and '..' not in entries[0].parts,
+                            'PINNED_NSIS_COMPILER_ENTRY_INVALID')
+                    relative = entries[0]
+                    compiler = distribution.joinpath(*relative.parts)
+                    check_path(compiler)
+                    compiler_bytes = compiler.read_bytes()
+                    require(compiler_bytes == archive.read(relative.as_posix()), 'PINNED_NSIS_COMPILER_BYTES_MISMATCH')
+                    resource_root = relative.parent.parent
+                    archive_names = {name.casefold(): name for name in archive.namelist()}
+                    for name in NSIS_RESOURCE_MEMBERS:
+                        member = resource_root / name
+                        file = distribution.joinpath(*member.parts)
+                        check_path(file)
+                        require(file.read_bytes() == archive.read(archive_names[member.as_posix().casefold()]), 'PINNED_NSIS_RESOURCE_BYTES_MISMATCH')
+                env = {**os.environ, 'NSISDIR': str(compiler.parent.parent)}
+                execution = {}
+                for name, args in (
+                    ('version', ['/VERSION']),
+                    ('header_default', ['/NOCONFIG', '/HDRINFO']),
+                    ('header_build_flags', ['/NOCONFIG', '/V4', '/INPUTCHARSET', 'UTF8', '/HDRINFO']),
+                ):
+                    completed = subprocess.run([str(compiler), *args], cwd=RUN / 'candidate', env=env,
+                                               capture_output=True, timeout=25, check=False)
+                    execution[name] = {
+                        'exit_code': completed.returncode,
+                        'stdout_bytes': len(completed.stdout),
+                        'stderr_bytes': len(completed.stderr),
+                        'pinned_version_output': completed.stdout.strip() == b'v3.13',
+                        'nsis_compile_signals': bool(re.search(rb'(?i)NSIS_(?:CONFIG|MAX_STRLEN|COMPRESS)', completed.stdout)),
+                        'stderr_excerpts': [
+                            redact_nsis_line(line) for line in completed.stderr[:4096].decode('utf-8', 'replace').splitlines()[-4:]
+                        ],
+                    }
+                return {
+                    'pinned_archive_sha256': NSIS_ARCHIVE_SHA,
+                    'verified_compiler_sha256': hashlib.sha256(compiler_bytes).hexdigest(),
+                    'resources_match_pinned_archive': True,
+                    'direct_read_only_invocations': execution,
+                    'retained_failed_compiler_command': classify_failed_command(raw, compiler),
+                    'replay': guarded_probe(replay_nsis, compiler, env),
+                }
+
+          FLOWBRIDGE_NSIS_REPLAY: |
+            import csv
+
+            NSI_REL = 'packaging/windows/FlowBridgeExplicitBeta.nsi'
+            NSI_SHA = '68eec9ddbb9dc84319c3231065cbdad433f979d031c94311d44ced5f5c633b7a'
+            REPLAY_INSTALLER = 'FlowBridge-0.3.0-beta.4-windows-x64-setup.exe'
+            PAYLOAD_ORIGINS = {
+                'FlowBridge.exe': 'build/windows-explicit-beta/Release/FlowBridge.exe',
+                'flowbridge-cli.exe': 'target/release/flowbridge.exe',
+                'flowbridge_ffi.dll': 'target/release/flowbridge_ffi.dll',
+                'LICENSE': 'LICENSE',
+                'README.txt': 'packaging/windows/README-EXPLICIT-BETA.txt',
+                'licenses/nlohmann-json-LICENSE.MIT': 'third_party/nlohmann/LICENSE.MIT',
+                'licenses/THIRD_PARTY_NOTICES.txt': 'build/explicit-beta-metadata/windows/THIRD_PARTY_NOTICES.txt',
+                'SBOM.cdx.json': 'build/explicit-beta-metadata/windows/SBOM.cdx.json',
+                'BUILD-METADATA.json': 'build/explicit-beta-metadata/windows/BUILD-METADATA.json',
+                'resources/presets.json': 'resources/presets.json',
+                'examples/direct.json': 'examples/direct.json',
+                'examples/ssh-socks.json': 'examples/ssh-socks.json',
+                'examples/chain.json': 'examples/chain.json',
+            }
+
+            def file_sha(path):
+                info = check_path(path)
+                require(stat.S_ISREG(info.st_mode) and info.st_size <= 100_000_000, 'PROBE_INPUT_NOT_BOUNDED_REGULAR_FILE')
+                with path.open('rb') as stream:
+                    return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+            def decode_process_output(data):
+                if not data:
+                    return '', 'empty'
+                if data.startswith((b'\xff\xfe', b'\xfe\xff')):
+                    return data.decode('utf-16', 'replace'), 'utf-16-bom'
+                if data.startswith(b'\xef\xbb\xbf'):
+                    return data.decode('utf-8-sig', 'replace'), 'utf-8-bom'
+                if len(data) > 10 and data[1::2].count(b'\0') > len(data) // 6:
+                    return data.decode('utf-16-le', 'replace'), 'utf-16-le'
+                if len(data) > 10 and data[0::2].count(b'\0') > len(data) // 6:
+                    return data.decode('utf-16-be', 'replace'), 'utf-16-be'
+                try:
+                    return data.decode('utf-8'), 'utf-8'
+                except UnicodeDecodeError:
+                    return data.decode('cp1252', 'replace'), 'cp1252-fallback'
+
+            def summarize_process_output(data):
+                text, encoding = decode_process_output(data)
+                lines = [line for line in text.splitlines() if line.strip()]
+                excerpts = [line for line in lines if NSIS_IMPORTANT.search(line)][-10:] or lines[-4:]
+                return {
+                    'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest(), 'encoding': encoding,
+                    'lines': len(lines), 'known_files_or_symbols': [name for name in NSIS_NAMES if name.lower() in text.lower()],
+                    'excerpts': [redact_nsis_line(line) for line in excerpts],
+                }
+
+            def replay_nsis(compiler, env):
+                source = RUN / 'candidate'
+                payload = source / 'build/explicit-beta-payload'
+                require(file_sha(source / NSI_REL) == NSI_SHA, 'REPLAY_INSTALLER_SCRIPT_SHA_MISMATCH')
+                require(file_sha(source / BUILDER_REL) == BUILDER_SHA, 'REPLAY_BUILDER_SHA_MISMATCH')
+                check_path(payload)
+                members = set()
+                for parent, dirs, files in os.walk(payload, followlinks=False):
+                    for name in dirs + files:
+                        check_path(Path(parent) / name)
+                    members.update((Path(parent) / name).relative_to(payload).as_posix() for name in files)
+                require(members == PAYLOAD_ORIGINS.keys(), 'REPLAY_PAYLOAD_ALLOWLIST_MISMATCH')
+                for relative, original in PAYLOAD_ORIGINS.items():
+                    require(file_sha(payload / relative) == file_sha(source / original), 'REPLAY_PAYLOAD_SOURCE_MISMATCH')
+                identity = '-'.join(os.environ[name] for name in ('GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT'))
+                require(re.fullmatch(r'[0-9]+-[0-9]+', identity), 'INVALID_RUN_ID')
+                out = BASE / ('nsis-probe-beta4-' + identity)
+                require(not os.path.lexists(out), 'PRIVATE_NSIS_PROBE_DIRECTORY_ALREADY_EXISTS')
+                system = Path(os.environ['SystemRoot']) / 'System32'
+                sid_row = subprocess.check_output([str(system / 'whoami.exe'), '/user', '/fo', 'csv', '/nh'],
+                                                  timeout=15).decode('ascii').strip()
+                sid = next(csv.reader([sid_row]))[-1]
+                require(re.fullmatch(r'S-1-[0-9]+(?:-[0-9]+)+', sid), 'INVALID_SERVICE_SID')
+                out.mkdir()
+                subprocess.run([str(system / 'icacls.exe'), str(out), '/inheritance:r', '/grant:r',
+                                f'*{sid}:(OI)(CI)F', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F'],
+                               capture_output=True, timeout=20, check=True)
+                check_path(out)
+                installer = out / REPLAY_INSTALLER
+                command = [str(compiler), '/NOCONFIG', '/V4', '/INPUTCHARSET', 'UTF8',
+                           '/DPAYLOAD_DIR=' + str(payload), '/DOUTPUT_FILE=' + str(installer),
+                           '/DVERSION=0.3.0-beta.4', '/DFILE_VERSION=0.3.0.4', NSI_REL]
+                completed = subprocess.run(command, cwd=source, env={**env, 'TEMP': str(out), 'TMP': str(out)},
+                                           capture_output=True, timeout=140, check=False)
+                for name, data in (('makensis.stdout.bin', completed.stdout), ('makensis.stderr.bin', completed.stderr)):
+                    with (out / name).open('xb') as stream:
+                        stream.write(data)
+                exists = installer.is_file()
+                return {
+                    'source_and_13_payload_origins_verified': True,
+                    'private_output_created': exists,
+                    'private_output_sha256': file_sha(installer) if exists else None,
+                    'exit_code': completed.returncode,
+                    'stdout': summarize_process_output(completed.stdout),
+                    'stderr': summarize_process_output(completed.stderr),
+                    'installer_executed': False,
+                }
+
+            def guarded_probe(probe, *args):
+                try:
+                    return probe(*args)
+                except Blocked as exc:
+                    return {'status': 'BLOCKED', 'reason': str(exc)}
+                except (OSError, subprocess.SubprocessError, ValueError, KeyError):
+                    return {'status': 'BLOCKED', 'reason': 'DIAGNOSTIC_INPUT_OR_SUBPROCESS_UNAVAILABLE'}
+
+          FLOWBRIDGE_NSIS_RESULT: |
             def main():
                 guard()
                 log = RUN / 'private-build.log'
@@ -305,7 +576,9 @@ jobs:
                 decoded = content.decode('utf-8', 'replace')
                 return {'status': 'DIAGNOSTIC_READ', 'log_bytes': size,
                         'sample_bytes': len(content), 'whole_log_read': len(content) == size,
-                        'private_build_files_present': presence, **scan(decoded), 'nsis': nsis_details(decoded)}
+                        'private_build_files_present': presence, **scan(decoded), 'nsis': nsis_details(decoded),
+                        'source_builder': guarded_probe(describe_builder),
+                        'nsis_provenance': guarded_probe(inspect_verified_compiler, decoded)}
 
             summary = {'schema': 'flowbridge-private-beta4-build-diagnostic-v1', 'source_run': 46037525707,
                        'source_attempt': 1}
@@ -319,5 +592,5 @@ jobs:
             sys.exit(0 if summary['status'] == 'DIAGNOSTIC_READ' else 1)
         run: |
           @echo off
-          "C:\FlowBridge\private-candidates\toolchain-45986630920-1\python\tools\python.exe" -I -B -c "import os; exec(os.environ['FLOWBRIDGE_LOG_GUARD'] + os.environ['FLOWBRIDGE_LOG_SCAN'] + os.environ['FLOWBRIDGE_NSIS_SCAN'])" 2>nul
+          "C:\FlowBridge\private-candidates\toolchain-45986630920-1\python\tools\python.exe" -I -B -c "import os; exec(''.join(os.environ['FLOWBRIDGE_' + name] for name in ('LOG_GUARD','LOG_SCAN','NSIS_SCAN','NSIS_VERIFY','NSIS_PROBES','NSIS_REPLAY','NSIS_RESULT')))" 2>nul
           exit /b %ERRORLEVEL%
