@@ -89,9 +89,10 @@ def local_bytes(path: Path, limit: int = 134217728) -> bytes:
     return data
 
 
-def license_notice_bytes(notices: bytes, inventory: list[dict], rustc: str) -> dict[tuple[str, str], bytes]:
+def license_notice_bytes(notices: bytes, inventory: list[dict], rustc: str, *,
+                         version: str = VERSION, nlohmann_attributions: bool = False) -> dict[tuple[str, str], bytes]:
     """Match the generator's ordered headings and hash the exact intervening bytes."""
-    header = (f"FlowBridge {VERSION} explicit beta — resolved component notices\n"
+    header = (f"FlowBridge {version} explicit beta — resolved component notices\n"
               "Targets: x86_64-pc-windows-msvc\n"
               "Includes production and build inputs of the shipped Cargo roots; exact binary retention is not asserted.\n"
               "Externally installed OpenSSH and OS frameworks are not redistributed by this package.\n").encode()
@@ -108,8 +109,11 @@ def license_notice_bytes(notices: bytes, inventory: list[dict], rustc: str) -> d
             headings = [f"\n--- {item['name']} ---\n" for item in files]
             headings[0] = first + headings[0]
         elif component == NLOHMANN_REF:
-            require([item["name"] for item in files] == ["LICENSE.MIT"], "notice_nlohmann_license")
-            headings = ["\n=== nlohmann/json 3.11.3 — vendored Windows GUI header ===\n"]
+            heading = "\n=== nlohmann/json 3.11.3 — vendored Windows GUI header ===\n"
+            names = ["LICENSE.MIT", "ATTRIBUTIONS.txt"] if nlohmann_attributions else ["LICENSE.MIT"]
+            require([item["name"] for item in files] == names, "notice_nlohmann_license")
+            headings = ([heading + "\n--- LICENSE.MIT ---\n", "\n--- ATTRIBUTIONS.txt ---\n"]
+                        if nlohmann_attributions else [heading])
         elif component == "NSIS installer runtime":
             require([item["name"] for item in files] == ["COPYING"], "notice_nsis_license")
             headings = ["\n=== NSIS installer runtime distribution COPYING ===\n"]
@@ -173,6 +177,23 @@ def nsis_archive_inventory(archive: bytes, copying: bytes) -> dict:
             "upstream_plugin_files": plugins, "embedded_plugin_bytes_verified": False}
 
 
+def cargo_notice_expression_counts(components: list[dict], texts: dict[tuple[str, str], bytes]) -> dict:
+    declared = Counter()
+    cargo_records = {component for component, _ in texts if component.startswith("pkg:cargo/")}
+    for item in components:
+        ref = item["purl"]
+        if not ref.startswith("pkg:cargo/") or "hashes" not in item:
+            continue
+        require(ref in cargo_records and len(item["licenses"]) == 1, "cargo_notice_license_declaration")
+        expression = item["licenses"][0].get("expression")
+        require(type(expression) is str and re.fullmatch(r"[a-zA-Z0-9+_.() /-]{1,200}", expression),
+                "cargo_notice_unsafe_license_expression")
+        declared[expression] += 1
+        cargo_records.remove(ref)
+    require(not cargo_records, "unmapped_cargo_notice_section")
+    return dict(sorted(declared.items()))
+
+
 def notice_coverage(files: dict[str, bytes], source: dict[str, bytes], archive: bytes) -> dict:
     meta = json.loads(files["BUILD-METADATA.json"])
     components = json.loads(files["SBOM.cdx.json"])["components"]
@@ -192,22 +213,9 @@ def notice_coverage(files: dict[str, bytes], source: dict[str, bytes], archive: 
     require(native[NLOHMANN_REF].get("hashes") == [{"alg": "SHA-256",
         "content": sha(source["third_party/nlohmann/json.hpp"])}], "nlohmann_sbom_source_bytes")
 
-    declared = Counter()
-    cargo_records = {component for component, _ in texts if component.startswith("pkg:cargo/")}
-    for item in components:
-        ref = item["purl"]
-        if not ref.startswith("pkg:cargo/") or "hashes" not in item:
-            continue
-        require(ref in cargo_records and len(item["licenses"]) == 1, "cargo_notice_license_declaration")
-        expression = item["licenses"][0].get("expression")
-        require(type(expression) is str and re.fullmatch(r"[a-zA-Z0-9+_.() /-]{1,200}", expression),
-                "cargo_notice_unsafe_license_expression")
-        declared[expression] += 1
-        cargo_records.remove(ref)
-    require(not cargo_records, "unmapped_cargo_notice_section")
     return {
         "notice_file_bytes_verified": len(texts),
-        "cargo_declared_license_expression_counts": dict(sorted(declared.items())),
+        "cargo_declared_license_expression_counts": cargo_notice_expression_counts(components, texts),
         "project_license_sha256": sha(files["LICENSE"]),
         "nlohmann_json_header_sha256": sha(source["third_party/nlohmann/json.hpp"]),
         "nlohmann_license_sha256": sha(nlohmann),
@@ -391,13 +399,14 @@ def pe_inventory(data: bytes, *, installer: bool = False) -> dict:
     }
 
 
-def metadata_inventory(files: dict[str, bytes], lock_bytes: bytes, contract_bytes: bytes) -> dict:
+def metadata_inventory(files: dict[str, bytes], lock_bytes: bytes, contract_bytes: bytes, *,
+                       version: str = VERSION, source_sha: str = SOURCE) -> dict:
     metadata = json.loads(files["BUILD-METADATA.json"])
     bom = json.loads(files["SBOM.cdx.json"])
     lock = tomllib.loads(lock_bytes.decode("utf-8"))
     contract = json.loads(contract_bytes)
     require(metadata.get("schema") == "flowbridge-explicit-beta-build-metadata-v1"
-            and metadata.get("source_sha") == SOURCE and metadata.get("version") == VERSION
+            and metadata.get("source_sha") == source_sha and metadata.get("version") == version
             and metadata.get("platform") == "windows", "metadata_identity")
     require(metadata.get("targets") == ["x86_64-pc-windows-msvc"]
             and metadata.get("shipped_cargo_roots") == ["flowbridge-cli", "flowbridge-ffi"], "metadata_scope")
@@ -409,11 +418,11 @@ def metadata_inventory(files: dict[str, bytes], lock_bytes: bytes, contract_byte
             and metadata.get("version_contract_sha256") == sha(contract_bytes)
             and metadata.get("sbom_sha256") == sha(files["SBOM.cdx.json"])
             and metadata.get("notices_sha256") == sha(files["licenses/THIRD_PARTY_NOTICES.txt"]), "metadata_hash_chain")
-    require(contract.get("version") == VERSION and contract.get("release_approved") is False, "contract_identity")
+    require(contract.get("version") == version and contract.get("release_approved") is False, "contract_identity")
     require(bom.get("bomFormat") == "CycloneDX" and bom.get("specVersion") == "1.5"
-            and bom.get("metadata", {}).get("component", {}).get("version") == VERSION, "bom_identity")
+            and bom.get("metadata", {}).get("component", {}).get("version") == version, "bom_identity")
     properties = {item["name"]: item["value"] for item in bom["metadata"]["properties"]}
-    require(properties.get("flowbridge:source_sha") == SOURCE, "bom_source")
+    require(properties.get("flowbridge:source_sha") == source_sha, "bom_source")
     components = bom.get("components")
     require(type(components) is list and 0 < len(components) <= 256
             and metadata.get("component_count") == len(components), "bom_component_count")
@@ -433,7 +442,7 @@ def metadata_inventory(files: dict[str, bytes], lock_bytes: bytes, contract_byte
                 require(item.get("hashes") == [{"alg": "SHA-256", "content": pin["checksum"]}], "bom_lock_checksum")
                 external_cargo.add(ref)
             else:
-                require(pin["name"].startswith("flowbridge-") and pin["version"] == VERSION, "bom_local_package")
+                require(pin["name"].startswith("flowbridge-") and pin["version"] == version, "bom_local_package")
     for edge in bom.get("dependencies", []):
         require(edge.get("ref") in refs and all(child in refs for child in edge.get("dependsOn", [])), "bom_dependency_ref")
     inventory = metadata.get("license_inventory")
