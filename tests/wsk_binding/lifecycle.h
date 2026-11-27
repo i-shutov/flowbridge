@@ -28,6 +28,72 @@ static unsigned long FbWskGateStop(FbWskGate* gate)
     return gate->outstanding;
 }
 
+/* Admission and terminal authority share one lock with this transition. */
+static unsigned long FbWskDisarmOwner(FbWskGate* gate, int* armed)
+{
+    *armed = 0;
+    return FbWskGateStop(gate);
+}
+
+static int FbWskEnterArmedBinding(FbWskGate* gate, int armed)
+{
+    return armed && FbWskGateEnter(gate);
+}
+
+typedef enum FbWskOwnerProgress {
+    FbWskOwnerWaitingForUsers,
+    FbWskOwnerUsersJoined,
+    FbWskOwnerListenerClosing,
+    FbWskOwnerListenerClosed,
+    FbWskOwnerListenerCloseFailed,
+    FbWskOwnerProviderReleased,
+    FbWskOwnerProviderDeregistered,
+    FbWskOwnerCallbacksReturned
+} FbWskOwnerProgress;
+
+typedef enum FbWskOwnerStep {
+    FbWskOwnerNeedsStop,
+    FbWskOwnerNeedsBindingDrain,
+    FbWskOwnerJoinUsers,
+    FbWskOwnerCloseListener,
+    FbWskOwnerCollectListenerClose,
+    FbWskOwnerHoldListenerCloseFailure,
+    FbWskOwnerReleaseProvider,
+    FbWskOwnerDeregister,
+    FbWskOwnerWaitForCallbacks,
+    FbWskOwnerFree,
+    FbWskOwnerInvalidState
+} FbWskOwnerStep;
+
+static FbWskOwnerStep FbWskNextOwnerStep(const FbWskGate* gate,
+                                        FbWskOwnerProgress progress, int has_listener)
+{
+    if (!gate->stopping)
+        return FbWskOwnerNeedsStop;
+    if (gate->outstanding)
+        return FbWskOwnerNeedsBindingDrain;
+
+    switch (progress) {
+    case FbWskOwnerWaitingForUsers:
+        return FbWskOwnerJoinUsers;
+    case FbWskOwnerUsersJoined:
+        return has_listener ? FbWskOwnerCloseListener : FbWskOwnerReleaseProvider;
+    case FbWskOwnerListenerClosing:
+        return FbWskOwnerCollectListenerClose;
+    case FbWskOwnerListenerClosed:
+        return FbWskOwnerReleaseProvider;
+    case FbWskOwnerListenerCloseFailed:
+        return FbWskOwnerHoldListenerCloseFailure;
+    case FbWskOwnerProviderReleased:
+        return FbWskOwnerDeregister;
+    case FbWskOwnerProviderDeregistered:
+        return FbWskOwnerWaitForCallbacks;
+    case FbWskOwnerCallbacksReturned:
+        return FbWskOwnerFree;
+    }
+    return FbWskOwnerInvalidState;
+}
+
 typedef enum FbWskOperation {
     FbWskIdle,
     FbWskAccept,

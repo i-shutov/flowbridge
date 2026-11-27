@@ -3,43 +3,72 @@
 
 #include <ntddk.h>
 #include <wsk.h>
-#include "lifecycle.h"
 
-/* Kernel-only prototype. Supply one initialized lifetime per owned listener.
- * Keep listener, policy and provider rundown through every live handle.
- * Serialize all operations on each handle and publish it with synchronization
- * when ownership moves between threads. Lifetime and spin-locked authority
- * storage are nonpaged. All pointers are kernel-private. */
+/* Kernel-only. The containing driver keeps its nonpaged authority lock and
+ * process epoch table alive until the owner is destroyed. It publishes one
+ * owner per fresh generation and serializes startup, arm, stop and teardown.
+ * It must also serialize and synchronize every binding handle handoff. */
 struct FbWskClaimPolicy;
 struct FbWskListenerEpoch;
+struct FbEpochTable;
+typedef struct FbWskOwner FbWskOwner;
 typedef struct FbWskBoundConnection FbWskBoundConnection;
 typedef struct FbWskDrain FbWskDrain;
 
-typedef struct FbWskBindingLifetime {
-    KSPIN_LOCK lock;
-    FbWskGate gate;
-} FbWskBindingLifetime;
+/* Invoked by the serialized owner at PASSIVE_LEVEL. Success attests that
+ * the named condition is complete. Other statuses leave the owner live. */
+typedef NTSTATUS FbWskOwnerBarrier(PVOID context);
+
+/* listener_process is a trusted, referenced process object selected by the
+ * containing driver. The owner takes its own reference and receipt history. */
+_IRQL_requires_(PASSIVE_LEVEL)
+NTSTATUS FbWskCreateOwner(
+    PEPROCESS listener_process, ULONG64 generation, ADDRESS_FAMILY family,
+    USHORT port_be, PKSPIN_LOCK authority_lock, struct FbEpochTable* epochs,
+    FbWskOwnerBarrier* join_users, FbWskOwnerBarrier* wait_callbacks,
+    PVOID barrier_context, FbWskOwner** result
+    );
+
+/* This one-shot startup may wait for WSK socket creation and bind. The owner
+ * must go through stop and rundown even if startup fails midway. */
+_IRQL_requires_(PASSIVE_LEVEL)
+NTSTATUS FbWskStartOwner(FbWskOwner* owner);
 
 _IRQL_requires_(PASSIVE_LEVEL)
-void FbWskInitializeBindingLifetime(FbWskBindingLifetime* lifetime);
+NTSTATUS FbWskArmOwner(FbWskOwner* owner);
 
-/* Closes admission. Success means all admitted binding handles drained.
- * Admitted work can still commit until the caller disarms policy under its
- * authority lock. The caller owns listener close, joined caller/worker and
- * callback rundown, provider release and WSK deregistration. */
+/* The callout reads the exact redirect target and operates on the generation
+ * ledger under this lock. The entry point needs a live owner publication.
+ * Success keeps the lock held until FbWskUnlockOwnerAuthority. */
+_IRQL_requires_max_(DISPATCH_LEVEL)
+NTSTATUS FbWskLockOwnerAuthority(
+    FbWskOwner* owner, PKIRQL previous_irql, const struct FbWskClaimPolicy** policy,
+    const struct FbWskListenerEpoch** target
+    );
+
+_IRQL_requires_(DISPATCH_LEVEL)
+void FbWskUnlockOwnerAuthority(FbWskOwner* owner, KIRQL previous_irql);
+
+/* Disarms terminal authority and closes admission together. STATUS_SUCCESS
+ * here covers the number of binding handles. Owner rundown is separate. */
 _IRQL_requires_(PASSIVE_LEVEL)
-NTSTATUS FbWskStopBinding(FbWskBindingLifetime* lifetime, PULONG outstanding);
+NTSTATUS FbWskStopOwner(FbWskOwner* owner, PULONG outstanding);
+
+/* After stop and binding drain, join_users must withdraw owner publication
+ * and join all callout and worker entries. Close then completes before
+ * provider release and deregistration. wait_callbacks must establish that
+ * completion routines returned before the owner can be destroyed. The
+ * callbacks must be retryable and must never reenter owner rundown. Only
+ * STATUS_SUCCESS consumes the owner. A failed listener close quarantines it. */
+_IRQL_requires_(PASSIVE_LEVEL)
+NTSTATUS FbWskAdvanceOwnerRundown(FbWskOwner** owner);
 
 /* Uses one three-second budget for accept/query completion waits. WSK
  * dispatch call latency is outside the prototype's control. A failure after
  * allocation hands back a cleanup-only handle. Keep it until drain succeeds. */
 _IRQL_requires_(PASSIVE_LEVEL)
 NTSTATUS FbWskAcceptBound(
-    FbWskBindingLifetime* lifetime, PWSK_SOCKET listener,
-    const struct FbWskListenerEpoch* listener_epoch,
-    PKSPIN_LOCK policy_lock,
-    struct FbWskClaimPolicy* policy_state,
-    FbWskBoundConnection** result, FbWskDrain** drain
+    FbWskOwner* owner, FbWskBoundConnection** result, FbWskDrain** drain
     );
 
 /* Moves a successful binding to the same cleanup path without calling WSK. */

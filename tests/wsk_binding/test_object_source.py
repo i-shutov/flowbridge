@@ -56,9 +56,10 @@ def verify_source(source):
         "sizeof(connection->bound.records),connection->bound.records,&connection->bound.records_size,started);",
         "if(status!=STATUS_SUCCESS)gotoreject;",
         "if(!connection->bound.records_size||connection->bound.records_size>sizeof(connection->bound.records))",
-        "KeAcquireSpinLock(policy_lock,&irql);",
-        "FbWskCommitAcceptedContext(policy_state,listener_epoch,&connection->bound.context)",
-        "KeReleaseSpinLock(policy_lock,irql);",
+        "KeAcquireSpinLock(owner->authority_lock,&irql);",
+        "status=FbWskBrokerEpochIsLive(owner->policy.epochs,&owner->broker)&&"
+        "FbWskCommitAcceptedContext(&owner->policy,&owner->target,&connection->bound.context)",
+        "KeReleaseSpinLock(owner->authority_lock,irql);",
         "if(status!=STATUS_SUCCESS)gotoreject;",
         "*result=&connection->bound;returnSTATUS_SUCCESS;",
         "reject:*drain=connection;returnstatus;",
@@ -77,16 +78,20 @@ def verify_lifecycle_source(source):
         r"==STATUS_SUCCESS&&KeQueryInterruptTime\(\)-started<FB_WSK_WAIT_BUDGET_100NS;", wait
     ):
         raise ValueError("caller wait must use the remaining completion budget")
-    if compact.count("KeWaitForSingleObject(") != 2 or not re.search(
+    if (wait + drain + accept).count("KeWaitForSingleObject(") != 2 or not re.search(
         r"LARGE_INTEGERno_wait=\{0\};.*?"
         r"KeWaitForSingleObject\(&connection->finished,Executive,KernelMode,FALSE,&no_wait\)", drain
     ):
         raise ValueError("drain may sample completion but cannot wait for it")
-    if compact.count("IoCancelIrp(") != 1 or compact.count("->WskCloseSocket(") != 1:
+    if compact.count("IoCancelIrp(") != 1 or drain.count("->WskCloseSocket(") != 1:
         raise ValueError("provider cancellation and close belong only to the drain owner")
     require_order(accept, (
-        "admitted=FbWskGateEnter(&lifetime->gate);",
+        "KeAcquireSpinLock(owner->authority_lock,&irql);",
+        "admitted=FbWskBrokerEpochIsLive(owner->policy.epochs,&owner->broker)&&"
+        "FbWskEnterArmedBinding(&owner->gate,owner->policy.armed);",
+        "KeReleaseSpinLock(owner->authority_lock,irql);",
         "if(!admitted)returnSTATUS_DEVICE_BUSY;",
+        "listener=owner->listener;",
         "ExAllocatePool2(POOL_FLAG_NON_PAGED,sizeof(*connection),FB_WSK_POOL_TAG);",
         "WskAccept(listener,0,NULL,NULL,(PSOCKADDR)&connection->local,NULL,connection->request);",
         "reject:*drain=connection;returnstatus;",
@@ -109,14 +114,88 @@ def verify_lifecycle_source(source):
         "IoFreeIrp(connection->request);",
         "RtlSecureZeroMemory(connection,sizeof(*connection));",
         "ExFreePoolWithTag(connection,FB_WSK_POOL_TAG);",
-        "FbWskLeaveBinding(lifetime);",
+        "FbWskLeaveBinding(owner);",
     ), "storage must be reclaimed before dropping the drain gate")
+
+
+def verify_owner_source(source):
+    compact = compact_source(source)
+    create = compact.split("NTSTATUSFbWskCreateOwner(", 1)[1].split("staticNTSTATUSFbWskWaitForStartup", 1)[0]
+    start = compact.split("NTSTATUSFbWskStartOwner(", 1)[1].split("NTSTATUSFbWskArmOwner", 1)[0]
+    arm = compact.split("NTSTATUSFbWskArmOwner(", 1)[1].split("NTSTATUSFbWskLockOwnerAuthority", 1)[0]
+    stop = compact.split("NTSTATUSFbWskStopOwner(", 1)[1].split("NTSTATUSFbWskAdvanceOwnerRundown", 1)[0]
+    rundown = compact.split("NTSTATUSFbWskAdvanceOwnerRundown(", 1)[1].split("staticvoidFbWskLeaveBinding", 1)[0]
+    require_order(create, (
+        "pid=(ULONG_PTR)PsGetProcessId(listener_process);",
+        "ExAllocatePool2(POOL_FLAG_NON_PAGED,sizeof(*owner),FB_WSK_OWNER_POOL_TAG);",
+        "ObReferenceObject(listener_process);owner->listener_process=listener_process;",
+        "owner->policy.auth=&owner->history;",
+        "address->sin_port=port_be;address->sin_addr.S_un.S_un_b.s_b1=127;"
+        "address->sin_addr.S_un.S_un_b.s_b4=1;",
+        "address->sin6_port=port_be;RtlCopyMemory(&address->sin6_addr,FbWskLoopback6,sizeof(FbWskLoopback6));",
+        "*result=owner;returnSTATUS_SUCCESS;",
+    ), "creator must retain the exact process, loopback endpoint and its fresh history")
+    require_order(start, (
+        "if(owner->started||owner->gate.stopping)returnSTATUS_INVALID_DEVICE_STATE;",
+        "status=WskRegister(&client,&owner->registration);if(status!=STATUS_SUCCESS)returnstatus;"
+        "owner->registered=TRUE;",
+        "status=WskCaptureProviderNPI(&owner->registration,WSK_NO_WAIT,&owner->provider);"
+        "if(status!=STATUS_SUCCESS)returnstatus;owner->captured=TRUE;",
+        "owner->provider.Dispatch->WskSocket(owner->provider.Client,owner->target.address_family,"
+        "SOCK_STREAM,IPPROTO_TCP,WSK_FLAG_LISTEN_SOCKET,NULL,NULL,owner->listener_process,NULL,NULL,owner->request);",
+        "status=FbWskWaitForStartup(owner);if(status!=STATUS_SUCCESS)returnstatus;"
+        "owner->listener=(PWSK_SOCKET)owner->request->IoStatus.Information;",
+        "dispatch->WskBind(owner->listener,(PSOCKADDR)&owner->local,0,owner->request);"
+        "status=FbWskWaitForStartup(owner);owner->ready=status==STATUS_SUCCESS;",
+    ), "listener must be created by the captured provider, then bound before arming")
+    require_order(arm, (
+        "KeAcquireSpinLock(owner->authority_lock,&irql);",
+        "if(owner->ready&&!owner->gate.stopping&&!owner->policy.armed&&"
+        "FbWskBrokerEpochIsLive(owner->policy.epochs,&owner->broker)){owner->policy.armed=1;",
+        "KeReleaseSpinLock(owner->authority_lock,irql);",
+    ), "arm must require a bound listener, active owner and live process epoch")
+    require_order(stop, (
+        "KeAcquireSpinLock(owner->authority_lock,&irql);",
+        "count=FbWskDisarmOwner(&owner->gate,&owner->policy.armed);",
+        "KeReleaseSpinLock(owner->authority_lock,irql);",
+    ), "stop must disarm policy and admission under the authority lock")
+    require_order(rundown, (
+        "LARGE_INTEGERno_wait={0};",
+        "KeAcquireSpinLock(owner->authority_lock,&irql);gate=owner->gate;"
+        "KeReleaseSpinLock(owner->authority_lock,irql);",
+        "switch(FbWskNextOwnerStep(&gate,owner->progress,owner->listener!=NULL))",
+        "caseFbWskOwnerNeedsBindingDrain:returnSTATUS_DEVICE_BUSY;",
+        "caseFbWskOwnerJoinUsers:status=owner->join_users(owner->barrier_context);"
+        "if(status!=STATUS_SUCCESS)returnstatus;owner->progress=FbWskOwnerUsersJoined;",
+        "caseFbWskOwnerCloseListener:",
+        "owner->listener=NULL;owner->progress=FbWskOwnerListenerClosing;"
+        "(void)dispatch->WskCloseSocket(listener,owner->request);returnSTATUS_PENDING;",
+        "caseFbWskOwnerCollectListenerClose:"
+        "if(KeWaitForSingleObject(&owner->finished,Executive,KernelMode,FALSE,&no_wait)!=STATUS_SUCCESS)"
+        "returnSTATUS_PENDING;owner->listener_close_status=owner->request->IoStatus.Status;"
+        "owner->progress=owner->listener_close_status==STATUS_SUCCESS?"
+        "FbWskOwnerListenerClosed:FbWskOwnerListenerCloseFailed;",
+        "caseFbWskOwnerHoldListenerCloseFailure:returnowner->listener_close_status;",
+        "caseFbWskOwnerReleaseProvider:if(owner->captured){WskReleaseProviderNPI(&owner->registration);"
+        "owner->captured=FALSE;}owner->progress=FbWskOwnerProviderReleased;",
+        "caseFbWskOwnerDeregister:if(owner->registered){WskDeregister(&owner->registration);"
+        "owner->registered=FALSE;}owner->progress=FbWskOwnerProviderDeregistered;",
+        "caseFbWskOwnerWaitForCallbacks:status=owner->wait_callbacks(owner->barrier_context);"
+        "if(status!=STATUS_SUCCESS)returnstatus;owner->progress=FbWskOwnerCallbacksReturned;",
+        "caseFbWskOwnerFree:IoFreeIrp(owner->request);ObDereferenceObject(owner->listener_process);"
+        "RtlSecureZeroMemory(owner,sizeof(*owner));ExFreePoolWithTag(owner,FB_WSK_OWNER_POOL_TAG);"
+        "*handle=NULL;returnSTATUS_SUCCESS;",
+    ), "rundown must join callers, close the listener, deregister and wait for callbacks before free")
+    if (compact.count("->WskCloseSocket("), compact.count("WskReleaseProviderNPI("),
+            compact.count("WskDeregister(")) != (2, 1, 1):
+        raise ValueError("rundown operations must have a single call site per owner")
 
 
 class WskSourceTests(unittest.TestCase):
     def test_checked_production_shaped_calls(self):
         verify_source(SOURCE)
         verify_lifecycle_source(SOURCE)
+        verify_owner_source(SOURCE)
 
     def test_reject_provider_provenance_and_gate_mutants(self):
         mutations = (
@@ -127,7 +206,7 @@ class WskSourceTests(unittest.TestCase):
             ("&connection->bound.context,\n                        &context_size", "caller_context, &context_size"),
             ("SIO_QUERY_WFP_CONNECTION_REDIRECT_RECORDS", "SIO_QUERY_WFP_CONNECTION_REDIRECT_CONTEXT"),
             ("if (!connection->bound.records_size ||", "if (connection->bound.records_size ||"),
-            ("FbWskCommitAcceptedContext(policy_state, listener_epoch, &connection->bound.context)",
+            ("FbWskCommitAcceptedContext(&owner->policy, &owner->target, &connection->bound.context)",
              "1"),
             ("*drain = connection;", "*drain = NULL;"),
         )
@@ -141,9 +220,11 @@ class WskSourceTests(unittest.TestCase):
         mutations = (
             ("FALSE, &timeout)", "FALSE, NULL)"),
             ("FB_WSK_WAIT_BUDGET_100NS - elapsed", "FB_WSK_WAIT_BUDGET_100NS"),
-            ("LARGE_INTEGER no_wait = {0};", "LARGE_INTEGER no_wait = {-1};"),
-            ("admitted = FbWskGateEnter(&lifetime->gate);", "admitted = 1;"),
-            ("ExAllocatePool2(POOL_FLAG_NON_PAGED", "ExAllocatePool2(POOL_FLAG_PAGED"),
+            ("LARGE_INTEGER no_wait = {0};\n    int complete;",
+             "LARGE_INTEGER no_wait = {-1};\n    int complete;"),
+            ("FbWskEnterArmedBinding(&owner->gate, owner->policy.armed);", "1;"),
+            ("ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*connection)",
+             "ExAllocatePool2(POOL_FLAG_PAGED, sizeof(*connection)"),
             ("(PSOCKADDR)&connection->local", "(PSOCKADDR)&temporary_local"),
             ("status = STATUS_IO_TIMEOUT;\n        goto reject;",
              "(void)IoCancelIrp(connection->request); status = STATUS_IO_TIMEOUT; goto reject;"),
@@ -152,13 +233,46 @@ class WskSourceTests(unittest.TestCase):
             ("FbWskPrepare(connection, FbWskClose);", "FbWskPrepare(connection, FbWskIdle);"),
             ("return close_status;", "return FbWskFreeDrain(handle);"),
             ("RtlSecureZeroMemory(connection, sizeof(*connection));",
-             "FbWskLeaveBinding(lifetime);"),
+             "FbWskLeaveBinding(owner);"),
         )
         for before, after in mutations:
             with self.subTest(before=before):
                 self.assertIn(before, SOURCE)
                 with self.assertRaises(ValueError):
                     verify_lifecycle_source(SOURCE.replace(before, after, 1))
+
+    def test_reject_owner_mutants(self):
+        mutations = (
+            ("owner->policy.auth = &owner->history;", "owner->policy.auth = prior_generation;"),
+            ("address->sin_addr.S_un.S_un_b.s_b1 = 127;", "address->sin_addr.S_un.S_un_b.s_b1 = 0;"),
+            ("FbWskLoopback6, sizeof(FbWskLoopback6));", "wildcard6, sizeof(wildcard6));"),
+            ("NULL, NULL, owner->listener_process, NULL, NULL, owner->request",
+             "NULL, NULL, NULL, NULL, NULL, owner->request"),
+            ("owner->listener = (PWSK_SOCKET)owner->request->IoStatus.Information;",
+             "owner->listener = caller_listener;"),
+            ("owner->ready = status == STATUS_SUCCESS;", "owner->ready = TRUE;"),
+            ("owner->ready && !owner->gate.stopping", "owner->ready"),
+            ("count = FbWskDisarmOwner(&owner->gate, &owner->policy.armed);",
+             "count = FbWskGateStop(&owner->gate);"),
+            ("case FbWskOwnerNeedsBindingDrain:\n            return STATUS_DEVICE_BUSY;",
+             "case FbWskOwnerNeedsBindingDrain: break;"),
+            ("owner->join_users(owner->barrier_context)", "STATUS_SUCCESS"),
+            ("LARGE_INTEGER no_wait = {0};", "LARGE_INTEGER no_wait = {-1};"),
+            ("FALSE, &no_wait) != STATUS_SUCCESS", "FALSE, &no_wait) == STATUS_SUCCESS"),
+            ("? FbWskOwnerListenerClosed : FbWskOwnerListenerCloseFailed;",
+             "? FbWskOwnerListenerClosed : FbWskOwnerListenerClosed;"),
+            ("return owner->listener_close_status;", "owner->progress = FbWskOwnerListenerClosed; break;"),
+            ("WskReleaseProviderNPI(&owner->registration);", "WskDeregister(&owner->registration);"),
+            ("WskDeregister(&owner->registration);", "WskReleaseProviderNPI(&owner->registration);"),
+            ("owner->wait_callbacks(owner->barrier_context)", "STATUS_SUCCESS"),
+            ("case FbWskOwnerFree:\n            IoFreeIrp(owner->request);",
+             "case FbWskOwnerFree:\n            return STATUS_SUCCESS;"),
+        )
+        for before, after in mutations:
+            with self.subTest(before=before):
+                self.assertIn(before, SOURCE)
+                with self.assertRaises(ValueError):
+                    verify_owner_source(SOURCE.replace(before, after, 1))
 
 
 if __name__ == "__main__":

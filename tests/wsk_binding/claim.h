@@ -24,6 +24,15 @@ typedef struct FbWskListenerEpoch {
     FbUint16 port_be;
 } FbWskListenerEpoch;
 
+static int FbWskBrokerEpochIsLive(const FbEpochTable* epochs, const FbEpochRecord* broker)
+{
+    FbEpochRecord live = {0};
+    return FbEpochLookup(epochs, broker->pid, &live) &&
+           live.creation_100ns == broker->creation_100ns &&
+           live.start_key == broker->start_key &&
+           live.process_token == broker->process_token;
+}
+
 /* Called under the authority spin lock after both queries succeeded on the
  * accepted WSK object. The caller must keep policy/ledger storage alive and
  * never carry receipts across a policy-generation transition. */
