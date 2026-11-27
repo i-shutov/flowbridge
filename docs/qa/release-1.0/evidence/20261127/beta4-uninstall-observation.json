@@ -1,0 +1,119 @@
+{
+  "workflow_commit": "d71ab8b452a530e59a0324a14eb26f1b0dd182b8",
+  "run_id": 46042401435,
+  "job_id": 140653163050,
+  "attempt": 1,
+  "run_url": "https://github.com/i-shutov/flowbridge/actions/runs/46042401435",
+  "conclusion": "success",
+  "report": {
+    "completion_predicates": {
+      "private_temp_empty_directory": false,
+      "uninstall_key_absent_both_views": true,
+      "uninstaller_absent": true
+    },
+    "failed_job": 140650437184,
+    "failed_run": 46041604814,
+    "host": {
+      "account": "VM-326272\\Admin",
+      "architecture": "x64",
+      "build": 22631,
+      "computer": "VM-326272",
+      "os": "Windows 11 Pro",
+      "token_elevated": true,
+      "ubr": 2861
+    },
+    "install_type": "directory",
+    "owned_processes": {
+      "owned": [],
+      "owned_count": 0,
+      "possible_names_with_unavailable_path": 0
+    },
+    "registry": {
+      "32": {
+        "settings": {
+          "exists": true,
+          "path_matches_owned_install": false,
+          "path_value_exists": false,
+          "subkey_count": 0,
+          "value_count": 0
+        },
+        "uninstall": {
+          "exists": false,
+          "path_matches_owned_install": false,
+          "path_value_exists": false
+        }
+      },
+      "64": {
+        "settings": {
+          "exists": true,
+          "path_matches_owned_install": false,
+          "path_value_exists": false,
+          "subkey_count": 0,
+          "value_count": 0
+        },
+        "uninstall": {
+          "exists": false,
+          "path_matches_owned_install": false,
+          "path_value_exists": false
+        }
+      }
+    },
+    "schema": "flowbridge-win11-beta4-uninstall-observer-v1",
+    "status": "READ_ONLY_OBSERVATION_COMPLETE",
+    "temp_type": "directory",
+    "uninstaller_type": "absent",
+    "work_id": "qa-beta4-74021cde30d34727bcce54f0d6a85283",
+    "work_inventory": {
+      "entries": [
+        {
+          "device_id": "10108441072652092086",
+          "file_id": "281474977745904",
+          "modified_utc": "2026-11-27T17:24:40.988058+00:00",
+          "role": "work",
+          "type": "directory"
+        },
+        {
+          "device_id": "10108441072652092086",
+          "file_id": "281474977745909",
+          "modified_utc": "2026-11-27T17:24:44.940083+00:00",
+          "role": "install",
+          "type": "directory"
+        },
+        {
+          "device_id": "10108441072652092086",
+          "file_id": "281474977745905",
+          "modified_utc": "2026-11-27T17:24:44.944091+00:00",
+          "role": "tmp",
+          "type": "directory"
+        },
+        {
+          "bytes": 43,
+          "device_id": "10108441072652092086",
+          "file_id": "281474977745934",
+          "modified_utc": "2026-11-27T17:24:43.385376+00:00",
+          "role": "install/qa-preserve-user-file.txt",
+          "sha256": "90650db13aa546cb7d3b37898e3787bd7d70beb717343f2e6240e949f7e1c2fc",
+          "type": "regular_file"
+        },
+        {
+          "device_id": "10108441072652092086",
+          "file_id": "281474977745938",
+          "modified_utc": "2026-11-27T17:24:44.772048+00:00",
+          "role": "tmp/~nsu1.tmp",
+          "type": "directory"
+        },
+        {
+          "bytes": 64057,
+          "device_id": "10108441072652092086",
+          "file_id": "281474977745939",
+          "modified_utc": "2026-11-27T17:24:43.599938+00:00",
+          "role": "tmp/~nsu1.tmp/un.exe",
+          "sha256": "86ef3f88a4ac08a46d30187da0ac2e6386b34b77e1a23df44889992dca53a3b4",
+          "type": "regular_file"
+        }
+      ],
+      "limit_reached": false
+    }
+  },
+  "artifact_count": 0
+}

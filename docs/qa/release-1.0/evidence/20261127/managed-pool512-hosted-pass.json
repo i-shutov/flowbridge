@@ -1,0 +1,391 @@
+{
+  "schema": "flowbridge-managed-pool512-hosted-evidence-v1",
+  "observed_at_utc": "2026-11-27T17:15:28Z",
+  "workflow_run_id": 46039371745,
+  "workflow_run_url": "https://github.com/i-shutov/flowbridge/actions/runs/46039371745",
+  "job_id": 140642883277,
+  "run_attempt": 1,
+  "workflow_commit": "ea6cd2396fca949f1d213e56cdba648e25d6a21f",
+  "conclusion": "success",
+  "artifact_count": 0,
+  "product_commit": "1261201d8561ee4e70faccc8699f60606a71c93b",
+  "product_tree": "b42325734201827e6b4d7566b4b3418205d78889",
+  "probe_commit": "c45fce1675706bcf5612f7b5fceeea54a1d56594",
+  "probe_tree": "233f794cdc09bdc1c5614bfc358584131effe6f8",
+  "managed": {
+    "passed": true,
+    "stage": "complete",
+    "target_held": 512,
+    "peak_held": 512,
+    "verified_under_overload": 512,
+    "overload_replies": 80,
+    "recovery_successes": 16,
+    "children": [
+      {
+        "pid": 6308,
+        "worker_port": 54017,
+        "version": "OpenSSH_for_Windows_9.5p2, LibreSSL 3.8.2"
+      },
+      {
+        "pid": 4380,
+        "worker_port": 54018,
+        "version": "OpenSSH_for_Windows_9.5p2, LibreSSL 3.8.2"
+      },
+      {
+        "pid": 4164,
+        "worker_port": 54019,
+        "version": "OpenSSH_for_Windows_9.5p2, LibreSSL 3.8.2"
+      },
+      {
+        "pid": 1924,
+        "worker_port": 54020,
+        "version": "OpenSSH_for_Windows_9.5p2, LibreSSL 3.8.2"
+      }
+    ],
+    "release_zero_permits": true,
+    "stop_zero_permits": true,
+    "stop_cleared_pool": true,
+    "stop_original_children_exited": true,
+    "stop_listeners_closed": true,
+    "admission_peak": {
+      "54017": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 0
+      },
+      "54018": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 0
+      },
+      "54019": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 0
+      },
+      "54020": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 0
+      }
+    },
+    "admission_queue_peak": {
+      "54017": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 16,
+        "rejected": 4
+      },
+      "54018": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 16,
+        "rejected": 4
+      },
+      "54019": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 16,
+        "rejected": 4
+      },
+      "54020": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 16,
+        "rejected": 4
+      }
+    },
+    "admission_after_overload": {
+      "54017": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 20
+      },
+      "54018": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 20
+      },
+      "54019": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 20
+      },
+      "54020": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 20
+      }
+    },
+    "admission_recovered": {
+      "54017": {
+        "active_including_opening": 4,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 20
+      },
+      "54018": {
+        "active_including_opening": 4,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 20
+      },
+      "54019": {
+        "active_including_opening": 4,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 20
+      },
+      "54020": {
+        "active_including_opening": 4,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 20
+      }
+    },
+    "paused_admission_failed_closed": true,
+    "listeners_before_stop": [
+      {
+        "role": "engine",
+        "ipv4_listeners": 1,
+        "ipv6_listeners": 0,
+        "expected_ipv4_loopback_owner": true,
+        "unexpected_owner_or_address": false
+      },
+      {
+        "role": "ssh_worker_1",
+        "ipv4_listeners": 1,
+        "ipv6_listeners": 0,
+        "expected_ipv4_loopback_owner": true,
+        "unexpected_owner_or_address": false
+      },
+      {
+        "role": "ssh_worker_2",
+        "ipv4_listeners": 1,
+        "ipv6_listeners": 0,
+        "expected_ipv4_loopback_owner": true,
+        "unexpected_owner_or_address": false
+      },
+      {
+        "role": "ssh_worker_3",
+        "ipv4_listeners": 1,
+        "ipv6_listeners": 0,
+        "expected_ipv4_loopback_owner": true,
+        "unexpected_owner_or_address": false
+      },
+      {
+        "role": "ssh_worker_4",
+        "ipv4_listeners": 1,
+        "ipv6_listeners": 0,
+        "expected_ipv4_loopback_owner": true,
+        "unexpected_owner_or_address": false
+      }
+    ],
+    "listeners_after_stop": [
+      {
+        "role": "engine",
+        "ipv4_listeners": 0,
+        "ipv6_listeners": 0,
+        "expected_ipv4_loopback_owner": false,
+        "unexpected_owner_or_address": false
+      },
+      {
+        "role": "ssh_worker_1",
+        "ipv4_listeners": 0,
+        "ipv6_listeners": 0,
+        "expected_ipv4_loopback_owner": false,
+        "unexpected_owner_or_address": false
+      },
+      {
+        "role": "ssh_worker_2",
+        "ipv4_listeners": 0,
+        "ipv6_listeners": 0,
+        "expected_ipv4_loopback_owner": false,
+        "unexpected_owner_or_address": false
+      },
+      {
+        "role": "ssh_worker_3",
+        "ipv4_listeners": 0,
+        "ipv6_listeners": 0,
+        "expected_ipv4_loopback_owner": false,
+        "unexpected_owner_or_address": false
+      },
+      {
+        "role": "ssh_worker_4",
+        "ipv4_listeners": 0,
+        "ipv6_listeners": 0,
+        "expected_ipv4_loopback_owner": false,
+        "unexpected_owner_or_address": false
+      }
+    ],
+    "tcp_connections_after_stop": [
+      {
+        "initial_socket_code": 10035,
+        "final_socket_code": 10061,
+        "connect_timed_out": false,
+        "role": "engine"
+      },
+      {
+        "initial_socket_code": 10035,
+        "final_socket_code": 10061,
+        "connect_timed_out": false,
+        "role": "ssh_worker_1"
+      },
+      {
+        "initial_socket_code": 10035,
+        "final_socket_code": 10061,
+        "connect_timed_out": false,
+        "role": "ssh_worker_2"
+      },
+      {
+        "initial_socket_code": 10035,
+        "final_socket_code": 10061,
+        "connect_timed_out": false,
+        "role": "ssh_worker_3"
+      },
+      {
+        "initial_socket_code": 10035,
+        "final_socket_code": 10061,
+        "connect_timed_out": false,
+        "role": "ssh_worker_4"
+      }
+    ]
+  },
+  "outer": {
+    "passed": true,
+    "source_commit": "c45fce1675706bcf5612f7b5fceeea54a1d56594",
+    "platform": "Windows-2025Server-10.0.26100-SP0",
+    "hosted_windows_runner": true,
+    "native_windows_11_pool_probe": false,
+    "windows_10_11_user_machine_tested": false,
+    "wfp_driver_loaded": false,
+    "native_dns_leaks_verified": false,
+    "system_configuration_modified": false,
+    "network_test_destinations_loopback_only": true,
+    "scenario": "managed-pool-512",
+    "managed_acceptance_proved": false,
+    "raw_backend_512_stability_proved": false,
+    "ssh_sha256": "98d447730047f5df91373e852d057928a921c3d1e89938700ab656ba84b19dc8",
+    "sshd_sha256": "00d61610a0965b42cc9a9cd401dae8983fe77d5394697f074d776bb68ce6ff0a",
+    "ffi_sha256": "2ceb6615726dba4d599fea4251ca18f24339dd9ff84e19e06cd5f1c22e812d40",
+    "workflow_run_id": "46039371745",
+    "source_tree_sha": "233f794cdc09bdc1c5614bfc358584131effe6f8",
+    "cli_sha256": null,
+    "managed_pool_512_proved": true,
+    "win32_gui_interaction_exercised": false,
+    "compiled_win32_pool_policy_sha256": "dd24536db3029279c2cc077f962c5080d227142dced354adde44afe1659ff063",
+    "pinned_fixture_archive_sha256": "b67ff8becd203502190ec42ac7787c24c2cd3325ed7700485fe7a1c83d2a7957",
+    "microsoft_fixture_signatures_valid": true
+  },
+  "scope": "Hosted Windows CI managed Engine/FFI and compiled Win32 pool policy. Not original beta.4 installer acceptance or native Win11 GUI interaction.",
+  "prior_run": {
+    "id": 46037433600,
+    "conclusion": "failure",
+    "reason": "Final listener-refusal check failed after successful capacity/recovery/child cleanup; historical run remains FAIL."
+  },
+  "probe_revision": "Added OS TCP owner inventory and asynchronous SO_ERROR observation. Requires no listening endpoints and ECONNREFUSED for all five ports; timeouts remain failure."
+}

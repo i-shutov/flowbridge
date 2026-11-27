@@ -1,0 +1,204 @@
+{
+  "workflow_run_id": 46040665928,
+  "job_id": 140647280785,
+  "workflow_commit": "96e273f62608ddfcb97f3235e68b3cef610a8ffb",
+  "run_url": "https://github.com/i-shutov/flowbridge/actions/runs/46040665928",
+  "conclusion": "success",
+  "artifact_count": 0,
+  "root_cause": "The exact builder failed at print(proc.stdout), with UnicodeEncodeError on the redirected Windows log stream. The original installer exists. Exact NSIS replay on verified inputs returns zero and creates an installer in a new private diagnostic directory.",
+  "scope": "Diagnostic installer is not the release candidate and was not executed. Failed original run remains failure; a fresh full build is required.",
+  "report": {
+    "compiler_error_codes": [],
+    "error_signals": [
+      "log_codec_cannot_encode_character",
+      "log_codepage_character_unmapped"
+    ],
+    "git_subprocesses_failed": [],
+    "log_bytes": 20320,
+    "nsis": {
+      "compiler_markers": {
+        "contains_error": false,
+        "processing_script": false,
+        "showed_usage": false,
+        "writing_output": false
+      },
+      "compiler_output_lines": 0,
+      "known_files_or_symbols": [],
+      "logged_compiler_flags": [
+        "/NOCONFIG",
+        "/V4",
+        "/INPUTCHARSET",
+        "/DPAYLOAD_DIR",
+        "/DOUTPUT_FILE",
+        "/DVERSION",
+        "/DFILE_VERSION"
+      ],
+      "logged_nsis_call": true,
+      "sanitized_compiler_excerpts": []
+    },
+    "nsis_provenance": {
+      "direct_read_only_invocations": {
+        "header_build_flags": {
+          "exit_code": 0,
+          "nsis_compile_signals": true,
+          "pinned_version_output": false,
+          "stderr_bytes": 0,
+          "stderr_excerpts": [],
+          "stdout_bytes": 1775
+        },
+        "header_default": {
+          "exit_code": 0,
+          "nsis_compile_signals": true,
+          "pinned_version_output": false,
+          "stderr_bytes": 0,
+          "stderr_excerpts": [],
+          "stdout_bytes": 1636
+        },
+        "version": {
+          "exit_code": 0,
+          "nsis_compile_signals": false,
+          "pinned_version_output": true,
+          "stderr_bytes": 0,
+          "stderr_excerpts": [],
+          "stdout_bytes": 5
+        }
+      },
+      "pinned_archive_sha256": "ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8",
+      "replay": {
+        "exit_code": 0,
+        "installer_executed": false,
+        "private_output_created": true,
+        "private_output_sha256": "a09ccd58287d9cd4ccc68afe79795ec95f8d7c6b94e8ad8ba93e381399ec0593",
+        "source_and_13_payload_origins_verified": true,
+        "stderr": {
+          "bytes": 0,
+          "encoding": "empty",
+          "excerpts": [],
+          "known_files_or_symbols": [],
+          "lines": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "stdout": {
+          "bytes": 14608,
+          "encoding": "cp1252-fallback",
+          "excerpts": [
+            "[redacted] 46658 [redacted]",
+            "[redacted] data [redacted]",
+            "[redacted] 4 [redacted] 4 [redacted]",
+            "[redacted] size [redacted]"
+          ],
+          "known_files_or_symbols": [
+            "FlowBridgeExplicitBeta.nsi",
+            "MUI2.nsh",
+            "LogicLib.nsh",
+            "x64.nsh",
+            "WinVer.nsh",
+            "System.dll",
+            "LICENSE",
+            "BUILD-METADATA.json",
+            "SBOM.cdx.json",
+            "THIRD_PARTY_NOTICES.txt",
+            "FlowBridge-0.3.0-beta.4-windows-x64-setup.exe",
+            "FlowBridge.exe",
+            "flowbridge_ffi.dll",
+            "PAYLOAD_DIR",
+            "OUTPUT_FILE",
+            "FILE_VERSION",
+            "VERSION"
+          ],
+          "lines": 308,
+          "sha256": "9480c069099e941255e859a7e661c82aeb5a267a070eae2c65de9f3297917ec8"
+        }
+      },
+      "resources_match_pinned_archive": true,
+      "retained_failed_compiler_command": {},
+      "verified_compiler_sha256": "65343c225ec88393cc4453b0963caf63f763f42f48cb55736d51893ff2e29d4a"
+    },
+    "phase_signals": [
+      "version_check_pass",
+      "cargo_build",
+      "cargo_resolve_output",
+      "rust_compiling",
+      "cmake_configure",
+      "cmake_build",
+      "nsis_compile"
+    ],
+    "private_build_files_present": {
+      "candidate_git_head": true,
+      "candidate_git_index": true,
+      "candidate_source": true,
+      "checkpoint": false,
+      "ffi_binary": true,
+      "installer_output": true,
+      "native_cmake_cache": true,
+      "native_gui": true,
+      "nsis_extraction": true,
+      "package_manifest": false,
+      "package_metadata": true
+    },
+    "python_exceptions": [
+      "CalledProcessError",
+      "UnicodeEncodeError"
+    ],
+    "sample_bytes": 20320,
+    "schema": "flowbridge-private-beta4-build-diagnostic-v1",
+    "source_attempt": 1,
+    "source_builder": {
+      "computed_git_blob_matches": true,
+      "git_audit_available": true,
+      "head_tree_matches": true,
+      "index_builder_matches": true,
+      "retained_builder_bytes": 9342,
+      "retained_builder_line_classification": {
+        "36": "other",
+        "37": "invoke_subprocess",
+        "39": "other",
+        "40": "print_compiler_stdout",
+        "41": "other",
+        "42": "print_compiler_stderr",
+        "43": "check_subprocess_exit_status",
+        "143": "invoke_nsis",
+        "191": "other"
+      },
+      "retained_builder_matches_tree_blob": true,
+      "retained_builder_sha256": "d41bb18dd2009243e3d1995e77a58e988bf13380cc88e739bb9e3cd9a1f18350"
+    },
+    "source_run": 46037525707,
+    "status": "DIAGNOSTIC_READ",
+    "subprocess_exit_codes": [
+      1
+    ],
+    "traceback_frames": [
+      {
+        "file": "build-explicit-beta.py",
+        "line": 191
+      },
+      {
+        "file": "build-explicit-beta.py",
+        "line": 143
+      },
+      {
+        "file": "build-explicit-beta.py",
+        "line": 40
+      },
+      {
+        "file": "stage_internal_beta4.py",
+        "line": 220
+      },
+      {
+        "file": "stage_internal_beta4.py",
+        "line": 216
+      },
+      {
+        "file": "stage_internal_beta4.py",
+        "line": 197
+      },
+      {
+        "file": "subprocess.py",
+        "line": 578
+      }
+    ],
+    "whole_log_read": true,
+    "windows_error_codes": []
+  }
+}

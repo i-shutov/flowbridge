@@ -13,10 +13,16 @@ watchdog и установщиком. Прозрачное перенаправ�
 
 ## 1. Что выпускаем и что сейчас мешает
 
-Для 0.3.0 осталось получить новый пакет с исправленными notices/metadata,
-подтвердить 512 соединений через настоящий управляемый пул, провести
-функциональную и визуальную приёмку этого пакета на Win11 и закрыть
-конкретные замечания проверки состава и безопасности.
+Новый **0.3.0-beta.4 собран и проверен на Win11** с исправленными notices/metadata
+и настройкой четырёх SSH workers на 512 совокупных потоков. Оригинальная FFI
+этого пакета выдержала 512 одновременно удерживаемых соединений, перегрузку,
+восстановление и закрытие процессов/портов. Установщик прошёл полный цикл
+install/reinstall/uninstall с сохранностью профиля и очисткой тестового состояния.
+Для выпуска остались интерактивная GUI/SSH-приёмка и итоговые A5/A6/A7.
+
+Первый блок начат после публикации плана `8ea89cd`. Все четыре задания выданы
+и имеют результаты. Последующие исправления и повторные проверки сохраняют
+историю неуспешных запусков; статус выпуска остаётся **NO GO** до приёмки.
 
 | Версия | Назначение | Условие выпуска |
 | --- | --- | --- |
@@ -45,11 +51,18 @@ Release или tag. Проверки подписи SSH, абсолютного 
 | --- | --- |
 | Product source | `44f1fc0eba5ac1552df94f083342e25a1a764937`, [PR #91](https://github.com/i-shutov/flowbridge/pull/91): SSH privacy/trust/path fixes |
 | Следующий product source | `cc0106245d10e3e26ca3847c33397522db91b59f`, [PR #94](https://github.com/i-shutov/flowbridge/pull/94): notices и native runtime metadata; 51 локальная проверка PASS, Rust/native 5/5 и capture integration 3/3 PASS; отдельный G2 открыт |
+| Активный product source | `1261201d8561ee4e70faccc8699f60606a71c93b`, [PR #95](https://github.com/i-shutov/flowbridge/pull/95): исправлен прежний GUI-лимит 128 при четырёх workers; 14 jobs PASS, отдельный G2 FAIL сохранён |
+| Private beta.4 | [Сборка 46040903481](https://github.com/i-shutov/flowbridge/actions/runs/46040903481) PASS; original source `c8881dada43e3183a0340dc823105bdcdac71171`, tree `ce336e83bb724a65bf512e79e286c97fb0cb3190`; 13 payload-файлов, installer/GUI/CLI/FFI/manifest закреплены; [evidence](qa/release-1.0/evidence/20261127/beta4-native-build.json) |
+| Managed pool512 на hosted Windows | [46039371745](https://github.com/i-shutov/flowbridge/actions/runs/46039371745) PASS: 4 × 128, все 512 проверены байтами под перегрузкой, 80 отказов лишним открытиям, 16 восстановлений; после Stop нет процессов, permits и пяти listeners; [evidence](qa/release-1.0/evidence/20261127/managed-pool512-hosted-pass.json) |
+| Original beta.4 pool512 на Win11 | [46043398994](https://github.com/i-shutov/flowbridge/actions/runs/46043398994) PASS на FFI из нового пакета: 512 held, 80 отказов перегрузке, 16 recovery, 4 × 128, пустой Job после завершения и пять закрытых listeners; [evidence](qa/release-1.0/evidence/20261127/beta4-native-managed-pool512-pass.json) |
+| Original beta.4 installer на Win11 | [46043764383](https://github.com/i-shutov/flowbridge/actions/runs/46043764383) PASS всех 9 headless-фаз: baseline, install, payload, CLI, reinstall, uninstall, profile/stable preservation, cleanup; [evidence](qa/release-1.0/evidence/20261127/beta4-headless-lifecycle-pass.json) |
+| Состав оригинальной beta.4 | [46042486760](https://github.com/i-shutov/flowbridge/actions/runs/46042486760) PASS технической инвентаризации: 13 файлов, 114 license text records, 76 SBOM components, CMake/MSVC/NSIS input hashes; A5/A6/A7 не подменены инвентаризацией; [evidence](qa/release-1.0/evidence/20261127/beta4-original-static-inventory.json) |
 | Frozen beta.3 | Source `c6ead0f31de4c118453913d733f537ba421af616`; installer SHA-256 `6408c0bf595b0ae61a4fc05db17421dc4b03dcda241f3c1f1f997ab6583eec5b`; собран, сохранён, original-byte release acceptance не закрыта |
 | Аудит оригиналов | 13 payload-файлов, 113 notice sections, три NSIS distribution plugins и MSVC configuration проверены; [evidence](qa/release-1.0/evidence/20261127/frozen-beta3-notice-coverage.json) |
 | RustSec | 75 lock-записей; 0 advisories/0 warnings в закреплённой базе; [границы проверки](qa/release-1.0/evidence/20261127/frozen-beta3-rustsec.json) |
 | Завершённый QA head `63936d4` | 6/6 workflow, 13/13 jobs, artifacts 0. Managed 128 held/10 000 churn и lifecycle четырёх процессов прошли. Это ещё не проверка 512 одновременно через пул |
 | WSK prototype | `a7476671a5b9574dfe8d6f5a307148b5fe27ef11`: 18 C++ cases, 20 source mutants, WDK compile без warnings/errors; driver не загружался |
+| WSK owner/rundown | `f5182e971b0a6b203e509fe3dc0e7c11e269251e`: 25 C++ cases, 38 source mutants; [WDK run 46038690086](https://github.com/i-shutov/flowbridge/actions/runs/46038690086) PASS, 0 warnings/errors; driver не загружался; [evidence](qa/release-1.0/evidence/20261127/wsk-owner-rundown-compile.json) |
 
 Все точные исходники, запуски и hashes остаются в реестре и evidence.
 Прежняя beta.2 приёмка, generic installer CI и успешная сборка не заменяют
@@ -69,6 +82,32 @@ Release или tag. Проверки подписи SSH, абсолютного 
 P1/P2, P3 и подготовка P4/P5 выполняются параллельно. Для финальной P4/P5
 используется тот кандидат, который прошёл P2/P3. Изменение product bytes после
 приёмки требует повторить затронутые проверки.
+
+### Статус после выполненного блока
+
+| Шаг | Фактическое состояние |
+| --- | --- |
+| P1 | Source закреплён; исправление GUI-пула опубликовано в PR #95 поверх metadata PR #94 |
+| P2 | PASS: private beta.4 собран на Win11, оригиналы и hash chain сохранены |
+| P3 | PASS: managed 512 на hosted Windows и на оригинальной beta.4 в Win11 |
+| P4 | Headless installer 9/9 PASS. Интерактивные GUI/SSH, клавиатура, визуальная проверка и screenshots ещё NOT_RUN |
+| P5 | Техническая инвентаризация оригиналов PASS; итоговый review лицензий, состава, security/privacy и решение A5/A6 ещё открыты |
+| P6 | Release notes/внутренний комплект и A7 после оставшейся приёмки |
+
+Win11 preflight обнаружил runner в Session 0 и отсутствие активного рабочего
+стола. Для следующего этапа нужен вход существующего Admin в Win11 через VM
+console/RDP с подключённым и разблокированным рабочим столом.
+[Точная карточка запуска на закреплённых оригиналах](qa/release-1.0/checkpoints/WIN11_BETA4_DESKTOP_START_20261127.md).
+Codex на машине не является обязательным условием сборки и этих runner-проверок.
+
+Первый native pool run остановился до нагрузки из-за неинициализированного
+окружения MSVC. Первый installer run остановился на проверке пустого TEMP:
+NSIS оставил завершившуюся временную копию деинсталлятора. Исправлены QA-обвязки;
+product bytes остались прежними. Остаток удалён только после проверки его
+наблюдённых file IDs, размера и SHA-256; затем полный цикл пройден заново.
+Первичные FAIL сохранены. Системная очередь отложенного удаления NSIS не
+проверялась и напрямую QA не изменялась; PASS очистки относится к проверенным
+тестовым файлам и FlowBridge namespace.
 
 ### Критерий 512: продуктовый пул
 
@@ -123,12 +162,17 @@ close один раз. Failed close остаётся в quarantine. Три се�
 собственное ожидание completion; время provider call, cleanup и unload
 такой границей не доказано.
 
-Следующий результат — явный владелец listener/provider/policy, policy disarm
-под authority lock, joining workers/callers, callback rundown, listener close
-и WSK deregistration. После source review и compile нужны подписанный
+В текущем блоке реализован явный владелец listener/provider/policy, policy disarm
+под authority lock, listener close и WSK deregistration. После source review
+и compile нужны интеграция joining workers/callers и callback rundown, подписанный
 изолированный стенд, rollback и настоящие IPv4/IPv6 redirected connections,
 anti-transplant, отказы, packet lineage и Driver Verifier.
-[Последний WSK evidence](qa/release-1.0/evidence/20261127/wsk-accepted-socket-lifecycle.json).
+[Последний WSK evidence](qa/release-1.0/evidence/20261127/wsk-owner-rundown-compile.json).
+
+В текущем блоке слой owner/provider/listener реализован и проверен компиляцией
+WDK (`f5182e9`). Host join и callback-return barrier остаются контрактами для
+дальнейшей интеграции; compile PASS не подтверждает выполнение драйвера,
+происхождение процесса или packet lineage.
 
 WFP/G2 остаются обязательными для версии с прозрачным перенаправлением.
 Они не подменяются SOCKS-проверками и не задерживают 0.3.0 с заявленным
@@ -142,7 +186,7 @@ explicit-SOCKS объёмом.
 успешную компиляцию или сохранённый документ за приёмку продукта.
 
 Прежний Win10 A3 отложен; новый Win11 original-candidate gate активен.
-A5/A6/A7 и release acceptance остаются открытыми до выполнения P2–P6.
+A5/A6/A7 и release acceptance остаются открытыми до завершения P4–P6.
 Текущие подтверждённые source fixes и исследования используются без повторного
 запуска уже известных отрицательных raw512 опытов. Ни прямой доступ к Win10,
 ни изменение ExecutionPolicy, ни отключение проверки подписи SSH для этого

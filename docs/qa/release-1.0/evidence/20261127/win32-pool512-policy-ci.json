@@ -1,0 +1,149 @@
+{
+  "schema": "flowbridge-win32-pool512-policy-ci-evidence-v1",
+  "date_moscow": "2026-11-27",
+  "source": "1261201d8561ee4e70faccc8699f60606a71c93b",
+  "tree": "b42325734201827e6b4d7566b4b3418205d78889",
+  "base": "cc0106245d10e3e26ca3847c33397522db91b59f",
+  "pull_request": "https://github.com/i-shutov/flowbridge/pull/95",
+  "executed_merge": "ee1ac976e8869636f57366702215468d4c5d7d47",
+  "executed_merge_tree": "b42325734201827e6b4d7566b4b3418205d78889",
+  "change": "Win32 GUI four-worker pool changes from aggregate128 / per-worker32 to aggregate512 / per-worker128; two and three workers preserve their prior limits.",
+  "first_attempt_only": true,
+  "passed_jobs": 14,
+  "failed_jobs": 1,
+  "runs": [
+    {
+      "run_id": 46036063179,
+      "artifacts": 0,
+      "jobs": [
+        {
+          "job_id": 140631656660,
+          "name": "dns (windows-2025)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140631656861,
+          "name": "dns (macos-15)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140631656921,
+          "name": "dns (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run_id": 46036063099,
+      "artifacts": 0,
+      "jobs": [
+        {
+          "job_id": 140631656858,
+          "name": "windows-application",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140631656967,
+          "name": "rust (windows-2025)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140631657066,
+          "name": "rust (macos-15)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140631657115,
+          "name": "macos-application",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140631657207,
+          "name": "rust (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run_id": 46036063113,
+      "artifacts": 0,
+      "jobs": [
+        {
+          "job_id": 140631656243,
+          "name": "integration (macos-15)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140631656658,
+          "name": "integration (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140631656761,
+          "name": "g2-kernel-connection-owner",
+          "status": "completed",
+          "conclusion": "failure"
+        },
+        {
+          "job_id": 140631656784,
+          "name": "integration (windows-2025)",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "run_id": 46036063163,
+      "artifacts": 0,
+      "jobs": [
+        {
+          "job_id": 140631656945,
+          "name": "Rust SSH + C++ source privacy (windows-2025)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140631657322,
+          "name": "Rust SSH + C++ source privacy (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140632696054,
+          "name": "Build Windows explicit-only GUI from changed source without packaging",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ],
+  "native_regression": {
+    "job_id": 140631656858,
+    "observed_pass": "PASS owned GUI pool: pause/resume limits, 2->3->4->1->2, stale IDs, managed capture button state"
+  },
+  "independent_g2": {
+    "status": "FAIL",
+    "job_id": 140631656761,
+    "observed_markers": [
+      "G2_ETW_CONNECTION_EVIDENCE=FAIL",
+      "G2_PACKET_BOUND=UNPROVED"
+    ],
+    "blocks_explicit_socks_0_3": false
+  },
+  "limits": [
+    "This CI does not prove 512 simultaneous network flows.",
+    "Generic Windows installer and native tests do not grant original beta4 acceptance.",
+    "No changes to SSH trust guards or single-backend raw512 acceptance."
+  ],
+  "public_artifacts": 0
+}

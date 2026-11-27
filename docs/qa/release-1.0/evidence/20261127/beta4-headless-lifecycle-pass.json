@@ -1,0 +1,55 @@
+{
+  "run_id": 46043764383,
+  "job_id": 140657761417,
+  "attempt": 1,
+  "workflow_commit": "e7092049b6ae63274d7f0fe84f19b3cd35771659",
+  "run_url": "https://github.com/i-shutov/flowbridge/actions/runs/46043764383",
+  "artifact_count": 0,
+  "conclusion": "success",
+  "report": {
+    "candidate": {
+      "pins": {
+        "harness": "46cd8970cf669e0be3493998aeec6ba30ecb464dd399d0c3cdd972444e193a32",
+        "installer": "e0e4491cd97b30aa52b52ce89a7a8396a2fc11902bec3e70bed8ebfd722450b0",
+        "manifest": "3542633d089aff80e379f30db8be6f301edae462f38f70ea07c5b8ba76011703",
+        "source": "c8881dada43e3183a0340dc823105bdcdac71171",
+        "tool": "faf62aabeea95ef316f5c0935177a65820ea4679ac94afe8b5461138dd17a33c",
+        "tree": "ce336e83bb724a65bf512e79e286c97fb0cb3190"
+      },
+      "runner_result_sha256": "92a86edace76982d8b6d17539c9503de86cc2b8d84ce651acef1b1137b9eff64",
+      "version": "0.3.0-beta.4"
+    },
+    "checks": {
+      "clean_baseline": "PASS",
+      "cleanup": "PASS",
+      "cli": "PASS",
+      "install": "PASS",
+      "payload": "PASS",
+      "profile_preserved": "PASS",
+      "reinstall": "PASS",
+      "stable_preserved": "PASS",
+      "uninstall": "PASS"
+    },
+    "gui_acceptance": "NOT_RUN",
+    "gui_managed_ssh": "NOT_RUN",
+    "host": {
+      "account": "VM-326272\\Admin",
+      "architecture": "x64",
+      "build": 22631,
+      "computer": "VM-326272",
+      "os": "Windows 11 Pro",
+      "token_elevated": true,
+      "ubr": 2861
+    },
+    "nsis_machine_pending_rename_queue": {
+      "inspection": "NOT_INSPECTED",
+      "qa_direct_write": false
+    },
+    "private_work_id": "qa-beta4-2ced1cc13e074c25be72d37495eed46b",
+    "schema": "flowbridge-win11-beta4-headless-lifecycle-v1",
+    "session": 0,
+    "status": "PASS_HEADLESS_LIFECYCLE",
+    "uninstaller_temp_copy_verified": true,
+    "visual_acceptance": "NOT_RUN"
+  }
+}

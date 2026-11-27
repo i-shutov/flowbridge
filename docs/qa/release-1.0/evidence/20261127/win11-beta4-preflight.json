@@ -1,0 +1,91 @@
+{
+  "schema": "flowbridge-win11-release-acceptance-preflight-evidence-v1",
+  "observed_at_utc": "2026-11-27T16:53:33Z",
+  "date_moscow": "2026-11-27",
+  "workflow": {
+    "url": "https://github.com/i-shutov/flowbridge/actions/runs/46037376944",
+    "run_id": 46037376944,
+    "job_id": 140636101568,
+    "attempt": 1,
+    "status": "completed",
+    "conclusion": "success",
+    "workflow_source": "ee338d6b0d97a68c0ba4c30d78da9b5fe02db137",
+    "artifacts": 0
+  },
+  "probe": {
+    "source": "562ac8fb5087d820a4b213b08dffb24c4ed1680e",
+    "tree": "938593a539dbd3d6d0102102ab4ce00984fa66ff",
+    "script_sha256": "89fcff121b1cd12c6b8a0e315bfdf73599157dd1d11e79cc713a90a73230e858",
+    "local_contract_tests": 5
+  },
+  "result": {
+    "candidate": {
+      "status": "NOT_CHECKED"
+    },
+    "desktop": {
+      "active_sessions": [],
+      "process_session": 0,
+      "screen_pixels": null,
+      "status": "BLOCKED_SESSION_0"
+    },
+    "host": {
+      "account": "VM-326272\\Admin",
+      "architecture": "x64",
+      "build": 22631,
+      "computer": "VM-326272",
+      "os": "Windows 11 Pro",
+      "token_elevated": true,
+      "ubr": 2861
+    },
+    "isolation": "ISOLATION_BASELINE_AVAILABLE",
+    "native_acceptance": "NOT_RUN",
+    "per_user_state": {
+      "beta": {
+        "default_install_directory": "absent",
+        "desktop_settings_file": "absent",
+        "profile_directory": "absent",
+        "profile_file": "absent",
+        "registry": {
+          "32": {
+            "install_dir_value": false,
+            "installer_language_value": false,
+            "uninstall_key": false
+          },
+          "64": {
+            "install_dir_value": false,
+            "installer_language_value": false,
+            "uninstall_key": false
+          }
+        },
+        "shortcuts_directory": "absent"
+      },
+      "flowbridge_process_count": 0,
+      "stable": {
+        "default_install_directory": "absent",
+        "desktop_settings_file": "absent",
+        "profile_directory": "absent",
+        "profile_file": "absent",
+        "registry": {
+          "32": {
+            "install_dir_value": false,
+            "installer_language_value": false,
+            "uninstall_key": false
+          },
+          "64": {
+            "install_dir_value": false,
+            "installer_language_value": false,
+            "uninstall_key": false
+          }
+        },
+        "shortcuts_directory": "absent"
+      }
+    },
+    "schema": "flowbridge-win11-explicit-beta-preflight-v1",
+    "status": "READ_ONLY_CHECKS_COMPLETED",
+    "visual_acceptance": "NOT_RUN"
+  },
+  "conclusion": "Clean observed per-user install/profile baseline is available. No active interactive session exists; the service is in session0. Candidate functional and visual acceptance are not granted.",
+  "mutation_performed": false,
+  "win10_touched": false,
+  "frozen_beta3_mutated": false
+}
