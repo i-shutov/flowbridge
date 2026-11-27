@@ -14,15 +14,37 @@ $runtime = Join-Path $scratch 'runtime'
 $reports = Join-Path $scratch 'reports'
 $buildReceipt = Join-Path $scratch 'build.json'
 $evidenceTool = Join-Path $PSScriptRoot 'win32_openssh_capacity_lab.py'
-$log = Join-Path $scratch 'build.log'
+$buildLog = Join-Path $scratch 'build.log'
+$log = $buildLog
 $ownsScratch = $false
 $phase = 'HOST_TOOLCHAIN'
 $exitCode = 1
+$failedCommandExit = $null
 
 function Invoke-Logged {
     param([string]$Executable, [string[]]$Arguments)
     & $Executable @Arguments *>> $log
-    if ($LASTEXITCODE -ne 0) { throw 'external test command failed' }
+    if ($LASTEXITCODE -ne 0) {
+        $script:failedCommandExit = $LASTEXITCODE
+        throw 'external test command failed'
+    }
+}
+
+function Get-DependencyDiagnostics {
+    param([string[]]$Lines)
+    foreach ($line in $Lines) {
+        $message = $line -replace '\x1b\[[0-?]*[ -/]*[@-~]', '' -replace '[\x00-\x1f\x7f]', ' '
+        if ($message -notmatch 'error|failed|fatal|cannot|could not|not found|does not exist|unsupported|unable' -or
+            $message -match 'authorization|credential|password|secret|token|api[-_ ]?key|cookie') { continue }
+        $message = $message -replace '\\+', '/' -replace '(?i)\b(?:https?|ssh|git)://\S+', '<url>'
+        foreach ($root in @($scratch, $repo, $env:RUNNER_TEMP, $env:USERPROFILE)) {
+            if ($root) {
+                $message = $message -ireplace [regex]::Escape(($root -replace '\\+', '/')), '<local-path>'
+            }
+        }
+        $message = $message.Trim()
+        $message.Substring(0, [Math]::Min(300, $message.Length))
+    }
 }
 
 function Checkout-Pin {
@@ -60,14 +82,19 @@ try {
     & python $evidenceTool prepare --source $source --vcpkg $vcpkg 2>> $log
     if ($LASTEXITCODE -ne 0) { throw 'Upstream source or single modification verification failed' }
 
-    $phase = 'VCPKG_MANIFEST'
+    $phase = 'VCPKG_BOOTSTRAP'
+    $log = Join-Path $scratch 'vcpkg-bootstrap.log'
     $env:VCPKG_DISABLE_METRICS = '1'
     $env:VCPKG_BINARY_SOURCES = 'clear'
     $env:VCPKG_ROOT = $vcpkg
     $env:VCPKG_VISUAL_STUDIO_PATH = $vs
     $env:VCPKG_PLATFORM_TOOLSET = 'v143'
     $env:VCPKG_DOWNLOADS = Join-Path $scratch 'downloads'
+    New-Item -ItemType Directory -Path $env:VCPKG_DOWNLOADS | Out-Null
     Invoke-Logged (Join-Path $vcpkg 'bootstrap-vcpkg.bat') @('-disableMetrics')
+
+    $phase = 'VCPKG_INSTALL'
+    $log = Join-Path $scratch 'vcpkg-install.log'
     $project = Join-Path $source 'contrib/win32/openssh'
     $installed = Join-Path $project 'vcpkg_installed/x64-custom'
     $triplets = Join-Path $project 'vcpkg_triplets'
@@ -81,6 +108,7 @@ try {
     }
 
     $phase = 'EXPERIMENTAL_COMPILATION'
+    $log = $buildLog
     $integration = Join-Path $vcpkg 'scripts/buildsystems/msbuild'
     $properties = Join-Path $integration 'vcpkg.props'
     $targets = Join-Path $integration 'vcpkg.targets'
@@ -124,12 +152,19 @@ try {
 } catch {
     # Avoid emitting build paths or complete compiler command lines.
     $codes = @()
+    $tail = @()
     if ($ownsScratch -and (Test-Path -LiteralPath $log)) {
         $tail = Get-Content -LiteralPath $log -Tail 240
         $codes = @([regex]::Matches(($tail -join "`n"), '\b(?:MSB|LNK|C)[0-9]{4}\b').Value |
             Sort-Object -Unique | Select-Object -First 12)
     }
-    Write-Host ('FLOWBRIDGE_RAW512_LAB_BLOCKED ' + (@{phase=$phase; compiler_codes=$codes} | ConvertTo-Json -Compress))
+    $blocked = @{phase=$phase; compiler_codes=$codes; native_exit=$failedCommandExit}
+    # Only these separate logs precede SSH key generation and the loopback traffic.
+    if ($phase -in @('VCPKG_BOOTSTRAP', 'VCPKG_INSTALL')) {
+        $blocked.dependency_diagnostics = @(Get-DependencyDiagnostics (@($tail) + $_.Exception.Message) |
+            Select-Object -Unique | Select-Object -Last 8)
+    }
+    Write-Host ('FLOWBRIDGE_RAW512_LAB_BLOCKED ' + ($blocked | ConvertTo-Json -Compress))
 } finally {
     if ($ownsScratch) {
         try {
