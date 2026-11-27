@@ -1,0 +1,52 @@
+{
+  "schema": "flowbridge-win11-owned-ale-endpoint-observation-v1",
+  "date": "2026-11-27",
+  "timezone": "Europe/Moscow",
+  "run": {
+    "id": 45999914730,
+    "url": "https://github.com/i-shutov/flowbridge/actions/runs/45999914730",
+    "job_id": 140508617104,
+    "job_url": "https://github.com/i-shutov/flowbridge/actions/runs/45999914730/job/140508617104",
+    "conclusion": "success",
+    "head_sha": "46b766f1e8604d27401764c3c1987fa2d42e5e28",
+    "event": "workflow_dispatch",
+    "runner": "win11-flowbridge",
+    "machine": "VM-326272",
+    "artifacts": 0
+  },
+  "source": {
+    "helper_sha": "94b13b0c0ae4bc75c799903e44d55e81a45e10d9",
+    "tree": "171f7ac973b57aaa6b3910e3a1307bc8628d582e",
+    "parent_sha": "06c7d7d5cc005be092dd1c944b0c8dcd265d5726",
+    "path": "tests/windows_ale_endpoint_handle_probe.py",
+    "sha256": "f21713b3a53784d9e0b6f9c3fadf0c0cafc9a518a74ed6e6c09266f4c5821fce",
+    "workflow_path": ".github/workflows/win11-own-ale-endpoint-probe.yml",
+    "workflow_sha256": "afb39fe6812b492ec144caa927c9338d6194722605d2a4e6c393df97b3f50baa",
+    "unit_tests": 6,
+    "unit_result": "PASS",
+    "independent_review": "PASS; published bytes match reviewed source, only launcher commit pin changed"
+  },
+  "result": {
+    "accepted_connections": 2,
+    "all_nonzero": true,
+    "distinct_between_sockets": true,
+    "g2_accepted": false,
+    "origin_process_bound": false,
+    "owned_sockets_closed": true,
+    "packet_owner_bound": false,
+    "queries_completed": 4,
+    "reason": "owned_socket_endpoint_handles_observed",
+    "returned_length_valid": true,
+    "stable_per_socket": true,
+    "status": "PASS"
+  },
+  "scope": "Two concurrently live owned IPv4 TCP loopback connections accepted on one listener. Peers matched the corresponding owned clients before all four IOCTL calls. No endpoint values, PID, address, port or raw exception text exported. Launcher printed the result only after private temporary workspace teardown.",
+  "interpretation": "The documented own-socket to transport-endpoint query is available and returned stable distinct nonzero UINT64 endpoint handles on this host. This is not ETW connid evidence, original-process attribution, or independent WFP accepted-socket/redirect-record binding.",
+  "next_gate": "Use a separately reviewed signed isolated kernel experiment to bind the same accepted socket to kernel-owned redirect records, original process epoch, policy generation and one-use claim ticket, including cross-socket and replay negatives. No such kernel experiment was performed here.",
+  "win10_touched": false,
+  "driver_loaded": false,
+  "system_network_configuration_changed": false,
+  "product_installed": false,
+  "g2_accepted": false,
+  "release_accepted": false
+}

@@ -1,0 +1,78 @@
+{
+  "schema": "flowbridge-qa-pr92-real-ssh-observation-v1",
+  "run": {
+    "conclusion": "failure",
+    "event": "pull_request",
+    "head_branch": "release/resume-internal-beta3-20261127",
+    "head_sha": "c671bc1618cba55447de289fc58bd965568fbc3f",
+    "html_url": "https://github.com/i-shutov/flowbridge/actions/runs/45988927279",
+    "id": 45988927279,
+    "name": "Real Windows OpenSSH acceptance",
+    "run_attempt": 1,
+    "status": "completed"
+  },
+  "job": {
+    "id": 140471511452,
+    "name": "windows-openssh",
+    "status": "completed",
+    "conclusion": "failure",
+    "failed_steps": [
+      "Actual Windows SSH 128 held flows, 10k churn, four-worker lifecycle and backend ceiling"
+    ],
+    "url": "https://github.com/i-shutov/flowbridge/actions/runs/45988927279/job/140471511452"
+  },
+  "artifacts": {
+    "count": 0
+  },
+  "source": {
+    "executed_merge_sha": "a0e1889804af1eb1cd519586efa1315690d127ca",
+    "platform": "Windows-2025Server-10.0.26100-SP0",
+    "hosted_windows_runner": true,
+    "windows_10_11_user_machine_tested": false,
+    "wfp_driver_loaded": false,
+    "native_dns_leaks_verified": false,
+    "loopback_only": true
+  },
+  "managed": {
+    "passed": true,
+    "held": 128,
+    "expected_overload_rejections": 1152,
+    "churn_completed": 10000,
+    "churn_failures": 0,
+    "owned_pool_passed": true,
+    "independent_workers": 4
+  },
+  "raw": {
+    "passed": false,
+    "requested_tiers": [
+      64,
+      128,
+      192,
+      256
+    ],
+    "accepted_held_by_reported_tier": [
+      64,
+      128,
+      192,
+      244
+    ],
+    "attempts": 245,
+    "peak_held": 244,
+    "recovery_successes": 0,
+    "capacity_baseline_verified": false,
+    "resource_recovery_verified": false,
+    "client_windows_error_code": 10054,
+    "server_resource_markers": [
+      "too_many_open_files",
+      "ppoll"
+    ],
+    "raw_512_proved": false
+  },
+  "old_public_artifact_cleanup": {
+    "status": "BLOCKED_AUTOMATIC_APPROVAL_REVIEW",
+    "selected": 11,
+    "deleted": 0,
+    "remaining": 11,
+    "source": "parent cleanup verification"
+  }
+}

@@ -43,23 +43,23 @@
       {
         "run_id": 45976744578,
         "scope": "raw OpenSSH requested 512",
-        "result": "FAIL: existing stream lost at 244, resource evidence; managed gate PASS"
+        "result": "FAIL: 244 byte-verified held channels of 245 attempts; server postauth notify-pipe Too many open files; recovery not proved; managed gate PASS"
       },
       {
         "run_id": 45976744560,
         "scope": "hosted WFP G2 ETW",
-        "result": "G2_ETW_CONNECTION_EVIDENCE=FAIL; G2_PACKET_BOUND=UNPROVED"
+        "result": "FAIL: kernel_connection_id_missing in hosted job summary; independently reproduced on native Win11 with four zero IDs; G2_PACKET_BOUND=UNPROVED"
       }
     ],
     "ci_observation": "evidence/20261127/ci-observation.json"
   },
   "main": {
-    "sha": "ad3b7b2576b060345aa6892498f0db0897228666",
+    "sha": "46b766f1e8604d27401764c3c1987fa2d42e5e28",
     "runner_smoke_pr": 90,
     "runner_smoke_merge": "40f8b66f356dbe26b75458b6508528c36d1eb0f8",
     "hosted_ci": {
-      "run_id": 45988114739,
-      "source_sha": "ad3b7b2576b060345aa6892498f0db0897228666",
+      "run_id": 45999775594,
+      "source_sha": "46b766f1e8604d27401764c3c1987fa2d42e5e28",
       "conclusion": "success",
       "attempt": 1,
       "jobs_passed": 5,
@@ -308,10 +308,16 @@
         "size_in_bytes": 514
       }
     ],
-    "cleanup_status": "AWAITING_CONFIRMATION_NOT_DELETED",
+    "cleanup_status": "BLOCKED_AUTOMATIC_APPROVAL_REVIEW",
     "prevention_main_commit": "cc547d204756712f14d05d38b34e6ace9a3d4a31",
     "prevention_verified_new_run_artifact_count": 0,
-    "browser_auth": "SIGNED_IN_VERIFIED"
+    "browser_auth": "SIGNED_IN_VERIFIED",
+    "owner_authorized": true,
+    "deletion_attempted": true,
+    "deleted_count": 0,
+    "remaining_count": 11,
+    "verification": "Authenticated UI and artifact API after rejected final confirmation both show the original 11 IDs",
+    "rejection_reason": "Automatic approval review demanded a fresh action-time confirmation for irreversible deletion and did not accept the owner instruction. First confirmation dialog dismissed; no workaround attempted."
   },
   "work": [
     {
@@ -326,13 +332,13 @@
     },
     {
       "id": "R2",
-      "status": "GUARD_DONE_CLEANUP_AWAITING_CONFIRMATION",
-      "result": "New runs contain zero artifacts; 11 old artifacts remain, irreversible deletion confirmation not received"
+      "status": "GUARD_DONE_CLEANUP_BLOCKED_AUTO_REVIEW",
+      "result": "Owner confirmed exact 11-artifact deletion; automatic approval review rejected final confirmation; API still reports all 11, deleted 0"
     },
     {
       "id": "R3",
-      "status": "TARGETED_AND_BROAD_PASS_SEPARATE_LIMITS_OPEN",
-      "result": "SSH targeted 3/3, Rust/native latest 5/5; raw512 and G2 ETW remain failed/unproved"
+      "status": "SOURCE_PASS_DIAGNOSTICS_IMPLEMENTED_LIMITS_OPEN",
+      "result": "macOS QA fixture fixed and first-attempt broad CI 5/5; strict raw512 diagnostics and G2 counts in PR93; native Win11 confirms four zero connids; raw512 and PacketBound not accepted"
     },
     {
       "id": "R4",
@@ -351,8 +357,8 @@
     },
     {
       "id": "R7",
-      "status": "BLOCKED_NATIVE_WIN10_ACCESS",
-      "result": "Historical route is local Codex under existing Admin on VM-910136 interactive RDP; no connected Win10 runner/session available; exact beta3 bytes still required"
+      "status": "DEFERRED_BY_OWNER_DO_NOT_TOUCH_WIN10",
+      "result": "Owner explicitly excluded Win10 from current work; no transfer, installation, GUI, SSH or Codex action on that host"
     },
     {
       "id": "R8",
@@ -366,15 +372,13 @@
     }
   ],
   "access_blockers": [
-    "GitHub connector exposes no workflow dispatch, runner inventory or artifact deletion; signed-in browser is available for these operations",
-    "Irreversible artifact cleanup awaits confirmation; no confirmation was supplied in the request form",
-    "Native Win10 VM-910136 interactive Codex/RDP session is not connected; authenticated runner inventory shows only win11-flowbridge"
+    "Exact 11-artifact cleanup is owner-authorized but blocked by automatic approval review at the browser final confirmation; all 11 remain."
   ],
   "next_actions": [
-    "Transfer the ready 2057147-byte private QA ZIP to VM-910136 through the owner-approved private channel; verify its published SHA before extraction",
-    "Remove exactly the 11 accidental artifacts after confirmation",
-    "Transfer the private kit to the existing Win10 Codex session; execute native lifecycle/GUI/SSH and independently review original-byte A5/A6 evidence",
-    "Present exact candidate evidence for owner internal-pilot A7 decision"
+    "Resolve the raw512 signed dependency/backend capacity prerequisite before repeating a native load test",
+    "Prepare a separately reviewed kernel prototype tying the same accepted socket object to kernel-owned redirect records, origin epoch, policy generation and one-use claim ticket; own-socket endpoint availability is now confirmed, but no signed kernel run has occurred",
+    "Delete only the 11 approved accidental artifacts when action-time approval review permits; retain logs/commits",
+    "Keep R7/Win10 deferred until the owner changes scope; retain frozen beta3 installer and private kit"
   ],
   "candidate": {
     "version": "0.3.0-beta.3",
@@ -420,6 +424,104 @@
       "status": "PRIVATE_KIT_READY_WIN10_NOT_RUN"
     },
     "evidence": "evidence/20261127/private-beta3-kit.json",
-    "win10_handoff": "checkpoints/WIN10_BETA3_NATIVE_ACCEPTANCE_HANDOFF_20261127.md"
+    "win10_handoff": "checkpoints/WIN10_BETA3_NATIVE_ACCEPTANCE_HANDOFF_20261127.md",
+    "handoff_status": "DEFERRED_BY_OWNER_DO_NOT_TRANSFER_OR_RUN_ON_WIN10"
+  },
+  "owner_scope_update": {
+    "date": "2026-11-27",
+    "win10_actions": "FORBIDDEN_BY_OWNER_CURRENT_SCOPE",
+    "r7": "DEFERRED_BY_OWNER",
+    "focus": [
+      "raw512 dependency limit",
+      "G2 connection and packet binding evidence",
+      "CI fixture reliability"
+    ],
+    "codex_on_win11_required": false,
+    "exact_11_artifact_cleanup_authorized": true
+  },
+  "diagnostic_changes": {
+    "pr": "https://github.com/i-shutov/flowbridge/pull/93",
+    "source_sha": "06c7d7d5cc005be092dd1c944b0c8dcd265d5726",
+    "tree": "ecf3634b143a65b34f4c70f9e3643730918eca64",
+    "base_product_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+    "files_changed": 7,
+    "production_code_changed": false,
+    "frozen_beta3_changed": false,
+    "combined_python_tests": 112,
+    "combined_python_result": "PASS",
+    "independent_focused_raw_tests": 14,
+    "independent_focused_g2_tests": 21,
+    "hosted_ci": {
+      "passed": 9,
+      "total": 11,
+      "artifact_count": 0,
+      "rust_native": "5/5 PASS",
+      "capture": "3/4; zero-connid G2 FAIL",
+      "windows_ssh_managed": "PASS 128 held /1152 refusals/10000 zero-failure churn/four workers",
+      "windows_ssh_raw": "FAIL minimum512; peak246; recovery not reached",
+      "evidence": "evidence/20261127/release-limit-ci.json"
+    }
+  },
+  "ci_fixture_reliability": {
+    "qa_sha": "295fd7051646c1d9907904edc2ea0a1d01ceb671",
+    "production_code_changed": false,
+    "run_id": 45997867096,
+    "conclusion": "success",
+    "attempt": 1,
+    "jobs_passed": 5,
+    "artifact_count": 0,
+    "evidence": "evidence/20261127/qa-macos-fixture-ci.json",
+    "all_qa_jobs": {
+      "passed": 13,
+      "total": 13,
+      "artifacts": 0,
+      "raw_characterization_minimum": 128,
+      "raw_peak": 246,
+      "raw_recovery": 16,
+      "strict_raw512_proved": false
+    }
+  },
+  "native_win11_g2": {
+    "evidence": "evidence/20261127/native-win11-g2.json",
+    "run_id": 45998584523,
+    "conclusion": "failure",
+    "error_code": "kernel_connection_id_missing",
+    "pinned_matches": 4,
+    "ipv4_zero_connid": 2,
+    "ipv6_zero_connid": 2,
+    "nonzero_connid": 0,
+    "owned_cleanup_verified": true,
+    "private_trace_cleanup_verified": true,
+    "artifact_count": 0,
+    "packet_bound": "UNPROVED"
+  },
+  "raw512_investigation": {
+    "evidence": "evidence/20261127/raw512-investigation.json",
+    "original_peak": 244,
+    "original_server_marker": "postauth_notify_pipe_file_limit",
+    "strict_probe_run_id": 45998507203,
+    "strict_probe_job_id": 140503871736,
+    "strict_probe_peak": 246,
+    "strict_probe_attempts": 248,
+    "strict_required_held": 512,
+    "strict_required_recovery_connections": 16,
+    "strict_probe_recovery": "NOT_REACHED_CAPACITY_MINIMUM_FAILED",
+    "strict_probe_resource_markers_observed": false,
+    "accepted": false,
+    "dependency_source_max_fds": 256
+  },
+  "native_win11_owned_endpoint": {
+    "evidence": "evidence/20261127/native-win11-ale-endpoint.json",
+    "run_id": 45999914730,
+    "job_id": 140508617104,
+    "conclusion": "success",
+    "source_sha": "94b13b0c0ae4bc75c799903e44d55e81a45e10d9",
+    "accepted_connections": 2,
+    "queries": 4,
+    "nonzero_stable_distinct_uint64": true,
+    "owned_sockets_closed": true,
+    "artifact_count": 0,
+    "origin_process_bound": false,
+    "g2_accepted": false
   }
 }

@@ -1,0 +1,51 @@
+{
+  "schema": "flowbridge-native-win11-g2-observation-v1",
+  "date": "2026-11-27",
+  "timezone": "Europe/Moscow",
+  "run": {
+    "id": 45998584523,
+    "url": "https://github.com/i-shutov/flowbridge/actions/runs/45998584523",
+    "job_id": 140504148023,
+    "job_url": "https://github.com/i-shutov/flowbridge/actions/runs/45998584523/job/140504148023",
+    "conclusion": "failure",
+    "event": "workflow_dispatch",
+    "head_sha": "31b40a3ab082ea51d7e782e33f1272ab2ab5c09f",
+    "runner": "win11-flowbridge",
+    "machine": "VM-326272",
+    "artifacts": 0
+  },
+  "source": {
+    "probe_commit": "06c7d7d5cc005be092dd1c944b0c8dcd265d5726",
+    "probe_sha256": "a4bfd117f70b05798e36d95529a1f9276d44256c149e16cff29388229f7292b8",
+    "workflow_path": ".github/workflows/win11-g2-readonly-etw.yml",
+    "workflow_sha256": "f185e03fecdd18380529232a071437a13c012c417141a1fba47593110c039beb"
+  },
+  "diagnostics": {
+    "complete_connect_payloads": 4,
+    "connect_events_without_connid": 0,
+    "connect_payloads_for_pinned_clients": 4,
+    "error_code": "kernel_connection_id_missing",
+    "ipv4_matches_with_nonzero_connid": 0,
+    "ipv4_matches_with_zero_connid": 2,
+    "ipv6_matches_with_nonzero_connid": 0,
+    "ipv6_matches_with_zero_connid": 2,
+    "kernel_network_events": 20,
+    "kernel_tcp_connect_events": 4,
+    "loopback_requests_received": 4,
+    "owned_cleanup_verified": true,
+    "phase": "kernel_owner_match",
+    "private_trace_cleanup_verified": true,
+    "verified_client_owners": 0
+  },
+  "interpretation": "Four complete pinned test-client TCP connect payloads were observed: two IPv4 and two IPv6, all with zero connid. This repeats the hosted diagnostic on the verified native Win11 runner. It does not determine whether the zero originated in the provider or decoder.",
+  "g2_etw_connection_evidence": "FAIL",
+  "g2_packet_bound": "UNPROVED",
+  "win10_touched": false,
+  "driver_loaded": false,
+  "product_installed": false,
+  "release_accepted": false,
+  "cleanup": {
+    "owned_session_processes_listeners_verified": true,
+    "private_trace_deleted_verified": true
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "schema": "flowbridge-qa-rust-macos-fixture-ci-observation-v1",
+  "run": {
+    "id": 45997867096,
+    "name": "rust-and-native-applications",
+    "head_sha": "295fd7051646c1d9907904edc2ea0a1d01ceb671",
+    "run_attempt": 1,
+    "status": "completed",
+    "conclusion": "success",
+    "event": "pull_request",
+    "html_url": "https://github.com/i-shutov/flowbridge/actions/runs/45997867096"
+  },
+  "jobs": [
+    {
+      "name": "macos-application",
+      "id": 140501709042,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45997867096/job/140501709042"
+    },
+    {
+      "name": "rust (windows-2025)",
+      "id": 140501709262,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45997867096/job/140501709262"
+    },
+    {
+      "name": "rust (macos-15)",
+      "id": 140501709476,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45997867096/job/140501709476"
+    },
+    {
+      "name": "rust (ubuntu-24.04)",
+      "id": 140501709499,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45997867096/job/140501709499"
+    },
+    {
+      "name": "windows-application",
+      "id": 140501709549,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45997867096/job/140501709549"
+    }
+  ],
+  "artifacts": {
+    "count": 0
+  },
+  "macos_first_attempt": {
+    "executed_merge_sha": "b07b13076237757bb99d4ba65e9aec54e4909694",
+    "workspace_tests_passed": true,
+    "fixture_tests": {
+      "overload_is_reported_coalesced_and_recovers_without_restarting": "PASS",
+      "stop_does_not_wait_for_a_descendant_holding_stderr_open": "PASS"
+    },
+    "tunnel_suite": {
+      "passed": 20,
+      "failed": 0
+    }
+  },
+  "earlier_pre_child_bind_faults": [
+    {
+      "head": "ee218fcffe9c7d2d69821824ea693698bc382098",
+      "job_id": 140454615932,
+      "test": "stop_does_not_wait_for_a_descendant_holding_stderr_open"
+    },
+    {
+      "head": "c671bc1618cba55447de289fc58bd965568fbc3f",
+      "job_id": 140471511070,
+      "test": "overload_is_reported_coalesced_and_recovers_without_restarting"
+    }
+  ],
+  "earlier_fault_class": {
+    "macos_os_error": 48,
+    "pid": null,
+    "attempt": 0,
+    "restarts": 0
+  }
+}
