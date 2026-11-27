@@ -18,39 +18,27 @@ jobs:
     runs-on: [self-hosted, Windows, X64, win11-flowbridge]
     timeout-minutes: 5
     steps:
-      - name: Verify exact Windows host, user and native runtime
-        shell: powershell
+      - name: Verify Windows host, service identity and tool availability
+        shell: cmd
         env:
           EXPECTED_RUNNER: win11-flowbridge
           EXPECTED_COMPUTER: VM-326272
           EXPECTED_ACCOUNT: VM-326272\Admin
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $os = Get-CimInstance Win32_OperatingSystem
-          $actualUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-          $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-          $isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-          if ($env:COMPUTERNAME -ine $env:EXPECTED_COMPUTER) { throw "Wrong host: $env:COMPUTERNAME" }
-          if ($env:RUNNER_NAME -ine $env:EXPECTED_RUNNER) { throw "Wrong runner: $env:RUNNER_NAME" }
-          if ($actualUser -ine $env:EXPECTED_ACCOUNT) { throw "Unexpected service identity: $actualUser" }
-          if (-not $isAdmin) { throw 'Expected elevated administrator service token' }
-          if ($os.Caption -notmatch 'Windows 11') { throw "Not Windows 11: $($os.Caption)" }
-          if ($os.OSArchitecture -notmatch '64') { throw "Not x64: $($os.OSArchitecture)" }
-          Write-Host "RUNNER_HOST: $env:COMPUTERNAME"
-          Write-Host "RUNNER_NAME: $env:RUNNER_NAME"
-          Write-Host "SERVICE_ACCOUNT: $actualUser"
-          Write-Host "WINDOWS_VERSION: $($os.Caption) build $($os.BuildNumber)"
-          Write-Host "PWSH_VERSION: $($PSVersionTable.PSVersion.ToString())"
-          Write-Host 'RUNNER_SMOKE_PASS'
-      - name: Report project toolchain availability (non-blocking)
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
-          foreach ($tool in @('cargo.exe', 'rustc.exe', 'git.exe', 'ssh.exe', 'python.exe', 'cmake.exe', 'cl.exe')) {
-            $c = Get-Command $tool -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($null -eq $c) {
-              Write-Host "TOOL_MISSING: $tool"
-            } else {
-              Write-Host "TOOL_FOUND: $tool @ $($c.Source)"
-            }
-          }
+        # cmd runs a single inline command under the existing PowerShell policy.
+        run: >-
+          "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command
+          "$ErrorActionPreference = 'Stop';
+          if ($env:COMPUTERNAME -ine $env:EXPECTED_COMPUTER) { throw 'Unexpected host' };
+          if ($env:RUNNER_NAME -ine $env:EXPECTED_RUNNER) { throw 'Unexpected runner' };
+          $identity = [Security.Principal.WindowsIdentity]::GetCurrent();
+          if ($identity.Name -ine $env:EXPECTED_ACCOUNT) { throw 'Unexpected service identity' };
+          $principal = [Security.Principal.WindowsPrincipal]::new($identity);
+          if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Expected elevated administrator service token' };
+          $os = Get-CimInstance Win32_OperatingSystem;
+          if ($os.ProductType -ne 1 -or $os.Caption -notmatch 'Windows 11' -or [int]$os.BuildNumber -lt 22000) { throw 'Expected Windows 11 client' };
+          $cpus = @(Get-CimInstance Win32_Processor);
+          if ($env:RUNNER_ARCH -ne 'X64' -or $os.OSArchitecture -notmatch '64' -or $cpus.Count -eq 0 -or @($cpus | Where-Object Architecture -ne 9).Count -ne 0) { throw 'Expected native x64 Windows' };
+          Write-Host ('WINDOWS_VERSION: {0} build {1}' -f $os.Caption, $os.BuildNumber);
+          Write-Host ('POWERSHELL_EXECUTION_POLICY: ' + (Get-ExecutionPolicy));
+          foreach ($tool in @('cargo.exe', 'rustc.exe', 'git.exe', 'ssh.exe', 'python.exe', 'cmake.exe', 'cl.exe', 'msbuild.exe', 'makensis.exe', 'codex.exe', 'codex.cmd')) { if (Get-Command $tool -CommandType Application -ErrorAction SilentlyContinue) { Write-Host ('TOOL_FOUND: ' + $tool) } else { Write-Host ('TOOL_MISSING: ' + $tool) } };
+          Write-Host 'RUNNER_SMOKE_PASS'; exit 0"
