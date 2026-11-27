@@ -1,0 +1,264 @@
+name: Windows 11 prepare private beta.3 Win10 kit
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: win11-vps-smoke-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  private-kit:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'i-shutov/flowbridge' }}
+    runs-on: [self-hosted, Windows, X64, win11-flowbridge]
+    timeout-minutes: 10
+    steps:
+      - name: Verify native runner and local Python path
+        shell: cmd
+        working-directory: C:\
+        run: >-
+          "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command
+          "try {
+          $ErrorActionPreference = 'Stop';
+          $identity = [Security.Principal.WindowsIdentity]::GetCurrent();
+          $principal = New-Object Security.Principal.WindowsPrincipal($identity);
+          $os = Get-CimInstance Win32_OperatingSystem;
+          $processors = @(Get-CimInstance Win32_Processor);
+          if ($env:COMPUTERNAME -ine 'VM-326272' -or $env:RUNNER_NAME -ine 'win11-flowbridge' -or
+          $identity.Name -ine 'VM-326272\Admin' -or
+          -not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) -or
+          -not [Environment]::Is64BitProcess -or -not $processors.Count -or
+          @($processors | Where-Object Architecture -ne 9).Count -or
+          $os.ProductType -ne 1 -or [int]$os.BuildNumber -lt 22000) { throw 'unexpected host' };
+          $root = Join-Path 'C:\' 'FlowBridge\private-candidates';
+          $path = Get-Item -LiteralPath (Join-Path $root 'toolchain-45986630920-1\python\tools\python.exe') -Force;
+          if ($path.PSIsContainer) { throw 'unexpected Python file' };
+          while ($path) {
+          if ($path.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'reparse point' };
+          if ($path.PSIsContainer) { $path = $path.Parent } else { $path = $path.Directory }
+          };
+          Write-Host 'FLOWBRIDGE_KIT_HOST_READY'
+          } catch { Write-Host ('FLOWBRIDGE_KIT_RESULT ' + (@{status='BLOCKED'; reason='TRUSTED_NATIVE_HOST_OR_PYTHON_REQUIRED'} | ConvertTo-Json -Compress)); exit 1 }" 2>nul
+      - name: Verify exact candidate and write a local-only ZIP
+        shell: cmd
+        working-directory: C:\
+        env:
+          NoDefaultCurrentDirectoryInExePath: '1'
+          FLOWBRIDGE_KIT_VERIFY: |
+            import csv
+            import hashlib
+            import json
+            import os
+            from pathlib import Path
+            import re
+            import shutil
+            import stat
+            import subprocess
+            import sys
+            from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
+
+            PRODUCT = '44f1fc0eba5ac1552df94f083342e25a1a764937'
+            PRIVATE_COMMIT = 'c6ead0f31de4c118453913d733f537ba421af616'
+            PRIVATE_TREE = '19df7a94071f38be6b8aa3530e1ded7a954a02a8'
+            INSTALLER_SHA = '6408c0bf595b0ae61a4fc05db17421dc4b03dcda241f3c1f1f997ab6583eec5b'
+            MANIFEST_SHA = 'f6a94e5e8a87e571d63604ff3b2e417bf21e2e2758343171c587a43717318c99'
+            TOOL_SHA = 'faf62aabeea95ef316f5c0935177a65820ea4679ac94afe8b5461138dd17a33c'
+            BUILD_RUN = '45986630920'
+            VERSION = '0.3.0-beta.3'
+            BASE = Path('C:/') / 'FlowBridge' / 'private-candidates'
+            INPUT = BASE / ('run-' + BUILD_RUN + '-1')
+            ZIP_NAME = 'FlowBridge-0.3.0-beta.3-Win10-private-QA.zip'
+            INSTALLER = 'windows/FlowBridge-0.3.0-beta.3-windows-x64-setup.exe'
+            MANIFEST = 'windows/explicit-beta-package.json'
+            HARNESS = 'windows/FlowBridgeNativeSmoke.exe'
+            TOOL = 'tools/explicit_beta_acceptance.py'
+            PROVENANCE = {'original_product_source_sha': PRODUCT, 'native_build_run_id': BUILD_RUN,
+                          'native_build_run_attempt': 1}
+
+            class Blocked(Exception):
+                pass
+
+            def require(ok, reason):
+                if not ok:
+                    raise Blocked(reason)
+
+            def no_links(path):
+                for part in (*reversed(path.parents), path):
+                    if os.path.lexists(part):
+                        info = part.lstat()
+                        require(not stat.S_ISLNK(info.st_mode)
+                                and not (getattr(info, 'st_file_attributes', 0) & 0x400),
+                                'LOCAL_PATH_REPARSE_POINT')
+
+            def read_local(path, limit):
+                no_links(path)
+                require(path.is_file(), 'REQUIRED_ORIGINAL_FILE_MISSING')
+                with path.open('rb') as stream:
+                    data = stream.read(limit + 1)
+                require(0 < len(data) <= limit, 'ORIGINAL_FILE_SIZE_INVALID')
+                return data
+
+            def sha(data):
+                return hashlib.sha256(data).hexdigest()
+
+            def command(args, reason, env=None):
+                try:
+                    result = subprocess.run(args, capture_output=True, check=True, timeout=45, env=env)
+                except (OSError, subprocess.SubprocessError):
+                    raise Blocked(reason) from None
+                return result.stdout.decode('utf-8', 'replace').strip()
+
+            def verify_git(candidate):
+                no_links(candidate / '.git')
+                require((candidate / '.git').is_dir(), 'ORIGINAL_LOCAL_GIT_MISSING')
+                git = Path(os.environ['ProgramFiles']) / 'Git/cmd/git.exe'
+                if not git.is_file():
+                    location = shutil.which('git.exe')
+                    require(location and Path(location).is_absolute(), 'GIT_NOT_AVAILABLE')
+                    git = Path(location)
+                env = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
+                env.update(GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull, GIT_TERMINAL_PROMPT='0')
+                args = [str(git), '-C', str(candidate)]
+                actual = command([*args, 'rev-parse', 'HEAD', 'HEAD^{tree}'], 'GIT_PROVENANCE_UNAVAILABLE', env)
+                require(actual.splitlines() == [PRIVATE_COMMIT, PRIVATE_TREE], 'PRIVATE_GIT_PIN_MISMATCH')
+                require(not command([*args, 'remote'], 'GIT_REMOTE_CHECK_FAILED', env), 'PRIVATE_GIT_REMOTE_PRESENT')
+
+            def verify_candidate(candidate, checkpoint):
+                cp = json.loads(read_local(checkpoint, 65536))
+                require(cp['original_verified_source_sha'] == PRODUCT
+                        and cp['new_private_git_commit'] == PRIVATE_COMMIT
+                        and cp['new_private_git_tree'] == PRIVATE_TREE
+                        and cp['installer_sha256'] == INSTALLER_SHA, 'ORIGINAL_CHECKPOINT_PIN_MISMATCH')
+                require(cp['status'] == 'PRIVATE_LOCAL_INSTALLER_BUILT_QA_NOT_ACCEPTED'
+                        and cp['installer_built'] is True and cp['installer_installed'] is False
+                        and cp['driver_built_or_installed'] is False
+                        and cp['new_win10_owner_qa_accepted'] is False
+                        and cp['a7_internal_deployment_approved'] is False
+                        and cp['public_release_or_upload_performed'] is False, 'ORIGINAL_CHECKPOINT_SCOPE_INVALID')
+                raw_manifest = read_local(candidate / 'build/verification/explicit-beta-package.json', 65536)
+                require(sha(raw_manifest) == MANIFEST_SHA, 'MANIFEST_SHA256_MISMATCH')
+                manifest = json.loads(raw_manifest)
+                tool_data = read_local(candidate / TOOL, 262144)
+                require(sha(tool_data) == TOOL_SHA, 'ACCEPTANCE_TOOL_SHA256_MISMATCH')
+                checks = {'__name__': 'flowbridge_kit_verifier', '__file__': 'explicit_beta_acceptance.py'}
+                exec(compile(tool_data, 'explicit_beta_acceptance.py', 'exec'), checks)
+                require(manifest['candidate'] == VERSION and manifest['source_tree_sha'] == PRIVATE_TREE
+                        and manifest['workflow_run_id'] == BUILD_RUN, 'MANIFEST_PROVENANCE_MISMATCH')
+                try:
+                    require(checks['validate_manifest'](manifest, PRIVATE_COMMIT, INSTALLER_SHA) == 'windows',
+                            'WINDOWS_MANIFEST_REQUIRED')
+                    payload = {item['path']: item for item in manifest['payload']}
+                    require(len(payload) == 13, 'EXPLICIT_PAYLOAD_COUNT_MISMATCH')
+                    staged = candidate / 'build/explicit-beta-payload'
+                    no_links(staged)
+                    actual = set()
+                    for entry in staged.rglob('*'):
+                        no_links(entry)
+                        if entry.is_file():
+                            actual.add(entry.relative_to(staged).as_posix())
+                    require(actual == payload.keys(), 'LOCAL_PAYLOAD_ALLOWLIST_MISMATCH')
+                    for name, item in payload.items():
+                        file = checks['contained_payload_file'](staged, name)
+                        checks['verified_file'](file, item['sha256'], item['bytes'])
+                except checks['Rejected']:
+                    raise Blocked('MANIFEST_OR_STAGED_PAYLOAD_INVALID') from None
+                installer = read_local(candidate / 'artifacts' / Path(INSTALLER).name, 134217728)
+                require(sha(installer) == INSTALLER_SHA and len(installer) == manifest['installer_bytes'],
+                        'INSTALLER_BYTES_MISMATCH')
+                harness = read_local(candidate / 'build/windows-explicit-beta/Release/FlowBridgeNativeSmoke.exe', 67108864)
+                require(sha(harness) == manifest['qa_harness']['sha256']
+                        and len(harness) == manifest['qa_harness']['bytes'], 'HARNESS_BYTES_MISMATCH')
+                return {INSTALLER: installer, MANIFEST: raw_manifest, HARNESS: harness, TOOL: tool_data}
+
+          FLOWBRIDGE_KIT_WRITE: |
+            def json_bytes(data):
+                return (json.dumps(data, indent=2, sort_keys=True) + '\n').encode('utf-8')
+
+            def document_members(original):
+                index = {
+                    'schema': 'flowbridge-beta3-private-kit-index-v1', 'version': VERSION,
+                    **PROVENANCE, 'owner_win10_acceptance': 'NOT_RUN', 'release_approved': False,
+                    'windows': {'source_sha': PRIVATE_COMMIT, 'source_tree_sha': PRIVATE_TREE,
+                                'installer': INSTALLER, 'installer_sha256': INSTALLER_SHA,
+                                'manifest': MANIFEST, 'manifest_sha256': MANIFEST_SHA,
+                                'harness': HARNESS, 'harness_sha256': sha(original[HARNESS]),
+                                'harness_bytes': len(original[HARNESS])},
+                    'acceptance_tool': {'path': TOOL, 'sha256': TOOL_SHA, 'bytes': len(original[TOOL])},
+                }
+                entries = {**original, 'candidate-index.json': json_bytes(index)}
+                entries['SHA256SUMS'] = ''.join(f'{sha(data)}  {name}\n' for name, data in sorted(entries.items())).encode('ascii')
+                return entries
+
+            def write_checked_zip(path, entries):
+                expected = {name: sha(data) for name, data in entries.items()}
+                with ZipFile(path, 'x') as archive:
+                    for name, item in sorted(entries.items()):
+                        archive.writestr(ZipInfo(name), item, compress_type=ZIP_DEFLATED)
+                with ZipFile(path, 'r') as archive:
+                    require(len(archive.namelist()) == len(entries)
+                            and set(archive.namelist()) == expected.keys(), 'ARCHIVE_MEMBER_LIST_MISMATCH')
+                    for name, digest in expected.items():
+                        stream_hash = hashlib.sha256()
+                        with archive.open(name) as stream:
+                            for chunk in iter(lambda: stream.read(1048576), b''):
+                                stream_hash.update(chunk)
+                        require(stream_hash.hexdigest() == digest, 'ARCHIVE_MEMBER_SHA256_MISMATCH')
+
+            def new_private_directory():
+                run = '-'.join(os.environ.get(name, '') for name in ('GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT'))
+                require(re.fullmatch(r'[0-9]+-[0-9]+', run), 'INVALID_KIT_RUN_ID')
+                directory = BASE / ('kit-' + run)
+                no_links(directory)
+                require(not os.path.lexists(directory), 'KIT_DIRECTORY_ALREADY_EXISTS')
+                workspace = Path(os.environ['GITHUB_WORKSPACE']).resolve()
+                require(not directory.is_relative_to(workspace), 'KIT_INSIDE_ACTIONS_WORKSPACE')
+                directory.mkdir()
+                system = Path(os.environ['SystemRoot']) / 'System32'
+                row = command([str(system / 'whoami.exe'), '/user', '/fo', 'csv', '/nh'], 'SERVICE_SID_UNAVAILABLE')
+                sid = next(csv.reader([row]))[-1]
+                require(re.fullmatch(r'S-1-[0-9]+(?:-[0-9]+)+', sid), 'SERVICE_SID_INVALID')
+                command([str(system / 'icacls.exe'), str(directory), '/inheritance:r', '/grant:r',
+                         f'*{sid}:(OI)(CI)F', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F'],
+                        'PRIVATE_KIT_ACL_FAILED')
+                return directory
+
+            def main():
+                require(sys.platform == 'win32' and sys.maxsize > 2**32 and sys.version_info[:3] == (3, 13, 17),
+                        'EXPECTED_PINNED_PYTHON_REQUIRED')
+                candidate = INPUT / 'candidate'
+                verify_git(candidate)
+                original = verify_candidate(candidate, INPUT / 'candidate-CHECKPOINT.json')
+                entries = document_members(original)
+                directory = new_private_directory()
+                archive = directory / ZIP_NAME
+                partial = directory / (ZIP_NAME + '.partial')
+                write_checked_zip(partial, entries)
+                archive_hash = hashlib.sha256()
+                with partial.open('rb') as stream:
+                    for chunk in iter(lambda: stream.read(1048576), b''):
+                        archive_hash.update(chunk)
+                size = partial.stat().st_size
+                partial.rename(archive)
+                return {'status': 'PRIVATE_KIT_READY_WIN10_NOT_RUN', 'kit_sha256': archive_hash.hexdigest(),
+                        'kit_bytes': size, 'installer_sha256': INSTALLER_SHA, 'manifest_sha256': MANIFEST_SHA,
+                        'harness_sha256': sha(original[HARNESS]), 'harness_bytes': len(original[HARNESS]),
+                        'acceptance_tool_sha256': TOOL_SHA, 'acceptance_tool_bytes': len(original[TOOL]),
+                        'candidate_index_sha256': sha(entries['candidate-index.json']),
+                        'private_source_commit': PRIVATE_COMMIT, 'private_source_tree': PRIVATE_TREE,
+                        **PROVENANCE}
+
+            try:
+                result = main()
+            except Blocked as exc:
+                result = {'status': 'BLOCKED', 'reason': str(exc)}
+            except Exception:
+                result = {'status': 'BLOCKED', 'reason': 'LOCAL_KIT_PREPARATION_FAILED'}
+            print('FLOWBRIDGE_KIT_RESULT ' + json.dumps(result, sort_keys=True))
+            sys.exit(0 if result['status'] == 'PRIVATE_KIT_READY_WIN10_NOT_RUN' else 1)
+        run: |
+          @echo off
+          set "FLOWBRIDGE_KIT_PY=C:\"
+          "%FLOWBRIDGE_KIT_PY%FlowBridge\private-candidates\toolchain-45986630920-1\python\tools\python.exe" -I -c "import os; exec(os.environ['FLOWBRIDGE_KIT_VERIFY'] + os.environ['FLOWBRIDGE_KIT_WRITE'])" 2>nul
+          exit /b %ERRORLEVEL%
