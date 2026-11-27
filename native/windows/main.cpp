@@ -290,8 +290,8 @@ class Worker {
             if(ids.size()!=static_cast<size_t>(activeWorkerCount))
                 throw std::runtime_error("Неполный набор владельцев SSH-пула.");
             // Pause in-place with the SAME pool budgets. A temporary single
-            // gate with the default 128 slots prevents the 64/42/32-slot pool
-            // from being installed even before its first connection.
+            // gate can conflict with the per-worker pool budget even before
+            // its first connection.
             const Json pool=ssh_pool_policy::ownedRequest(ids,allowed);
             response(fb_engine_sync_owned_ssh_pool_json(engine,pool.dump().c_str()));
         } else {
