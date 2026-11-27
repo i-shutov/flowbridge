@@ -130,6 +130,7 @@ def main():
               "source_commit": os.environ.get("GITHUB_SHA"),
               "actual_ssh_executable_sha256": hashlib.sha256(ssh.read_bytes()).hexdigest(),
               "ssh_version": None, "ssh_pid": None,
+              "minimum_required_held": args.min_held, "selected_held_ceiling": args.held,
               "attempts": [], "windows_handle_samples": [],
               "actual_internal_fd_table_measured": False,
               "notes": ["OS HANDLE counts are not the internal Win32 OpenSSH FD table.",
@@ -205,21 +206,24 @@ def main():
             time.sleep(0.1)
         sample("after_recovery")
         report["resource_recovery_verified"] = True
-        report["minimum_required_held"] = args.min_held
-        report["selected_held_ceiling"] = args.held
         require(ssh_process.poll() is None, "OpenSSH exited after release")
         report["passed"] = True
     except Exception as error:
-        report["error"] = str(error)
+        report["error_type"] = type(error).__name__
+        winerror = getattr(error, "winerror", None)
+        if type(winerror) is int:
+            report["error_winerror"] = winerror
         raise
     finally:
         if ssh_process:
-            ssh_process.terminate()
-            try:
-                ssh_process.wait(timeout=8)
-            except subprocess.TimeoutExpired:
-                ssh_process.kill()
-                ssh_process.wait(timeout=8)
+            report["ssh_exit_code_before_cleanup"] = ssh_process.poll()
+            if report["ssh_exit_code_before_cleanup"] is None:
+                ssh_process.terminate()
+                try:
+                    ssh_process.wait(timeout=8)
+                except subprocess.TimeoutExpired:
+                    ssh_process.kill()
+                    ssh_process.wait(timeout=8)
         if stderr_thread:
             stderr_thread.join(timeout=5)
         if ssh_process and ssh_process.stderr:

@@ -21,6 +21,7 @@ import time
 
 from ssh_real_integration import ABI, Echo, Server, free_port, require, until, round_trip
 from windows_openssh_capacity_vm import windows_handle_count
+from windows_ssh_probe_core import RAW_CAPACITY, ResourceErrors, raw_capacity_verified
 
 
 def sha256(path):
@@ -51,28 +52,70 @@ def windows_resources(pid):
             'internal_openssh_fd_table_measured': False}
 
 
+def run_raw_probe(ssh, identity, known_hosts, user, port, evidence_path, report):
+    require(not os.path.lexists(evidence_path), 'Raw OpenSSH evidence destination must be new')
+    limit = str(RAW_CAPACITY)
+    command = [sys.executable, str(Path(__file__).with_name('windows_openssh_capacity_vm.py')),
+               '--ssh', str(ssh), '--identity', str(identity),
+               '--known-hosts', str(known_hosts), '--user', user, '--ssh-port', str(port),
+               '--held', limit, '--min-held', limit, '--output', str(evidence_path)]
+    env = dict(os.environ, FLOWBRIDGE_SSH_VM='1')
+    child = subprocess.Popen(command, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        returncode = child.wait(timeout=180)
+    except subprocess.TimeoutExpired:
+        report['raw_backend_timeout_cleanup'] = 'unverified'
+        try:
+            # Target only the probe just created and its children, never a system SSH service.
+            if child.poll() is None:
+                cleanup = subprocess.run(['taskkill', '/PID', str(child.pid), '/T', '/F'],
+                                         capture_output=True, timeout=15, check=False)
+                child.wait(timeout=8)
+                if cleanup.returncode == 0:
+                    report['raw_backend_timeout_cleanup'] = 'owned_process_tree_terminated'
+        except (OSError, subprocess.SubprocessError):
+            pass
+        raise RuntimeError('Raw OpenSSH probe timed out') from None
+    if evidence_path.is_file():
+        evidence = json.loads(evidence_path.read_text(encoding='utf-8'))
+        report['raw_backend_peak_held'] = evidence.get('peak_held')
+        report['raw_backend_observations'] = {key: evidence.get(key) for key in (
+            'attempts', 'minimum_required_held', 'selected_held_ceiling',
+            'actual_connection_attempts', 'recovery_successes',
+            'capacity_baseline_verified', 'resource_recovery_verified',
+            'resource_error_counts', 'ssh_exit_code_before_cleanup',
+            'error_type', 'error_winerror',
+        )}
+        report['raw_backend_512_stability_proved'] = returncode == 0 and raw_capacity_verified(evidence)
+    report['bare_backend_probe_passed'] = report['raw_backend_512_stability_proved']
+    require(report['raw_backend_512_stability_proved'], 'Raw OpenSSH did not verify 512 held channels and recovery')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--ssh', type=Path, required=True)
     parser.add_argument('--sshd', type=Path, required=True)
     parser.add_argument('--keygen', type=Path, required=True)
-    parser.add_argument('--library', type=Path, required=True)
+    parser.add_argument('--library', type=Path, help='Required for the managed scenario only')
     parser.add_argument('--cli', type=Path, default=Path('target/debug/flowbridge.exe'),
                         help='Exact CLI bytes to test; candidate workflow supplies packaged release CLI')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--churn', type=int, default=10000)
     parser.add_argument('--scenario', required=True, choices=('managed', 'raw'),
-                        help='Independent strict managed acceptance or bare OpenSSH characterization')
+                        help='Independent strict managed acceptance or bare OpenSSH 512 gate')
     args = parser.parse_args()
     require(sys.platform == 'win32' and os.environ.get('GITHUB_ACTIONS') == 'true'
             and os.environ.get('FLOWBRIDGE_HOSTED_WINDOWS_SSH') == '1',
             'Explicit disposable hosted Windows opt-in required')
     require(0 <= args.churn <= 10000, 'Unbounded churn rejected')
-    for name in ('ssh', 'sshd', 'keygen', 'library'):
+    for name in ('ssh', 'sshd', 'keygen'):
         value = getattr(args, name).resolve(strict=True)
         require(value.is_file(), 'Required executable/library missing')
         setattr(args, name, value)
     if args.scenario == 'managed':
+        require(args.library is not None, 'Managed scenario requires the exact FlowBridge library')
+        args.library = args.library.resolve(strict=True)
+        require(args.library.is_file(), 'Managed-test library missing')
         args.cli = args.cli.resolve(strict=True)
         require(args.cli.is_file(), 'Exact managed-test CLI missing')
     args.output.mkdir(parents=True, exist_ok=True)
@@ -84,16 +127,18 @@ def main():
               'scenario': args.scenario, 'managed_acceptance_proved': False,
               'raw_backend_512_stability_proved': False,
               'ssh_sha256': sha256(args.ssh), 'sshd_sha256': sha256(args.sshd),
-              'ffi_sha256': sha256(args.library),
+              'ffi_sha256': sha256(args.library) if args.scenario == 'managed' else None,
               'workflow_run_id': os.environ.get('GITHUB_RUN_ID'),
               'source_tree_sha': subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], text=True).strip(),
               'cli_sha256': sha256(args.cli) if args.scenario == 'managed' else None}
     supervisor = engine = 0
     daemon = None
-    abi = ABI(args.library)
-    echo = Server(('127.0.0.1', 0), Echo)
-    echo_thread = threading.Thread(target=echo.serve_forever, daemon=True)
-    echo_thread.start()
+    abi = echo = echo_thread = None
+    if args.scenario == 'managed':
+        abi = ABI(args.library)
+        echo = Server(('127.0.0.1', 0), Echo)
+        echo_thread = threading.Thread(target=echo.serve_forever, daemon=True)
+        echo_thread.start()
     try:
         with tempfile.TemporaryDirectory(prefix='flowbridge-isolated-sshd-') as temporary:
             root = Path(temporary)
@@ -104,9 +149,11 @@ def main():
             authorized = root / 'authorized_keys'
             authorized.write_bytes((root / 'client_key.pub').read_bytes())
             secure_test_file(authorized)
-            ssh_port, socks_port, ingress = free_port(), free_port(), free_port()
-            require(len({ssh_port,socks_port,ingress,echo.server_address[1]}) == 4,
-                    'Port reservation race')
+            ssh_port = free_port()
+            if args.scenario == 'managed':
+                socks_port, ingress = free_port(), free_port()
+                require(len({ssh_port, socks_port, ingress, echo.server_address[1]}) == 4,
+                        'Port reservation race')
             user = getpass.getuser().lower()
             require(user.isascii() and user.replace('_','').replace('-','').isalnum(),
                     'Unexpected hosted user name')
@@ -223,19 +270,8 @@ def main():
                         abi.lib.fb_ssh_destroy(supervisor); supervisor = 0
                         report['managed_acceptance_proved'] = True
                     else:
-                        command = [sys.executable, str(Path(__file__).with_name('windows_openssh_capacity_vm.py')),
-                                   '--ssh',str(args.ssh),'--identity',str(root/'client_key'),
-                                   '--known-hosts',str(known),'--user',user,'--ssh-port',str(ssh_port),
-                                   '--held','512','--min-held','128',
-                                   '--output',str(args.output/'bare-backend-capacity.json')]
-                        env = dict(os.environ, FLOWBRIDGE_SSH_VM='1')
-                        subprocess.run(command, env=env, check=True, timeout=180)
-                        report['bare_backend_probe_passed'] = True
-                        raw_evidence = json.loads((args.output/'bare-backend-capacity.json').read_text(encoding='utf-8'))
-                        require(raw_evidence.get('passed') is True, 'Bare backend evidence did not pass')
-                        report['raw_backend_peak_held'] = raw_evidence.get('peak_held')
-                        report['raw_backend_512_stability_proved'] = (raw_evidence.get('peak_held') == 512 and
-                            raw_evidence.get('recovery_successes', 0) >= 1)
+                        run_raw_probe(args.ssh, root / 'client_key', known, user, ssh_port,
+                                      args.output / 'bare-backend-capacity.json', report)
                     report['passed'] = True
                 except Exception:
                     def redact(value):
@@ -255,7 +291,15 @@ def main():
                     with (root/'sshd.log').open('rb') as diagnostics:
                         diagnostics.seek(0,2)
                         diagnostics.seek(max(0, diagnostics.tell()-8192))
-                        report['fixture_server_failure'] = redact(diagnostics.read().decode('utf-8',errors='replace'))
+                        tail = diagnostics.read(8192)
+                    if args.scenario == 'raw':
+                        errors = ResourceErrors()
+                        for line in tail.splitlines():
+                            errors.observe(line)
+                        report['fixture_server_resource_error_counts'] = errors.snapshot()
+                        report['fixture_listener_exit_code'] = daemon.poll() if daemon else None
+                    else:
+                        report['fixture_server_failure'] = redact(tail.decode('utf-8', errors='replace'))
                     raise
                 finally:
                     if engine:
@@ -268,10 +312,16 @@ def main():
                         daemon.wait(timeout=10)
     except Exception as error:
         report['error_type'] = type(error).__name__
+        if args.scenario == 'raw':
+            report['error'] = 'Raw OpenSSH fixture or strict capacity gate failed'
+            raise SystemExit(1) from None
         report['error'] = str(error) if not isinstance(error,subprocess.CalledProcessError) else 'Fixture subprocess failed'
         raise
     finally:
-        echo.shutdown(); echo.server_close(); echo_thread.join(timeout=5)
+        if echo:
+            echo.shutdown()
+            echo.server_close()
+            echo_thread.join(timeout=5)
         (args.output/'summary.json').write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
         print(json.dumps({'windows_real_ssh':report}),flush=True)
 
