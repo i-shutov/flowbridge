@@ -1,0 +1,236 @@
+{
+  "schema": "flowbridge-raw512-signed-runtime-review-v1",
+  "review_date_utc": "2026-11-27",
+  "scope": "Official Microsoft public release metadata and static package inspection on Linux",
+  "product_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+  "decision": "NO_CREDIBLE_MICROSOFT_SIGNED_LARGER_DESCRIPTOR_CANDIDATE_FOUND",
+  "production_raw512_accepted": false,
+  "verification": {
+    "windows_authenticode_valid_retested": false,
+    "product_guard_exercised": false,
+    "new_capacity_run": false,
+    "win10_touched": false,
+    "windows_binaries_executed": false,
+    "windows_installs_or_driver_loads": false,
+    "frozen_beta3_changed": false,
+    "product_trust_policy_changed": false,
+    "binaries_published": false
+  },
+  "release_discovery": {
+    "release_index": "https://github.com/PowerShell/Win32-OpenSSH/releases",
+    "release_api": "https://api.github.com/repos/PowerShell/Win32-OpenSSH/releases",
+    "public_release_count": 55,
+    "latest_api": "https://api.github.com/repos/PowerShell/Win32-OpenSSH/releases/latest",
+    "latest_release_id": 414280594,
+    "latest_tag": "10.4.0.0p1-Preview",
+    "latest_published_at_utc": "2026-10-20T15:40:18Z",
+    "latest_release_repo_target": "39d805023462aea5f994bdb793ea1f560378d3cf",
+    "latest_api_prerelease_flag": false,
+    "latest_api_immutable_flag": false,
+    "latest_classification": "Microsoft release notes explicitly label this preview non-production. The GitHub Latest badge and prerelease flag do not establish production support or executable signing.",
+    "winget_package": "Microsoft.OpenSSH.Preview",
+    "winget_manifest": "https://github.com/microsoft/winget-pkgs/blob/master/manifests/m/Microsoft/OpenSSH/Preview/10.4.0.0/Microsoft.OpenSSH.Preview.installer.yaml",
+    "winget_asset_relationship": "Winget 10.4.0.0 points to the same GitHub release MSI files for x86, x64 and ARM64 and pins the same published SHA-256 values. It is a second distribution path for the preview.",
+    "stable_channel": "Microsoft supports and services the in-box OpenSSH Feature on Demand through Windows Update. No larger descriptor table was established for a current stable build; the historical in-box client is identified only by its recorded version family and exact hash.",
+    "stable_channel_source": "https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh_install_firstuse"
+  },
+  "public_source": {
+    "release_to_tag_mapping": "https://github.com/PowerShell/Win32-OpenSSH#release-history",
+    "repository": "https://github.com/PowerShell/openssh-portable",
+    "header": "contrib/win32/win32compat/inc/sys/select.h",
+    "identical_header_sha256": "77b2fbe3f7c0992a8d62cf6ba46013d60b4365c8e4d34a28d3531f30867fb0df",
+    "max_fds_all_checked_refs": 256,
+    "refs": {
+      "v10.4.0.0": "274893f8d1fe86c4d128b514c3af4bc10cdc0c99",
+      "v10.0.0.0": "b8c08ef9da9450a94a9c5ef717d96a7bd83f3332",
+      "v9.8.3.0": "bdacf9868fe9e8024a5312861b7aaa6faba1821f",
+      "latestw_all_at_review": "0172cc6adb99d8b4324b8f0391b5b1fd6f39b2c6"
+    },
+    "allocator_at_10_4": "contrib/win32/win32compat/w32fd.c",
+    "allocator_sha256": "a964fb8994b4b778fe51db359fa72ba04e4c0cead122156c21f110958f899186",
+    "source_binary_mapping_limit": "The x64 ZIP's included build metadata identifies internal build 729037 and internal source version ce1580d7213db293515be6c8e432058dd60716b2. The public source tag identifies the release source lineage. Exact compiled table evidence below comes independently from PE bytes and matching PDBs."
+  },
+  "latest_x64_portable": {
+    "zip_url": "https://github.com/PowerShell/Win32-OpenSSH/releases/download/10.4.0.0p1-Preview/OpenSSH-Win64.zip",
+    "zip_asset_id": 645185877,
+    "zip_sha256_published_and_observed": "b67ff8becd203502190ec42ac7787c24c2cd3325ed7700485fe7a1c83d2a7957",
+    "symbols_url": "https://github.com/PowerShell/Win32-OpenSSH/releases/download/10.4.0.0p1-Preview/OpenSSH-Win64_Symbols.zip",
+    "symbols_sha256_published_and_observed": "8e7cd6b7f6a003d186fe3c11993219a53d987b7aa009833dc043fa8f457685a5",
+    "msi_sha256_published_only": "788d8643464a01eb63640a2fd746f9ed23d106b5a901a35f88dc8cd40e446ac9",
+    "embedded_spdx_sha256_observed_and_manifest_pin": "f187ee0cc033c5c8d3776c5b4032bf14a26532a7cf09fd2b582779cf9ba9a2e3",
+    "member_hashes_match_packaged_spdx": true,
+    "microsoft_signer_organization_for_all_listed_members": "Microsoft Corporation",
+    "signer_cn_for_executables": "Microsoft Corporation",
+    "signer_cn_for_crypto_dll": "Microsoft 3rd Party Application Component",
+    "executable_file_version": "10.4.0.0",
+    "crypto_dll_file_version": "4.3.3.0",
+    "member_sha256": {
+      "ssh.exe": "ee115a1b833261034dcb2e5b862e6571f6dcedc084c555ea0df45ae7fd42c5e0",
+      "sshd.exe": "00d61610a0965b42cc9a9cd401dae8983fe77d5394697f074d776bb68ce6ff0a",
+      "sshd-session.exe": "c4c664eac726e23d82f6ff0039298b8f04457f38a7527669f10e2ae067268a1f",
+      "sshd-auth.exe": "6f1e5e4e8f245fa2f2884429ac26c458e3c6e102fa95b8ae629185688e49ba56",
+      "ssh-keygen.exe": "a7370caccfe212af57f10f0b87e366a8977139dc08146106d2b80d1433b85b38",
+      "libcrypto.dll": "b4cbfd202d52ec0f094bfa328414c74b05b51234df95d2eb42e5fdb47160c9b5"
+    },
+    "descriptor_tables": {
+      "pdb_evidence": "PE CodeView RSDS matches each official PDB GUID and age 1. PDB fd_table has a 32-byte occupied bitmap and a 2048-byte w32_ios array of 8-byte pointers, yielding 256 slots.",
+      "disassembly_evidence": "At the reported comparison RVA, the allocator increments the index by eight per full bitmap byte, compares with 0x100 and takes a >= branch to the EMFILE (0x18) and MAX_FDS limit reached path.",
+      "ssh.exe": {
+        "slots": 256,
+        "comparison_rva": "0x49e66",
+        "table_rva": "0x16d770",
+        "pdb_guid": "d653fab0-cba1-4d35-abfa-4af8795efbf2"
+      },
+      "sshd.exe": {
+        "slots": 256,
+        "comparison_rva": "0x299d6",
+        "table_rva": "0xdbf90",
+        "pdb_guid": "756a0aa7-1163-4e55-afb4-3f1b572e1096"
+      },
+      "sshd-session.exe": {
+        "slots": 256,
+        "comparison_rva": "0x51c96",
+        "table_rva": "0x1745f0",
+        "pdb_guid": "2ec5b461-6583-4d01-9be6-ba9058f032d0"
+      },
+      "sshd-auth.exe": {
+        "slots": 256,
+        "comparison_rva": "0x1d226",
+        "table_rva": "0x109bd0",
+        "pdb_guid": "04be18c9-f29b-4e2e-9bd0-b61f2ef75ef3"
+      }
+    }
+  },
+  "other_asset_checks": {
+    "10.4.0.0p1-Preview-arm64": {
+      "zip_url": "https://github.com/PowerShell/Win32-OpenSSH/releases/download/10.4.0.0p1-Preview/OpenSSH-ARM64.zip",
+      "zip_sha256_published_and_observed": "d2b1928225479fec9e0c938f527fdb5ed676446cca1bbcc5af84aca1f272842e",
+      "symbols_url": "https://github.com/PowerShell/Win32-OpenSSH/releases/download/10.4.0.0p1-Preview/OpenSSH-ARM64_Symbols.zip",
+      "symbols_sha256_published_and_observed": "b276c1397feceb82553cb5794f4627ea0d3583bddb9a15a8af96fceaef0fb2e9",
+      "method": "Matching PDB RSDS GUID and age show a 32-byte bitmap and 2048-byte array of 8-byte pointers.",
+      "ssh.exe": {
+        "sha256": "c8a6cb61e88a7bf8d4e7b57c81a38430eb4b461e0cbefe99f6f4eb962e5a0af4",
+        "slots": 256,
+        "pdb_guid": "c0d4f9b4-9e47-4f3e-8827-72d2064d3877",
+        "pdb_age": 1
+      },
+      "sshd-session.exe": {
+        "sha256": "50a1d591906b83d436d499e238c37ac71c816ad1f13686f3ef413a23708916f2",
+        "slots": 256,
+        "pdb_guid": "0d9e1fd3-b532-48e0-864c-2599cfbca53f",
+        "pdb_age": 1
+      }
+    },
+    "10.0.0.0p2-Preview-x64": {
+      "zip_url": "https://github.com/PowerShell/Win32-OpenSSH/releases/download/10.0.0.0p2-Preview/OpenSSH-Win64.zip",
+      "zip_sha256_published_and_observed": "23f50f3458c4c5d0b12217c6a5ddfde0137210a30fa870e98b29827f7b43aba5",
+      "method": "The raw allocator instructions compare with 0x100 and branch to EMFILE and the matching descriptor-exhaustion log.",
+      "ssh.exe": {
+        "sha256": "6890c128c86cc2c38aad9fcb32a82b851ff3d38c714a1f656b8e445d7cd5e1c6",
+        "slots": 256,
+        "comparison_rva": "0x45926"
+      },
+      "sshd-session.exe": {
+        "sha256": "5b28ad2046596454bd1e0b1ab19e8d66945def1d18ec9bec6f0ef538600a03cf",
+        "slots": 256,
+        "comparison_rva": "0x4d576"
+      }
+    }
+  },
+  "signature_method_and_limits": "For every listed PE, matched the embedded PKCS#7 SignerInfo issuer and serial to its certificate and confirmed organization Microsoft Corporation. OpenSSL 3.5.9 smime -verify -noverify verified each signed-content cryptographic signature. A separately computed Authenticode SHA-256 PE digest matched the signed digest. The check does not validate the Windows trust chain, revocation, timestamp policy, or product path/read-lock guard.",
+  "reproduction": {
+    "host_tools": {
+      "curl": "8.14.1",
+      "unzip": "6.00",
+      "python": "3.12.14",
+      "gnu_objdump": "2.44",
+      "openssl": "3.5.9"
+    },
+    "commands": [
+      "curl -fLSs --max-time 45 -o OpenSSH-Win64.zip <recorded zip_url>",
+      "sha256sum OpenSSH-Win64.zip OpenSSH-Win64_Symbols.zip",
+      "unzip -jo OpenSSH-Win64.zip '*/ssh.exe' '*/sshd*.exe' '*/ssh-keygen.exe' '*/libcrypto.dll' '*/manifest.spdx.json'",
+      "unzip -jo OpenSSH-Win64_Symbols.zip '*/ssh.pdb' '*/sshd.pdb' '*/sshd-session.pdb' '*/sshd-auth.pdb'",
+      "objdump -p ssh.exe | rg 'ImageBase|RSDS'",
+      "objdump -d -M intel --start-address=0x140049e40 --stop-address=0x140049ed9 ssh.exe",
+      "objdump -d -M intel --start-address=0x140051c70 --stop-address=0x140051d09 sshd-session.exe",
+      "openssl smime -verify -inform DER -in ssh.exe.p7 -noverify -out signed-content.der",
+      "openssl pkcs7 -inform DER -in ssh.exe.p7 -print"
+    ],
+    "signature_data_extraction": "Read the PE32+ Security Directory (optional-header data-directory index 4) as a file offset. At that offset, the WIN_CERTIFICATE header is 8 bytes, followed by the PKCS#7 DER. For the contiguous packages inspected, hash the file through the signature table offset, excluding the PE checksum and Security Directory entry. Compare with the SHA-256 digest in the signed SpcIndirectDataContent.",
+    "pdb_data_extraction": "Read the PE Debug Directory CodeView record (type 2) and match its RSDS GUID and age to MSF PDB Information stream 1. Read the DBI stream 3 symbol-stream index, then the S_LDATA32 record named fd_table. Resolve the symbol's TPI stream 2 type through LF_STRUCTURE and LF_FIELDLIST to the occupied.bitmap and w32_ios LF_ARRAY byte sizes. The w32_ios LF_POINTER type gives the element byte width.",
+    "ssh_client_static_excerpt": {
+      "rsds_guid_age": "d653fab0-cba1-4d35-abfa-4af8795efbf2/1",
+      "codeview_rva": "0x152b68",
+      "pdb_fd_table_rva": "0x16d770",
+      "pdb_occupied_bitmap_bytes": 32,
+      "pdb_w32_ios_array_bytes": 2048,
+      "pdb_pointer_bytes": 8,
+      "objdump": [
+        "140049e46: lea rcx,[rip+0x123923] # 0x14016d770",
+        "140049e63: add eax,0x8",
+        "140049e66: cmp eax,0x100",
+        "140049e6b: jge 0x140049e8b",
+        "140049ea7: mov DWORD PTR [rax],0x18",
+        "140049ead: lea rax,[rip+0xfa65c] # 0x140144510",
+        "140049ecf: mov eax,0xffffffff"
+      ],
+      "error_message_at_0x140144510": "ERROR: MAX_FDS limit reached"
+    },
+    "server_session_static_excerpt": {
+      "rsds_guid_age": "2ec5b461-6583-4d01-9be6-ba9058f032d0/1",
+      "codeview_rva": "0x1494e8",
+      "pdb_fd_table_rva": "0x1745f0",
+      "pdb_occupied_bitmap_bytes": 32,
+      "pdb_w32_ios_array_bytes": 2048,
+      "pdb_pointer_bytes": 8,
+      "objdump": [
+        "140051c76: lea rcx,[rip+0x122973] # 0x1401745f0",
+        "140051c93: add eax,0x8",
+        "140051c96: cmp eax,0x100",
+        "140051c9b: jge 0x140051cbb",
+        "140051cd7: mov DWORD PTR [rax],0x18",
+        "140051cdd: lea rax,[rip+0xeb8c4] # 0x14013d5a8",
+        "140051cff: mov eax,0xffffffff"
+      ],
+      "error_message_at_0x14013d5a8": "ERROR: MAX_FDS limit reached"
+    }
+  },
+  "historical_comparison": {
+    "latest_terminal_run": {
+      "run_id": 46010365023,
+      "job_id": 140544016065,
+      "job_url": "https://github.com/i-shutov/flowbridge/actions/runs/46010365023/job/140544016065",
+      "peak_held": 244,
+      "connection_attempts": 245,
+      "recovery_successes": 0,
+      "recovery_stage_reached": false,
+      "sshd_sha256_matches_latest_x64": "00d61610a0965b42cc9a9cd401dae8983fe77d5394697f074d776bb68ce6ff0a",
+      "inbox_ssh_sha256": "98d447730047f5df91373e852d057928a921c3d1e89938700ab656ba84b19dc8",
+      "fixture_server_log_markers": [
+        "postauth notify_pipe allocation failed with EMFILE",
+        "ppoll resource error"
+      ],
+      "evidence_origin": "Primary assistant direct review of decoded GitHub connector job log; independent durable summary in qa-f998127-terminal-ci.json"
+    },
+    "strict_run_id": 45998507203,
+    "strict_run_peak_held": 246,
+    "strict_run_recovery_stage_reached": false,
+    "strict_run_sshd_exact_hash_matches_latest_x64": true,
+    "strict_run_inbox_ssh_sha256": "98d447730047f5df91373e852d057928a921c3d1e89938700ab656ba84b19dc8",
+    "strict_run_inbox_ssh_equals_latest_portable_ssh": false,
+    "earlier_run_id": 45976744578,
+    "earlier_run_peak_held": 244,
+    "earlier_run_fixture_pin": "Product workflow pins the same official x64 ZIP; the exact recorded listener file hash comparison above is for the 246-channel run.",
+    "expanded_unsigned_run_id": 46007206276,
+    "expanded_unsigned_run_held": 512,
+    "expanded_unsigned_run_recovered": 16,
+    "expanded_unsigned_run_is_matched_stock_control": false
+  },
+  "next_action": [
+    "Keep strict512 blocked on the signed dependency. Skip a strict512 rerun against the inspected 256-slot stock preview binaries.",
+    "Qualify a future Microsoft-signed candidate only after the exact client and server-session binaries show adequate descriptor headroom. Pin the archive and exact executable/helper/DLL hashes, then require Windows Authenticode Valid with signer organization Microsoft Corporation using the existing explicit absolute-path and locked-file product guard.",
+    "Run the same single-backend 512-held integrity and 16-recovery trial on the exact pair in isolated approved hosted Windows, then collect separate managed and installed-client acceptance evidence.",
+    "Use a separate matched stock/expanded same-source lab if causal attribution or endpoint isolation is needed. Keep that lab independent of signed runtime acceptance."
+  ]
+}

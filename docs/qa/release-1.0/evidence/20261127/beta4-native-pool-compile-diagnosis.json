@@ -1,0 +1,51 @@
+{
+  "workflow_commit": "d71ab8b452a530e59a0324a14eb26f1b0dd182b8",
+  "run_id": 46042401556,
+  "job_id": 140653194633,
+  "attempt": 1,
+  "run_url": "https://github.com/i-shutov/flowbridge/actions/runs/46042401556",
+  "conclusion": "success",
+  "report": {
+    "cache_present": true,
+    "cmake_cache": {
+      "CMAKE_CACHE_MAJOR_VERSION": "4",
+      "CMAKE_CACHE_MINOR_VERSION": "1",
+      "CMAKE_CACHE_PATCH_VERSION": "1",
+      "CMAKE_CXX_COMPILER_PRESENT": false,
+      "CMAKE_GENERATOR_INSTANCE_PRESENT": true,
+      "CMAKE_GENERATOR_PLATFORM": "x64",
+      "CMAKE_MAKE_PROGRAM_PRESENT": false,
+      "FLOWBRIDGE_FFI_LIBRARY_PRESENT": true,
+      "generator": "Visual Studio 17 2022",
+      "visual_studio_edition": "BuildTools",
+      "visual_studio_year": "2022"
+    },
+    "fixture_directory_present": false,
+    "log_signals": {
+      "exit_codes": [
+        1
+      ],
+      "failed_subcommands": [
+        "cmake_configure"
+      ],
+      "known_message_signals": [
+        "cmake_configure_incomplete",
+        "cmake_no_compiler",
+        "windows_sdk_missing"
+      ],
+      "numeric_compiler_errors": [],
+      "sanitized_error_context": [
+        "cmake error at [redacted] project",
+        "no CMAKE_CXX_COMPILER could be found"
+      ]
+    },
+    "phase": "COMPILED_WIN32_POLICY",
+    "policy_executable_present": false,
+    "policy_vcxproj_present": false,
+    "schema": "flowbridge-native-managed-pool-policy-build-diagnostic-v1",
+    "source_attempt": 1,
+    "source_run": 46041606345,
+    "status": "READ_ONLY_DIAGNOSTIC_COLLECTED"
+  },
+  "artifact_count": 0
+}

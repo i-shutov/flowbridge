@@ -1,0 +1,79 @@
+{
+  "schema": "flowbridge-exact-artifact-cleanup-v1",
+  "date": "2026-11-27",
+  "timezone": "Europe/Moscow",
+  "verified_at_utc": "2026-11-27T12:54:05Z",
+  "run_id": 45975037904,
+  "source_sha": "40f8b66f356dbe26b75458b6508528c36d1eb0f8",
+  "run_url": "https://github.com/i-shutov/flowbridge/actions/runs/45975037904",
+  "status": "DONE",
+  "owner_action_time_confirmation": "Да, подтверждаю удаление 11 артефактов",
+  "scope": "Only the exact enumerated accidental artifacts from this run; retain run, logs and commits",
+  "deleted_count": 11,
+  "remaining_count": 0,
+  "artifacts_deleted": [
+    {
+      "id": 15187570311,
+      "name": "FlowBridge-real-SSH-verification",
+      "size_in_bytes": 200687
+    },
+    {
+      "id": 15187350470,
+      "name": "FlowBridge-native-session-ubuntu-24.04",
+      "size_in_bytes": 851
+    },
+    {
+      "id": 15187031432,
+      "name": "FlowBridge-wfp-wire-fixture-windows-2025",
+      "size_in_bytes": 396
+    },
+    {
+      "id": 15186767355,
+      "name": "FlowBridge-windows-x64",
+      "size_in_bytes": 1764265
+    },
+    {
+      "id": 15186622885,
+      "name": "FlowBridge-windows-verification",
+      "size_in_bytes": 218181
+    },
+    {
+      "id": 15186263304,
+      "name": "FlowBridge-wfp-wire-fixture-ubuntu-24.04",
+      "size_in_bytes": 392
+    },
+    {
+      "id": 15186223915,
+      "name": "FlowBridge-wfp-wire-fixture-macos-15",
+      "size_in_bytes": 392
+    },
+    {
+      "id": 15186163937,
+      "name": "FlowBridge-native-session-windows-2025",
+      "size_in_bytes": 865
+    },
+    {
+      "id": 15186049094,
+      "name": "FlowBridge-capacity-windows-2025",
+      "size_in_bytes": 518
+    },
+    {
+      "id": 15185909821,
+      "name": "FlowBridge-exact-source",
+      "size_in_bytes": 713501
+    },
+    {
+      "id": 15185879669,
+      "name": "FlowBridge-capacity-ubuntu-24.04",
+      "size_in_bytes": 514
+    }
+  ],
+  "api_artifacts": [],
+  "run_retained": true,
+  "run_conclusion": "cancelled",
+  "original_application_job_id": 140424542158,
+  "original_application_job_log_readable": true,
+  "original_commit_retained": true,
+  "unrelated_artifacts_deleted": false,
+  "prior_approval_rejection_resolved_by_fresh_owner_confirmation": true
+}

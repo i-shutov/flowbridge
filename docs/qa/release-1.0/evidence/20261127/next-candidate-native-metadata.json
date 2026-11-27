@@ -1,0 +1,77 @@
+{
+  "schema": "flowbridge-next-candidate-native-metadata-review-v1",
+  "date": "2026-11-27",
+  "timezone": "Europe/Moscow",
+  "base_product_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+  "source_sha": "cc0106245d10e3e26ca3847c33397522db91b59f",
+  "tree_sha": "27d7d73906c21f8752c464f1f9d691c691721f7d",
+  "pr_url": "https://github.com/i-shutov/flowbridge/pull/94",
+  "draft": true,
+  "files_changed": 5,
+  "root_reverified_tests": {
+    "command": "python -m unittest discover -s tests -p 'test_explicit_beta*.py'",
+    "passed": 51,
+    "failed": 0,
+    "version_consistency": "PASS; source retains 0.3.0-beta.2 until separately versioned staging",
+    "diff_check": "PASS",
+    "native_scope": "51 local Python tests; generic native CI is tracked separately and is not the future versioned explicit-beta package"
+  },
+  "independent_review": {
+    "model": "GPT-6.2 Sol",
+    "performed": true,
+    "findings_corrected": [
+      "README distinguishes bundled license text from pending Microsoft runtime terms",
+      "NSIS hashes explicitly identify distribution members; compiler selection and installer embedded identity remain unverified"
+    ],
+    "native_future_explicit_candidate_build_executed": false
+  },
+  "frozen_receipt": "frozen-beta3-notice-coverage.json",
+  "findings": [
+    {
+      "id": "R8-NLOHMANN-ATTRIBUTIONS",
+      "status": "SOURCE_CORRECTION_PREPARED",
+      "evidence": "Frozen source copies upstream main MIT file only; upstream v3.11.3 additionally identifies Hoehrmann UTF-8 decoder and Loitsch Grisu2 MIT notices",
+      "scope": "Retain named MIT attributions with main permission text; document Hedley and Abseil scope separately; no exact linked-binary composition assertion",
+      "sources": [
+        "https://github.com/nlohmann/json/releases/tag/v3.11.3",
+        "https://github.com/nlohmann/json/tree/v3.11.3#license"
+      ]
+    },
+    {
+      "id": "R8-STATIC-MICROSOFT-RUNTIME",
+      "status": "CONFIGURATION_IDENTIFIED_REVIEW_OPEN",
+      "evidence": "Frozen CMake Release MultiThreaded and Rust +crt-static observed; previous SBOM no separate MSVC runtime",
+      "scope": "Record generated compiler/SDK/configuration; exact static members and applicable terms remain unverified",
+      "sources": [
+        "https://cmake.org/cmake/help/latest/prop_tgt/MSVC_RUNTIME_LIBRARY.html",
+        "https://learn.microsoft.com/en-us/cpp/c-runtime-library/crt-library-features?view=msvc-170",
+        "https://www.microsoft.com/licensing/guidance/Visual-Studio"
+      ]
+    },
+    {
+      "id": "R8-NSIS-DISTRIBUTION-MEMBERS",
+      "status": "INPUT_HASH_SCOPE_IDENTIFIED",
+      "evidence": "Pinned NSIS3.13 COPYING and three plugin files verified on frozen build host; official ZIP includes LZMA x86 Unicode stub",
+      "scope": "Hash distribution stub and plugins; ambient compiler configuration and compressed installer member identity remain unverified",
+      "sources": [
+        "https://nsis.sourceforge.io/License",
+        "https://nsis.sourceforge.io/Docs/Modern%20UI%202/Readme.html"
+      ]
+    },
+    {
+      "id": "R8-EXTERNAL-MANAGED-SSH",
+      "status": "SOURCE_DEPENDENCIES_DOCUMENTED_RUNTIME_REVIEW_OPEN",
+      "evidence": "Product trust guard invokes host Windows PowerShell Security; OpenSSH is external or explicitly selected local Microsoft-signed client",
+      "scope": "Not redistributed by this package; no original-candidate installed/runtime execution in current audit"
+    }
+  ],
+  "next_gate": "Review source, create a new separately versioned candidate, verify new hashes and native metadata; do not overwrite frozen beta3",
+  "a5_accepted": false,
+  "a6_accepted": false,
+  "a7_approved": false,
+  "license_obligations_accepted": false,
+  "frozen_beta3_changed": false,
+  "win10_accessed": false,
+  "public_release_created": false,
+  "hosted_ci_evidence": "next-candidate-native-metadata-ci.json"
+}

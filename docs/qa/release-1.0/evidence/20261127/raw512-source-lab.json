@@ -1,0 +1,342 @@
+{
+  "schema": "flowbridge-hosted-openssh-raw512-three-trials-v1",
+  "scope": "hosted_ephemeral_windows_only",
+  "initial": {
+    "repository": "i-shutov/flowbridge",
+    "workflow_path": ".github/workflows/win32-openssh-raw512-lab.yml",
+    "workflow_commit": "c3e56a3d777cdfa36ad5ddf4b36693836ef891f8",
+    "workflow_sha256": "ebdb81a93fb072d8de5e14f12addbef27c2964a26af671254059304757f7131c",
+    "checkout_sha": "6e48d625e98a76faa1e7b3ea3961531334b0114e",
+    "checkout_tree": "020273d9d61ab6d77de299dca20eabb423799263",
+    "checkout_parent": "06c7d7d5cc005be092dd1c944b0c8dcd265d5726",
+    "script_sha256": "302d114261d84ab6a6b71a1ca49bea28f356e6f9c7a82813759aee82eccace3b",
+    "run_id": 46004898518,
+    "run_attempt": 1,
+    "job_id": 140525507139,
+    "job_name": "isolated-compiler-fixture",
+    "job_url": "https://github.com/i-shutov/flowbridge/actions/runs/46004898518/job/140525507139",
+    "event": "workflow_dispatch",
+    "ref": "refs/heads/main",
+    "started_utc": "2026-11-27T13:11:01Z",
+    "last_updated_utc": "2026-11-27T13:11:58Z",
+    "runner_image": "windows-2022",
+    "runner_image_version": "20261123.376.1",
+    "status": "completed",
+    "conclusion": "failure",
+    "windows_contract_tests": {
+      "passed": 5,
+      "failed": 0
+    },
+    "blocked_step": 6,
+    "blocked_phase": "VCPKG_MANIFEST",
+    "blocked_marker_utc": "2026-11-27T13:11:53.0752451Z",
+    "compiler_codes": [],
+    "workflow_step_exit": 1,
+    "dependency_native_exit": null,
+    "dependency_root_cause": "UNDETERMINED_BOOTSTRAP_OR_INSTALL",
+    "owned_temp_cleanup": "PASS",
+    "artifacts": 0,
+    "compiled_runtime": "NOT_REACHED",
+    "lab_raw_512_and_recovery_16": "NOT_REACHED",
+    "peak_held": null,
+    "recovery_successes": null
+  },
+  "resolver_preflight": {
+    "host": "Linux",
+    "mode": "dry_run_package_graph_only",
+    "openssh_source_sha": "274893f8d1fe86c4d128b514c3af4bc10cdc0c99",
+    "vcpkg_registry_sha": "99541cc939bf01ae3c42f928266d648f5acb88fd",
+    "vcpkg_builtin_baseline": "a345bbdc68cdfda65603e24413b21afb28f110fb",
+    "vcpkg_tool_release": "2026-10-29",
+    "vcpkg_tool_linux_sha256": "8b10d43c1392a2d51622b1e439cb952289dcf56cbb595eb935847e79fe00d303",
+    "manifest_modified": false,
+    "direct_packages": {
+      "libcbor": {
+        "version": "0.14.0",
+        "source": "registry"
+      },
+      "libfido2": {
+        "version": "1.17.0",
+        "source": "upstream_overlay"
+      },
+      "libressl": {
+        "version": "4.3.3",
+        "source": "upstream_overlay"
+      },
+      "zlib": {
+        "version": "1.3.2",
+        "source": "registry"
+      }
+    },
+    "baseline_helpers": {
+      "vcpkg-cmake": "2024-04-23",
+      "vcpkg-cmake-config": "2024-05-23"
+    },
+    "x64_linux_dry_run": "PASS_WITH_ALLOW_UNSUPPORTED_FOR_WINDOWS_ONLY_LIBFIDO2",
+    "x64_custom_dry_run": "STOPPED_AT_WINDOWS_ONLY_VISUAL_STUDIO_COMPILER_DETECTION",
+    "windows_package_install": "NOT_VERIFIED",
+    "missing_download_directory_reproduced_hosted_failure": false
+  },
+  "instrumentation": {
+    "local_parent": "ffcbc084ecaffacefb313eb365b917483388a8a2",
+    "local_commit": "66f891fa76e67332baa752c876fcf3b6626e7dfd",
+    "local_tree": "a11e5b4e3b68a1b2d1e290b59f405d6b4480f7e6",
+    "changed_path": "tools/qa/win32_openssh_capacity_lab.ps1",
+    "script_sha256": "a6fc5e7c11bdbb5a09f7e7e2e89b02fcb824d7e20cc2fdf8acc71481587b18c5",
+    "dependency_phases": [
+      "VCPKG_BOOTSTRAP",
+      "VCPKG_INSTALL"
+    ],
+    "failure_diagnostics": "native exit, up to eight redacted 300-character pre-SSH dependency error lines",
+    "pwsh_version": "7.6.1",
+    "pwsh_test_binary_archive_sha256": "dfc94229767921603f7c3e1cb1ac5aa931448af7496ccf657723b6278057c415",
+    "pwsh_parser": "PASS",
+    "pwsh_native_exit_and_redaction_fixture": "PASS",
+    "local_lab_contract_tests": {
+      "passed": 5,
+      "failed": 0
+    },
+    "local_strict_ssh_tests": {
+      "passed": 14,
+      "failed": 0
+    },
+    "git_diff_check": "PASS",
+    "declared_threshold": {
+      "held_single_backend": 512,
+      "recovery_connections": 16
+    },
+    "production_raw512_accepted": false,
+    "production_adoption_approved": false,
+    "frozen_beta3_changed": false
+  },
+  "instrumented_trial": {
+    "workflow_commit": "464cba6b2a0f8abd95055f334e8b752c011e86cc",
+    "workflow_sha256": "66db24fdb275f5fbd5ee003f7edc53c14f4d140d65e61499ac72e16156725821",
+    "checkout_sha": "beba4b63abe4713cbed3a6ab57b7373a4458d826",
+    "checkout_tree": "a11e5b4e3b68a1b2d1e290b59f405d6b4480f7e6",
+    "checkout_parent": "6e48d625e98a76faa1e7b3ea3961531334b0114e",
+    "script_sha256": "a6fc5e7c11bdbb5a09f7e7e2e89b02fcb824d7e20cc2fdf8acc71481587b18c5",
+    "run_id": 46006546283,
+    "run_attempt": 1,
+    "job_id": 140531028015,
+    "job_url": "https://github.com/i-shutov/flowbridge/actions/runs/46006546283/job/140531028015",
+    "event": "workflow_dispatch",
+    "ref": "refs/heads/main",
+    "started_utc": "2026-11-27T13:22:26Z",
+    "last_updated_utc": "2026-11-27T13:23:11Z",
+    "runner_image": "windows-2022",
+    "runner_image_version": "20261123.376.1",
+    "status": "completed",
+    "conclusion": "failure",
+    "windows_contract_tests": {
+      "passed": 5,
+      "failed": 0
+    },
+    "blocked_step": 6,
+    "bootstrap": "PASSED",
+    "blocked_phase": "VCPKG_INSTALL",
+    "blocked_marker_utc": "2026-11-27T13:23:07.1463209Z",
+    "dependency_native_exit": 1,
+    "workflow_step_exit": 1,
+    "compiler_codes": [],
+    "dependency_failure": "GIT_CHECKOUT_INDEX_COULD_NOT_FETCH_HISTORICAL_BLOB_FROM_PROMISOR_REMOTE",
+    "missing_blob_oids": [
+      "49c586cfc3507679626ea71fda77068fe91ba585",
+      "6106d323a6678871cc2538de418439b09c492f65",
+      "fa484eafc5a76aead90876e9d3aff0a2d023be8d",
+      "25dcde81172b6cb5a7afe9b6f8fa6ab462062c10"
+    ],
+    "owned_temp_cleanup": "PASS",
+    "artifacts": 0,
+    "compiled_runtime": "NOT_REACHED",
+    "lab_raw_512_and_recovery_16": "NOT_REACHED",
+    "peak_held": null,
+    "recovery_successes": null
+  },
+  "full_registry_fetch_fix": {
+    "local_parent": "66f891fa76e67332baa752c876fcf3b6626e7dfd",
+    "local_commit": "4693bb04e00d15978e44eb5b532731f52c3d3391",
+    "local_tree": "747cf28924a2e9e01a1ef4235e3e78d6215b4e48",
+    "changed_path": "tools/qa/win32_openssh_capacity_lab.ps1",
+    "script_sha256": "5d553f5d9baca26b33ad7fe2949487e430eef8b37ca5087747d4ebede6b3f30e",
+    "fetch": {
+      "vcpkg": "FULL_PINNED_HISTORY",
+      "openssh": "UNCHANGED_SHALLOW_PIN"
+    },
+    "verified_history_pin": "99541cc939bf01ae3c42f928266d648f5acb88fd",
+    "verified_history_pack_kib": 127962,
+    "promisor_remote_configured": false,
+    "local_objects_verified_with_unreachable_origin": 4,
+    "offline_checkout_index_verified": {
+      "vcpkg-cmake-config": "97a63e4bc1a17422ffe4eff71da53b4b561a7841",
+      "vcpkg-cmake": "e74aa1e8f93278a8e71372f1fa08c3df420eb840",
+      "zlib": "e2a9ce8cf8f5d07e489e14c256eefdd58cd535c1",
+      "libcbor": "8adfdb0526926bf3fe3df6d4bf9ea17f2be68a35"
+    },
+    "pwsh_7_6_1_fetch_argv_fixture": "PASS",
+    "pwsh_7_6_1_parser_and_diagnostics_fixture": "PASS",
+    "local_lab_contract_tests": {
+      "passed": 5,
+      "failed": 0
+    },
+    "local_strict_ssh_tests": {
+      "passed": 14,
+      "failed": 0
+    },
+    "git_diff_check": "PASS",
+    "hosted_native_fix_trial": "PASS_46007206276",
+    "production_raw512_accepted": false,
+    "production_adoption_approved": false,
+    "frozen_beta3_changed": false
+  },
+  "full_registry_fetch_trial": {
+    "workflow_commit": "0a3771bf5e39e7397f5af4c62cd51d7f7b79cf99",
+    "workflow_tree": "8d9d13ceaf9151dba08388401fee2dd89894b282",
+    "workflow_sha256": "a4821ce9c1672d5bf73966a1c3fea4de083cb692db1f7eef6395834842d59d00",
+    "checkout_sha": "78f5ec602500ab3478632a249afe55f334b593c0",
+    "checkout_tree": "747cf28924a2e9e01a1ef4235e3e78d6215b4e48",
+    "checkout_parent": "beba4b63abe4713cbed3a6ab57b7373a4458d826",
+    "script_sha256": "5d553f5d9baca26b33ad7fe2949487e430eef8b37ca5087747d4ebede6b3f30e",
+    "run_id": 46007206276,
+    "run_attempt": 1,
+    "job_id": 140533273025,
+    "job_url": "https://github.com/i-shutov/flowbridge/actions/runs/46007206276/job/140533273025",
+    "event": "workflow_dispatch",
+    "ref": "refs/heads/main",
+    "started_utc": "2026-11-27T13:27:02Z",
+    "last_updated_utc": "2026-11-27T13:31:57Z",
+    "runner_image": "windows-2022",
+    "runner_image_version": "20261123.376.1",
+    "runner_os": "Microsoft Windows Server 2022",
+    "runner_agent_version": "2.338.2",
+    "status": "completed",
+    "conclusion": "success",
+    "terminal_api_artifact_count": 0,
+    "windows_contract_tests": {
+      "passed": 5,
+      "failed": 0
+    },
+    "toolchain_log_observed": {
+      "cpython_version": "3.13.17",
+      "git_version": "2.56.1.windows.1",
+      "compiler_exact_version_emitted": false,
+      "assembled_ssh_version_string_emitted": false
+    },
+    "toolchain_pinned_by_source": {
+      "msvc_toolset": "v143",
+      "windows_sdk": "10.0.22621.0",
+      "vcpkg_tool_release": "2026-10-29"
+    },
+    "compiled_runtime_utc": "2026-11-27T13:31:45.5933646Z",
+    "compiled_runtime_receipt": {
+      "experimental_descriptors": 1024,
+      "experimental_header_sha256": "e9b21fbec79a4eaad87c1b4de5db7384e4df6513e069d804c47b635c96fa41a1",
+      "openssh_source_sha": "274893f8d1fe86c4d128b514c3af4bc10cdc0c99",
+      "original_header_sha256": "77b2fbe3f7c0992a8d62cf6ba46013d60b4365c8e4d34a28d3531f30867fb0df",
+      "runtime_sha256": {
+        "libcrypto.dll": "0607ec44106788dbcec4806568fb182716324d5fd354766effaff388d68fd33f",
+        "ssh-keygen.exe": "f0e24c2a39e7aef37ae6ddbcd6d50ef6a73d247582d0431b4ddd2ed5327d0fd0",
+        "ssh.exe": "fa45cde92cb367ac71c74d4152f7151cf8def7df9af299e9cf9609ad72ed8146",
+        "sshd-auth.exe": "050144719ee0bd56136a97887e6c18bca640fae7f7b00478a3a1ce60549774de",
+        "sshd-session.exe": "9e582d2995e3c4fd8c2fd6eae4c7bc8026a6215c29978843282ef0a780d56f2a",
+        "sshd.exe": "8dc7a8d06b3fe4f860e0ab0c1a8cccc7edc507897623f0a071186745ec2a197b"
+      },
+      "single_tracked_change": "contrib/win32/win32compat/inc/sys/select.h",
+      "status": "COMPILED_HOSTED_EXPERIMENT",
+      "stock_descriptors": 256,
+      "vcpkg_builtin_baseline": "a345bbdc68cdfda65603e24413b21afb28f110fb",
+      "vcpkg_registry_overrides": {
+        "libcbor": "0.14.0",
+        "zlib": "1.3.2"
+      },
+      "vcpkg_source_sha": "99541cc939bf01ae3c42f928266d648f5acb88fd"
+    },
+    "strict_raw_result_utc": "2026-11-27T13:31:50.5796592Z",
+    "strict_raw_receipt": {
+      "actual_connection_attempts": 528,
+      "client_resource_error_counts": {},
+      "fixture_server_resource_error_counts": {},
+      "frozen_beta3_changed": false,
+      "hold_integrity_verified": true,
+      "hosted_unsigned_experiment": true,
+      "lab_binary_pins_match": true,
+      "peak_held": 512,
+      "production_adoption_approved": false,
+      "production_raw512_accepted": false,
+      "raw_minimum_held": 512,
+      "raw_process_exit": 0,
+      "raw_recovery_required": 16,
+      "recovery_status": "VERIFIED",
+      "recovery_successes": 16,
+      "schema": "flowbridge-hosted-openssh-raw512-lab-v1",
+      "status": "LAB_STRICT_512_PASS"
+    },
+    "resource_evidence": {
+      "baseline_handle_count": null,
+      "tier_handle_counts": null,
+      "after_release_handle_count": null,
+      "after_recovery_handle_count": null,
+      "numeric_handle_samples_publicly_emitted": false,
+      "internal_openssh_fd_table_occupancy_measured": false,
+      "configured_internal_descriptor_table_size": 1024,
+      "resource_recovery_verified_derived_from_successful_predicate": true,
+      "recovery_handle_bound_derived_from_pinned_code": {
+        "metric": "client Windows OS HANDLE count",
+        "comparison": "observed_count <= initial_baseline + 32",
+        "window_seconds": 15,
+        "checked_after_16_recovered_echoes": true
+      },
+      "capacity_baseline_verified_derived_from_successful_predicate": true,
+      "final_tier_derived_from_successful_predicate": {
+        "requested": 512,
+        "target": 512,
+        "accepted": 512,
+        "test_ceiling_applied": false
+      },
+      "client_resource_error_counts_measured_by_classified_stderr": true,
+      "fixture_server_resource_error_counts_empty_map_is_success_path_default": true,
+      "fixture_server_tail_classification_executed_on_success": false
+    },
+    "owned_temp_cleanup_utc": "2026-11-27T13:31:53.4482786Z",
+    "owned_temp_cleanup": "PASS",
+    "scope_boundaries": {
+      "exact_unsigned_hosted_lab_pair_only": true,
+      "raw_loopback_only": true,
+      "uses_flowbridge_product_or_pooling": false,
+      "isolates_causality_with_same_source_stock_control": false,
+      "production_raw512_accepted": false,
+      "production_adoption_approved": false,
+      "frozen_beta3_changed": false,
+      "win10_user_machine_touched": false
+    }
+  },
+  "production_adoption_prerequisites": {
+    "exact_product_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+    "client_guard_source": "crates/flowbridge-tunnel/src/windows_backend_trust.rs",
+    "client_guard_symbols": [
+      "verify_microsoft_signature",
+      "verify_and_lock",
+      "default_system_ssh"
+    ],
+    "requires_authenticode_status": "Valid",
+    "requires_signer_certificate": true,
+    "requires_signer_subject_organization": "Microsoft Corporation",
+    "valid_other_publisher_signature_is_accepted": false,
+    "unsigned_lab_runtime_is_accepted": false,
+    "explicit_portable_client_supported": true,
+    "system32_replacement_required": false,
+    "path_requires": [
+      "local absolute canonical executable",
+      "ordinary .exe file",
+      "resolved reparse components rejected",
+      "FILE_SHARE_READ held across signature/version/spawn"
+    ],
+    "production_guard_checks_remote_server_helpers_or_dlls": false,
+    "qa_must_pin_server_helper_and_dll_provenance": true,
+    "compatible_signed_larger_fd_candidate_identified": false,
+    "larger_fd_candidate_qa_required": "New signed-file hashes, actual publisher/version check, strict512+16 exact-pair test, managed and installed-client acceptance",
+    "other_publisher_requires_separate_trust_policy_decision": true,
+    "product_guard_modified": false,
+    "frozen_beta3_changed": false
+  }
+}

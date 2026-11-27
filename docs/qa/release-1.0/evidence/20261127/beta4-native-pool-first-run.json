@@ -1,0 +1,30 @@
+{
+  "workflow_commit": "b753d3ad2d100d67d08886bcca367096120be438",
+  "run_id": 46041606345,
+  "job_id": 140650886172,
+  "attempt": 1,
+  "run_url": "https://github.com/i-shutov/flowbridge/actions/runs/46041606345",
+  "conclusion": "failure",
+  "artifact_count": 0,
+  "report": {
+    "candidate_build_runner_result_verified": true,
+    "candidate_ffi_sha256": "a193b8c9e96ecbcd5c2a79722a09e7ca3a822ce406ec997c9ab475f022f2469a",
+    "candidate_installed_by_probe": false,
+    "candidate_installer_sha256": "e0e4491cd97b30aa52b52ce89a7a8396a2fc11902bec3e70bed8ebfd722450b0",
+    "candidate_manifest_sha256": "3542633d089aff80e379f30db8be6f301edae462f38f70ea07c5b8ba76011703",
+    "candidate_sha": "c8881dada43e3183a0340dc823105bdcdac71171",
+    "candidate_tree": "ce336e83bb724a65bf512e79e286c97fb0cb3190",
+    "error_type": "CalledProcessError",
+    "interactive_gui_tested": false,
+    "managed_pool_512_proved": false,
+    "phase": "COMPILED_WIN32_POLICY",
+    "qa_sha": "c45fce1675706bcf5612f7b5fceeea54a1d56594",
+    "qa_tree": "233f794cdc09bdc1c5614bfc358584131effe6f8",
+    "raw_single_backend_512_tested": false,
+    "reason": "NATIVE_POOL_WRAPPER_FAILURE",
+    "schema": "flowbridge-native-win11-candidate-managed-pool-512-v1",
+    "service_session": 0,
+    "status": "BLOCKED",
+    "windows_build": 22631
+  }
+}

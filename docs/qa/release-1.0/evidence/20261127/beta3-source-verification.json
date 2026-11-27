@@ -1,0 +1,174 @@
+{
+  "date_utc": "2026-11-27",
+  "environment": {
+    "architecture": "x86_64",
+    "git": "git version 2.56.1",
+    "os": "Linux",
+    "python": "3.12.14"
+  },
+  "invocation": {
+    "fixture_env": {
+      "FLOWBRIDGE_BETA2_FIXTURE_ROOT": "product"
+    },
+    "metadata": [
+      "python",
+      "tools/explicit_beta_metadata.py",
+      "check"
+    ],
+    "stage": [
+      "python",
+      "qa/tools/stage_internal_beta3.py",
+      "--source",
+      "product",
+      "--out-dir",
+      "beta3-staged"
+    ]
+  },
+  "qa_snapshot_file_sha256": {
+    ".github/workflows/internal-beta3-staging-contract.yml": "7f625f8af5b135df93026fe57f50fe9152e01e8d1ca230efaae80a55cbd8b88c",
+    "tests/test_internal_windows_build_preflight.py": "fb6f1b0757efb08a968ce009e092a3336bce128c3f69b7600c0428ab17606d33",
+    "tests/test_stage_internal_beta3.py": "87dc979dbf6f50cfa0bf719c2930aff5d4dfec23ab666049b77f312e94c9a54a",
+    "tools/internal_windows_build_preflight.py": "ac17bf68485622027559b85a1206ab45e8384b8be97bfa70625c9ab8ed51c27b",
+    "tools/stage_internal_beta3.py": "c3bd2189a32a689b1feaa2f0477660abd4e271501ce55448a58ef146e9338bd2"
+  },
+  "qa_workflow_upload_guard": {
+    "existing_non_upload_workflow_structure_preserved": true,
+    "existing_upload_predicates_preserved": true,
+    "new_staging_workflow_upload_steps": 0,
+    "private_only_upload_steps": 26,
+    "result": "PASS",
+    "upload_steps_by_workflow": {
+      ".github/workflows/ci.yml": 9,
+      ".github/workflows/dns-vertical.yml": 1,
+      ".github/workflows/flowbridge-r39-win10-w1-usermode.yml": 1,
+      ".github/workflows/flowbridge-w2b2-pinned-zip-native-replay.yml": 1,
+      ".github/workflows/flowbridge-w2b2-uninstall-repro.yml": 1,
+      ".github/workflows/flowbridge-win10-readonly-inventory-qa.yml": 1,
+      ".github/workflows/flowbridge-win10-w2a-cli-smoke.yml": 1,
+      ".github/workflows/flowbridge-win10-w2b0-ssh-readiness.yml": 1,
+      ".github/workflows/flowbridge-win10-w2b1-real-ssh.yml": 1,
+      ".github/workflows/flowbridge-win10-w2b2-exact-gui-installer.yml": 3,
+      ".github/workflows/wfp-scope.yml": 1,
+      ".github/workflows/windows-dpi-runtime-vm.yml": 1,
+      ".github/workflows/windows-driver.yml": 2,
+      ".github/workflows/windows-real-ssh.yml": 1,
+      ".github/workflows/windows-wfp-runtime-vm.yml": 1
+    },
+    "workflow_baseline_commit": "d903f2aef442a59c5e792746e31476cac0b50b54",
+    "yaml_workflows_parsed": 17
+  },
+  "result": "PASS",
+  "schema": "flowbridge-beta3-local-source-verification-v1",
+  "scope": "Hosted Linux source-only verification",
+  "scope_limits": {
+    "cargo_locked_workspace_check": "NOT_RUN",
+    "cargo_tunnel_library_tests": "NOT_RUN",
+    "github_actions_outcome": "NOT_VERIFIED",
+    "native_win10_owner_qa": "NOT_RUN",
+    "native_win11_validation": "NOT_RUN",
+    "native_windows_build": "NOT_RUN",
+    "pinned_nsis_binary_execution": "NOT_RUN",
+    "windows_build_helper_tests": "SIMULATED_ON_LINUX"
+  },
+  "source": {
+    "cargo_lock_sha256": "7873affb09ffbb45dcb811b30555ad3844c0e4ce4da995e4a7f22130483d4b29",
+    "commit": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+    "metadata": {
+      "version": "0.3.0-beta.2",
+      "version_consistency": "PASS"
+    },
+    "tracked_files": 308,
+    "tree": "19bc86bb16da826ff59352482d34e79c0ee41c82"
+  },
+  "staged": {
+    "cargo_lock_reversioned_workspace_packages": [
+      "flowbridge-capture",
+      "flowbridge-cli",
+      "flowbridge-core",
+      "flowbridge-ffi",
+      "flowbridge-net",
+      "flowbridge-runtime",
+      "flowbridge-tunnel"
+    ],
+    "cargo_lock_sha256": "d1f0a9399a48ab48e8ccce61aedd484bf7efce0c1142a69ed8e2738d46aa30e6",
+    "cargo_lock_unchanged_packages": 68,
+    "changed_tracked_files": [
+      ".github/workflows/explicit-socks-beta-macos.yml",
+      ".github/workflows/explicit-socks-beta-windows.yml",
+      "Cargo.lock",
+      "Cargo.toml",
+      "packaging/explicit-beta.json",
+      "packaging/windows/README-EXPLICIT-BETA.txt",
+      "packaging/windows/build-explicit-beta.py",
+      "tests/test_explicit_beta_candidate.py",
+      "tests/test_explicit_beta_metadata.py"
+    ],
+    "commit": "01323038b64bb4db08401ed6a0e78876b9b3eedc",
+    "contract": {
+      "macos_bundle_id": "org.flowbridge.FlowBridgeExplicitBeta",
+      "macos_bundle_version": "3.0.3",
+      "macos_installer": "FlowBridge-0.3.0-beta.3-macOS-universal-explicit-beta.pkg",
+      "macos_short_version": "0.3.0",
+      "release_approved": false,
+      "schema": "flowbridge-explicit-beta-version-v1",
+      "version": "0.3.0-beta.3",
+      "windows_file_version": "0.3.0.3",
+      "windows_installer": "FlowBridge-0.3.0-beta.3-windows-x64-setup.exe",
+      "windows_namespace": "FlowBridgeExplicitBeta"
+    },
+    "git_commit_count": 1,
+    "git_remote_count": 0,
+    "git_tag_count": 0,
+    "license_blob_preserved": true,
+    "metadata": {
+      "version": "0.3.0-beta.3",
+      "version_consistency": "PASS"
+    },
+    "paths_and_modes_preserved": true,
+    "status": "PRIVATE_SOURCE_ONLY_READY_NOT_BUILT",
+    "tree": "19df7a94071f38be6b8aa3530e1ded7a954a02a8",
+    "unchanged_tracked_files": 299
+  },
+  "test_suites": {
+    "offline-cutter": {
+      "command": "python -m unittest discover -s qa/tests -p 'test_stage_internal_beta3.py' -v",
+      "passed": 6,
+      "result": "PASS"
+    },
+    "staged-all-python": {
+      "command": "python -m unittest discover -s tests -p 'test_*.py' -v",
+      "passed": 103,
+      "result": "PASS"
+    },
+    "staged-explicit-packaging": {
+      "command": "python -m unittest discover -s tests -p 'test_explicit_beta*.py' -v",
+      "passed": 50,
+      "result": "PASS"
+    },
+    "windows-build-helper-simulated": {
+      "command": "python -m unittest discover -s qa/tests -p 'test_internal_windows_build_preflight.py' -v",
+      "passed": 9,
+      "result": "PASS"
+    }
+  },
+  "trust_flags": {
+    "a7_internal_deployment_approved": false,
+    "driver_built_or_installed": false,
+    "independent_a5_a6_security_accepted": false,
+    "installer_built": false,
+    "installer_installed": false,
+    "installer_sha256": null,
+    "new_win10_owner_qa_accepted": false,
+    "product_acceptance_target": "Windows 10 Pro 22H2 x64",
+    "public_release_or_upload_performed": false
+  },
+  "workflow_syntax": {
+    "embedded_python_blocks_compiled": [
+      "Assert the product source is the exact security-reviewed commit",
+      "Stage and verify the ACTUAL pinned security tree without remotes or installers",
+      "Assert no installer or package generated or uploaded by staging test"
+    ],
+    "source_pin_matches": true,
+    "yaml_parsed": true
+  }
+}

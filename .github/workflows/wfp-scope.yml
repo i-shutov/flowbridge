@@ -24,7 +24,7 @@ jobs:
       - name: Actual kernel filter scope and cleanup without loading a driver
         run: python tests/windows_wfp_scope.py --executable build/wfp-scope/Release/FlowBridgeWfpScopeQA.exe --output build/verification/wfp-scope/result.json
       - uses: actions/upload-artifact@v7.0.0
-        if: always()
+        if: ${{ github.event.repository.private == true && (always()) }}
         with:
           name: FlowBridge-real-WFP-scope-QA
           path: build/verification/wfp-scope/

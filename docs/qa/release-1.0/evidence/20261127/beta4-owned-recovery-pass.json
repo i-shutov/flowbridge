@@ -1,0 +1,38 @@
+{
+  "run_id": 46043723863,
+  "job_id": 140657624275,
+  "attempt": 1,
+  "workflow_commit": "e7092049b6ae63274d7f0fe84f19b3cd35771659",
+  "run_url": "https://github.com/i-shutov/flowbridge/actions/runs/46043723863",
+  "artifact_count": 0,
+  "conclusion": "success",
+  "report": {
+    "candidate_pins_unchanged": true,
+    "clean_baseline_verified": true,
+    "empty_beta_settings_removed": true,
+    "failed_run": 46041604814,
+    "host": {
+      "account": "VM-326272\\Admin",
+      "architecture": "x64",
+      "build": 22631,
+      "computer": "VM-326272",
+      "os": "Windows 11 Pro",
+      "token_elevated": true,
+      "ubr": 2861
+    },
+    "mutation_started": true,
+    "native_lifecycle_accepted_by_recovery": false,
+    "nsis_machine_pending_rename_queue": {
+      "inspection": "NOT_INSPECTED",
+      "qa_direct_write": false
+    },
+    "observation_run": 46042401435,
+    "observed_work_and_synthetic_profile_verified": true,
+    "observed_work_removed": true,
+    "runner_result_sha256": "92a86edace76982d8b6d17539c9503de86cc2b8d84ce651acef1b1137b9eff64",
+    "schema": "flowbridge-win11-beta4-retained-cleanup-v1",
+    "status": "OWNED_RECOVERY_COMPLETE",
+    "synthetic_profile_removed": true,
+    "work_id": "qa-beta4-74021cde30d34727bcce54f0d6a85283"
+  }
+}

@@ -1,0 +1,481 @@
+{
+  "schema": "flowbridge-qa-pr93-release-limits-observation-v1",
+  "runs": {
+    "pr93_capture": {
+      "id": 45998507259,
+      "name": "Rust capture integration candidate",
+      "head_sha": "06c7d7d5cc005be092dd1c944b0c8dcd265d5726",
+      "event": "pull_request",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "failure",
+      "html_url": "https://github.com/i-shutov/flowbridge/actions/runs/45998507259",
+      "artifact_count": 0,
+      "jobs": [
+        {
+          "id": 140503872172,
+          "name": "integration (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45998507259/job/140503872172"
+        },
+        {
+          "id": 140503872649,
+          "name": "integration (windows-2025)",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45998507259/job/140503872649"
+        },
+        {
+          "id": 140503872693,
+          "name": "g2-kernel-connection-owner",
+          "status": "completed",
+          "conclusion": "failure",
+          "failed_steps": [
+            "Real independent OS curl IPv4 and IPv6 kernel owner evidence (no driver)"
+          ],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45998507259/job/140503872693"
+        },
+        {
+          "id": 140503872726,
+          "name": "integration (macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45998507259/job/140503872726"
+        }
+      ]
+    },
+    "pr93_rust_native": {
+      "id": 45998507229,
+      "name": "rust-and-native-applications",
+      "head_sha": "06c7d7d5cc005be092dd1c944b0c8dcd265d5726",
+      "event": "pull_request",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/i-shutov/flowbridge/actions/runs/45998507229",
+      "artifact_count": 0,
+      "jobs": [
+        {
+          "id": 140503872264,
+          "name": "macos-application",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45998507229/job/140503872264"
+        },
+        {
+          "id": 140503872571,
+          "name": "windows-application",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45998507229/job/140503872571"
+        },
+        {
+          "id": 140503872658,
+          "name": "rust (macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45998507229/job/140503872658"
+        },
+        {
+          "id": 140503872822,
+          "name": "rust (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45998507229/job/140503872822"
+        },
+        {
+          "id": 140503872952,
+          "name": "rust (windows-2025)",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45998507229/job/140503872952"
+        }
+      ]
+    },
+    "pr93_real_ssh": {
+      "id": 45998507203,
+      "name": "Real Windows OpenSSH acceptance",
+      "head_sha": "06c7d7d5cc005be092dd1c944b0c8dcd265d5726",
+      "event": "pull_request",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "failure",
+      "html_url": "https://github.com/i-shutov/flowbridge/actions/runs/45998507203",
+      "artifact_count": 0,
+      "jobs": [
+        {
+          "id": 140503871736,
+          "name": "Windows OpenSSH (raw)",
+          "status": "completed",
+          "conclusion": "failure",
+          "failed_steps": [
+            "Actual Windows OpenSSH raw scenario"
+          ],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45998507203/job/140503871736"
+        },
+        {
+          "id": 140503872243,
+          "name": "Windows OpenSSH (managed)",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45998507203/job/140503872243"
+        }
+      ]
+    },
+    "pr92_real_ssh": {
+      "id": 45997867224,
+      "name": "Real Windows OpenSSH acceptance",
+      "head_sha": "295fd7051646c1d9907904edc2ea0a1d01ceb671",
+      "event": "pull_request",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/i-shutov/flowbridge/actions/runs/45997867224",
+      "artifact_count": 0,
+      "jobs": [
+        {
+          "id": 140501708682,
+          "name": "windows-openssh",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45997867224/job/140501708682"
+        }
+      ]
+    },
+    "win11_g2": {
+      "id": 45998584523,
+      "name": "Win11 local G2 ETW diagnostics (observation only)",
+      "head_sha": "31b40a3ab082ea51d7e782e33f1272ab2ab5c09f",
+      "event": "workflow_dispatch",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "failure",
+      "html_url": "https://github.com/i-shutov/flowbridge/actions/runs/45998584523",
+      "artifact_count": 0,
+      "jobs": [
+        {
+          "id": 140504148023,
+          "name": "observe",
+          "status": "completed",
+          "conclusion": "failure",
+          "failed_steps": [
+            "Observe loopback TCP ownership events on the verified Win11 host"
+          ],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45998584523/job/140504148023"
+        }
+      ]
+    },
+    "main_g2_hosted": {
+      "id": 45998447979,
+      "name": "rust-and-native-applications",
+      "head_sha": "31b40a3ab082ea51d7e782e33f1272ab2ab5c09f",
+      "event": "push",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/i-shutov/flowbridge/actions/runs/45998447979",
+      "artifact_count": 0,
+      "jobs": [
+        {
+          "id": 140503676197,
+          "name": "rust (windows-2025)",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45998447979/job/140503676197"
+        },
+        {
+          "id": 140503676603,
+          "name": "rust (macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45998447979/job/140503676603"
+        },
+        {
+          "id": 140503676637,
+          "name": "rust (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45998447979/job/140503676637"
+        },
+        {
+          "id": 140503676640,
+          "name": "macos-application",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45998447979/job/140503676640"
+        },
+        {
+          "id": 140503676651,
+          "name": "windows-application",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45998447979/job/140503676651"
+        }
+      ]
+    },
+    "native_ale": {
+      "id": 45999914730,
+      "name": "Win11 own loopback ALE endpoint handle probe",
+      "head_sha": "46b766f1e8604d27401764c3c1987fa2d42e5e28",
+      "event": "workflow_dispatch",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/i-shutov/flowbridge/actions/runs/45999914730",
+      "artifact_count": 0,
+      "jobs": [
+        {
+          "id": 140508617104,
+          "name": "observe",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45999914730/job/140508617104"
+        }
+      ]
+    },
+    "main_ale_hosted": {
+      "id": 45999775594,
+      "name": "rust-and-native-applications",
+      "head_sha": "46b766f1e8604d27401764c3c1987fa2d42e5e28",
+      "event": "push",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/i-shutov/flowbridge/actions/runs/45999775594",
+      "artifact_count": 0,
+      "jobs": [
+        {
+          "id": 140508144410,
+          "name": "windows-application",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45999775594/job/140508144410"
+        },
+        {
+          "id": 140508144697,
+          "name": "rust (windows-2025)",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45999775594/job/140508144697"
+        },
+        {
+          "id": 140508144799,
+          "name": "rust (macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45999775594/job/140508144799"
+        },
+        {
+          "id": 140508144967,
+          "name": "rust (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45999775594/job/140508144967"
+        },
+        {
+          "id": 140508145521,
+          "name": "macos-application",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45999775594/job/140508145521"
+        }
+      ]
+    }
+  },
+  "pr93_real_ssh": {
+    "executed_merge_sha": "e14aa93e83678c4a4aa3c405154bfea7a187d303",
+    "executed_tree": "ecf3634b143a65b34f4c70f9e3643730918eca64",
+    "host_platform": "Windows-2025Server-10.0.26100-SP0",
+    "hosted": true,
+    "loopback_only": true,
+    "managed": {
+      "job_id": 140503872243,
+      "passed": true,
+      "held": 128,
+      "expected_overload_rejections": 1152,
+      "churn_attempted": 10000,
+      "churn_started": 10000,
+      "churn_failures": 0,
+      "starts_per_second": 15,
+      "workers": 4,
+      "independent_children": true,
+      "worker_transitions": [
+        2,
+        4,
+        3,
+        2
+      ]
+    },
+    "strict_bare": {
+      "job_id": 140503871736,
+      "passed": false,
+      "flowbridge_ffi_loaded": false,
+      "flowbridge_cli_used": false,
+      "minimum_required_held": 512,
+      "selected_held_ceiling": 512,
+      "reported_tiers": [
+        {
+          "requested": 64,
+          "accepted_held": 64,
+          "failed_new": 0
+        },
+        {
+          "requested": 128,
+          "accepted_held": 128,
+          "failed_new": 0
+        },
+        {
+          "requested": 192,
+          "accepted_held": 192,
+          "failed_new": 0
+        },
+        {
+          "requested": 256,
+          "accepted_held": 246,
+          "failed_new": 1
+        },
+        {
+          "requested": 512,
+          "accepted_held": 246,
+          "failed_new": 1
+        }
+      ],
+      "peak_held": 246,
+      "actual_attempts": 248,
+      "recovery_successes": 0,
+      "capacity_baseline_verified": false,
+      "resource_recovery_verified": false,
+      "client_resource_error_counts": {},
+      "server_tail_resource_error_counts": {},
+      "error_type": "RuntimeError",
+      "error_winerror": null
+    }
+  },
+  "pr92_legacy_real_ssh": {
+    "job_id": 140501708682,
+    "executed_merge_sha": "b07b13076237757bb99d4ba65e9aec54e4909694",
+    "host_platform": "Windows-2025Server-10.0.26100-SP0",
+    "managed": {
+      "passed": true,
+      "held": 128,
+      "churn": 10000,
+      "rejected": 1152
+    },
+    "owned_pool": {
+      "passed": true,
+      "independent_children": 4
+    },
+    "raw": {
+      "minimum_required_held": 128,
+      "selected_held_ceiling": 512,
+      "peak_held": 246,
+      "recovery_successes": 16,
+      "capacity_baseline_verified": true,
+      "raw_512_proved": false
+    }
+  },
+  "g2_etw": {
+    "collector_source_sha": "06c7d7d5cc005be092dd1c944b0c8dcd265d5726",
+    "collector_sha256": "a4bfd117f70b05798e36d95529a1f9276d44256c149e16cff29388229f7292b8",
+    "hosted": {
+      "job_id": 140503872693,
+      "error_code": "kernel_connection_id_missing",
+      "complete_connect_payloads": 5,
+      "connect_events_without_connid": 0,
+      "connect_payloads_for_pinned_clients": 4,
+      "ipv4_matches_with_nonzero_connid": 0,
+      "ipv4_matches_with_zero_connid": 2,
+      "ipv6_matches_with_nonzero_connid": 0,
+      "ipv6_matches_with_zero_connid": 2,
+      "kernel_network_events": 25,
+      "kernel_tcp_connect_events": 5,
+      "loopback_requests_received": 4,
+      "owned_cleanup_verified": true,
+      "phase": "kernel_owner_match",
+      "private_trace_cleanup_verified": true,
+      "verified_client_owners": 0,
+      "packet_bound_proved": false,
+      "g2_accepted": false
+    },
+    "self_hosted_win11": {
+      "job_id": 140504148023,
+      "error_code": "kernel_connection_id_missing",
+      "complete_connect_payloads": 4,
+      "connect_events_without_connid": 0,
+      "connect_payloads_for_pinned_clients": 4,
+      "ipv4_matches_with_nonzero_connid": 0,
+      "ipv4_matches_with_zero_connid": 2,
+      "ipv6_matches_with_nonzero_connid": 0,
+      "ipv6_matches_with_zero_connid": 2,
+      "kernel_network_events": 20,
+      "kernel_tcp_connect_events": 4,
+      "loopback_requests_received": 4,
+      "owned_cleanup_verified": true,
+      "phase": "kernel_owner_match",
+      "private_trace_cleanup_verified": true,
+      "verified_client_owners": 0,
+      "packet_bound_proved": false,
+      "g2_accepted": false
+    }
+  },
+  "ale_owned_socket": {
+    "job_id": 140508617104,
+    "main_launcher": {
+      "sha": "46b766f1e8604d27401764c3c1987fa2d42e5e28",
+      "tree": "2e6019ed1e312c54f7c82053167677a7721fa40b",
+      "parents": [
+        "31b40a3ab082ea51d7e782e33f1272ab2ab5c09f"
+      ],
+      "files": [
+        ".github/workflows/win11-own-ale-endpoint-probe.yml"
+      ]
+    },
+    "helper_source": {
+      "sha": "94b13b0c0ae4bc75c799903e44d55e81a45e10d9",
+      "tree": "171f7ac973b57aaa6b3910e3a1307bc8628d582e",
+      "parents": [
+        "06c7d7d5cc005be092dd1c944b0c8dcd265d5726"
+      ],
+      "files": [
+        "tests/test_windows_ale_endpoint_handle_probe.py",
+        "tests/windows_ale_endpoint_handle_probe.py"
+      ]
+    },
+    "result": {
+      "accepted_connections": 2,
+      "all_nonzero": true,
+      "distinct_between_sockets": true,
+      "g2_accepted": false,
+      "origin_process_bound": false,
+      "owned_sockets_closed": true,
+      "packet_owner_bound": false,
+      "queries_completed": 4,
+      "reason": "owned_socket_endpoint_handles_observed",
+      "returned_length_valid": true,
+      "stable_per_socket": true,
+      "status": "PASS"
+    }
+  }
+}

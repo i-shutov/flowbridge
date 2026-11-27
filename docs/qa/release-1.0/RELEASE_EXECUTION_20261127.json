@@ -1,0 +1,1082 @@
+{
+  "schema": "flowbridge-release-execution-v1",
+  "date": "2026-11-27",
+  "timezone": "Europe/Moscow",
+  "project": "i-shutov/flowbridge",
+  "plan": "../../RELEASE_1_0_PLAN.md",
+  "distribution": "internal-only",
+  "candidate_version": "0.3.0-beta.4",
+  "release_target": "Windows 11 Pro x64; actual candidate acceptance required",
+  "new_build_and_engineering_qa_host": "Windows 11 Pro build 22631 native x64; exact runner/host/account smoke PASS",
+  "product_release_accepted": false,
+  "publisher_release_approved": false,
+  "release_tag_created": false,
+  "installer_built": true,
+  "win10_beta3_native_accepted": false,
+  "win11_product_accepted": false,
+  "wfp_g2_accepted": false,
+  "source": {
+    "sha": "1261201d8561ee4e70faccc8699f60606a71c93b",
+    "tree": "b42325734201827e6b4d7566b4b3418205d78889",
+    "pr": "https://github.com/i-shutov/flowbridge/pull/95",
+    "metadata_pr": "https://github.com/i-shutov/flowbridge/pull/94",
+    "security_baseline": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+    "status": "SOURCE_FIXED_AND_PRIVATE_CANDIDATE_BUILT",
+    "hosted_ci": {
+      "jobs_passed": 14,
+      "jobs_total": 15,
+      "remaining_failure": "Independent WFP G2; not a 0.3.0 explicit-SOCKS release condition",
+      "evidence": "evidence/20261127/win32-pool512-policy-ci.json"
+    }
+  },
+  "main": {
+    "sha": "e7092049b6ae63274d7f0fe84f19b3cd35771659",
+    "runner_smoke_pr": 90,
+    "runner_smoke_merge": "40f8b66f356dbe26b75458b6508528c36d1eb0f8",
+    "hosted_ci": {
+      "run_id": 46025445113,
+      "source_sha": "7ec261fde7ca15e20830143131bd116e8fa36f19",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "jobs_passed": 5,
+      "jobs_total": 5,
+      "artifacts": 0,
+      "evidence": "evidence/20261127/main-7ec261-terminal-ci.json"
+    },
+    "self_hosted_smoke": {
+      "run_id": 45982267687,
+      "job_id": 140448907494,
+      "source_sha": "f1d1e71e703caf805cfc7e492f908db9e0d0c4e4",
+      "conclusion": "success",
+      "runner_name": "win11-flowbridge",
+      "machine_name": "VM-326272",
+      "windows_edition": "Windows 11 Pro",
+      "windows_build": 22631,
+      "native_arch": "x64",
+      "expected_account_verified": true,
+      "elevated_token_verified": true,
+      "execution_policy": "Restricted",
+      "execution_policy_changed": false,
+      "artifact_count": 0,
+      "previous_run_id": 45981565644,
+      "previous_failure": "Default powershell shell dot-sourced a .ps1 while execution policy forbade script files"
+    },
+    "registered_runners_observed": {
+      "method": "authenticated GitHub repository Settings > Actions > Runners",
+      "date": "2026-11-27",
+      "runners": [
+        {
+          "name": "win11-flowbridge",
+          "labels": [
+            "self-hosted",
+            "Windows",
+            "X64",
+            "win11-flowbridge"
+          ],
+          "status": "Active"
+        }
+      ],
+      "native_win10_runner_present": false
+    },
+    "manual_diagnostics": {
+      "frozen_static_inventory": {
+        "source_sha": "8355c01b9d8c3d444f371e4b7b6fcb317b65bdb7",
+        "run_id": 46004506024
+      },
+      "frozen_rustsec": {
+        "workflow_sha": "464cba6b2a0f8abd95055f334e8b752c011e86cc",
+        "run_id": 46006587890
+      },
+      "wsk_object_compile": {
+        "source_sha": "229e37263b5927167795eb2f76097299e4b9770a",
+        "run_id": 46003874189
+      },
+      "raw512_expanded_table_lab": {
+        "source_sha": "78f5ec602500ab3478632a249afe55f334b593c0",
+        "run_id": 46007206276
+      },
+      "frozen_notice_coverage": {
+        "source_sha": "03858fb0710e414992f2ed872b3384c08ee7ac8b",
+        "run_id": 46025031777,
+        "status": "PASS_READ_ONLY"
+      },
+      "wsk_lifecycle_object_compile": {
+        "source_sha": "a7476671a5b9574dfe8d6f5a307148b5fe27ef11",
+        "run_id": 46025550513,
+        "status": "PASS_OBJECT_ONLY"
+      }
+    },
+    "prior_hosted_ci": {
+      "run_id": 46007168400,
+      "source_sha": "0a3771bf5e39e7397f5af4c62cd51d7f7b79cf99",
+      "status": "completed",
+      "conclusion": "success",
+      "evidence": "evidence/20261127/main-diagnostic-ci.json",
+      "attempt": 1,
+      "jobs_passed": 5,
+      "jobs_total": 5,
+      "artifacts": 0
+    },
+    "tree": "f248fb965427041efdeddea63e79baebdb6e84a1",
+    "latest_workflow_head_ci": {
+      "source_sha": "e7092049b6ae63274d7f0fe84f19b3cd35771659",
+      "run_id": 46043668621,
+      "status": "completed",
+      "conclusion": "success",
+      "scope": "Unrelated automatic Rust/native repeat; not substituted for original-package manual gates",
+      "jobs_total": 5,
+      "jobs_passed": 5,
+      "artifacts": 0,
+      "evidence": "evidence/20261127/main-e709-terminal-ci.json"
+    }
+  },
+  "local_source_validation": {
+    "evidence": "evidence/20261127/beta3-source-verification.json",
+    "junit": "evidence/20261127/beta3-source-verification.junit.xml",
+    "source_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+    "staged_tree": "19df7a94071f38be6b8aa3530e1ded7a954a02a8",
+    "files_total": 308,
+    "modified_files": 9,
+    "unchanged_files": 299,
+    "workspace_packages_updated": 7,
+    "other_lock_entries_unchanged": 68,
+    "cutter_tests": 6,
+    "simulated_windows_nsis_tests": 9,
+    "staged_python_tests": 103,
+    "packaging_tests_included_in_python": 50,
+    "unique_tests": 118,
+    "native_windows_or_nsis_executed": false
+  },
+  "build_tooling": {
+    "script": "tools/stage_internal_beta4.py",
+    "source_sha": "16b385c90160956bd3c64e602953d75434e5bc8e",
+    "source_tree": "f0906b312c580f419db9e34ada6c31bf9ff72af8",
+    "expected_candidate_tree": "ce336e83bb724a65bf512e79e286c97fb0cb3190",
+    "native_workflow": {
+      "source_sha": "5e880fdf393fd84e5b0d859b7d42612173c3a57f",
+      "run_id": 46040903481,
+      "job_id": 140648094899,
+      "conclusion": "success",
+      "artifact_count": 0
+    },
+    "utf8_fix": {
+      "reason": "UnicodeEncodeError printing verbose NSIS output to redirected Windows log",
+      "flag": "-I -X utf8",
+      "focused_tests_passed": 4,
+      "candidate_product_tree_changed": false,
+      "diagnosis": "evidence/20261127/beta4-nsis-encoding-diagnosis.json"
+    },
+    "failed_initial_run_preserved": 46037525707,
+    "win10_allowed": false,
+    "execution_policy_changed": false
+  },
+  "historical_beta2": {
+    "source_sha": "86583a1a0487b9d383c0122b24558e620bde5b9c",
+    "installer_sha256": "0699bed4acaa1b9df9b63c658808b08fd65b5953cacdaaddb7a13953389e19f4",
+    "win10_a0_a3": "PASS_ONLY_FOR_ORIGINAL_BYTES",
+    "new_ssh_fixes_included": false
+  },
+  "public_artifact_incident": {
+    "run_id": 45975037904,
+    "source_sha": "40f8b66f356dbe26b75458b6508528c36d1eb0f8",
+    "cause": "Infrastructure merge triggered inherited public CI before artifact privacy guard was applied",
+    "run_conclusion": "cancelled",
+    "artifact_count": 11,
+    "artifacts": [
+      {
+        "id": 15187570311,
+        "name": "FlowBridge-real-SSH-verification",
+        "size_in_bytes": 200687
+      },
+      {
+        "id": 15187350470,
+        "name": "FlowBridge-native-session-ubuntu-24.04",
+        "size_in_bytes": 851
+      },
+      {
+        "id": 15187031432,
+        "name": "FlowBridge-wfp-wire-fixture-windows-2025",
+        "size_in_bytes": 396
+      },
+      {
+        "id": 15186767355,
+        "name": "FlowBridge-windows-x64",
+        "size_in_bytes": 1764265
+      },
+      {
+        "id": 15186622885,
+        "name": "FlowBridge-windows-verification",
+        "size_in_bytes": 218181
+      },
+      {
+        "id": 15186263304,
+        "name": "FlowBridge-wfp-wire-fixture-ubuntu-24.04",
+        "size_in_bytes": 392
+      },
+      {
+        "id": 15186223915,
+        "name": "FlowBridge-wfp-wire-fixture-macos-15",
+        "size_in_bytes": 392
+      },
+      {
+        "id": 15186163937,
+        "name": "FlowBridge-native-session-windows-2025",
+        "size_in_bytes": 865
+      },
+      {
+        "id": 15186049094,
+        "name": "FlowBridge-capacity-windows-2025",
+        "size_in_bytes": 518
+      },
+      {
+        "id": 15185909821,
+        "name": "FlowBridge-exact-source",
+        "size_in_bytes": 713501
+      },
+      {
+        "id": 15185879669,
+        "name": "FlowBridge-capacity-ubuntu-24.04",
+        "size_in_bytes": 514
+      }
+    ],
+    "cleanup_status": "DONE_EXACT_11_DELETED",
+    "prevention_main_commit": "cc547d204756712f14d05d38b34e6ace9a3d4a31",
+    "prevention_verified_new_run_artifact_count": 0,
+    "browser_auth": "SIGNED_IN_VERIFIED",
+    "owner_authorized": true,
+    "deletion_attempted": true,
+    "deleted_count": 11,
+    "remaining_count": 0,
+    "verification": "Authenticated UI confirmed each named deletion; artifact API returned []; run remains completed/cancelled at original SHA; original Windows application job log is readable",
+    "prior_approval_block": {
+      "cleanup_status": "BLOCKED_AUTOMATIC_APPROVAL_REVIEW",
+      "deleted_count": 0,
+      "remaining_count": 11,
+      "rejection_reason": "Automatic approval review demanded a fresh action-time confirmation for irreversible deletion and did not accept the owner instruction. First confirmation dialog dismissed; no workaround attempted."
+    },
+    "action_time_owner_confirmation": true,
+    "completed_at_utc": "2026-11-27T12:54:05Z",
+    "evidence": "evidence/20261127/artifact-cleanup.json"
+  },
+  "work": [
+    {
+      "id": "R0",
+      "status": "DONE",
+      "result": "Repository and release provenance restored"
+    },
+    {
+      "id": "R1",
+      "status": "PASS",
+      "result": "Native Win11 runner/host/account/x64/admin smoke accepted; Restricted policy unchanged"
+    },
+    {
+      "id": "R2",
+      "status": "DONE",
+      "result": "Private-only upload guards active; exact 11 approved artifacts deleted after fresh action-time confirmation; API remaining 0, run/logs/commits retained"
+    },
+    {
+      "id": "R3",
+      "status": "SOURCE_PASS_RAW512_LAB_PASS_SIGNED_RUNTIME_BLOCKED_G2_OPEN",
+      "result": "Unsigned laboratory512+16 passed; exact latest official Microsoft preview client/session remain256-slot, no adequate signed candidate identified; WSK lifecycle object compiles but native authority remains open"
+    },
+    {
+      "id": "R4",
+      "status": "PASS",
+      "result": "Deterministic 9-file stage, 118 unique local tests, Windows/Linux staging CI 2/2"
+    },
+    {
+      "id": "R5",
+      "status": "PASS",
+      "result": "Pinned private beta3 installer built on verified native Win11 with official Python/Rust/NSIS and existing MSVC/SDK; no installation or upload"
+    },
+    {
+      "id": "R6",
+      "status": "PASS",
+      "result": "Actual installer, original manifest and all 13 staged payload files rehashed; source tree matches validated stage; GUI/CLI/FFI pinned, driver absent"
+    },
+    {
+      "id": "R7",
+      "status": "DEFERRED_BY_OWNER_DO_NOT_TOUCH_WIN10",
+      "result": "Owner explicitly excluded Win10 from current work; no transfer, installation, GUI, SSH or Codex action on that host"
+    },
+    {
+      "id": "R8",
+      "status": "FROZEN_NOTICE_BYTES_AND_RUSTSEC_PASS_NEXT_METADATA_SOURCE_PREPARED_FORMAL_A5_A6_OPEN",
+      "result": "113 notice sections and three NSIS distribution plugins verified against original frozen files; MSVC configuration observed; future metadata/attribution correction published in draft PR94 and51 focused tests passed; legal/runtime/privacy acceptance remains open"
+    },
+    {
+      "id": "R9",
+      "status": "NOT_READY",
+      "result": "Owner internal-pilot GO after exact-byte acceptance"
+    }
+  ],
+  "access_blockers": [],
+  "next_actions": [
+    "Win11: fresh interactive-desktop/isolation preflight and exact original beta4 GUI/SSH acceptance using pinned desktop card (not Session 0)",
+    "A5: original NSIS embedded member evidence, MSVC link/runtime and distribution terms, component obligations review",
+    "A6: fresh exact-tree RustSec and native negative/privacy cases; focused signature-verifier exceptional child cleanup review",
+    "Independent A5/A6/A7 review and internal delivery decision; draft handoff prepared; no public binaries",
+    "Keep Win10 untouched and WFP/G2 separate; preserve frozen candidate"
+  ],
+  "candidate": {
+    "version": "0.3.0-beta.4",
+    "source_commit": "c8881dada43e3183a0340dc823105bdcdac71171",
+    "source_tree": "ce336e83bb724a65bf512e79e286c97fb0cb3190",
+    "original_product_commit": "1261201d8561ee4e70faccc8699f60606a71c93b",
+    "installer_sha256": "e0e4491cd97b30aa52b52ce89a7a8396a2fc11902bec3e70bed8ebfd722450b0",
+    "gui_sha256": "8317e93ecda430848cfe4e565daa80c90297c0a6ef66a9b8b60263f1666a837a",
+    "cli_sha256": "12dfc4ec1f605cfb41a69f574c32f68eaf4ddbe7a4a5eebec02a662c98b6b824",
+    "ffi_sha256": "a193b8c9e96ecbcd5c2a79722a09e7ca3a822ce406ec997c9ab475f022f2469a",
+    "manifest_sha256": "3542633d089aff80e379f30db8be6f301edae462f38f70ea07c5b8ba76011703",
+    "qa_harness_sha256": "46cd8970cf669e0be3493998aeec6ba30ecb464dd399d0c3cdd972444e193a32",
+    "acceptance_tool_sha256": "faf62aabeea95ef316f5c0935177a65820ea4679ac94afe8b5461138dd17a33c",
+    "payload_files": 13,
+    "driver_included": false,
+    "signed": false,
+    "installed": false,
+    "status": "BUILT_NATIVE_POOL_AND_HEADLESS_PASS_GUI_PENDING",
+    "evidence": "evidence/20261127/beta4-native-build.json",
+    "build_run": 46040903481,
+    "original_bytes_changed_after_build": false,
+    "frozen_beta3_unchanged": true
+  },
+  "private_qa_kit": {
+    "workflow_source_sha": "ad3b7b2576b060345aa6892498f0db0897228666",
+    "workflow_sha256": "3b14bb743f3acb8487b2c961e859895053e9a99e786f00460aaa7d2d200a6506",
+    "run_id": 45988214013,
+    "job_id": 140469137208,
+    "artifact_count": 0,
+    "result": {
+      "acceptance_tool_bytes": 25507,
+      "acceptance_tool_sha256": "faf62aabeea95ef316f5c0935177a65820ea4679ac94afe8b5461138dd17a33c",
+      "candidate_index_sha256": "dbc6b7b8150378e3ca44747ed9344a8a04efc2618196b9e27da4d72a045f5348",
+      "harness_bytes": 573440,
+      "harness_sha256": "d41905fdcb2fc5f77e042d61c9aac5d640b23ca60ea0cf0965a4567dc9b105ff",
+      "installer_sha256": "6408c0bf595b0ae61a4fc05db17421dc4b03dcda241f3c1f1f997ab6583eec5b",
+      "kit_bytes": 2057147,
+      "kit_sha256": "60e13a2c9d35e441469c0b6e95b5115fa0d4e3212be8fd2f072e2c5d5baba085",
+      "manifest_sha256": "f6a94e5e8a87e571d63604ff3b2e417bf21e2e2758343171c587a43717318c99",
+      "native_build_run_attempt": 1,
+      "native_build_run_id": "45986630920",
+      "original_product_source_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+      "private_source_commit": "c6ead0f31de4c118453913d733f537ba421af616",
+      "private_source_tree": "19df7a94071f38be6b8aa3530e1ded7a954a02a8",
+      "status": "PRIVATE_KIT_READY_WIN10_NOT_RUN"
+    },
+    "evidence": "evidence/20261127/private-beta3-kit.json",
+    "win10_handoff": "checkpoints/WIN10_BETA3_NATIVE_ACCEPTANCE_HANDOFF_20261127.md",
+    "handoff_status": "DEFERRED_BY_OWNER_DO_NOT_TRANSFER_OR_RUN_ON_WIN10"
+  },
+  "owner_scope_update": {
+    "date": "2026-11-27",
+    "win10_actions": "FORBIDDEN_UNCHANGED",
+    "r7": "DEFERRED_BY_OWNER",
+    "focus": [
+      "managed pool512",
+      "new private Windows11 candidate",
+      "functional and visual Win11 acceptance",
+      "parallel WFP ownership/rundown"
+    ],
+    "codex_on_win11_required": false,
+    "exact_11_artifact_cleanup_authorized": true,
+    "exact_11_artifact_cleanup_completed": true,
+    "win11_product_acceptance_work_authorized": true
+  },
+  "diagnostic_changes": {
+    "pr": "https://github.com/i-shutov/flowbridge/pull/93",
+    "source_sha": "06c7d7d5cc005be092dd1c944b0c8dcd265d5726",
+    "tree": "ecf3634b143a65b34f4c70f9e3643730918eca64",
+    "base_product_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+    "files_changed": 7,
+    "production_code_changed": false,
+    "frozen_beta3_changed": false,
+    "combined_python_tests": 112,
+    "combined_python_result": "PASS",
+    "independent_focused_raw_tests": 14,
+    "independent_focused_g2_tests": 21,
+    "hosted_ci": {
+      "passed": 9,
+      "total": 11,
+      "artifact_count": 0,
+      "rust_native": "5/5 PASS",
+      "capture": "3/4; zero-connid G2 FAIL",
+      "windows_ssh_managed": "PASS 128 held /1152 refusals/10000 zero-failure churn/four workers",
+      "windows_ssh_raw": "FAIL minimum512; peak246; recovery not reached",
+      "evidence": "evidence/20261127/release-limit-ci.json"
+    }
+  },
+  "ci_fixture_reliability": {
+    "qa_sha": "295fd7051646c1d9907904edc2ea0a1d01ceb671",
+    "production_code_changed": false,
+    "run_id": 45997867096,
+    "conclusion": "success",
+    "attempt": 1,
+    "jobs_passed": 5,
+    "artifact_count": 0,
+    "evidence": "evidence/20261127/qa-macos-fixture-ci.json",
+    "all_qa_jobs": {
+      "passed": 13,
+      "total": 13,
+      "artifacts": 0,
+      "raw_characterization_minimum": 128,
+      "raw_peak": 246,
+      "raw_recovery": 16,
+      "strict_raw512_proved": false
+    },
+    "paired_dns_followup": {
+      "local_review_commit": "c33994d180b6bea443cbbe2d7a17066d72d3d2dd",
+      "base_sha": "ec0a8ebb649f1b8692726e276b632bf500b31ece",
+      "file_sha256": "254a7ef2564f7554d564317f5313126c493afbaf50f5d08915cb4a3c4e22fd9a",
+      "production_bytes_unchanged": true,
+      "positive_pair_test_on_all_platforms": true,
+      "explicit_conflict_keeps_owned_tcp_listener": true,
+      "new_retries": false,
+      "underlying_windows_10013_cause": "UNDETERMINED",
+      "native_ci_status": "WINDOWS_UNIT_AND_THREE_PLATFORM_DNS_PASS",
+      "ci_evidence": "evidence/20261127/qa-872657-terminal-ci.json"
+    }
+  },
+  "native_win11_g2": {
+    "evidence": "evidence/20261127/native-win11-g2.json",
+    "run_id": 45998584523,
+    "conclusion": "failure",
+    "error_code": "kernel_connection_id_missing",
+    "pinned_matches": 4,
+    "ipv4_zero_connid": 2,
+    "ipv6_zero_connid": 2,
+    "nonzero_connid": 0,
+    "owned_cleanup_verified": true,
+    "private_trace_cleanup_verified": true,
+    "artifact_count": 0,
+    "packet_bound": "UNPROVED"
+  },
+  "raw512_investigation": {
+    "evidence": "evidence/20261127/raw512-investigation.json",
+    "original_peak": 244,
+    "original_server_marker": "postauth_notify_pipe_file_limit",
+    "strict_probe_run_id": 45998507203,
+    "strict_probe_job_id": 140503871736,
+    "strict_probe_peak": 246,
+    "strict_probe_attempts": 248,
+    "strict_required_held": 512,
+    "strict_required_recovery_connections": 16,
+    "strict_probe_recovery": "NOT_REACHED_CAPACITY_MINIMUM_FAILED",
+    "strict_probe_resource_markers_observed": false,
+    "accepted": false,
+    "dependency_source_max_fds": 256,
+    "scope": "Historical signed fixture results; separate later unsigned lab does not promote this gate",
+    "later_unsigned_lab_evidence": "evidence/20261127/raw512-source-lab.json"
+  },
+  "native_win11_owned_endpoint": {
+    "evidence": "evidence/20261127/native-win11-ale-endpoint.json",
+    "run_id": 45999914730,
+    "job_id": 140508617104,
+    "conclusion": "success",
+    "source_sha": "94b13b0c0ae4bc75c799903e44d55e81a45e10d9",
+    "accepted_connections": 2,
+    "queries": 4,
+    "nonzero_stable_distinct_uint64": true,
+    "owned_sockets_closed": true,
+    "artifact_count": 0,
+    "origin_process_bound": false,
+    "g2_accepted": false
+  },
+  "qa_final_document_head_ci": {
+    "source_sha": "63936d4967529b2794e98d547e275fabe01d9f65",
+    "jobs_passed": 13,
+    "jobs_total": 13,
+    "workflow_count": 6,
+    "workflows_passed": 6,
+    "artifacts": 0,
+    "strict_raw512_proved": false,
+    "managed_pool512_proved": false,
+    "evidence": "evidence/20261127/qa-63936d4-terminal-ci.json"
+  },
+  "frozen_beta3_static_review": {
+    "source_sha": "8355c01b9d8c3d444f371e4b7b6fcb317b65bdb7",
+    "run_id": 46004506024,
+    "job_id": 140524170302,
+    "status": "TECHNICAL_STATIC_INVENTORY_COMPLETE",
+    "payload_files_verified": 13,
+    "sbom_components": 71,
+    "cargo_components": 68,
+    "external_cargo_checksums_verified": 61,
+    "license_inventory_entries": 64,
+    "license_file_hash_records": 113,
+    "pe_files": 5,
+    "direct_or_delay_dynamic_msvc_runtime_imports_observed": false,
+    "a5_accepted": false,
+    "a6_accepted": false,
+    "a7_approved": false,
+    "frozen_candidate_changed": false,
+    "evidence": "evidence/20261127/frozen-beta3-static-inventory.json"
+  },
+  "wsk_accepted_socket_prototype": {
+    "source_sha": "229e37263b5927167795eb2f76097299e4b9770a",
+    "tree": "336529d9446d7eedd6396fe7879c47dd778eda25",
+    "base_sha": "f1ac3b04369163ece245c4fea9520571cec112bf",
+    "run_id": 46003874189,
+    "job_id": 140522049766,
+    "status": "HOSTED_WDK_OBJECT_COMPILE_PASS_RUNTIME_UNPROVED",
+    "native_cpp_authority_cases_passed": 9,
+    "structural_source_mutants_rejected": 8,
+    "warnings": 0,
+    "errors": 0,
+    "driver_loaded": false,
+    "g2_accepted": false,
+    "origin_process_bound": false,
+    "packet_owner_bound": false,
+    "evidence": "evidence/20261127/wsk-accepted-socket-compile.json"
+  },
+  "frozen_beta3_rustsec": {
+    "run_id": 46006587890,
+    "job_id": 140531169076,
+    "status": "RUSTSEC_NO_KNOWN_ADVISORIES",
+    "cargo_audit_version": "0.23.0",
+    "database_sha": "c5279d0b0c9e8b70df666eb6d1edbabcfd1176bd",
+    "locked_packages_audited": 75,
+    "unchanged_third_party_records": 68,
+    "vulnerabilities": 0,
+    "warnings": 0,
+    "crates_io_yanked_status_checked": false,
+    "a5_accepted": false,
+    "a6_accepted": false,
+    "a7_approved": false,
+    "evidence": "evidence/20261127/frozen-beta3-rustsec.json"
+  },
+  "raw512_source_lab": {
+    "source_sha": "78f5ec602500ab3478632a249afe55f334b593c0",
+    "tree": "747cf28924a2e9e01a1ef4235e3e78d6215b4e48",
+    "run_id": 46007206276,
+    "status": "LAB_STRICT_512_PASS",
+    "upstream_openssh_sha": "274893f8d1fe86c4d128b514c3af4bc10cdc0c99",
+    "max_fds": 1024,
+    "required_single_transport_held": 512,
+    "required_recovery": 16,
+    "previous_compile_and_raw_probe_reached": false,
+    "production_raw512_accepted": false,
+    "production_adoption_approved": false,
+    "frozen_beta3_changed": false,
+    "evidence": "evidence/20261127/raw512-source-lab.json",
+    "job_id": 140533273025,
+    "peak_held": 512,
+    "recovery_successes": 16,
+    "actual_connection_attempts": 528,
+    "hold_integrity_verified": true,
+    "lab_binary_pins_match": true,
+    "artifacts": 0,
+    "owned_temp_cleanup": "PASS",
+    "same_source_stock_control_compared": false,
+    "os_handle_recovery_bound": "initial_baseline +32 within15s after16 recovered echoes",
+    "numeric_handle_samples_publicly_emitted": false,
+    "production_signer_requirement": "Authenticode Valid plus signer Subject organization Microsoft Corporation",
+    "compatible_signed_larger_fd_candidate_identified": false
+  },
+  "qa_paired_dns_ci": {
+    "source_sha": "872657679b4a5f5a2f53f7209516614732b4f672",
+    "tree": "630a964ad32c39e8ea7281008958fad04b77df6f",
+    "executed_merge_sha": "6803bca842e24ac957e98ffea5c8a9f441ffd610",
+    "executed_merge_tree_matches_head": true,
+    "workflows_passed": 5,
+    "workflows_total": 6,
+    "jobs_passed": 12,
+    "jobs_total": 13,
+    "all_attempts": 1,
+    "artifacts": 0,
+    "windows_paired_dns_tests": "PASS_21_FFI_TESTS",
+    "real_dns_vertical": "PASS_3_PLATFORMS",
+    "legacy_windows_ssh": {
+      "run_id": 46007854819,
+      "job_id": 140535473821,
+      "status": "FAIL_RAW_BACKEND",
+      "managed_held": 128,
+      "managed_rejected": 1152,
+      "managed_churn": 10000,
+      "managed_churn_failed": 0,
+      "managed_worker_processes": 4,
+      "raw_peak_held": 244,
+      "raw_attempts": 245,
+      "raw_recovery_successes": 0,
+      "raw_recovery_verified": false,
+      "raw_client_error": 10054,
+      "actual_server_markers": [
+        "postauth_notify_pipe_too_many_open_files",
+        "ppoll_not_enough_space"
+      ]
+    },
+    "evidence": "evidence/20261127/qa-872657-terminal-ci.json"
+  },
+  "master_plan_revision": {
+    "date": "2026-11-27",
+    "timezone": "Europe/Moscow",
+    "overview": "../../PLAN.md",
+    "plan": "../../RELEASE_1_0_PLAN.md",
+    "previous_plan_archive": "../../RELEASE_1_0_PLAN_HISTORY_20261127.md",
+    "milestone_order": [
+      "P1 unified source",
+      "P2 separate private candidate",
+      "P3 managed aggregate512",
+      "P4 Win11 original-candidate acceptance",
+      "P5 composition/security",
+      "P6 internal delivery decision"
+    ],
+    "parallel_active_blocks": [
+      "release_ssh_pool",
+      "release_candidate",
+      "release_qa",
+      "release_wfp"
+    ],
+    "release_go": false,
+    "previous_plan_commit": "63936d4967529b2794e98d547e275fabe01d9f65",
+    "plan_pushed_before_delegation": "8ea89cdf81728bf942c22591b879ec3b8d3606d5",
+    "four_distinct_junior_subagents_started": true
+  },
+  "qa_historical_document_head_ci": {
+    "source_sha": "ec0a8ebb649f1b8692726e276b632bf500b31ece",
+    "jobs_passed": 13,
+    "jobs_total": 13,
+    "workflow_count": 6,
+    "first_attempt_all": true,
+    "artifacts": 0,
+    "evidence": "evidence/20261127/qa-ec0-terminal-ci.json",
+    "strict_raw512_proved": false
+  },
+  "frozen_beta3_notice_coverage": {
+    "source_sha": "03858fb0710e414992f2ed872b3384c08ee7ac8b",
+    "run_id": 46025031777,
+    "job_id": 140594113911,
+    "status": "TECHNICAL_NOTICE_BYTES_AND_BUILD_INPUTS_VERIFIED",
+    "notice_file_sections_verified": 113,
+    "nsis_distribution_plugins_verified": 3,
+    "compiler_version": "19.44.35230.0",
+    "sdk_version": "10.0.26100.0",
+    "license_obligations_accepted": false,
+    "a5_accepted": false,
+    "a6_accepted": false,
+    "a7_approved": false,
+    "frozen_candidate_changed": false,
+    "artifact_count": 0,
+    "evidence": "evidence/20261127/frozen-beta3-notice-coverage.json"
+  },
+  "next_candidate_native_metadata": {
+    "source_sha": "cc0106245d10e3e26ca3847c33397522db91b59f",
+    "tree_sha": "27d7d73906c21f8752c464f1f9d691c691721f7d",
+    "base_product_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+    "pr": "https://github.com/i-shutov/flowbridge/pull/94",
+    "draft": true,
+    "status": "SOURCE_PREPARED_LOCAL_AND_INDEPENDENT_TESTS_PASS_NATIVE_BUILD_OPEN",
+    "files_changed": 5,
+    "focused_tests_passed": 51,
+    "native_installer_built": false,
+    "frozen_beta3_changed": false,
+    "evidence": "evidence/20261127/next-candidate-native-metadata.json",
+    "hosted_ci": {
+      "rust_native_jobs_passed": 5,
+      "capture_integration_jobs_passed": 3,
+      "g2_failed": true,
+      "g2_error_code": "kernel_connection_id_missing",
+      "jobs_passed": 8,
+      "jobs_total": 9,
+      "first_attempt_all": true,
+      "artifacts": 0,
+      "evidence": "evidence/20261127/next-candidate-native-metadata-ci.json"
+    }
+  },
+  "raw512_signed_runtime_review": {
+    "status": "NO_CREDIBLE_MICROSOFT_SIGNED_LARGER_DESCRIPTOR_CANDIDATE_FOUND",
+    "latest_official_preview": "10.4.0.0p1-Preview",
+    "exact_latest_x64_client_and_session_slots": 256,
+    "exact_latest_x64_sshd_matches_observed_failure": true,
+    "windows_authenticode_trust_retested": false,
+    "product_trust_guard_changed": false,
+    "new_stock_capacity_run_needed": false,
+    "production_raw512_accepted": false,
+    "evidence": "evidence/20261127/raw512-signed-runtime-review.json"
+  },
+  "wsk_accepted_socket_lifecycle": {
+    "source_sha": "a7476671a5b9574dfe8d6f5a307148b5fe27ef11",
+    "tree_sha": "8dc0424a5b97c337bb7b93d098094cf51f786d02",
+    "parent_source_sha": "229e37263b5927167795eb2f76097299e4b9770a",
+    "workflow_sha": "7ec261fde7ca15e20830143131bd116e8fa36f19",
+    "run_id": 46025550513,
+    "job_id": 140595900897,
+    "warnings": 0,
+    "errors": 0,
+    "driver_linked": false,
+    "driver_signed": false,
+    "driver_loaded": false,
+    "native_kernel_runtime_executed": false,
+    "g2_accepted": false,
+    "origin_process_bound": false,
+    "packet_owner_bound": false,
+    "artifact_count": 0,
+    "status": "HOSTED_WDK_LIFECYCLE_OBJECT_COMPILE_PASS_NATIVE_KERNEL_OPEN",
+    "authority_cases_passed": 9,
+    "lifecycle_cases_passed": 9,
+    "source_mutations_rejected": 20,
+    "completion_wait_budget_ms": 3000,
+    "total_provider_cleanup_or_unload_time_bounded": false,
+    "evidence": "evidence/20261127/wsk-accepted-socket-lifecycle.json"
+  },
+  "previous_release_target_before_pool_win11_revision": "Windows 10 Pro 22H2 x64",
+  "release_strategy_revision": {
+    "date": "2026-11-27",
+    "basis": "Owner instructed master-plan update, commit/push then four-agent execution after proposed product split",
+    "next_release": "0.3.0 internal SSH/SOCKS5 Windows11",
+    "following_versions": {
+      "0.4.0": "WFP transparent Windows routing",
+      "0.5.0": "Reliability and validated network scope",
+      "1.0.0": "Full acceptance of declared scope/platforms"
+    },
+    "managed_pool512_required": true,
+    "managed_pool512_accepted": true,
+    "single_backend_raw512_required_for_0_3": false,
+    "wfp_g2_required_for_0_3": false,
+    "raw_diagnostic_threshold_changed": false,
+    "previous_raw_failures_preserved": true,
+    "win11_acceptance_work_authorized": true,
+    "win11_product_accepted": false,
+    "win10_deferred": true,
+    "workpackages": "RELEASE_WORKPACKAGES_20261127.json",
+    "managed_pool512_hosted_passed": true
+  },
+  "qa_prior_document_head_ci": {
+    "source_sha": "f99812701b4b3db60e22bc3077e5657a397e3a17",
+    "tree_sha": "f6ceb30ae11ae525a4b85ecc36bd1fd57cc3cd62",
+    "executed_merge_sha": "ce39a9668e11bcaad8313bdbe8b76488f71823c8",
+    "jobs_passed": 12,
+    "jobs_total": 13,
+    "workflow_count": 6,
+    "workflows_passed": 5,
+    "first_attempt_all": true,
+    "artifacts": 0,
+    "evidence": "evidence/20261127/qa-f998127-terminal-ci.json",
+    "strict_raw512_proved": false,
+    "meaning": "Latest completed preceding document-head observation; later plan commit may trigger fresh automatic CI"
+  },
+  "frozen_beta3_candidate": {
+    "version": "0.3.0-beta.3",
+    "source_commit": "c6ead0f31de4c118453913d733f537ba421af616",
+    "source_tree": "19df7a94071f38be6b8aa3530e1ded7a954a02a8",
+    "original_product_commit": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+    "installer_sha256": "6408c0bf595b0ae61a4fc05db17421dc4b03dcda241f3c1f1f997ab6583eec5b",
+    "gui_sha256": "8137a43a27eae62ba3988baeb5dffde0ee03fa983c96e8440480d77b1072b4d0",
+    "cli_sha256": "10182b2d58d9d0728f301afe3deb21be33b7aff9b99c627f4f37507bec7b70ab",
+    "ffi_sha256": "cb933d0a0c312932d80c60ece25549a749f9664807e225dd339da2e57dad5b4e",
+    "manifest_sha256": "f6a94e5e8a87e571d63604ff3b2e417bf21e2e2758343171c587a43717318c99",
+    "payload_files": 13,
+    "driver_included": false,
+    "installed": false,
+    "signed": false,
+    "status": "PRIVATE_LOCAL_INSTALLER_BUILT_QA_NOT_ACCEPTED",
+    "evidence": "evidence/20261127/native-beta3-build.json",
+    "qa_harness_sha256": "d41905fdcb2fc5f77e042d61c9aac5d640b23ca60ea0cf0965a4567dc9b105ff",
+    "acceptance_tool_sha256": "faf62aabeea95ef316f5c0935177a65820ea4679ac94afe8b5461138dd17a33c",
+    "private_kit_sha256": "60e13a2c9d35e441469c0b6e95b5115fa0d4e3212be8fd2f072e2c5d5baba085"
+  },
+  "historical_beta3_product_source": {
+    "sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+    "tree": "19bc86bb16da826ff59352482d34e79c0ee41c82",
+    "pr": "https://github.com/i-shutov/flowbridge/pull/91",
+    "previous_security_baseline": "44e3ba988ac5a9f7cf2d25b16d46c432ff3d8c38",
+    "targeted_ci": {
+      "run_id": 45976744631,
+      "status": "completed",
+      "conclusion": "success",
+      "jobs_passed": 3,
+      "jobs_total": 3,
+      "artifacts": 0
+    },
+    "rust_local": "NOT_RUN_NO_TOOLCHAIN",
+    "broad_ci": {
+      "run_id": 45976744692,
+      "conclusion": "success",
+      "jobs_passed": 5,
+      "artifacts": 0,
+      "windows_rerun_job_id": 140444849665,
+      "checkout_merge_sha": "1f51c13d66aeac4afdbcf3a0ac9bf9de30896f61",
+      "checkout_tree_matches_source": true,
+      "prior_failure": "Paired native DNS test WinError 10013; not reproduced on identical tree, cause not established"
+    },
+    "remaining_ci_failures": [
+      {
+        "run_id": 45976744578,
+        "scope": "raw OpenSSH requested 512",
+        "result": "FAIL: 244 byte-verified held channels of 245 attempts; server postauth notify-pipe Too many open files; recovery not proved; managed gate PASS"
+      },
+      {
+        "run_id": 45976744560,
+        "scope": "hosted WFP G2 ETW",
+        "result": "FAIL: kernel_connection_id_missing in hosted job summary; independently reproduced on native Win11 with four zero IDs; G2_PACKET_BOUND=UNPROVED"
+      }
+    ],
+    "ci_observation": "evidence/20261127/ci-observation.json"
+  },
+  "historical_beta3_build_tooling": {
+    "branch": "release/resume-internal-beta3-20261127",
+    "script": "tools/stage_internal_beta3.py",
+    "script_sha256": "c3bd2189a32a689b1feaa2f0477660abd4e271501ce55448a58ef146e9338bd2",
+    "nsis_zip_sha256": "ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8",
+    "host_matrix": [
+      "Windows 10 client build 19045 native x64",
+      "Windows 11 client build >=22000 native x64"
+    ],
+    "server_accepted": false,
+    "global_environment_modified": false,
+    "private_staging_required": true,
+    "hosted_ci": {
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 45977468284,
+      "qa_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
+      "checkout_merge_sha": "519b194f5c3f68daeada20bf1aa295b72a7a794e",
+      "checkout_tree_matches_qa": true,
+      "jobs_passed": 2,
+      "artifacts": 0,
+      "product_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+      "staged_cargo_check_and_tunnel_tests": true
+    },
+    "all_qa_pr_jobs": {
+      "passed": 13,
+      "total": 13,
+      "artifact_count": 0,
+      "qa_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
+      "inherited_workflows_test_qa_tree_not_product_pin": true
+    },
+    "native_workflow": {
+      "path": ".github/workflows/win11-private-beta3-build.yml",
+      "source_sha": "7d6597eb738d16839ff7a969c5ff6644194df975",
+      "workflow_sha256": "9682590ac543cbb73629ff80321064dbb9553ac85737b6c462dbca8796f0c3a6",
+      "run_id": 45986630920,
+      "job_id": 140463855261,
+      "conclusion": "success",
+      "gate_status": "PRIVATE_LOCAL_INSTALLER_BUILT_QA_NOT_ACCEPTED",
+      "reason": null,
+      "found_standard_installations": [
+        "git.exe",
+        "cmake.exe",
+        "msvc-x64",
+        "windows-sdk-headers"
+      ],
+      "artifact_count": 0,
+      "installer_built": true,
+      "installed_product": false,
+      "preparation_status": "PASS",
+      "previous_attempts": [
+        {
+          "source_sha": "ee218fcffe9c7d2d69821824ea693698bc382098",
+          "workflow_sha256": "bfe32434724d1081b037e623f8271df79f50df8256a7c84c45861565ff8da3ca",
+          "run_id": 45984099025,
+          "job_id": 140455165164,
+          "conclusion": "failure",
+          "gate_status": "BLOCKED_PREREQUISITES",
+          "reason": "PYTHON_3_13_OR_LATER_REQUIRED",
+          "artifact_count": 0,
+          "installer_built": false
+        },
+        {
+          "source_sha": "cc3ed937b5be14c601742d640a65aee580de61f6",
+          "workflow_sha256": "790c281a352d734078b83787b39ecd29fcd5ae691d7e16f54a77fb17d5d3e82f",
+          "run_id": 45985845724,
+          "job_id": 140461138748,
+          "conclusion": "failure",
+          "gate_status": "BLOCKED",
+          "reason": "PYTHON_REGISTRATION_DOWNLOAD: curl native_exit=2",
+          "artifact_count": 0,
+          "installer_built": false
+        }
+      ],
+      "isolated_toolchain": {
+        "rustup": "1.29.3",
+        "cargo_sha256": "f381bae27c59588eacf69208e115b2c001a2998afed83a2e9084ea93620737b1",
+        "python": "3.13.17",
+        "rustup_sha256": "38027d51d69a5d05493627a0634dbea52d6cd793c8f072d2373d3f4163eec7db",
+        "status": "READY",
+        "rust": "1.100.0",
+        "python_sha512": "0e667928bb4f19573c6cd88f65133b2e07b243a5c716f335b56aa66bb9ec6f82328256d22c3a29e23a0276ac5c6a6d786211feab524890ad1e56629196c6b29c",
+        "rustc_sha256": "d4f8a0283de2dba0dc458cd13c333337d2b76c3649eb39e91c4acce618e661a1"
+      },
+      "missing_tools": [],
+      "first_preflight_missing_standard_installations": [
+        "python.exe",
+        "cargo.exe",
+        "rustc.exe",
+        "nsis-3.13.zip"
+      ],
+      "evidence": "evidence/20261127/native-beta3-build.json",
+      "result": {
+        "cli_sha256": "10182b2d58d9d0728f301afe3deb21be33b7aff9b99c627f4f37507bec7b70ab",
+        "cmake_version": "4.1",
+        "driver_included": false,
+        "ffi_sha256": "cb933d0a0c312932d80c60ece25549a749f9664807e225dd339da2e57dad5b4e",
+        "gui_sha256": "8137a43a27eae62ba3988baeb5dffde0ee03fa983c96e8440480d77b1072b4d0",
+        "installer_built": true,
+        "installer_sha256": "6408c0bf595b0ae61a4fc05db17421dc4b03dcda241f3c1f1f997ab6583eec5b",
+        "missing_tools": [],
+        "new_private_git_commit": "c6ead0f31de4c118453913d733f537ba421af616",
+        "new_private_git_tree": "19df7a94071f38be6b8aa3530e1ded7a954a02a8",
+        "package_manifest_sha256": "f6a94e5e8a87e571d63604ff3b2e417bf21e2e2758343171c587a43717318c99",
+        "phase": "PACKAGE_EVIDENCE",
+        "product_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+        "qa_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
+        "rust_version": "1.100.0",
+        "schema": "flowbridge-private-beta3-runner-v1",
+        "staged_payload_allowlist_verified": true,
+        "status": "PRIVATE_LOCAL_INSTALLER_BUILT_QA_NOT_ACCEPTED",
+        "windows_build": 22631
+      },
+      "curl_compressed_option_exit": 2
+    },
+    "w2b2_private_producer_guard": {
+      "workflow": ".github/workflows/flowbridge-win10-w2b2-exact-gui-installer.yml",
+      "job": "exact-beta-gui-installer",
+      "reason": "Skip artifact producer and needs-bound consumer in a public repository; prevent a download of the deliberately absent artifact on future base-branch push"
+    }
+  },
+  "managed_pool512": {
+    "hosted_status": "PASS",
+    "hosted_run": 46039371745,
+    "hosted_evidence": "evidence/20261127/managed-pool512-hosted-pass.json",
+    "first_hosted_fail_preserved": 46037433600,
+    "source_sha": "c45fce1675706bcf5612f7b5fceeea54a1d56594",
+    "actual_held": 512,
+    "workers": 4,
+    "flows_per_worker": 128,
+    "overload_replies": 80,
+    "recovery_successes": 16,
+    "native_candidate_status": "PASS",
+    "native_first_run": 46041606345,
+    "native_diagnosis": "evidence/20261127/beta4-native-pool-compile-diagnosis.json",
+    "raw_single_backend_512_accepted": false,
+    "gui_interaction_accepted": false,
+    "native_run": 46043398994,
+    "native_evidence": "evidence/20261127/beta4-native-managed-pool512-pass.json",
+    "native_workflow_source": "620a3b39f2dde21c3eb6ed6f911c8214a291be56",
+    "original_ffi_used": true,
+    "actual_gui_interaction_tested": false
+  },
+  "win11_beta4_acceptance": {
+    "preflight_run": 46037376944,
+    "preflight_evidence": "evidence/20261127/win11-beta4-preflight.json",
+    "desktop_status": "NO_ACTIVE_SESSION",
+    "runner_session": 0,
+    "first_headless_run": 46041604814,
+    "first_headless_evidence": "evidence/20261127/beta4-headless-first-run.json",
+    "first_headless_passed_steps": [
+      "clean_baseline",
+      "install",
+      "payload",
+      "cli",
+      "reinstall"
+    ],
+    "first_headless_status": "FAIL_UNINSTALL_COMPLETION_PREDICATE",
+    "observation_run": 46042401435,
+    "observation_evidence": "evidence/20261127/beta4-uninstall-observation.json",
+    "observed_product_uninstalled": true,
+    "observed_owned_processes": 0,
+    "observed_residue": "Historical first-run observation; exact owned residue and synthetic profile recovered in46043723863, clean repeat in46043764383",
+    "cleanup_status": "PASS_OWNED_RECOVERY_AND_REPEAT_CLEANUP",
+    "gui_visual_status": "BLOCKED_NO_ACTIVE_DESKTOP",
+    "gui_managed_ssh_status": "NOT_RUN",
+    "beta4_lifecycle_helper": "78cb1448d66972f842e138645289a7466d461281",
+    "focused_helper_tests_passed": 15,
+    "recovery_run": 46043723863,
+    "recovery_evidence": "evidence/20261127/beta4-owned-recovery-pass.json",
+    "headless_status": "PASS_HEADLESS_LIFECYCLE",
+    "headless_run": 46043764383,
+    "headless_evidence": "evidence/20261127/beta4-headless-lifecycle-pass.json",
+    "headless_checks_passed": 9,
+    "recovery_helper": "88dea407442493250d07781dd4c1dd8118212fb3",
+    "nsis_temporary_uninstaller": "Exact original-generated bytes verified; owned copy explicitly removed after process completion",
+    "nsis_machine_pending_rename_queue": {
+      "inspection": "NOT_INSPECTED",
+      "qa_direct_write": false
+    },
+    "desktop_start_card": "checkpoints/WIN11_BETA4_DESKTOP_START_20261127.md"
+  },
+  "beta4_static_inventory": {
+    "run_id": 46042486760,
+    "job_id": 140653450546,
+    "source_sha": "7e9a284431a1c40dd20718e0b866a0ab07087ee8",
+    "status": "TECHNICAL_STATIC_INVENTORY_COMPLETE",
+    "payload_files_verified": 13,
+    "notice_file_records_verified": 114,
+    "sbom_components": 76,
+    "external_cargo_lock_checksums_verified": 61,
+    "native_input_hash_chain_verified": true,
+    "static_linker_members_verified": false,
+    "installer_embedded_nsis_members_verified": false,
+    "license_obligations_accepted": false,
+    "current_vulnerability_database_checked": false,
+    "a5_accepted": false,
+    "a6_accepted": false,
+    "a7_approved": false,
+    "evidence": "evidence/20261127/beta4-original-static-inventory.json"
+  },
+  "wsk_owner_rundown": {
+    "source_sha": "f5182e971b0a6b203e509fe3dc0e7c11e269251e",
+    "tree_sha": "f5be0d3df03813c60ec0841f8598c158a30b93e1",
+    "run_id": 46038690086,
+    "job_id": 140640557770,
+    "status": "PASS_SOURCE_AND_WDK_COMPILE",
+    "native_cpp_cases": 25,
+    "source_mutants_rejected": 38,
+    "warnings": 0,
+    "errors": 0,
+    "driver_loaded": false,
+    "g2_accepted": false,
+    "host_join_and_callback_return_barriers": "Integration contracts, not deployed host runtime",
+    "blocks_0_3": false,
+    "evidence": "evidence/20261127/wsk-owner-rundown-compile.json"
+  },
+  "historical_documentation_only_completion": {
+    "validated_code_head": "872657679b4a5f5a2f53f7209516614732b4f672",
+    "final_changes_scope": "docs and evidence only; source/tests/workflows byte-identical to validated head",
+    "validation_result": "12/13 jobs; inherited signed raw backend failure retained",
+    "new_automatic_head_ci_not_claimed": "Any automatic repeats on the documentation head are separate observations, not inherited PASS"
+  },
+  "completion_scope": {
+    "initial_plan_commit": "8ea89cdf81728bf942c22591b879ec3b8d3606d5",
+    "four_distinct_junior_agents": true,
+    "source_changes_pushed": true,
+    "private_beta4_built": true,
+    "original_candidate_managed_512_passed": true,
+    "original_candidate_headless_9_checks_passed": true,
+    "technical_original_static_inventory_passed": true,
+    "wsk_source_compile_passed": true,
+    "full_release_go": false,
+    "interactive_win11_gui_accepted": false,
+    "public_binary_artifacts_created": false
+  },
+  "active_execution_block": {
+    "id": "B2_FINAL_ACCEPTANCE_AND_INTERNAL_HANDOFF",
+    "state": "PLAN_READY_BEFORE_DELEGATION",
+    "planned_at_msk": "2026-11-27T22:52:00+03:00",
+    "previous_result_commit": "f00b4d9db56979dc57eabb6f04c7e4b264a296be",
+    "candidate_run": 46040903481,
+    "model": "gpt-6.2-sol",
+    "workpackages": "RELEASE_WORKPACKAGES_20261127.json",
+    "repeat_passed_native_gates_without_new_risk": false
+  },
+  "b2_resume_review": {
+    "date": "2026-11-27",
+    "plan_commit": "a9d1e6f14bd701363c7cd37b9ceab168aa24e31b",
+    "status": "PARTIAL_SOURCE_RECONSTRUCTION_PASS_DESKTOP_AND_FINAL_REVIEWS_OPEN",
+    "evidence": "evidence/20261127/beta4-b2-source-and-gate-reconciliation.json",
+    "handoff": "checkpoints/BETA4_B2_REVIEW_AND_HANDOFF_20261127.md",
+    "reconstructed_candidate_tree": "ce336e83bb724a65bf512e79e286c97fb0cb3190",
+    "source_patch_blobs_verified": 10,
+    "tree_entries": 359,
+    "unchanged_external_lock_records": 68,
+    "receipt_checks_passed": 15,
+    "source_privacy_checks_passed": 6,
+    "fresh_beta4_rustsec": "NOT_RUN",
+    "desktop_current": "NOT_OBSERVED_THIS_SESSION",
+    "prior_desktop_status": "BLOCKED_NO_ACTIVE_DESKTOP",
+    "actual_subagents_launched_this_session": 0,
+    "internal_delivery": "NO_GO",
+    "product_bytes_changed": false,
+    "win10_accessed": false
+  }
+}

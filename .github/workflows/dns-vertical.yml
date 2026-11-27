@@ -28,7 +28,7 @@ jobs:
       - run: cargo build --locked -p flowbridge-ffi
       - run: python tests/native_dns_integration.py --output build/verification/dns/result.json
       - uses: actions/upload-artifact@v7.0.0
-        if: always()
+        if: ${{ github.event.repository.private == true && (always()) }}
         with:
           name: FlowBridge-DNS-${{ matrix.os }}
           path: build/verification/dns/

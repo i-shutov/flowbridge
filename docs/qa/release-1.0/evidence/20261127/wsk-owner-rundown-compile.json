@@ -1,0 +1,44 @@
+{
+  "schema": "flowbridge-wsk-owner-rundown-evidence-v1",
+  "date_moscow": "2026-11-27",
+  "source": "f5182e971b0a6b203e509fe3dc0e7c11e269251e",
+  "tree": "f5be0d3df03813c60ec0841f8598c158a30b93e1",
+  "base": "a7476671a5b9574dfe8d6f5a307148b5fe27ef11",
+  "workflow": {
+    "run_id": 46038690086,
+    "job_id": 140640557770,
+    "attempt": 1,
+    "url": "https://github.com/i-shutov/flowbridge/actions/runs/46038690086",
+    "source": "c4ddab675483023b1ec8b9fdc8591b0f696e9817",
+    "conclusion": "success",
+    "artifacts": 0
+  },
+  "validation": {
+    "authority_cpp_fixtures": 9,
+    "binding_lifecycle_cpp_fixtures": 9,
+    "owner_cpp_fixtures": 7,
+    "source_mutants": 38,
+    "python_test_methods": 4,
+    "wdk_sdk": "10.0.28000.2526",
+    "msvc_toolset": "14.52.37025",
+    "compile_target": "ClCompile",
+    "warnings": 0,
+    "errors": 0
+  },
+  "behavior": [
+    "Opaque owner registers and captures WSK, owns listener and per-generation policy/receipt history.",
+    "Stop disarms policy and admission under one authority lock.",
+    "Binding drain and host caller join precede listener close, provider release and deregistration.",
+    "A failed listener close quarantines the owner/provider; a separate host callback-return barrier is required before owner free."
+  ],
+  "limits": [
+    "Startup socket creation and bind are unbounded completion waits at PASSIVE_LEVEL.",
+    "Host join and callback-return barriers are contracts; product wiring and runtime proof remain open.",
+    "WskSocket OwningProcess controls bind security/address sharing, not a proven WFP transport target identity."
+  ],
+  "g2_accepted": false,
+  "origin_process_bound": false,
+  "packet_owner_bound": false,
+  "driver_linked_signed_loaded": false,
+  "blocks_0_3": false
+}

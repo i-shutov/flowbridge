@@ -1,0 +1,191 @@
+{
+  "schema": "flowbridge-private-beta4-build-attempt-evidence-v1",
+  "date_moscow": "2026-11-27",
+  "workflow": {
+    "run_id": 46037525707,
+    "job_id": 140636607786,
+    "attempt": 1,
+    "url": "https://github.com/i-shutov/flowbridge/actions/runs/46037525707",
+    "source": "ee338d6b0d97a68c0ba4c30d78da9b5fe02db137",
+    "conclusion": "failure",
+    "artifacts": 0
+  },
+  "product_source": "1261201d8561ee4e70faccc8699f60606a71c93b",
+  "cutter_source": "ee229778609b6f6ff4a44a2318b239cd1b876a45",
+  "candidate_tree": "ce336e83bb724a65bf512e79e286c97fb0cb3190",
+  "stage": "PRIVATE_BUILD",
+  "reason": "PRIVATE_BUILD_FAILED_INSPECT_LOCAL_LOG",
+  "diagnostics": [
+    {
+      "run_id": 46038633340,
+      "job_id": 140640369025,
+      "report": {
+        "compiler_error_codes": [],
+        "error_signals": [],
+        "git_subprocesses_failed": [],
+        "log_bytes": 20320,
+        "phase_signals": [
+          "version_check_pass",
+          "cargo_build",
+          "cargo_resolve_output",
+          "rust_compiling",
+          "cmake_configure",
+          "cmake_build",
+          "nsis_compile"
+        ],
+        "private_build_files_present": {
+          "candidate_git_head": true,
+          "candidate_git_index": true,
+          "candidate_source": true,
+          "checkpoint": false,
+          "ffi_binary": true,
+          "native_cmake_cache": true,
+          "native_gui": true,
+          "nsis_extraction": true,
+          "package_manifest": false,
+          "package_metadata": true
+        },
+        "python_exceptions": [
+          "CalledProcessError"
+        ],
+        "sample_bytes": 20320,
+        "schema": "flowbridge-private-beta4-build-diagnostic-v1",
+        "source_attempt": 1,
+        "source_run": 46037525707,
+        "status": "DIAGNOSTIC_READ",
+        "subprocess_exit_codes": [
+          1
+        ],
+        "traceback_frames": [
+          {
+            "file": "build-explicit-beta.py",
+            "line": 191
+          },
+          {
+            "file": "build-explicit-beta.py",
+            "line": 143
+          },
+          {
+            "file": "build-explicit-beta.py",
+            "line": 40
+          },
+          {
+            "file": "stage_internal_beta4.py",
+            "line": 220
+          },
+          {
+            "file": "stage_internal_beta4.py",
+            "line": 216
+          },
+          {
+            "file": "stage_internal_beta4.py",
+            "line": 197
+          },
+          {
+            "file": "subprocess.py",
+            "line": 578
+          }
+        ],
+        "whole_log_read": true,
+        "windows_error_codes": []
+      }
+    },
+    {
+      "run_id": 46039369670,
+      "job_id": 140642878470,
+      "report": {
+        "compiler_error_codes": [],
+        "error_signals": [],
+        "git_subprocesses_failed": [],
+        "log_bytes": 20320,
+        "nsis": {
+          "compiler_markers": {
+            "contains_error": false,
+            "processing_script": false,
+            "showed_usage": false,
+            "writing_output": false
+          },
+          "compiler_output_lines": 0,
+          "known_files_or_symbols": [],
+          "logged_compiler_flags": [
+            "/NOCONFIG",
+            "/V4",
+            "/INPUTCHARSET",
+            "/DPAYLOAD_DIR",
+            "/DOUTPUT_FILE",
+            "/DVERSION",
+            "/DFILE_VERSION"
+          ],
+          "logged_nsis_call": true,
+          "sanitized_compiler_excerpts": []
+        },
+        "phase_signals": [
+          "version_check_pass",
+          "cargo_build",
+          "cargo_resolve_output",
+          "rust_compiling",
+          "cmake_configure",
+          "cmake_build",
+          "nsis_compile"
+        ],
+        "private_build_files_present": {
+          "candidate_git_head": true,
+          "candidate_git_index": true,
+          "candidate_source": true,
+          "checkpoint": false,
+          "ffi_binary": true,
+          "native_cmake_cache": true,
+          "native_gui": true,
+          "nsis_extraction": true,
+          "package_manifest": false,
+          "package_metadata": true
+        },
+        "python_exceptions": [
+          "CalledProcessError"
+        ],
+        "sample_bytes": 20320,
+        "schema": "flowbridge-private-beta4-build-diagnostic-v1",
+        "source_attempt": 1,
+        "source_run": 46037525707,
+        "status": "DIAGNOSTIC_READ",
+        "subprocess_exit_codes": [
+          1
+        ],
+        "traceback_frames": [
+          {
+            "file": "build-explicit-beta.py",
+            "line": 191
+          },
+          {
+            "file": "build-explicit-beta.py",
+            "line": 143
+          },
+          {
+            "file": "build-explicit-beta.py",
+            "line": 40
+          },
+          {
+            "file": "stage_internal_beta4.py",
+            "line": 220
+          },
+          {
+            "file": "stage_internal_beta4.py",
+            "line": 216
+          },
+          {
+            "file": "stage_internal_beta4.py",
+            "line": 197
+          },
+          {
+            "file": "subprocess.py",
+            "line": 578
+          }
+        ],
+        "whole_log_read": true,
+        "windows_error_codes": []
+      }
+    }
+  ],
+  "candidate_accepted": false,
+  "installer_available": false
+}

@@ -1,0 +1,288 @@
+{
+  "schema": "flowbridge-managed-pool512-evidence-v1",
+  "date_moscow": "2026-11-27",
+  "workflow": {
+    "run_id": 46037433600,
+    "job_id": 140636300471,
+    "attempt": 1,
+    "url": "https://github.com/i-shutov/flowbridge/actions/runs/46037433600",
+    "source": "ee338d6b0d97a68c0ba4c30d78da9b5fe02db137",
+    "conclusion": "failure",
+    "artifacts": 0
+  },
+  "result": {
+    "passed": false,
+    "source_commit": "309397a5f2cd8ae54e8d93d2be8e2f68358479de",
+    "platform": "Windows-2025Server-10.0.26100-SP0",
+    "hosted_windows_runner": true,
+    "native_windows_11_pool_probe": false,
+    "windows_10_11_user_machine_tested": false,
+    "wfp_driver_loaded": false,
+    "native_dns_leaks_verified": false,
+    "system_configuration_modified": false,
+    "network_test_destinations_loopback_only": true,
+    "scenario": "managed-pool-512",
+    "managed_acceptance_proved": false,
+    "raw_backend_512_stability_proved": false,
+    "ssh_sha256": "98d447730047f5df91373e852d057928a921c3d1e89938700ab656ba84b19dc8",
+    "sshd_sha256": "00d61610a0965b42cc9a9cd401dae8983fe77d5394697f074d776bb68ce6ff0a",
+    "ffi_sha256": "40fac007d898dae3a02fe310667c56ea7d2c6aca4d8ab8e34dff41dbd6b7efe7",
+    "workflow_run_id": "46037433600",
+    "source_tree_sha": "512ac58db83fcf94491ea7972924b4ad05e21bb7",
+    "cli_sha256": null,
+    "managed_pool_512_proved": false,
+    "win32_gui_interaction_exercised": false,
+    "compiled_win32_pool_policy_sha256": "2ca55cc86e6c34e681c938885f7578dee7e7f584ad30d36efd0c854a4f2d83d8",
+    "pinned_fixture_archive_sha256": "b67ff8becd203502190ec42ac7787c24c2cd3325ed7700485fe7a1c83d2a7957",
+    "microsoft_fixture_signatures_valid": true,
+    "error_type": "RuntimeError",
+    "error": "Expected stopped loopback listener to refuse connections"
+  },
+  "managed": {
+    "passed": false,
+    "stage": "stop",
+    "target_held": 512,
+    "peak_held": 512,
+    "verified_under_overload": 512,
+    "overload_replies": 80,
+    "recovery_successes": 16,
+    "children": [
+      {
+        "pid": 5452,
+        "worker_port": 55778,
+        "version": "OpenSSH_for_Windows_9.5p2, LibreSSL 3.8.2"
+      },
+      {
+        "pid": 6196,
+        "worker_port": 55779,
+        "version": "OpenSSH_for_Windows_9.5p2, LibreSSL 3.8.2"
+      },
+      {
+        "pid": 1940,
+        "worker_port": 55780,
+        "version": "OpenSSH_for_Windows_9.5p2, LibreSSL 3.8.2"
+      },
+      {
+        "pid": 6048,
+        "worker_port": 55781,
+        "version": "OpenSSH_for_Windows_9.5p2, LibreSSL 3.8.2"
+      }
+    ],
+    "release_zero_permits": true,
+    "stop_zero_permits": true,
+    "stop_cleared_pool": true,
+    "stop_original_children_exited": true,
+    "stop_listeners_closed": false,
+    "admission_peak": {
+      "55778": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 0
+      },
+      "55779": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 0
+      },
+      "55780": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 0
+      },
+      "55781": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 0
+      }
+    },
+    "admission_queue_peak": {
+      "55778": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 16,
+        "rejected": 4
+      },
+      "55779": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 16,
+        "rejected": 4
+      },
+      "55780": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 16,
+        "rejected": 4
+      },
+      "55781": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 16,
+        "rejected": 4
+      }
+    },
+    "admission_after_overload": {
+      "55778": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 20
+      },
+      "55779": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 20
+      },
+      "55780": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 20
+      },
+      "55781": {
+        "active_including_opening": 128,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 20
+      }
+    },
+    "admission_recovered": {
+      "55778": {
+        "active_including_opening": 4,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 20
+      },
+      "55779": {
+        "active_including_opening": 4,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 20
+      },
+      "55780": {
+        "active_including_opening": 4,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 20
+      },
+      "55781": {
+        "active_including_opening": 4,
+        "limits": {
+          "max_flows": 128,
+          "max_opening": 16,
+          "max_queued": 16,
+          "wait_timeout_ms": 10000
+        },
+        "opening": 0,
+        "queued": 0,
+        "rejected": 20
+      }
+    },
+    "paused_admission_failed_closed": true,
+    "error_type": "RuntimeError",
+    "error": "Expected stopped loopback listener to refuse connections"
+  },
+  "assessment": "512 held flows, 80 overload rejections and 16 recovery flows were observed. The complete gate failed at the final TCP listener closure assertion, which did not record the socket errno or port role. Preserve this FAIL. Revised QA adds OS TCP owner inventory and explicit Winsock refusal; no product change.",
+  "follow_up": {
+    "source": "c45fce1675706bcf5612f7b5fceeea54a1d56594",
+    "tree": "233f794cdc09bdc1c5614bfc358584131effe6f8",
+    "local_tests": 113,
+    "hosted_run": 46039371745,
+    "status": "IN_PROGRESS"
+  }
+}

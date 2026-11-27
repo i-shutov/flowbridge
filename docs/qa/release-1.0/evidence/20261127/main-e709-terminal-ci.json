@@ -1,0 +1,146 @@
+{
+  "schema": "flowbridge.workflow_terminal_evidence.v1",
+  "observed_at_utc": "2026-11-27T19:51:28Z",
+  "run_id": 46043668621,
+  "url": "https://github.com/i-shutov/flowbridge/actions/runs/46043668621",
+  "source_commit": "e7092049b6ae63274d7f0fe84f19b3cd35771659",
+  "source_tree": "f248fb965427041efdeddea63e79baebdb6e84a1",
+  "workflow_path": ".github/workflows/ci.yml",
+  "status": "completed",
+  "conclusion": "success",
+  "run_attempt": 1,
+  "jobs_total": 5,
+  "jobs_passed": 5,
+  "jobs": [
+    {
+      "id": 140657551778,
+      "name": "rust (ubuntu-24.04)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 140657552154,
+      "name": "rust (macos-15)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 140657552220,
+      "name": "rust (windows-2025)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 140657552385,
+      "name": "macos-application",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 140657552393,
+      "name": "windows-application",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "artifact_count": 0,
+  "artifact_upload_steps": [
+    {
+      "job": "rust (ubuntu-24.04)",
+      "name": "Preserve dual-stack wire-fixture evidence",
+      "conclusion": "skipped"
+    },
+    {
+      "job": "rust (ubuntu-24.04)",
+      "name": "Preserve native-session evidence",
+      "conclusion": "skipped"
+    },
+    {
+      "job": "rust (ubuntu-24.04)",
+      "name": "Preserve admission-control evidence",
+      "conclusion": "skipped"
+    },
+    {
+      "job": "rust (ubuntu-24.04)",
+      "name": "Run actions/upload-artifact@v7.0.0",
+      "conclusion": "skipped"
+    },
+    {
+      "job": "rust (ubuntu-24.04)",
+      "name": "Run actions/upload-artifact@v7.0.0",
+      "conclusion": "skipped"
+    },
+    {
+      "job": "rust (macos-15)",
+      "name": "Preserve dual-stack wire-fixture evidence",
+      "conclusion": "skipped"
+    },
+    {
+      "job": "rust (macos-15)",
+      "name": "Preserve native-session evidence",
+      "conclusion": "skipped"
+    },
+    {
+      "job": "rust (macos-15)",
+      "name": "Preserve admission-control evidence",
+      "conclusion": "skipped"
+    },
+    {
+      "job": "rust (macos-15)",
+      "name": "Run actions/upload-artifact@v7.0.0",
+      "conclusion": "skipped"
+    },
+    {
+      "job": "rust (macos-15)",
+      "name": "Run actions/upload-artifact@v7.0.0",
+      "conclusion": "skipped"
+    },
+    {
+      "job": "rust (windows-2025)",
+      "name": "Preserve dual-stack wire-fixture evidence",
+      "conclusion": "skipped"
+    },
+    {
+      "job": "rust (windows-2025)",
+      "name": "Preserve native-session evidence",
+      "conclusion": "skipped"
+    },
+    {
+      "job": "rust (windows-2025)",
+      "name": "Preserve admission-control evidence",
+      "conclusion": "skipped"
+    },
+    {
+      "job": "rust (windows-2025)",
+      "name": "Run actions/upload-artifact@v7.0.0",
+      "conclusion": "skipped"
+    },
+    {
+      "job": "rust (windows-2025)",
+      "name": "Run actions/upload-artifact@v7.0.0",
+      "conclusion": "skipped"
+    },
+    {
+      "job": "macos-application",
+      "name": "Run actions/upload-artifact@v7.0.0",
+      "conclusion": "skipped"
+    },
+    {
+      "job": "macos-application",
+      "name": "Publish macOS installation evidence",
+      "conclusion": "skipped"
+    },
+    {
+      "job": "windows-application",
+      "name": "Run actions/upload-artifact@v7.0.0",
+      "conclusion": "skipped"
+    },
+    {
+      "job": "windows-application",
+      "name": "Publish installer verification evidence",
+      "conclusion": "skipped"
+    }
+  ],
+  "scope": "Main-branch automatic CI. Does not replace original beta.4 Win11 pool512, installer, or interactive acceptance.",
+  "product_release_accepted": false
+}

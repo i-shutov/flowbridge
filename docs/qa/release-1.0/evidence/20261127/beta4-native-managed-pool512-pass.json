@@ -1,0 +1,166 @@
+{
+  "run_id": 46043398994,
+  "job_id": 140656558094,
+  "attempt": 1,
+  "workflow_commit": "620a3b39f2dde21c3eb6ed6f911c8214a291be56",
+  "run_url": "https://github.com/i-shutov/flowbridge/actions/runs/46043398994",
+  "artifact_count": 0,
+  "conclusion": "success",
+  "report": {
+    "candidate_build_runner_result_verified": true,
+    "candidate_compiler_inputs_verified": true,
+    "candidate_ffi_sha256": "a193b8c9e96ecbcd5c2a79722a09e7ca3a822ce406ec997c9ab475f022f2469a",
+    "candidate_installed_by_probe": false,
+    "candidate_installer_sha256": "e0e4491cd97b30aa52b52ce89a7a8396a2fc11902bec3e70bed8ebfd722450b0",
+    "candidate_manifest_sha256": "3542633d089aff80e379f30db8be6f301edae462f38f70ea07c5b8ba76011703",
+    "candidate_sha": "c8881dada43e3183a0340dc823105bdcdac71171",
+    "candidate_tree": "ce336e83bb724a65bf512e79e286c97fb0cb3190",
+    "compiled_win32_pool_policy_sha256": "f7e6473ff610e665f0a717df370ac033d0fd9968ec189efc58125c8f8c8952c3",
+    "fixture_archive_sha256": "b67ff8becd203502190ec42ac7787c24c2cd3325ed7700485fe7a1c83d2a7957",
+    "fixture_job_cleanup_verified": true,
+    "fixture_job_empty_after_probe": true,
+    "interactive_gui_tested": false,
+    "listeners_after_stop": [
+      {
+        "expected_ipv4_loopback_owner": false,
+        "ipv4_listeners": 0,
+        "ipv6_listeners": 0,
+        "role": "engine",
+        "unexpected_owner_or_address": false
+      },
+      {
+        "expected_ipv4_loopback_owner": false,
+        "ipv4_listeners": 0,
+        "ipv6_listeners": 0,
+        "role": "ssh_worker_1",
+        "unexpected_owner_or_address": false
+      },
+      {
+        "expected_ipv4_loopback_owner": false,
+        "ipv4_listeners": 0,
+        "ipv6_listeners": 0,
+        "role": "ssh_worker_2",
+        "unexpected_owner_or_address": false
+      },
+      {
+        "expected_ipv4_loopback_owner": false,
+        "ipv4_listeners": 0,
+        "ipv6_listeners": 0,
+        "role": "ssh_worker_3",
+        "unexpected_owner_or_address": false
+      },
+      {
+        "expected_ipv4_loopback_owner": false,
+        "ipv4_listeners": 0,
+        "ipv6_listeners": 0,
+        "role": "ssh_worker_4",
+        "unexpected_owner_or_address": false
+      }
+    ],
+    "listeners_before_stop": [
+      {
+        "expected_ipv4_loopback_owner": true,
+        "ipv4_listeners": 1,
+        "ipv6_listeners": 0,
+        "role": "engine",
+        "unexpected_owner_or_address": false
+      },
+      {
+        "expected_ipv4_loopback_owner": true,
+        "ipv4_listeners": 1,
+        "ipv6_listeners": 0,
+        "role": "ssh_worker_1",
+        "unexpected_owner_or_address": false
+      },
+      {
+        "expected_ipv4_loopback_owner": true,
+        "ipv4_listeners": 1,
+        "ipv6_listeners": 0,
+        "role": "ssh_worker_2",
+        "unexpected_owner_or_address": false
+      },
+      {
+        "expected_ipv4_loopback_owner": true,
+        "ipv4_listeners": 1,
+        "ipv6_listeners": 0,
+        "role": "ssh_worker_3",
+        "unexpected_owner_or_address": false
+      },
+      {
+        "expected_ipv4_loopback_owner": true,
+        "ipv4_listeners": 1,
+        "ipv6_listeners": 0,
+        "role": "ssh_worker_4",
+        "unexpected_owner_or_address": false
+      }
+    ],
+    "managed_pool_512_proved": true,
+    "microsoft_fixture_signatures_valid": true,
+    "msvc_cxx_compiler_version": "19.44.35230.0",
+    "msvc_dev_environment_verified": true,
+    "msvc_generator": "Visual Studio 17 2022",
+    "overload_replies": 80,
+    "paused_admission_failed_closed": true,
+    "peak_active_flows_per_worker": [
+      128,
+      128,
+      128,
+      128
+    ],
+    "peak_held": 512,
+    "phase": "COMPLETE",
+    "probe_exit_code": 0,
+    "probe_stage": "complete",
+    "qa_sha": "c45fce1675706bcf5612f7b5fceeea54a1d56594",
+    "qa_tree": "233f794cdc09bdc1c5614bfc358584131effe6f8",
+    "raw_single_backend_512_tested": false,
+    "recovery_successes": 16,
+    "release_zero_permits": true,
+    "run_only_fixture_files_removed": true,
+    "schema": "flowbridge-native-win11-candidate-managed-pool-512-v1",
+    "service_session": 0,
+    "status": "PASS",
+    "stop_cleared_pool": true,
+    "stop_listeners_closed": true,
+    "stop_original_children_exited": true,
+    "stop_zero_permits": true,
+    "target_held": 512,
+    "tcp_connections_after_stop": [
+      {
+        "connect_timed_out": false,
+        "final_socket_code": 10061,
+        "initial_socket_code": 10035,
+        "role": "engine"
+      },
+      {
+        "connect_timed_out": false,
+        "final_socket_code": 10061,
+        "initial_socket_code": 10035,
+        "role": "ssh_worker_1"
+      },
+      {
+        "connect_timed_out": false,
+        "final_socket_code": 10061,
+        "initial_socket_code": 10035,
+        "role": "ssh_worker_2"
+      },
+      {
+        "connect_timed_out": false,
+        "final_socket_code": 10061,
+        "initial_socket_code": 10035,
+        "role": "ssh_worker_3"
+      },
+      {
+        "connect_timed_out": false,
+        "final_socket_code": 10061,
+        "initial_socket_code": 10035,
+        "role": "ssh_worker_4"
+      }
+    ],
+    "verified_under_overload": 512,
+    "windows_build": 22631,
+    "windows_sdk_version": "10.0.26100.0",
+    "worker_count": 4
+  },
+  "scope": "Original beta4 FFI, verified successful build receipt, compiled Win32 GUI pool policy, real managed official SSH workers on native Win11. Interactive GUI acceptance is separate."
+}

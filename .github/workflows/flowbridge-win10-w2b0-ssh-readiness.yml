@@ -63,7 +63,7 @@ jobs:
             throw 'W2b0 native guard proof failed'
           }
       - name: Persist scoped W2b0 read-only evidence
-        if: always()
+        if: ${{ github.event.repository.private == true && (always()) }}
         uses: actions/upload-artifact@v4
         with:
           name: FlowBridge-W2b0-ManagedGuard-Hosted-${{ github.run_id }}

@@ -1,0 +1,75 @@
+{
+  "schema": "flowbridge-frozen-beta3-rustsec-evidence-v1",
+  "run": {
+    "id": 46006587890,
+    "url": "https://github.com/i-shutov/flowbridge/actions/runs/46006587890",
+    "workflow": "Frozen internal beta3 RustSec lockfile audit",
+    "event": "workflow_dispatch",
+    "head_branch": "main",
+    "head_sha": "464cba6b2a0f8abd95055f334e8b752c011e86cc",
+    "head_tree_sha": "28332876c0bde5a75c9ee8350a06afdb79ebd9a2",
+    "attempt": 1,
+    "status": "completed",
+    "conclusion": "success",
+    "started_at": "2026-11-27T13:22:43Z",
+    "completed_by": "2026-11-27T13:25:31Z",
+    "artifact_count": 0,
+    "job": {
+      "id": 140531169076,
+      "name": "audit-lockfile",
+      "conclusion": "success",
+      "runner_image": "ubuntu-24.04",
+      "provenance_step": "success",
+      "audit_step": "success"
+    }
+  },
+  "workflow": {
+    "path": ".github/workflows/internal-beta3-rustsec-audit.yml",
+    "git_blob_sha": "d1ab008ae916b00047e81c594728a787a70158a4",
+    "sha256": "6cadd46293e38d3aae22705b0ad7d3b4fd2244f9992e9baef5986f6c92cc72d5"
+  },
+  "staged_lock_provenance": {
+    "frozen_lock_sha256": "d1f0a9399a48ab48e8ccce61aedd484bf7efce0c1142a69ed8e2738d46aa30e6",
+    "frozen_tree": "19df7a94071f38be6b8aa3530e1ded7a954a02a8",
+    "identical_third_party_records": 68,
+    "locked_packages": 75,
+    "original_lock_sha256": "7873affb09ffbb45dcb811b30555ad3844c0e4ce4da995e4a7f22130483d4b29",
+    "product_source": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+    "staging_source": "86aace2a4696e9717bc2b4423b447a760946aa15",
+    "third_party_records_sha256": "d0c87f02ed4673856444e8747c3ea10c01a815cd5a25fbe136c1a7efa20c6b78",
+    "workspace_version_changes": 7
+  },
+  "official_rustsec_snapshot": {
+    "sha": "c5279d0b0c9e8b70df666eb6d1edbabcfd1176bd",
+    "tree_sha": "f8a43d78481cb9b7da2d34f3b00e691b257787c3",
+    "committed_at": "2026-11-27T10:35:42Z",
+    "url": "https://github.com/rustsec/advisory-db/commit/c5279d0b0c9e8b70df666eb6d1edbabcfd1176bd",
+    "independently_verified_against_official_git_commit": true,
+    "git_head_tree_and_clean_status_verified_before_scan": true,
+    "git_head_tree_and_clean_status_verified_after_scan": true,
+    "local_database_no_fetch": true
+  },
+  "emitted_result": {
+    "a5_accepted": false,
+    "a6_accepted": false,
+    "a7_approved": false,
+    "advisory_database_entries": 1571,
+    "cargo_audit_version": "0.23.0",
+    "frozen_lock_sha256": "d1f0a9399a48ab48e8ccce61aedd484bf7efce0c1142a69ed8e2738d46aa30e6",
+    "locked_packages_audited": 75,
+    "publisher_release_approved": false,
+    "rustsec_commit": "c5279d0b0c9e8b70df666eb6d1edbabcfd1176bd",
+    "rustsec_commit_time": "2026-11-27T11:35:42+01:00",
+    "rustsec_ids": [],
+    "rustsec_tree": "f8a43d78481cb9b7da2d34f3b00e691b257787c3",
+    "status": "RUSTSEC_NO_KNOWN_ADVISORIES",
+    "vulnerabilities": 0,
+    "warnings": 0
+  },
+  "limits": {
+    "crates_io_yanked_status_checked": false,
+    "scope": "exact Cargo.lock against the recorded advisory snapshot only",
+    "dynamic_runtime_or_non_cargo_components_audited": false,
+    "win10_accessed": false
+  }
+}

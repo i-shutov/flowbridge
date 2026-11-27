@@ -1,0 +1,307 @@
+{
+  "all_rerun_attempts_observed": true,
+  "failed_jobs": [
+    {
+      "attempt": 1,
+      "conclusion": "failure",
+      "job_id": 140535473821,
+      "lines": [
+        "2026-11-27T13:44:37.8173162Z ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host",
+        "2026-11-27T13:44:38.1228172Z ##[error]Process completed with exit code 1."
+      ],
+      "run_id": 46007854819,
+      "server_signatures": [
+        "pipe(notify_pipe) failed Too many open files [postauth]",
+        "wait_until_can_do_something: ppoll: Not enough space [postauth]"
+      ]
+    }
+  ],
+  "g2_accepted": false,
+  "job_count": 13,
+  "merge_base_commit": "d903f2aef442a59c5e792746e31476cac0b50b54",
+  "pr_head_sha": "872657679b4a5f5a2f53f7209516614732b4f672",
+  "pr_head_tree_sha": "630a964ad32c39e8ea7281008958fad04b77df6f",
+  "prior_main_dns_failure": {
+    "failed_test": "paired_ephemeral_port_and_explicit_conflict_are_distinct",
+    "job_id": 140525417921,
+    "os_error": 10013,
+    "root_cause_established": false,
+    "run_id": 46004830039
+  },
+  "pull_request": 92,
+  "recorded_at": "2026-11-27T13:47:04.985922+00:00",
+  "repository": "i-shutov/flowbridge",
+  "runs": [
+    {
+      "artifact_count": 0,
+      "attempts": [
+        {
+          "attempt": 1,
+          "conclusion": "success",
+          "job_count": 5,
+          "jobs": [
+            {
+              "conclusion": "success",
+              "failed_steps": [],
+              "id": 140535473999,
+              "name": "windows-application",
+              "status": "completed"
+            },
+            {
+              "conclusion": "success",
+              "failed_steps": [],
+              "id": 140535474487,
+              "name": "rust (ubuntu-24.04)",
+              "status": "completed"
+            },
+            {
+              "conclusion": "success",
+              "failed_steps": [],
+              "id": 140535474499,
+              "name": "macos-application",
+              "status": "completed"
+            },
+            {
+              "conclusion": "success",
+              "failed_steps": [],
+              "id": 140535474535,
+              "name": "rust (macos-15)",
+              "status": "completed"
+            },
+            {
+              "conclusion": "success",
+              "failed_steps": [],
+              "id": 140535474577,
+              "name": "rust (windows-2025)",
+              "status": "completed"
+            }
+          ],
+          "status": "completed",
+          "updated_at": "2026-11-27T13:35:13Z"
+        }
+      ],
+      "name": "rust-and-native-applications",
+      "run_id": 46007854848,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/46007854848"
+    },
+    {
+      "artifact_count": 0,
+      "attempts": [
+        {
+          "attempt": 1,
+          "conclusion": "success",
+          "job_count": 3,
+          "jobs": [
+            {
+              "conclusion": "success",
+              "failed_steps": [],
+              "id": 140535473406,
+              "name": "dns (ubuntu-24.04)",
+              "status": "completed"
+            },
+            {
+              "conclusion": "success",
+              "failed_steps": [],
+              "id": 140535473894,
+              "name": "dns (windows-2025)",
+              "status": "completed"
+            },
+            {
+              "conclusion": "success",
+              "failed_steps": [],
+              "id": 140535473961,
+              "name": "dns (macos-15)",
+              "status": "completed"
+            }
+          ],
+          "status": "completed",
+          "updated_at": "2026-11-27T13:34:06Z"
+        }
+      ],
+      "name": "Native DNS vertical",
+      "run_id": 46007854861,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/46007854861"
+    },
+    {
+      "artifact_count": 0,
+      "attempts": [
+        {
+          "attempt": 1,
+          "conclusion": "failure",
+          "job_count": 1,
+          "jobs": [
+            {
+              "conclusion": "failure",
+              "failed_steps": [
+                "Actual Windows SSH 128 held flows, 10k churn, four-worker lifecycle and backend ceiling"
+              ],
+              "id": 140535473821,
+              "name": "windows-openssh",
+              "status": "completed"
+            }
+          ],
+          "status": "completed",
+          "updated_at": "2026-11-27T13:44:42Z"
+        }
+      ],
+      "name": "Real Windows OpenSSH acceptance",
+      "run_id": 46007854819,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/46007854819"
+    },
+    {
+      "artifact_count": 0,
+      "attempts": [
+        {
+          "attempt": 1,
+          "conclusion": "success",
+          "job_count": 1,
+          "jobs": [
+            {
+              "conclusion": "success",
+              "failed_steps": [],
+              "id": 140535474501,
+              "name": "wdk-build",
+              "status": "completed"
+            }
+          ],
+          "status": "completed",
+          "updated_at": "2026-11-27T13:33:16Z"
+        }
+      ],
+      "name": "windows-wfp-driver",
+      "run_id": 46007855120,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/46007855120"
+    },
+    {
+      "artifact_count": 0,
+      "attempts": [
+        {
+          "attempt": 1,
+          "conclusion": "success",
+          "job_count": 1,
+          "jobs": [
+            {
+              "conclusion": "success",
+              "failed_steps": [],
+              "id": 140535473793,
+              "name": "actual-bfe-scope",
+              "status": "completed"
+            }
+          ],
+          "status": "completed",
+          "updated_at": "2026-11-27T13:32:11Z"
+        }
+      ],
+      "name": "Windows real WFP application scope",
+      "run_id": 46007854845,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/46007854845"
+    },
+    {
+      "artifact_count": 0,
+      "attempts": [
+        {
+          "attempt": 1,
+          "conclusion": "success",
+          "job_count": 2,
+          "jobs": [
+            {
+              "conclusion": "success",
+              "failed_steps": [],
+              "id": 140535473438,
+              "name": "Pure version and offline Git isolation tests (windows-2025)",
+              "status": "completed"
+            },
+            {
+              "conclusion": "success",
+              "failed_steps": [],
+              "id": 140535474086,
+              "name": "Pure version and offline Git isolation tests (ubuntu-24.04)",
+              "status": "completed"
+            }
+          ],
+          "status": "completed",
+          "updated_at": "2026-11-27T13:33:25Z"
+        }
+      ],
+      "name": "Internal beta3 LOCAL source staging contract — no release artifacts",
+      "run_id": 46007854813,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/46007854813"
+    }
+  ],
+  "schema": "flowbridge-pr92-dns-test-only-ci-v1",
+  "strict_raw512_accepted": false,
+  "tested_checkout_sources": [
+    {
+      "checkout_line": "2026-11-27T13:31:45.7201007Z HEAD is now at 6803bca Merge 872657679b4a5f5a2f53f7209516614732b4f672 into d903f2aef442a59c5e792746e31476cac0b50b54",
+      "job_id": 140535474577
+    },
+    {
+      "checkout_line": "2026-11-27T13:31:49.7435039Z HEAD is now at 6803bca Merge 872657679b4a5f5a2f53f7209516614732b4f672 into d903f2aef442a59c5e792746e31476cac0b50b54",
+      "job_id": 140535473894
+    },
+    {
+      "checkout_line": "2026-11-27T13:31:45.6433392Z HEAD is now at 6803bca Merge 872657679b4a5f5a2f53f7209516614732b4f672 into d903f2aef442a59c5e792746e31476cac0b50b54",
+      "job_id": 140535473821
+    }
+  ],
+  "tested_merge_sha": "6803bca842e24ac957e98ffea5c8a9f441ffd610",
+  "tested_merge_tree_sha": "630a964ad32c39e8ea7281008958fad04b77df6f",
+  "total_artifacts": 0,
+  "win10_qa_accepted": false,
+  "windows_dns_integration": {
+    "job_id": 140535473894,
+    "lines": [
+      "2026-11-27T13:34:00.6800571Z   \"passed\": true,",
+      "2026-11-27T13:34:00.6800945Z   \"os_dns_changed\": false,",
+      "2026-11-27T13:34:00.6802696Z     \"Loopback UDP and TCP stub returns correct data; Stop releases listener\",",
+      "2026-11-27T13:34:00.6803250Z     \"Proxy rejection and paused SSH never trigger local/DIRECT DNS fallback\""
+    ]
+  },
+  "windows_real_ssh": {
+    "job_id": 140535473821,
+    "metrics": {
+      "bare_backend": {
+        "actual_connection_attempts": 245,
+        "client_winerror": 10054,
+        "min_requirement": 128,
+        "passed": false,
+        "peak_held": 244,
+        "recovery_successes": 0,
+        "requested_target": 512,
+        "resource_recovery_verified": false,
+        "server_postauth_notify_pipe_file_limit": true,
+        "server_postauth_poll_space_error": true
+      },
+      "managed": {
+        "churn_completed": 10000,
+        "churn_failed": 0,
+        "elapsed_seconds": 688.093,
+        "held": 128,
+        "passed": true,
+        "rejected": 1152
+      },
+      "owned_four_worker": {
+        "children": 4,
+        "passed": true
+      }
+    },
+    "selected_observations": [
+      "2026-11-27T13:44:05.4508176Z {\"churn_completed\": 10000, \"start_rate_limit\": 15.0}",
+      "2026-11-27T13:44:37.8059640Z   \"actual_connection_attempts\": 245,",
+      "2026-11-27T13:44:37.8060705Z   \"peak_held\": 244,",
+      "2026-11-27T13:44:37.8062127Z   \"resource_recovery_verified\": false,",
+      "2026-11-27T13:44:37.8173162Z ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host",
+      "2026-11-27T13:44:38.1228172Z ##[error]Process completed with exit code 1."
+    ]
+  },
+  "windows_rust_dns_units": {
+    "job_id": 140535474577,
+    "lines": [
+      "2026-11-27T13:32:57.8280603Z test native_dns::tests::paired_ephemeral_sockets_share_the_assigned_address ... ok",
+      "2026-11-27T13:32:57.8281196Z test native_dns::tests::explicit_conflict_does_not_fall_back_to_another_port ... ok"
+    ]
+  },
+  "workflow_count": 6,
+  "first_attempt_all": true,
+  "manually_rerun": false
+}

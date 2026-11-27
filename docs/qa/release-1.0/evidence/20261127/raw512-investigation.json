@@ -1,0 +1,132 @@
+{
+  "schema": "flowbridge-raw512-investigation-v1",
+  "date": "2026-11-27",
+  "original_product_failure": {
+    "source": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+    "run_id": 45976744578,
+    "job_id": 140430311431,
+    "peak_held": 244,
+    "attempts": 245,
+    "client_winerror": 10054,
+    "server_signature": "pipe(notify_pipe) failed Too many open files [postauth]",
+    "recovery_proved": false
+  },
+  "source_analysis": {
+    "project": "PowerShell/openssh-portable",
+    "version": "v10.4.0.0",
+    "max_fds": 256,
+    "scope": "process-local Win32 compatibility descriptor table",
+    "allocation_exhaustion": "EMFILE",
+    "not_os_handle_limit": true,
+    "not_a_runtime_configuration_option": true,
+    "header": "https://github.com/PowerShell/openssh-portable/blob/v10.4.0.0/contrib/win32/win32compat/inc/sys/select.h",
+    "allocator": "https://github.com/PowerShell/openssh-portable/blob/v10.4.0.0/contrib/win32/win32compat/w32fd.c",
+    "qualification": "The source mechanism supports the earlier server-side resource failure; it does not establish the exact compiled table of the Windows inbox client solely from its version."
+  },
+  "strict_probe": {
+    "head_sha": "06c7d7d5cc005be092dd1c944b0c8dcd265d5726",
+    "run_id": 45998507203,
+    "job_id": 140503871736,
+    "url": "https://github.com/i-shutov/flowbridge/actions/runs/45998507203/job/140503871736",
+    "result": {
+      "passed": false,
+      "source_commit": "e14aa93e83678c4a4aa3c405154bfea7a187d303",
+      "platform": "Windows-2025Server-10.0.26100-SP0",
+      "hosted_windows_runner": true,
+      "windows_10_11_user_machine_tested": false,
+      "wfp_driver_loaded": false,
+      "native_dns_leaks_verified": false,
+      "system_configuration_modified": false,
+      "network_test_destinations_loopback_only": true,
+      "scenario": "raw",
+      "managed_acceptance_proved": false,
+      "raw_backend_512_stability_proved": false,
+      "ssh_sha256": "98d447730047f5df91373e852d057928a921c3d1e89938700ab656ba84b19dc8",
+      "sshd_sha256": "00d61610a0965b42cc9a9cd401dae8983fe77d5394697f074d776bb68ce6ff0a",
+      "ffi_sha256": null,
+      "workflow_run_id": "45998507203",
+      "source_tree_sha": "ecf3634b143a65b34f4c70f9e3643730918eca64",
+      "cli_sha256": null,
+      "raw_backend_peak_held": 246,
+      "raw_backend_observations": {
+        "attempts": [
+          {
+            "requested_tier": 64,
+            "target_held": 64,
+            "test_ceiling_applied": false,
+            "actual_new_attempts": 64,
+            "accepted_new": 64,
+            "failed_new": 0,
+            "held_at_start": 0,
+            "accepted_held": 64
+          },
+          {
+            "requested_tier": 128,
+            "target_held": 128,
+            "test_ceiling_applied": false,
+            "actual_new_attempts": 64,
+            "accepted_new": 64,
+            "failed_new": 0,
+            "held_at_start": 64,
+            "accepted_held": 128
+          },
+          {
+            "requested_tier": 192,
+            "target_held": 192,
+            "test_ceiling_applied": false,
+            "actual_new_attempts": 64,
+            "accepted_new": 64,
+            "failed_new": 0,
+            "held_at_start": 128,
+            "accepted_held": 192
+          },
+          {
+            "requested_tier": 256,
+            "target_held": 256,
+            "test_ceiling_applied": false,
+            "actual_new_attempts": 55,
+            "accepted_new": 54,
+            "failed_new": 1,
+            "held_at_start": 192,
+            "accepted_held": 246
+          },
+          {
+            "requested_tier": 512,
+            "target_held": 512,
+            "test_ceiling_applied": false,
+            "actual_new_attempts": 1,
+            "accepted_new": 0,
+            "failed_new": 1,
+            "held_at_start": 246,
+            "accepted_held": 246
+          }
+        ],
+        "minimum_required_held": 512,
+        "selected_held_ceiling": 512,
+        "actual_connection_attempts": 248,
+        "recovery_successes": 0,
+        "capacity_baseline_verified": false,
+        "resource_recovery_verified": false,
+        "resource_error_counts": {},
+        "ssh_exit_code_before_cleanup": null,
+        "error_type": "RuntimeError",
+        "error_winerror": null
+      },
+      "bare_backend_probe_passed": false,
+      "fixture_server_resource_error_counts": {},
+      "fixture_listener_exit_code": null,
+      "error_type": "RuntimeError",
+      "error": "Raw OpenSSH fixture or strict capacity gate failed"
+    }
+  },
+  "interpretation": {
+    "strict_raw512_pass": false,
+    "new_probe_capacity_verified": 246,
+    "new_probe_512_gate_failed": true,
+    "new_probe_recovery": "Not reached: the strict 512 minimum failed before recovery. Zero completed recovery connections must not be described as a measured recovery failure.",
+    "resource_failure_in_new_probe": "No allowlisted client/server resource marker or numeric WinError was observed in this run; retain earlier resource evidence separately.",
+    "required_next_step": "Review a signed client/server dependency or backend pair with adequate process descriptor headroom, then run the same strict 512-held plus 16-recovery gate. Do not lower 512 or count managed pooling as a single-backend result.",
+    "native_win11_load_repeated": false,
+    "win10_touched": false
+  }
+}

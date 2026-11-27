@@ -1,0 +1,121 @@
+name: Internal beta3 LOCAL source staging contract — no release artifacts
+on:
+  pull_request:
+    paths:
+      - 'tools/stage_internal_beta3.py'
+      - 'tests/test_stage_internal_beta3.py'
+      - 'tools/internal_windows_build_preflight.py'
+      - 'tests/test_internal_windows_build_preflight.py'
+      - '.github/workflows/internal-beta3-staging-contract.yml'
+      - 'docs/qa/release-1.0/checkpoints/BETA3_OFFLINE_PRIVATE_STAGE_20261117.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: internal-beta3-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-only:
+    name: Pure version and offline Git isolation tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: qa
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 44f1fc0eba5ac1552df94f083342e25a1a764937
+          path: product
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Assert the product source is the exact security-reviewed commit
+        shell: python
+        run: |
+          import subprocess
+          from pathlib import Path
+          assert Path('product/Cargo.lock').is_file()
+          source=subprocess.check_output(
+              ['git','-C','product','rev-parse','HEAD'],text=True).strip()
+          assert source=='44f1fc0eba5ac1552df94f083342e25a1a764937'
+          assert Path('qa/tools/stage_internal_beta3.py').is_file()
+          print('SOURCE_AND_QA_SEPARATE_EXACT_PRODUCT_SHA_PASS')
+      - name: Verify the existing beta.2 contract, not another binary candidate
+        run: python product/tools/explicit_beta_metadata.py check
+      - name: Prove version surgery, malicious ZIP rejection and NO-REMOTE private Git
+        env:
+          FLOWBRIDGE_BETA2_FIXTURE_ROOT: ${{ github.workspace }}/product
+        run: python -m unittest discover -s qa/tests -p 'test_stage_internal_beta3.py' -v
+      - name: Verify Windows build-host separation and pinned private NSIS prerequisites
+        run: python -m unittest discover -s qa/tests -p 'test_internal_windows_build_preflight.py' -v
+      - name: Stage and verify the ACTUAL pinned security tree without remotes or installers
+        shell: python
+        run: |
+          import importlib.util, json, pathlib, subprocess, sys, tempfile
+          def tree(root):
+              listing=subprocess.check_output(['git','-C',str(root),'ls-tree','-rz','HEAD'])
+              return {path: info.split() for info,path in
+                      (entry.split(b'\t',1) for entry in listing.rstrip(b'\0').split(b'\0'))}
+          source=pathlib.Path('product').resolve()
+          for k,v in [('user.name','CI Beta3 Safety Fixture'),('user.email','qa@example.invalid')]:
+              subprocess.run(['git','-C',str(source),'config',k,v],check=True)
+          spec=importlib.util.spec_from_file_location('stage', 'qa/tools/stage_internal_beta3.py')
+          stage=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(stage)
+          with tempfile.TemporaryDirectory() as tmp:
+              out=pathlib.Path(tmp)/'offline-private'
+              result=stage.stage(source,out)
+              assert result['status']=='PRIVATE_SOURCE_ONLY_READY_NOT_BUILT'
+              assert result['original_verified_source_sha']=='44f1fc0eba5ac1552df94f083342e25a1a764937'
+              assert not result['installer_built'] and not result['a7_internal_deployment_approved']
+              assert not result['public_release_or_upload_performed']
+              assert subprocess.check_output(['git','-C',str(out),'remote']).strip()==b''
+              before, after = tree(source), tree(out)
+              assert {path: meta[:2] for path,meta in before.items()} == {
+                  path: meta[:2] for path,meta in after.items()}
+              assert {path.decode() for path in before if before[path][2]!=after[path][2]} == set(stage.MODIFIED_FILES)
+              contract=json.loads((out/'packaging/explicit-beta.json').read_text())
+              assert contract['version']=='0.3.0-beta.3' and contract['release_approved'] is False
+              from importlib.util import spec_from_file_location, module_from_spec
+              meta_spec=spec_from_file_location('beta_metadata', out/'tools/explicit_beta_metadata.py')
+              meta=module_from_spec(meta_spec)
+              meta_spec.loader.exec_module(meta)
+              check=meta.check_versions(out)
+              assert check['version']=='0.3.0-beta.3'
+              # The candidate suite must still reject a mismatched version after staging.
+              subprocess.run([sys.executable, '-m', 'unittest', 'discover',
+                              '-s', 'tests', '-p', 'test_explicit_beta_candidate.py'],
+                             cwd=out,check=True,timeout=120)
+              # Build the newly staged/committed beta3 lockfile itself,
+              # not just the old beta2 source or a hand-maintained fixture.
+              # No package / proprietary binary is uploaded or retained.
+              import os
+              from subprocess import DEVNULL
+              subprocess.run(['cargo','check','--locked','--workspace'],
+                             cwd=out,check=True,timeout=900,
+                             stdout=DEVNULL)
+              subprocess.run(['cargo','test','--locked','-p','flowbridge-tunnel',
+                              '--lib','--','--test-threads=2'],
+                             cwd=out,check=True,timeout=900,
+                             stdout=DEVNULL)
+              assert not list(out.rglob('*beta.3*setup.exe'))
+              assert subprocess.check_output(['git','-C',str(out),
+                                              'status','--porcelain']).strip()==b''
+          print('EXACT_PINNED_SECURITY_SOURCE_TO_PRIVATE_BETA3_STAGING_CARGO_CHECK_AND_SSH_TEST_PASS_NO_INSTALLER_NO_REMOTE')
+      - name: Assert no installer or package generated or uploaded by staging test
+        shell: python
+        run: |
+          from pathlib import Path
+          for root in (Path('qa'),Path('product')):
+              assert not list(root.rglob('*beta.3*setup.exe'))
+          print('BETA3_STAGING_TESTS_ONLY_NO_INSTALLER_NO_RELEASE_NO_GITHUB_UPLOAD')

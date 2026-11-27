@@ -1,0 +1,228 @@
+{
+  "schema": "flowbridge-terminal-qa-ci-v1",
+  "date": "2026-11-27",
+  "timezone": "Europe/Moscow",
+  "head_sha": "f99812701b4b3db60e22bc3077e5657a397e3a17",
+  "tree_sha": "f6ceb30ae11ae525a4b85ecc36bd1fd57cc3cd62",
+  "executed_merge_sha": "ce39a9668e11bcaad8313bdbe8b76488f71823c8",
+  "executed_merge_tree_sha": "f6ceb30ae11ae525a4b85ecc36bd1fd57cc3cd62",
+  "tree_matches_head": true,
+  "test_bearing_previous_source": "872657679b4a5f5a2f53f7209516614732b4f672",
+  "change_from_previous": "Documentation only; code, tests and workflows unchanged",
+  "runs": [
+    {
+      "run_id": 46010365023,
+      "name": "Real Windows OpenSSH acceptance",
+      "run_url": "https://github.com/i-shutov/flowbridge/actions/runs/46010365023",
+      "head_sha": "f99812701b4b3db60e22bc3077e5657a397e3a17",
+      "attempt": 1,
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at_utc": "2026-11-27T13:49:01Z",
+      "updated_at_utc": "2026-11-27T14:02:15Z",
+      "jobs": [
+        {
+          "job_id": 140544016065,
+          "name": "windows-openssh",
+          "status": "completed",
+          "conclusion": "failure"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 46010363720,
+      "name": "Native DNS vertical",
+      "run_url": "https://github.com/i-shutov/flowbridge/actions/runs/46010363720",
+      "head_sha": "f99812701b4b3db60e22bc3077e5657a397e3a17",
+      "attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "created_at_utc": "2026-11-27T13:49:00Z",
+      "updated_at_utc": "2026-11-27T13:50:10Z",
+      "jobs": [
+        {
+          "job_id": 140544011624,
+          "name": "dns (windows-2025)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140544011949,
+          "name": "dns (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140544011962,
+          "name": "dns (macos-15)",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 46010363742,
+      "name": "Windows real WFP application scope",
+      "run_url": "https://github.com/i-shutov/flowbridge/actions/runs/46010363742",
+      "head_sha": "f99812701b4b3db60e22bc3077e5657a397e3a17",
+      "attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "created_at_utc": "2026-11-27T13:49:00Z",
+      "updated_at_utc": "2026-11-27T13:49:37Z",
+      "jobs": [
+        {
+          "job_id": 140544011622,
+          "name": "actual-bfe-scope",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 46010363792,
+      "name": "windows-wfp-driver",
+      "run_url": "https://github.com/i-shutov/flowbridge/actions/runs/46010363792",
+      "head_sha": "f99812701b4b3db60e22bc3077e5657a397e3a17",
+      "attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "created_at_utc": "2026-11-27T13:49:00Z",
+      "updated_at_utc": "2026-11-27T13:51:13Z",
+      "jobs": [
+        {
+          "job_id": 140544011786,
+          "name": "wdk-build",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 46010363738,
+      "name": "Internal beta3 LOCAL source staging contract — no release artifacts",
+      "run_url": "https://github.com/i-shutov/flowbridge/actions/runs/46010363738",
+      "head_sha": "f99812701b4b3db60e22bc3077e5657a397e3a17",
+      "attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "created_at_utc": "2026-11-27T13:49:00Z",
+      "updated_at_utc": "2026-11-27T13:50:51Z",
+      "jobs": [
+        {
+          "job_id": 140544011417,
+          "name": "Pure version and offline Git isolation tests (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140544011916,
+          "name": "Pure version and offline Git isolation tests (windows-2025)",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 46010363790,
+      "name": "rust-and-native-applications",
+      "run_url": "https://github.com/i-shutov/flowbridge/actions/runs/46010363790",
+      "head_sha": "f99812701b4b3db60e22bc3077e5657a397e3a17",
+      "attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "created_at_utc": "2026-11-27T13:49:00Z",
+      "updated_at_utc": "2026-11-27T13:52:51Z",
+      "jobs": [
+        {
+          "job_id": 140544011848,
+          "name": "macos-application",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140544012151,
+          "name": "windows-application",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140544012160,
+          "name": "rust (windows-2025)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140544012267,
+          "name": "rust (macos-15)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140544012468,
+          "name": "rust (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "artifact_count": 0
+    }
+  ],
+  "workflow_count": 6,
+  "workflows_passed": 5,
+  "jobs_total": 13,
+  "jobs_passed": 12,
+  "first_attempt_all": true,
+  "artifact_count": 0,
+  "ssh": {
+    "run_id": 46010365023,
+    "job_id": 140544016065,
+    "managed": {
+      "held": 128,
+      "admission_rejections": 1152,
+      "churn": 10000,
+      "churn_failures": 0,
+      "handle_counts": {
+        "before": 166,
+        "held_128": 292,
+        "after_release": 164,
+        "final": 162
+      },
+      "max_start_rate_per_second": 15,
+      "throughput_benchmark": false
+    },
+    "pool": {
+      "independent_processes": 4,
+      "passed": true
+    },
+    "raw": {
+      "target_held": 512,
+      "held": 244,
+      "attempts": 245,
+      "recovery_successes": 0,
+      "recovery_stage_completed": false,
+      "client_error": "WinError 10054",
+      "client_resource_error_counts": {},
+      "server_error_classes": {
+        "notify_pipe_too_many_open_files": true,
+        "ppoll_not_enough_space": true
+      },
+      "strict512_accepted": false
+    },
+    "ssh_sha256": "98d447730047f5df91373e852d057928a921c3d1e89938700ab656ba84b19dc8",
+    "sshd_sha256": "00d61610a0965b42cc9a9cd401dae8983fe77d5394697f074d776bb68ce6ff0a",
+    "ffi_sha256": "88133ff1e99122125cee300acac615862053f138db703e8bd51293498d3c7c07"
+  },
+  "scope_limits": [
+    "Hosted Windows Server is not Win10 or Win11 product acceptance",
+    "Stock signed backend failure remains separate from successful unsigned source laboratory512+16",
+    "No private candidate executed and no release artifacts uploaded"
+  ],
+  "frozen_candidate_changed": false,
+  "product_release_accepted": false
+}

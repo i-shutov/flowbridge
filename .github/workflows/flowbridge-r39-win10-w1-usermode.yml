@@ -53,7 +53,7 @@ jobs:
             }
           }
       - name: Preserve hosted user-mode evidence only, not any kernel driver
-        if: always()
+        if: ${{ github.event.repository.private == true && (always()) }}
         uses: actions/upload-artifact@v4
         with:
           name: FlowBridge-R39-W1-Hosted-Windows-${{ github.run_id }}

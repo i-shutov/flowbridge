@@ -1,0 +1,67 @@
+{
+  "schema": "flowbridge-wsk-accepted-socket-compile-evidence-v1",
+  "date": "2026-11-27",
+  "timezone": "Europe/Moscow",
+  "prototype_source": {
+    "sha": "229e37263b5927167795eb2f76097299e4b9770a",
+    "tree": "336529d9446d7eedd6396fe7879c47dd778eda25",
+    "independently_reviewed_local_same_tree_sha": "23a387222b973bed807981a6ef958f1bc29a216c"
+  },
+  "base_source_sha": "f1ac3b04369163ece245c4fea9520571cec112bf",
+  "workflow_sha256": "b0d7236b24177b5d68636b2c9802f74d85b7032e8d171f51163714ccbdd1136a",
+  "id": 46003874189,
+  "url": "https://github.com/i-shutov/flowbridge/actions/runs/46003874189",
+  "event": "workflow_dispatch",
+  "head_sha": "116067f71367517cf032373a7ff6706c8c409d8f",
+  "status": "completed",
+  "conclusion": "success",
+  "attempt": 1,
+  "started_at": "2026-11-27T13:03:55Z",
+  "updated_at": "2026-11-27T13:05:54Z",
+  "artifact_count": 0,
+  "jobs": [
+    {
+      "id": 140522049766,
+      "name": "compile-prototype",
+      "status": "completed",
+      "conclusion": "success",
+      "steps": [
+        {
+          "name": "Verify exact source and provider call-site mutations",
+          "conclusion": "success"
+        },
+        {
+          "name": "Build and run native C++ authority logic fixtures",
+          "conclusion": "success"
+        },
+        {
+          "name": "Compile the prototype object with pinned Microsoft SDK and WDK",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ],
+  "fixture_cases_passed": 9,
+  "structural_test_methods_passed": 2,
+  "independently_reviewed_source_mutants_rejected": 8,
+  "microsoft_sdk_wdk_version": "10.0.28000.2526",
+  "compiler_target": "ClCompile",
+  "target_toolset": "WindowsKernelModeDriver10.0",
+  "target_platform": "Universal",
+  "warnings": 0,
+  "errors": 0,
+  "warning_level": 4,
+  "warnings_as_errors": true,
+  "object_exists_check_passed": true,
+  "runtime_driver_executed": false,
+  "g2_accepted": false,
+  "origin_process_bound": false,
+  "packet_owner_bound": false,
+  "limits": [
+    "Only an isolated WDK object was compiled; no driver linked, signed, installed or loaded",
+    "Kernel-owned listener startup, target PID, provider and per-generation policy rundown not wired",
+    "Same-object queries compile but WSK redirect context/records runtime behavior and transplant rejection not tested",
+    "Cancellation drains and close may block; production cancellation/rundown design still needed",
+    "No origin-process, packet-owner or physical-egress proof"
+  ]
+}

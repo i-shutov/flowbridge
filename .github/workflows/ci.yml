@@ -38,7 +38,7 @@ jobs:
       - name: Verify IPv4/IPv6 SOCKS wire fixture (no WFP driver)
         run: python tests/wfp_wire_fixture_smoke.py --output build/verification/wfp-fixture/result.json
       - name: Preserve dual-stack wire-fixture evidence
-        if: always()
+        if: ${{ github.event.repository.private == true && (always()) }}
         uses: actions/upload-artifact@v7.0.0
         with:
           name: FlowBridge-wfp-wire-fixture-${{ matrix.os }}
@@ -57,7 +57,7 @@ jobs:
       - name: Native selected application through user-owned GUI SSH route
         run: python tests/native_user_ssh_chain_integration.py --output build/verification/native/user-ssh-two-hop.json
       - name: Preserve native-session evidence
-        if: always()
+        if: ${{ github.event.repository.private == true && (always()) }}
         uses: actions/upload-artifact@v7.0.0
         with:
           name: FlowBridge-native-session-${{ matrix.os }}
@@ -67,7 +67,7 @@ jobs:
       - name: Exercise shared SSH capacity under connection bursts
         run: python tests/managed_capacity_integration.py --output build/verification/capacity/result.json
       - name: Preserve admission-control evidence
-        if: always()
+        if: ${{ github.event.repository.private == true && (always()) }}
         uses: actions/upload-artifact@v7.0.0
         with:
           name: FlowBridge-capacity-${{ matrix.os }}
@@ -84,7 +84,7 @@ jobs:
           sudo install -d -m 0755 /run/sshd
           python tests/ssh_real_integration.py --library target/debug/libflowbridge_ffi.so --output build/verification/ssh
       - uses: actions/upload-artifact@v7.0.0
-        if: always() && matrix.os == 'ubuntu-24.04'
+        if: ${{ github.event.repository.private == true && (always() && matrix.os == 'ubuntu-24.04') }}
         with:
           name: FlowBridge-real-SSH-verification
           path: build/verification/ssh/
@@ -97,7 +97,7 @@ jobs:
           git archive --format=zip --prefix=flowbridge/ -o "artifacts/flowbridge-source-${GITHUB_SHA}.zip" HEAD
           sha256sum artifacts/flowbridge-source-*.zip > artifacts/source-SHA256SUMS.txt
       - uses: actions/upload-artifact@v7.0.0
-        if: matrix.os == 'ubuntu-24.04'
+        if: ${{ github.event.repository.private == true && (matrix.os == 'ubuntu-24.04') }}
         with:
           name: FlowBridge-exact-source
           path: |
@@ -146,6 +146,7 @@ jobs:
       - name: Install, run, upgrade and uninstall on Windows
         run: python tests/windows_installer_native.py --manifest docs/verification/windows-package.json --harness build/windows/Release/FlowBridgeNativeSmoke.exe --output build/verification/windows
       - uses: actions/upload-artifact@v7.0.0
+        if: ${{ github.event.repository.private == true }}
         with:
           name: FlowBridge-windows-x64
           path: |
@@ -154,7 +155,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Publish installer verification evidence
-        if: always()
+        if: ${{ github.event.repository.private == true && (always()) }}
         uses: actions/upload-artifact@v7.0.0
         with:
           name: FlowBridge-windows-verification
@@ -190,13 +191,14 @@ jobs:
       - name: Install, launch and upgrade the actual macOS package
         run: python tests/macos_installer_native.py --package-dir build/macos/local/packages --output build/verification/macos
       - uses: actions/upload-artifact@v7.0.0
+        if: ${{ github.event.repository.private == true }}
         with:
           name: FlowBridge-macos-universal-local
           path: build/macos/local/packages/*.pkg
           if-no-files-found: error
           retention-days: 14
       - name: Publish macOS installation evidence
-        if: always()
+        if: ${{ github.event.repository.private == true && (always()) }}
         uses: actions/upload-artifact@v7.0.0
         with:
           name: FlowBridge-macos-verification

@@ -1,0 +1,244 @@
+{
+  "schema": "flowbridge-release-workpackages-v1",
+  "date": "2026-11-27",
+  "timezone": "Europe/Moscow",
+  "objective": "Internal 0.3.0 Windows11 explicit-SOCKS release; WFP follows independently",
+  "authorization_basis": "Owner requested updated master plan, commit/push first, then execution by four subagents following the proposed split strategy",
+  "shared_constraints": {
+    "win10_actions_allowed": false,
+    "win11_product_acceptance_work_authorized": true,
+    "win11_product_accepted": false,
+    "frozen_beta3_mutation_allowed": false,
+    "public_release_allowed": false,
+    "security_policy_weakening_allowed": false,
+    "raw_single_512_required_for_0_3": false,
+    "managed_aggregate_512_required": true
+  },
+  "execution_order": [
+    "Publish refreshed plan commit",
+    "Start QA/composition/security agents in isolated worktrees",
+    "Start independent reviewer when one child slot is available",
+    "Root integrates and executes permitted native stages",
+    "Update evidence and plan; commit and push completed block"
+  ],
+  "tasks": [
+    {
+      "id": "release_qa",
+      "goal": "Original beta4 Win11 interactive GUI/SSH acceptance and fresh desktop preflight",
+      "deliverables": [
+        "Verified desktop/session observation",
+        "Ready exact-candidate GUI/SSH positive/negative acceptance runner",
+        "Actual native evidence when desktop available; otherwise exact observed prerequisite"
+      ],
+      "acceptance": [
+        "Original candidate pins unchanged",
+        "No Session0 visual PASS",
+        "Owned cleanup and private evidence"
+      ],
+      "model": "gpt-6.2-sol",
+      "reasoning_effort": "high",
+      "status": "BLOCKED_FRESH_NATIVE_DESKTOP_PREFLIGHT_UNAVAILABLE",
+      "candidate_run": 46040903481,
+      "direct_work": "Read and verified existing desktop card and original lifecycle receipt; no fresh native observation",
+      "actual_child_launch_this_session": false
+    },
+    {
+      "id": "release_candidate",
+      "goal": "A5 original composition/notices/runtime review and complete internal handoff packet",
+      "deliverables": [
+        "Candidate-specific dependency/runtime findings",
+        "Internal release notes, limitations, checksums and lifecycle instructions"
+      ],
+      "acceptance": [
+        "13 payload and original pins bound to review",
+        "No public distribution or invented legal approval",
+        "Concrete open items only"
+      ],
+      "model": "gpt-6.2-sol",
+      "reasoning_effort": "high",
+      "status": "DIRECT_PARTIAL_COMPOSITION_AND_DRAFT_HANDOFF",
+      "candidate_run": 46040903481,
+      "direct_work": "Reconciled original static inventory and all pins; draft release notes and handoff ready, exact obligations/embedded/link member review OPEN",
+      "actual_child_launch_this_session": false
+    },
+    {
+      "id": "release_ssh_pool",
+      "goal": "A6 exact-source Windows SSH and diagnostics security/privacy review plus fresh RustSec",
+      "deliverables": [
+        "Risk-prioritized source review",
+        "Focused executable checks where useful",
+        "Pinned vulnerability database evidence and findings"
+      ],
+      "acceptance": [
+        "Trust/path/holding-file protections retained",
+        "No scan result invented or generalized beyond scope",
+        "Product defect fixes isolated from immutable candidate"
+      ],
+      "model": "gpt-6.2-sol",
+      "reasoning_effort": "high",
+      "status": "DIRECT_PARTIAL_SOURCE_AND_LOCK_REVIEW",
+      "candidate_run": 46040903481,
+      "direct_work": "Reconstructed exact staged tree, unchanged third-party lock, six source assertions PASS; fresh scan/native negative/privacy OPEN",
+      "actual_child_launch_this_session": false
+    },
+    {
+      "id": "release_review",
+      "goal": "Independent evidence and internal release-readiness review",
+      "deliverables": [
+        "Reconciliation of candidate hashes and technical claims",
+        "A5/A6/A7 readiness matrix with exact missing evidence"
+      ],
+      "acceptance": [
+        "Independent review of other agents outputs",
+        "No GUI PASS without native observation",
+        "No publishing authorization invented"
+      ],
+      "model": "gpt-6.2-sol",
+      "reasoning_effort": "high",
+      "status": "AWAITING_ACTUAL_INDEPENDENT_REVIEW",
+      "candidate_run": 46040903481,
+      "direct_work": "15 cross-receipt checks reconciled by main assistant; not independent subagent acceptance",
+      "actual_child_launch_this_session": false
+    }
+  ],
+  "plan_commit_before_delegation": "a9d1e6f14bd701363c7cd37b9ceab168aa24e31b",
+  "four_distinct_agents_started": false,
+  "historical_blocks": [
+    {
+      "id": "B1_BUILD_POOL512_HEADLESS",
+      "plan_commit": "8ea89cdf81728bf942c22591b879ec3b8d3606d5",
+      "result_commit": "f00b4d9db56979dc57eabb6f04c7e4b264a296be",
+      "four_distinct_agents_started": true,
+      "tasks": [
+        {
+          "id": "release_ssh_pool",
+          "model": "gpt-6.2-sol",
+          "reasoning_effort": "high",
+          "status": "COMPLETED_HOSTED_AND_NATIVE_ORIGINAL_POOL512",
+          "product_base": "cc0106245d10e3e26ca3847c33397522db91b59f",
+          "goal": "Exercise 512 simultaneous byte-verified connections through the actual managed pool",
+          "deliverables": [
+            "Real Engine/FFI managed pool integration probe",
+            "Negative checks that reject fewer than512 or fake independent processes",
+            "Windows run with resource/recovery and cleanup evidence"
+          ],
+          "acceptance": [
+            "512 simultaneous held payload-verified flows",
+            "Observed managed worker identities and per-backend bounds",
+            "16 successful recovery connections after release",
+            "Stop and zero leaked owned processes/permits"
+          ],
+          "single_backend_result_is_not_promoted": true,
+          "results": {
+            "product_commit": "1261201d8561ee4e70faccc8699f60606a71c93b",
+            "product_pr": 95,
+            "hosted_run": 46039371745,
+            "hosted_result": "512/80/16 and process/listener cleanup PASS",
+            "native_first_run": 46041606345,
+            "native_status": "PASS_512_80_16_AND_OWNED_CLEANUP",
+            "native_run": 46043398994,
+            "original_ffi_used": true,
+            "interactive_gui_tested": false
+          }
+        },
+        {
+          "id": "release_candidate",
+          "model": "gpt-6.2-sol",
+          "reasoning_effort": "high",
+          "status": "BUILD_AND_ORIGINAL_STATIC_INVENTORY_PASS",
+          "product_base": "cc0106245d10e3e26ca3847c33397522db91b59f",
+          "goal": "Build a separate next-version private candidate with corrected native metadata",
+          "deliverables": [
+            "Reviewed offline source cutter/build pins",
+            "New native Win11 build outside existing frozen candidate",
+            "Manifest and original payload/installer hashes plus metadata verification"
+          ],
+          "acceptance": [
+            "Old frozen beta3 unchanged",
+            "Exact source/tree/Cargo.lock relationship",
+            "No driver/service in explicit package",
+            "New notices and native metadata present"
+          ],
+          "results": {
+            "build_run": 46040903481,
+            "candidate_source": "c8881dada43e3183a0340dc823105bdcdac71171",
+            "candidate_tree": "ce336e83bb724a65bf512e79e286c97fb0cb3190",
+            "static_inventory_run": 46042486760,
+            "payload_files": 13,
+            "notice_file_records": 114,
+            "a5_a6_accepted": false
+          }
+        },
+        {
+          "id": "release_qa",
+          "model": "gpt-6.2-sol",
+          "reasoning_effort": "high",
+          "status": "HEADLESS_COMPLETED_INTERACTIVE_DESKTOP_REQUIRED",
+          "goal": "Prepare and carry out integrated original-candidate Win11 functional and visual acceptance",
+          "first_phase": "Executable acceptance protocol, desktop/session and isolation preflight, prioritized concrete blockers; hand off before WFP slot starts",
+          "deliverables": [
+            "Pinned executable preflight/protocol",
+            "Install/upgrade/uninstall/profile-preservation checks",
+            "Real SSH positive/negative and GUI evidence or precise unfulfilled prerequisite"
+          ],
+          "acceptance": [
+            "Exact new candidate hashes",
+            "Actual interactive visual observations where required",
+            "No Session0-as-GUI acceptance",
+            "Rollback of owned test changes"
+          ],
+          "results": {
+            "first_native_run": 46041604814,
+            "install_payload_cli_reinstall": "PASS",
+            "uninstall_observation": "Product and registration absent; zero processes; one NSIS bootstrap copy retained",
+            "recovery_status": "PASS_EXACT_OWNED_CLEANUP",
+            "gui_status": "BLOCKED_NO_ACTIVE_DESKTOP",
+            "independent_ownership_review": "PASS",
+            "headless_run": 46043764383,
+            "headless_result": "9/9 PASS",
+            "recovery_run": 46043723863
+          }
+        },
+        {
+          "id": "release_wfp",
+          "model": "gpt-6.2-sol",
+          "reasoning_effort": "high",
+          "status": "COMPLETED_SOURCE_AND_WDK_COMPILE",
+          "product_base": "a7476671a5b9574dfe8d6f5a307148b5fe27ef11",
+          "goal": "Advance kernel-private listener/provider/policy ownership and WSK rundown integration",
+          "deliverables": [
+            "Isolated ownership/rundown implementation or bounded reviewable seam",
+            "Focused lifetime and failure tests",
+            "WDK compile evidence"
+          ],
+          "acceptance": [
+            "No new kernel deployment before reviewed signed lab readiness",
+            "Separate policy-disarm and callback rundown",
+            "No G2/native acceptance from models or compile alone"
+          ],
+          "blocks_0_3_release": false,
+          "results": {
+            "source_commit": "f5182e971b0a6b203e509fe3dc0e7c11e269251e",
+            "run_id": 46038690086,
+            "cpp_cases_passed": 25,
+            "source_mutants_rejected": 38,
+            "warnings": 0,
+            "errors": 0,
+            "native_kernel_runtime": "NOT_RUN",
+            "a5_a6_accepted": false
+          }
+        }
+      ]
+    }
+  ],
+  "active_block": "B2_FINAL_ACCEPTANCE_AND_INTERNAL_HANDOFF",
+  "current_session_execution": {
+    "mode": "DIRECT_API_PARTIAL_EXECUTION_NO_CHILD_AGENT_RUNTIME",
+    "agent_launches": 0,
+    "prior_agent_outputs_recovered": false,
+    "report": "checkpoints/BETA4_B2_REVIEW_AND_HANDOFF_20261127.md",
+    "source_reconstruction": "PASS",
+    "receipt_checks_passed": 15,
+    "privacy_source_assertions_passed": 6
+  }
+}

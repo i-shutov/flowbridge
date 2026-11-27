@@ -1,0 +1,118 @@
+{
+  "schema": "flowbridge-next-metadata-terminal-ci-v1",
+  "source_sha": "cc0106245d10e3e26ca3847c33397522db91b59f",
+  "source_tree": "27d7d73906c21f8752c464f1f9d691c691721f7d",
+  "pr_url": "https://github.com/i-shutov/flowbridge/pull/94",
+  "base_product_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+  "executed_merge_sha": "0e683fa392c667c6d894571c9ac568d82181b339",
+  "executed_merge_tree": "27d7d73906c21f8752c464f1f9d691c691721f7d",
+  "tree_matches_head": true,
+  "merge_seen_in_g2_job_log": true,
+  "runs": [
+    {
+      "run_id": 46026287980,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/46026287980",
+      "name": "rust-and-native-applications",
+      "head_sha": "cc0106245d10e3e26ca3847c33397522db91b59f",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "created_at_utc": "2026-11-27T15:35:40Z",
+      "completed_at_utc": "2026-11-27T15:39:37Z",
+      "jobs": [
+        {
+          "job_id": 140598408846,
+          "name": "windows-application",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140598409145,
+          "name": "rust (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140598409244,
+          "name": "rust (windows-2025)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140598409262,
+          "name": "macos-application",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140598409790,
+          "name": "rust (macos-15)",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 46026287230,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/46026287230",
+      "name": "Rust capture integration candidate",
+      "head_sha": "cc0106245d10e3e26ca3847c33397522db91b59f",
+      "status": "completed",
+      "conclusion": "failure",
+      "attempt": 1,
+      "created_at_utc": "2026-11-27T15:35:40Z",
+      "completed_at_utc": "2026-11-27T15:40:09Z",
+      "jobs": [
+        {
+          "job_id": 140598405674,
+          "name": "integration (windows-2025)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140598405685,
+          "name": "integration (macos-15)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140598405718,
+          "name": "integration (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "job_id": 140598405784,
+          "name": "g2-kernel-connection-owner",
+          "status": "completed",
+          "conclusion": "failure"
+        }
+      ],
+      "artifact_count": 0
+    }
+  ],
+  "workflows_passed": 1,
+  "workflows_total": 2,
+  "jobs_passed": 8,
+  "jobs_total": 9,
+  "artifact_count": 0,
+  "g2_failure": {
+    "run_id": 46026287230,
+    "job_id": 140598405784,
+    "log_markers": [
+      "G2_ETW_CONNECTION_EVIDENCE=FAIL",
+      "G2_PACKET_BOUND=UNPROVED"
+    ],
+    "error_code": "kernel_connection_id_missing",
+    "error_code_source": "Authenticated GitHub run page rendered job summary; decoded job log emits only failure and unproved markers",
+    "same_observed_code_as_previous_product_g2": true,
+    "g2_accepted": false
+  },
+  "scope_limits": [
+    "All five Rust/native jobs and three portable capture integration jobs passed",
+    "Generic Windows/macOS build/install CI is separate from building a new versioned explicit-beta package with the revised metadata generator",
+    "No Win10 or frozen beta3 product acceptance",
+    "No strict512 rerun was performed by these two workflows"
+  ]
+}
