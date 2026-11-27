@@ -6,7 +6,7 @@
   "plan": "../../RELEASE_1_0_PLAN.md",
   "distribution": "internal-only",
   "candidate_version": "0.3.0-beta.3",
-  "release_target": "Windows 10 Pro 22H2 x64",
+  "release_target": "Windows 11 Pro x64; actual candidate acceptance required",
   "new_build_and_engineering_qa_host": "Windows 11 Pro build 22631 native x64; exact runner/host/account smoke PASS",
   "product_release_accepted": false,
   "publisher_release_approved": false,
@@ -424,11 +424,11 @@
   ],
   "access_blockers": [],
   "next_actions": [
-    "Review draft PR94 and native input selection/linkage/licensing scope; integrate accepted source into a new separately versioned private candidate with new hashes, preserving frozen beta3",
-    "Finish exact-candidate privacy/security and non-Cargo/dynamic-runtime review; A5/A6 remain open",
-    "Define WSK listener/provider/policy ownership and callback/worker rundown, then prepare a pinned signed isolated-lab package and rollback before native redirected-socket/packet/Verifier acceptance",
-    "Resume strict production raw512 only with an identified Microsoft-signed adequate-capacity pair; another publisher or backend requires an explicit product trust/architecture decision; do not re-run known256-slot binaries as a substitute",
-    "Keep R7/Win10 deferred under the owner instruction; pilot A7 follows exact-candidate A3/A5/A6, and full1.0 additionally requires G2/native WFP and signed RC"
+    "Commit and push revised master plan before assigning four workpackages",
+    "Prove aggregate512 through the real managed product pool without weakening signed-client trust",
+    "Build a new separately versioned private candidate from reviewed metadata source, preserving frozen beta3",
+    "Run original-candidate Win11 functional/visual/security acceptance with exact hashes and owned rollback",
+    "Continue WFP ownership/rundown as parallel future-release work; do not block0.3 on G2 or a new Microsoft single-backend binary"
   ],
   "candidate": {
     "version": "0.3.0-beta.3",
@@ -479,17 +479,18 @@
   },
   "owner_scope_update": {
     "date": "2026-11-27",
-    "win10_actions": "FORBIDDEN_BY_OWNER_CURRENT_SCOPE",
+    "win10_actions": "FORBIDDEN_UNCHANGED",
     "r7": "DEFERRED_BY_OWNER",
     "focus": [
-      "candidate composition and security review",
-      "signed raw512 dependency qualification",
-      "G2 WSK lifecycle and native readiness",
-      "evidence-driven master release plan"
+      "managed pool512",
+      "new private Windows11 candidate",
+      "functional and visual Win11 acceptance",
+      "parallel WFP ownership/rundown"
     ],
     "codex_on_win11_required": false,
     "exact_11_artifact_cleanup_authorized": true,
-    "exact_11_artifact_cleanup_completed": true
+    "exact_11_artifact_cleanup_completed": true,
+    "win11_product_acceptance_work_authorized": true
   },
   "diagnostic_changes": {
     "pr": "https://github.com/i-shutov/flowbridge/pull/93",
@@ -591,18 +592,15 @@
     "g2_accepted": false
   },
   "qa_final_document_head_ci": {
-    "source_sha": "f99812701b4b3db60e22bc3077e5657a397e3a17",
-    "tree_sha": "f6ceb30ae11ae525a4b85ecc36bd1fd57cc3cd62",
-    "executed_merge_sha": "ce39a9668e11bcaad8313bdbe8b76488f71823c8",
-    "jobs_passed": 12,
+    "source_sha": "63936d4967529b2794e98d547e275fabe01d9f65",
+    "jobs_passed": 13,
     "jobs_total": 13,
     "workflow_count": 6,
-    "workflows_passed": 5,
-    "first_attempt_all": true,
+    "workflows_passed": 6,
     "artifacts": 0,
-    "evidence": "evidence/20261127/qa-f998127-terminal-ci.json",
     "strict_raw512_proved": false,
-    "meaning": "Latest completed preceding document-head observation; later plan commit may trigger fresh automatic CI"
+    "managed_pool512_proved": false,
+    "evidence": "evidence/20261127/qa-63936d4-terminal-ci.json"
   },
   "frozen_beta3_static_review": {
     "source_sha": "8355c01b9d8c3d444f371e4b7b6fcb317b65bdb7",
@@ -731,19 +729,21 @@
     "plan": "../../RELEASE_1_0_PLAN.md",
     "previous_plan_archive": "../../RELEASE_1_0_PLAN_HISTORY_20261127.md",
     "milestone_order": [
-      "B0 infrastructure/provenance",
-      "B1 candidate composition and A5/A6",
-      "B2 native A3 deferred by owner",
-      "B3 internal pilot A7",
-      "B4 raw512 and G2 authority",
-      "B5 native WFP validation",
-      "B6 signed RC and 1.0"
+      "P1 unified source",
+      "P2 separate private candidate",
+      "P3 managed aggregate512",
+      "P4 Win11 original-candidate acceptance",
+      "P5 composition/security",
+      "P6 internal delivery decision"
     ],
     "parallel_active_blocks": [
-      "B1",
-      "B4"
+      "release_ssh_pool",
+      "release_candidate",
+      "release_qa",
+      "release_wfp"
     ],
-    "release_go": false
+    "release_go": false,
+    "previous_plan_commit": "63936d4967529b2794e98d547e275fabe01d9f65"
   },
   "qa_historical_document_head_ci": {
     "source_sha": "ec0a8ebb649f1b8692726e276b632bf500b31ece",
@@ -831,5 +831,40 @@
     "completion_wait_budget_ms": 3000,
     "total_provider_cleanup_or_unload_time_bounded": false,
     "evidence": "evidence/20261127/wsk-accepted-socket-lifecycle.json"
+  },
+  "previous_release_target_before_pool_win11_revision": "Windows 10 Pro 22H2 x64",
+  "release_strategy_revision": {
+    "date": "2026-11-27",
+    "basis": "Owner instructed master-plan update, commit/push then four-agent execution after proposed product split",
+    "next_release": "0.3.0 internal SSH/SOCKS5 Windows11",
+    "following_versions": {
+      "0.4.0": "WFP transparent Windows routing",
+      "0.5.0": "Reliability and validated network scope",
+      "1.0.0": "Full acceptance of declared scope/platforms"
+    },
+    "managed_pool512_required": true,
+    "managed_pool512_accepted": false,
+    "single_backend_raw512_required_for_0_3": false,
+    "wfp_g2_required_for_0_3": false,
+    "raw_diagnostic_threshold_changed": false,
+    "previous_raw_failures_preserved": true,
+    "win11_acceptance_work_authorized": true,
+    "win11_product_accepted": false,
+    "win10_deferred": true,
+    "workpackages": "RELEASE_WORKPACKAGES_20261127.json"
+  },
+  "qa_prior_document_head_ci": {
+    "source_sha": "f99812701b4b3db60e22bc3077e5657a397e3a17",
+    "tree_sha": "f6ceb30ae11ae525a4b85ecc36bd1fd57cc3cd62",
+    "executed_merge_sha": "ce39a9668e11bcaad8313bdbe8b76488f71823c8",
+    "jobs_passed": 12,
+    "jobs_total": 13,
+    "workflow_count": 6,
+    "workflows_passed": 5,
+    "first_attempt_all": true,
+    "artifacts": 0,
+    "evidence": "evidence/20261127/qa-f998127-terminal-ci.json",
+    "strict_raw512_proved": false,
+    "meaning": "Latest completed preceding document-head observation; later plan commit may trigger fresh automatic CI"
   }
 }

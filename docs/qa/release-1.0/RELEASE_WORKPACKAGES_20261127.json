@@ -1,0 +1,102 @@
+{
+  "schema": "flowbridge-release-workpackages-v1",
+  "date": "2026-11-27",
+  "timezone": "Europe/Moscow",
+  "objective": "Internal 0.3.0 Windows11 explicit-SOCKS release; WFP follows independently",
+  "authorization_basis": "Owner requested updated master plan, commit/push first, then execution by four subagents following the proposed split strategy",
+  "shared_constraints": {
+    "win10_actions_allowed": false,
+    "win11_product_acceptance_work_authorized": true,
+    "win11_product_accepted": false,
+    "frozen_beta3_mutation_allowed": false,
+    "public_release_allowed": false,
+    "security_policy_weakening_allowed": false,
+    "raw_single_512_required_for_0_3": false,
+    "managed_aggregate_512_required": true
+  },
+  "execution_order": [
+    "Commit and push master plan",
+    "Start four distinct delegated workpackages; at most three children active at once",
+    "Review and integrate code; execute pinned allowed Windows checks",
+    "Record exact candidate evidence and remaining concrete blockers"
+  ],
+  "tasks": [
+    {
+      "id": "release_ssh_pool",
+      "model": "gpt-6.2-sol",
+      "reasoning_effort": "high",
+      "status": "PLANNED",
+      "product_base": "cc0106245d10e3e26ca3847c33397522db91b59f",
+      "goal": "Exercise 512 simultaneous byte-verified connections through the actual managed pool",
+      "deliverables": [
+        "Real Engine/FFI managed pool integration probe",
+        "Negative checks that reject fewer than512 or fake independent processes",
+        "Windows run with resource/recovery and cleanup evidence"
+      ],
+      "acceptance": [
+        "512 simultaneous held payload-verified flows",
+        "Observed managed worker identities and per-backend bounds",
+        "16 successful recovery connections after release",
+        "Stop and zero leaked owned processes/permits"
+      ],
+      "single_backend_result_is_not_promoted": true
+    },
+    {
+      "id": "release_candidate",
+      "model": "gpt-6.2-sol",
+      "reasoning_effort": "high",
+      "status": "PLANNED",
+      "product_base": "cc0106245d10e3e26ca3847c33397522db91b59f",
+      "goal": "Build a separate next-version private candidate with corrected native metadata",
+      "deliverables": [
+        "Reviewed offline source cutter/build pins",
+        "New native Win11 build outside existing frozen candidate",
+        "Manifest and original payload/installer hashes plus metadata verification"
+      ],
+      "acceptance": [
+        "Old frozen beta3 unchanged",
+        "Exact source/tree/Cargo.lock relationship",
+        "No driver/service in explicit package",
+        "New notices and native metadata present"
+      ]
+    },
+    {
+      "id": "release_qa",
+      "model": "gpt-6.2-sol",
+      "reasoning_effort": "high",
+      "status": "PLANNED",
+      "goal": "Prepare and carry out integrated original-candidate Win11 functional and visual acceptance",
+      "first_phase": "Executable acceptance protocol, desktop/session and isolation preflight, prioritized concrete blockers; hand off before WFP slot starts",
+      "deliverables": [
+        "Pinned executable preflight/protocol",
+        "Install/upgrade/uninstall/profile-preservation checks",
+        "Real SSH positive/negative and GUI evidence or precise unfulfilled prerequisite"
+      ],
+      "acceptance": [
+        "Exact new candidate hashes",
+        "Actual interactive visual observations where required",
+        "No Session0-as-GUI acceptance",
+        "Rollback of owned test changes"
+      ]
+    },
+    {
+      "id": "release_wfp",
+      "model": "gpt-6.2-sol",
+      "reasoning_effort": "high",
+      "status": "PLANNED",
+      "product_base": "a7476671a5b9574dfe8d6f5a307148b5fe27ef11",
+      "goal": "Advance kernel-private listener/provider/policy ownership and WSK rundown integration",
+      "deliverables": [
+        "Isolated ownership/rundown implementation or bounded reviewable seam",
+        "Focused lifetime and failure tests",
+        "WDK compile evidence"
+      ],
+      "acceptance": [
+        "No new kernel deployment before reviewed signed lab readiness",
+        "Separate policy-disarm and callback rundown",
+        "No G2/native acceptance from models or compile alone"
+      ],
+      "blocks_0_3_release": false
+    }
+  ]
+}

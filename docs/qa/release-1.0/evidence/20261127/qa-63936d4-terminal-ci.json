@@ -1,0 +1,177 @@
+{
+  "schema": "flowbridge-terminal-qa-ci-v1",
+  "date": "2026-11-27",
+  "source_sha": "63936d4967529b2794e98d547e275fabe01d9f65",
+  "source_tree": "2c087709871bef7e5aad9ef62bc49f675d1cd7e4",
+  "executed_merge_sha": "ec773e76b1a02f58fada819638a715e886361d9a",
+  "workflow_count": 6,
+  "workflows_passed": 6,
+  "jobs_total": 13,
+  "jobs_passed": 13,
+  "artifact_count": 0,
+  "runs": [
+    {
+      "id": 46027297849,
+      "name": "Native DNS vertical",
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/46027297849",
+      "head_sha": "63936d4967529b2794e98d547e275fabe01d9f65",
+      "attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 140601879354,
+          "name": "dns (macos-15)",
+          "conclusion": "success"
+        },
+        {
+          "id": 140601879763,
+          "name": "dns (windows-2025)",
+          "conclusion": "success"
+        },
+        {
+          "id": 140601879788,
+          "name": "dns (ubuntu-24.04)",
+          "conclusion": "success"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "id": 46027297781,
+      "name": "Internal beta3 LOCAL source staging contract — no release artifacts",
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/46027297781",
+      "head_sha": "63936d4967529b2794e98d547e275fabe01d9f65",
+      "attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 140601879974,
+          "name": "Pure version and offline Git isolation tests (ubuntu-24.04)",
+          "conclusion": "success"
+        },
+        {
+          "id": 140601880360,
+          "name": "Pure version and offline Git isolation tests (windows-2025)",
+          "conclusion": "success"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "id": 46027297711,
+      "name": "Windows real WFP application scope",
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/46027297711",
+      "head_sha": "63936d4967529b2794e98d547e275fabe01d9f65",
+      "attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 140601878308,
+          "name": "actual-bfe-scope",
+          "conclusion": "success"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "id": 46027297776,
+      "name": "windows-wfp-driver",
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/46027297776",
+      "head_sha": "63936d4967529b2794e98d547e275fabe01d9f65",
+      "attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 140601878568,
+          "name": "wdk-build",
+          "conclusion": "success"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "id": 46027297611,
+      "name": "rust-and-native-applications",
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/46027297611",
+      "head_sha": "63936d4967529b2794e98d547e275fabe01d9f65",
+      "attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 140601878273,
+          "name": "rust (windows-2025)",
+          "conclusion": "success"
+        },
+        {
+          "id": 140601878618,
+          "name": "macos-application",
+          "conclusion": "success"
+        },
+        {
+          "id": 140601878659,
+          "name": "windows-application",
+          "conclusion": "success"
+        },
+        {
+          "id": 140601878670,
+          "name": "rust (ubuntu-24.04)",
+          "conclusion": "success"
+        },
+        {
+          "id": 140601878713,
+          "name": "rust (macos-15)",
+          "conclusion": "success"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "id": 46027297594,
+      "name": "Real Windows OpenSSH acceptance",
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/46027297594",
+      "head_sha": "63936d4967529b2794e98d547e275fabe01d9f65",
+      "attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 140601878225,
+          "name": "windows-openssh",
+          "conclusion": "success"
+        }
+      ],
+      "artifact_count": 0
+    }
+  ],
+  "ssh": {
+    "passed": true,
+    "source_commit": "ec773e76b1a02f58fada819638a715e886361d9a",
+    "managed_capacity": {
+      "passed": true,
+      "held": 128,
+      "churn": 10000,
+      "rejected": 1152
+    },
+    "owned_pool": {
+      "passed": true,
+      "independent_children": 4
+    },
+    "ssh_sha256": "98d447730047f5df91373e852d057928a921c3d1e89938700ab656ba84b19dc8",
+    "sshd_sha256": "00d61610a0965b42cc9a9cd401dae8983fe77d5394697f074d776bb68ce6ff0a"
+  },
+  "raw_characterization": {
+    "held": 246,
+    "attempts": 264,
+    "recovery": 16,
+    "characterization_minimum": 128,
+    "requested_maximum": 512,
+    "strict_raw512_accepted": false,
+    "managed_pool512_accepted": false
+  },
+  "interpretation": "PASS for existing characterization/lifecycle criteria; not 512 held via one backend or aggregate managed pool. Earlier stock failures remain independently recorded."
+}
