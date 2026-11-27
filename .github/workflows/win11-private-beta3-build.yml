@@ -30,6 +30,7 @@ jobs:
             $phase = 'EXPECTED_WIN11_RUNNER'
             $log = $null
             $script:nativeExit = 0
+            $script:downloadError = $null
             $system = Join-Path $env:SystemRoot 'System32'
             $pythonVersion = '3.13.17'
             $rustVersion = '1.100.0'
@@ -46,9 +47,57 @@ jobs:
               if ($script:nativeExit -ne 0) { throw 'native command failed' }
             }
             function Download([string]$Url, [string]$Name, [string]$Limit) {
-              Invoke-Local (Join-Path $system 'curl.exe') @('--disable', '--proto', '=https', '--proto-redir', '=https',
-                '--location', '--compressed', '--fail', '--silent', '--show-error', '--connect-timeout', '20', '--max-time', '120',
-                '--max-filesize', $Limit, '--output', $Name, $Url)
+              $script:downloadError = $null
+              try {
+                Invoke-Local (Join-Path $system 'curl.exe') @('--disable', '--proto', '=https', '--proto-redir', '=https',
+                  '--location', '--fail', '--silent', '--show-error', '--connect-timeout', '20', '--max-time', '120',
+                  '--max-filesize', $Limit, '--output', $Name, $Url)
+                if ((Get-Item -LiteralPath $Name).Length -gt [long]$Limit) {
+                  $script:downloadError = 'DOWNLOAD_SIZE_LIMIT'
+                  throw 'download exceeded size limit'
+                }
+              } catch {
+                if (-not $script:downloadError) {
+                  $script:downloadError = switch ($script:nativeExit) {
+                    2 { 'CURL_OPTION_OR_INITIALIZATION' }
+                    3 { 'CURL_INVALID_URL' }
+                    5 { 'CURL_PROXY_DNS' }
+                    6 { 'CURL_ENDPOINT_DNS' }
+                    7 { 'CURL_CONNECTION' }
+                    22 { 'CURL_HTTP_ERROR' }
+                    23 { 'CURL_LOCAL_WRITE' }
+                    28 { 'CURL_TIMEOUT' }
+                    35 { 'CURL_TLS_HANDSHAKE' }
+                    60 { 'CURL_TLS_CERTIFICATE' }
+                    63 { 'DOWNLOAD_SIZE_LIMIT' }
+                    default { 'CURL_OTHER' }
+                  }
+                }
+                throw
+              }
+            }
+            function Read-NuGetJson([string]$Name, [int]$Limit) {
+              $file = [IO.File]::OpenRead($Name)
+              $reader = $file
+              $decoded = New-Object IO.MemoryStream
+              try {
+                # Some inbox curl builds cannot decompress. Accept bounded plain or gzip JSON.
+                $isGzip = $file.ReadByte() -eq 31 -and $file.ReadByte() -eq 139
+                $file.Position = 0
+                if ($isGzip) {
+                  $reader = [IO.Compression.GZipStream]::new($file, [IO.Compression.CompressionMode]::Decompress, $true)
+                }
+                $buffer = New-Object byte[] 8192
+                while (($count = $reader.Read($buffer, 0, $buffer.Length)) -gt 0) {
+                  if ($decoded.Length + $count -gt $Limit) { throw 'NuGet JSON exceeded decoded size limit' }
+                  $decoded.Write($buffer, 0, $count)
+                }
+                return ([Text.Encoding]::UTF8.GetString($decoded.ToArray()) | ConvertFrom-Json)
+              } finally {
+                if ($isGzip) { $reader.Dispose() }
+                $file.Dispose()
+                $decoded.Dispose()
+              }
             }
             function Report($Data) {
               Write-Host ('FLOWBRIDGE_TOOLCHAIN_RESULT ' + ($Data | ConvertTo-Json -Compress))
@@ -88,11 +137,17 @@ jobs:
               if ($script:nativeExit -ne 0) { throw 'private ACL failed' }
               $log = Join-Path $root 'provision.log'
 
+              $ErrorActionPreference = 'Continue'
+              & (Join-Path $system 'curl.exe') --disable --compressed --version *> $null
+              Write-Host ('FLOWBRIDGE_CURL_OPTION_PROBE ' + (@{compressed_option_exit=$LASTEXITCODE} | ConvertTo-Json -Compress))
+              $ErrorActionPreference = 'Stop'
+
               $phase = 'PYTHON_REGISTRATION_DOWNLOAD'
               $registrationFile = Join-Path $root 'python.registration.json'
               Download ($nuget + '/v3/registration5-gz-semver2/python/' + $pythonVersion + '.json') $registrationFile '1048576'
+              $phase = 'PYTHON_REGISTRATION_JSON'
+              $entry = Read-NuGetJson $registrationFile 1048576
               $phase = 'PYTHON_CATALOG_DOWNLOAD'
-              $entry = Get-Content -LiteralPath $registrationFile -Raw | ConvertFrom-Json
               $catalogUrl = [Uri]$entry.catalogEntry
               if (-not $catalogUrl.IsAbsoluteUri -or $catalogUrl.Scheme -cne 'https' -or
                   $catalogUrl.Host -cne 'api.nuget.org' -or -not $catalogUrl.IsDefaultPort -or
@@ -103,7 +158,7 @@ jobs:
               $catalogFile = Join-Path $root 'python.catalog.json'
               Download $catalogUrl.AbsoluteUri $catalogFile '2097152'
               $phase = 'PYTHON_SHA512_METADATA'
-              $catalog = Get-Content -LiteralPath $catalogFile -Raw | ConvertFrom-Json
+              $catalog = Read-NuGetJson $catalogFile 2097152
               if ($catalog.id -ine 'python' -or $catalog.version -cne $pythonVersion -or
                   $catalog.packageHashAlgorithm -ine 'SHA512') { throw 'unexpected NuGet catalog identity' }
               $bytes = [Convert]::FromBase64String($catalog.packageHash)
@@ -177,7 +232,7 @@ jobs:
               Report $result
             } catch {
               if ($log) { $_ | Out-String | Add-Content -LiteralPath $log -ErrorAction SilentlyContinue }
-              Report @{status='BLOCKED'; phase=$phase; native_exit=$script:nativeExit}
+              Report @{status='BLOCKED'; phase=$phase; native_exit=$script:nativeExit; download_error=$script:downloadError}
               exit 1
             }
         run: >-
@@ -337,6 +392,42 @@ jobs:
                 require(not missing, 'REQUIRED_NATIVE_TOOLS_NOT_FOUND')
                 return tools, dev
 
+          FLOWBRIDGE_EVIDENCE_CODE: |
+            def verify_package_evidence(candidate, checkpoint):
+                import runpy
+
+                manifest_file = candidate / 'build/verification/explicit-beta-package.json'
+                installer = candidate / 'artifacts/FlowBridge-0.3.0-beta.3-windows-x64-setup.exe'
+                reject_links(manifest_file)
+                reject_links(installer)
+                original_manifest = manifest_file.read_bytes()
+                manifest = json.loads(original_manifest)
+                checks = runpy.run_path(str(candidate / 'tools/explicit_beta_acceptance.py'))
+                verify_file = checks['verified_file']
+                require(checks['validate_manifest'](
+                    manifest, checkpoint['new_private_git_commit'], checkpoint['installer_sha256']
+                ) == 'windows' and manifest['candidate'] == '0.3.0-beta.3'
+                    and manifest['source_tree_sha'] == checkpoint['new_private_git_tree'],
+                    'PACKAGE_VERSION_OR_SOURCE_TREE_MISMATCH')
+                verify_file(installer, checkpoint['installer_sha256'], manifest['installer_bytes'])
+
+                payload = {item['path']: item for item in manifest['payload']}
+                stage = candidate / 'build/explicit-beta-payload'
+                staged_files = {path.relative_to(stage).as_posix()
+                                for path in stage.rglob('*') if path.is_file()}
+                require(staged_files == payload.keys(), 'PACKAGE_STAGED_PAYLOAD_MISMATCH')
+                for name, item in payload.items():
+                    member = checks['contained_payload_file'](stage, name)
+                    verify_file(member, item['sha256'], item['bytes'])
+                return {
+                    'package_manifest_sha256': hashlib.sha256(original_manifest).hexdigest(),
+                    'gui_sha256': payload['FlowBridge.exe']['sha256'],
+                    'cli_sha256': payload['flowbridge-cli.exe']['sha256'],
+                    'ffi_sha256': payload['flowbridge_ffi.dll']['sha256'],
+                    'driver_included': manifest['driver_included'],
+                    'staged_payload_allowlist_verified': True,
+                }
+
           FLOWBRIDGE_BUILD_CODE: |
             def main():
                 global local, log
@@ -451,6 +542,8 @@ jobs:
                 require(all(isinstance(value, str) and re.fullmatch(f'[0-9a-f]{{{keys[key]}}}', value)
                             for key, value in digests.items()), 'CANDIDATE_DIGESTS_INVALID')
                 state.update(digests)
+                state.update(phase='PACKAGE_EVIDENCE', installer_built=True)
+                state.update(verify_package_evidence(candidate, cp))
 
             try:
                 main()
@@ -480,7 +573,7 @@ jobs:
             echo FLOWBRIDGE_RUNNER_RESULT {"schema":"flowbridge-private-beta3-runner-v1","status":"BLOCKED","reason":"PYTHON_3_13_OR_LATER_REQUIRED"}
             exit /b 1
           )
-          "%FLOWBRIDGE_PYTHON%" -I -c "import os; exec(os.environ['FLOWBRIDGE_PREFLIGHT_CODE'] + os.environ['FLOWBRIDGE_BUILD_CODE'])" 2>nul
+          "%FLOWBRIDGE_PYTHON%" -I -c "import os; exec(os.environ['FLOWBRIDGE_PREFLIGHT_CODE'] + os.environ['FLOWBRIDGE_EVIDENCE_CODE'] + os.environ['FLOWBRIDGE_BUILD_CODE'])" 2>nul
           exit /b %ERRORLEVEL%
           :find_python
           if defined FLOWBRIDGE_PRIVATE_PYTHON (
