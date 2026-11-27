@@ -1,13 +1,17 @@
 """Negative controls for Windows managed pool proof and original candidate pins."""
 from copy import deepcopy
 from pathlib import Path
+import errno
 import json
+import socket
+import struct
 import tempfile
 import unittest
 
 from windows_managed_ssh_pool_capacity import (
     CAPACITY_TIMEOUT, HELD, LIMITS, PER_WORKER, QUEUE_FULL,
-    parse_policy, permits_zero, verify_active, verify_overload,
+    describe_listeners, observe_connect, parse_listener_table, parse_policy, permits_zero,
+    verify_active, verify_closed_listeners, verify_overload,
 )
 from windows_real_ssh_hosted import sha256, verify_candidate
 
@@ -128,6 +132,52 @@ class CandidateEvidenceTests(unittest.TestCase):
             manifest_path.write_text(json.dumps(manifest), encoding='utf-8')
             with self.assertRaisesRegex(RuntimeError, 'payload manifest'):
                 verify_candidate(manifest_path, source, dll, digest)
+
+
+class ListenerEvidenceTests(unittest.TestCase):
+    def test_ip_helper_ipv4_and_ipv6_listener_table_byte_order_and_truncation(self):
+        port, pid = PORTS[0], 432
+        ipv4 = struct.pack('<I', 1) + struct.pack(
+            '<6I', 2, 0x0100007F, socket.htons(port), 0, 0, pid)
+        ipv6 = struct.pack('<I', 1) + struct.pack(
+            '<16sII16sIIII', bytes(15) + b'\x01', 0, socket.htons(port), bytes(16), 0, 0, 2, pid)
+        for family, table in ((socket.AF_INET, ipv4), (socket.AF_INET6, ipv6)):
+            with self.subTest(family=family):
+                self.assertEqual(parse_listener_table(table, family, PORTS), [(port, family, pid, True)])
+                self.assertEqual(parse_listener_table(table, family, (TARGET,)), [])
+                with self.assertRaisesRegex(RuntimeError, 'truncated'):
+                    parse_listener_table(table[:-1], family, PORTS)
+
+    def test_listener_gate_rejects_silent_timeout_live_listener_and_wrong_owner(self):
+        expected = [('engine', TARGET, 50)] + [
+            (f'ssh_worker_{i}', port, 50 + i) for i, port in enumerate(PORTS, start=1)]
+        live = [(port, socket.AF_INET, pid, True) for _, port, pid in expected]
+        before = describe_listeners(live, expected)
+        after = describe_listeners([], expected)
+        observed = [{'role': role, 'final_socket_code': 10061} for role, _, _ in expected]
+        verify_closed_listeners(before, after, observed)
+        for code in (0, 10035, None):
+            with self.subTest(code=code), self.assertRaisesRegex(RuntimeError, 'confirmed TCP refusal'):
+                verify_closed_listeners(before, after, [dict(observed[0], final_socket_code=code), *observed[1:]])
+        with self.assertRaisesRegex(RuntimeError, 'LISTEN socket'):
+            verify_closed_listeners(before, describe_listeners([live[-1]], expected), observed)
+        wrong = [(TARGET, socket.AF_INET, 999, True), *live[1:]]
+        with self.assertRaisesRegex(RuntimeError, 'expected process'):
+            verify_closed_listeners(describe_listeners(wrong, expected), after, observed)
+        with self.assertRaisesRegex(RuntimeError, 'all four workers'):
+            verify_closed_listeners(before[:-1], after, observed)
+
+    def test_nonblocking_completion_distinguishes_real_listener_from_refusal(self):
+        with socket.socket() as listener:
+            listener.bind(('127.0.0.1', 0))
+            port = listener.getsockname()[1]
+            listener.listen()
+            self.assertEqual(observe_connect(port)['final_socket_code'], 0)
+            with listener.accept()[0]:
+                pass
+        observation = observe_connect(port)
+        self.assertIn(observation['final_socket_code'], (errno.ECONNREFUSED, 10061))
+        self.assertFalse(observation['connect_timed_out'])
 
 
 if __name__ == '__main__':

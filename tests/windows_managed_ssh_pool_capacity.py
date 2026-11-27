@@ -4,9 +4,13 @@ from ctypes import wintypes
 from collections import Counter
 from contextlib import ExitStack
 import errno
+import ipaddress
 import json
+import os
 from pathlib import Path
+import select
 import socket
+import struct
 import subprocess
 
 from real_ssh_capacity import exchange
@@ -153,12 +157,90 @@ def payload(phase, index):
     return b'FlowBridge owned SSH pool\x00\xff' + bytes([phase]) + index.to_bytes(2, 'big')
 
 
-def verify_listener_closed(port):
+def parse_listener_table(table, family, ports):
+    """Decode Win32 MIB_TCP(6)ROW_OWNER_PID records after GetExtendedTcpTable."""
+    row_format = struct.Struct('<6I' if family == socket.AF_INET else '<16sII16sIIII')
+    require(len(table) >= 4, 'TCP listener inventory header is missing')
+    count = struct.unpack_from('<I', table)[0]
+    require(count <= (len(table) - 4) // row_format.size, 'TCP listener inventory is truncated')
+    listeners = []
+    for index in range(count):
+        row = row_format.unpack_from(table, 4 + index * row_format.size)
+        if family == socket.AF_INET:
+            state, local, port, _, _, pid = row
+            address = struct.pack('<I', local)
+        else:
+            address, _, port, _, _, _, state, pid = row
+        require(state == 2, 'TCP listener inventory returned a non-LISTEN row')
+        port = socket.ntohs(port & 0xFFFF)
+        if port in ports:
+            listeners.append((port, family, pid, ipaddress.ip_address(address).is_loopback))
+    return listeners
+
+
+def windows_listener_inventory(ports):
+    tcp_table = ctypes.WinDLL('iphlpapi', use_last_error=True).GetExtendedTcpTable
+    tcp_table.argtypes = (ctypes.c_void_p, ctypes.POINTER(wintypes.DWORD), wintypes.BOOL,
+                          wintypes.DWORD, ctypes.c_int, wintypes.DWORD)
+    tcp_table.restype = wintypes.DWORD
+    listeners = []
+    for family in (socket.AF_INET, socket.AF_INET6):
+        size = wintypes.DWORD()
+        for _ in range(4):
+            require(size.value <= 8 * 1024 * 1024, 'TCP listener inventory exceeded bounded size')
+            table = ctypes.create_string_buffer(size.value) if size.value else None
+            # TCP_TABLE_OWNER_PID_LISTENER = 3; ERROR_INSUFFICIENT_BUFFER = 122.
+            code = tcp_table(table, ctypes.byref(size), False, family, 3, 0)
+            if code != 122:
+                break
+        require(code == 0 and table is not None, f'TCP listener inventory failed with Win32 code {code}')
+        listeners.extend(parse_listener_table(table, family, ports))
+    return listeners
+
+
+def describe_listeners(listeners, expected):
+    result = []
+    for role, port, pid in expected:
+        owned = [(family, owner, loopback) for entry_port, family, owner, loopback in listeners
+                 if entry_port == port]
+        result.append({
+            'role': role,
+            'ipv4_listeners': sum(family == socket.AF_INET for family, _, _ in owned),
+            'ipv6_listeners': sum(family == socket.AF_INET6 for family, _, _ in owned),
+            'expected_ipv4_loopback_owner': (socket.AF_INET, pid, True) in owned,
+            'unexpected_owner_or_address': any(owner != pid or not loopback for _, owner, loopback in owned),
+        })
+    return result
+
+
+def observe_connect(port):
+    # CPython's timed connect_ex can return WSAEWOULDBLOCK as its timeout code.
+    # Wait for an actual Winsock completion and report its SO_ERROR separately.
+    pending = {errno.EWOULDBLOCK, errno.EINPROGRESS, errno.EALREADY, 10035, 10036, 10037}
     with socket.socket() as client:
-        client.settimeout(2)
-        require(client.connect_ex(('127.0.0.1', port))
-                in (errno.ECONNREFUSED, 10061),
-                'Expected stopped loopback listener to refuse connections')
+        client.setblocking(False)
+        initial = client.connect_ex(('127.0.0.1', port))
+        result = {'initial_socket_code': initial, 'final_socket_code': initial, 'connect_timed_out': False}
+        if initial in pending:
+            _, writable, exceptional = select.select([], [client], [client], 5)
+            if writable or exceptional:
+                result['final_socket_code'] = client.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+            else:
+                result.update(final_socket_code=None, connect_timed_out=True)
+        return result
+
+
+def verify_closed_listeners(before, after, connections):
+    roles = ['engine', *(f'ssh_worker_{index}' for index in range(1, WORKERS + 1))]
+    require(all([row['role'] for row in observations] == roles
+                for observations in (before, after, connections)),
+            'Listener closure evidence must cover the engine and all four workers')
+    require(all(row['expected_ipv4_loopback_owner'] and not row['unexpected_owner_or_address']
+                for row in before), 'Pre-Stop listener inventory did not match each expected process')
+    require(not any(row['ipv4_listeners'] or row['ipv6_listeners'] for row in after),
+            'Windows still reports a LISTEN socket after Stop')
+    require(all(row['final_socket_code'] in (errno.ECONNREFUSED, 10061) for row in connections),
+            'Stopped listener did not return a confirmed TCP refusal')
 
 
 def run(abi, settings, target_port, policy_executable, output):
@@ -313,6 +395,12 @@ def run(abi, settings, target_port, policy_executable, output):
             report['paused_admission_failed_closed'] = True
 
             report['stage'] = 'stop'
+            expected = [('engine', ingress, os.getpid())]
+            expected.extend((f'ssh_worker_{index}', item['worker_port'], item['pid'])
+                            for index, item in enumerate(report['children'], start=1))
+            watched_ports = {port for _, port, _ in expected}
+            report['listeners_before_stop'] = describe_listeners(
+                windows_listener_inventory(watched_ports), expected)
             abi.call('fb_engine_stop_json', engine)
             stopped = snapshot()
             require(not stopped['status']['running'] and permits_zero(stopped, ports, ready=False),
@@ -336,8 +424,12 @@ def run(abi, settings, target_port, policy_executable, output):
                         'Supervisor retained a child after Stop')
             require(all(not child.alive() for child in children), 'Stop leaked an original SSH child')
             report['stop_original_children_exited'] = True
-            for port in (ingress, *ports):
-                verify_listener_closed(port)
+            report['listeners_after_stop'] = describe_listeners(
+                windows_listener_inventory(watched_ports), expected)
+            report['tcp_connections_after_stop'] = [
+                dict(observe_connect(port), role=role) for role, port, _ in expected]
+            verify_closed_listeners(report['listeners_before_stop'], report['listeners_after_stop'],
+                                    report['tcp_connections_after_stop'])
             report['stop_listeners_closed'] = True
         report['stage'] = 'complete'
         report['passed'] = True
