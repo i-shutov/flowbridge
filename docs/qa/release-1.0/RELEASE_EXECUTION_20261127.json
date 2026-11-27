@@ -122,9 +122,13 @@
     "latest_workflow_head_ci": {
       "source_sha": "e7092049b6ae63274d7f0fe84f19b3cd35771659",
       "run_id": 46043668621,
-      "status": "in_progress",
-      "conclusion": null,
-      "scope": "Unrelated automatic Rust/native repeat; not substituted for original-package manual gates"
+      "status": "completed",
+      "conclusion": "success",
+      "scope": "Unrelated automatic Rust/native repeat; not substituted for original-package manual gates",
+      "jobs_total": 5,
+      "jobs_passed": 5,
+      "artifacts": 0,
+      "evidence": "evidence/20261127/main-e709-terminal-ci.json"
     }
   },
   "local_source_validation": {
@@ -309,10 +313,11 @@
   ],
   "access_blockers": [],
   "next_actions": [
-    "Open an active unlocked existing Win11 Admin desktop for exact-candidate GUI, keyboard, visual and authenticated SSH acceptance; runner Session0 cannot supply those observations",
-    "Complete candidate-specific composition/security/privacy review and record A5/A6 findings with bounded claims",
-    "Prepare internal release notes, limitations and original-byte package for A7 decision",
-    "Continue WFP owner integration, signed native lab and packet lineage separately; Win10 remains excluded"
+    "Refresh original-candidate Win11 desktop/isolation preflight and execute interactive GUI/SSH acceptance if the existing unlocked Admin desktop is available",
+    "Complete candidate-specific A5 composition/notices/runtime review and prepare internal-only release notes and exact checksum handoff",
+    "Complete bounded Windows/SSH/diagnostic security/privacy review and fresh RustSec dependency evidence for original beta4 source",
+    "Independently reconcile evidence and A5/A6/A7 readiness, then commit and push the completed block",
+    "Keep WFP/G2 as a separate 0.4 track; Win10 remains excluded and original beta3/beta4 bytes remain frozen"
   ],
   "candidate": {
     "version": "0.3.0-beta.4",
@@ -1043,5 +1048,15 @@
     "full_release_go": false,
     "interactive_win11_gui_accepted": false,
     "public_binary_artifacts_created": false
+  },
+  "active_execution_block": {
+    "id": "B2_FINAL_ACCEPTANCE_AND_INTERNAL_HANDOFF",
+    "state": "PLAN_READY_BEFORE_DELEGATION",
+    "planned_at_msk": "2026-11-27T22:52:00+03:00",
+    "previous_result_commit": "f00b4d9db56979dc57eabb6f04c7e4b264a296be",
+    "candidate_run": 46040903481,
+    "model": "gpt-6.2-sol",
+    "workpackages": "RELEASE_WORKPACKAGES_20261127.json",
+    "repeat_passed_native_gates_without_new_risk": false
   }
 }
