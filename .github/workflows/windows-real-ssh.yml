@@ -20,6 +20,15 @@ on:
       - 'crates/flowbridge-capture/**'
       - '.github/workflows/windows-real-ssh.yml'
   workflow_dispatch:
+    inputs:
+      managed_pool_512:
+        description: 'Run only the strict four-worker managed 512-flow gate'
+        type: boolean
+        default: false
+      expected_source:
+        description: 'Full checkout commit SHA, required for the managed pool gate'
+        type: string
+        required: false
 permissions:
   contents: read
 concurrency:
@@ -35,7 +44,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [managed, raw]
+        scenario: ${{ fromJSON(inputs.managed_pool_512 && '["managed-pool-512"]' || '["managed","raw"]') }}
     runs-on: windows-2025
     timeout-minutes: 25
     steps:
@@ -47,6 +56,24 @@ jobs:
       - name: Reject false-positive capacity probes
         run: python -m unittest discover -s tests -p test_windows_ssh_probe.py -v
       - run: cargo build --locked -p flowbridge-ffi -p flowbridge-capture -p flowbridge-cli
+        if: matrix.scenario != 'managed-pool-512'
+      - name: Build exact release FFI and compiled Win32 pool policy
+        if: matrix.scenario == 'managed-pool-512'
+        shell: pwsh
+        env:
+          FLOWBRIDGE_EXPECTED_SOURCE: ${{ inputs.expected_source }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $head = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $env:FLOWBRIDGE_EXPECTED_SOURCE -cne $head) { throw 'Expected full source commit does not match checkout' }
+          python -m unittest discover -s tests -p test_windows_managed_ssh_pool_capacity.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Managed pool negative checks failed' }
+          cargo build --locked --release -p flowbridge-ffi
+          if ($LASTEXITCODE -ne 0) { throw 'Release FFI build failed' }
+          cmake -S native/windows -B build/windows-pool-policy -A x64 -DFLOWBRIDGE_BUILD_NATIVE_TESTS=ON "-DFLOWBRIDGE_FFI_LIBRARY=$env:GITHUB_WORKSPACE/target/release/flowbridge_ffi.dll.lib"
+          if ($LASTEXITCODE -ne 0) { throw 'Win32 policy configure failed' }
+          cmake --build build/windows-pool-policy --config Release --target FlowBridgeSshPoolRequest
+          if ($LASTEXITCODE -ne 0) { throw 'Win32 policy build failed' }
       - name: Fetch pinned official sshd without installing a system service
         shell: pwsh
         run: |
@@ -69,12 +96,25 @@ jobs:
           "FLOWBRIDGE_TEST_SSHD=$server" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "FLOWBRIDGE_TEST_SSH=$client" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "FLOWBRIDGE_TEST_KEYGEN=$keygen" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "FLOWBRIDGE_TEST_SSH_ARCHIVE=$archive" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           New-Item -ItemType Directory -Force "build/verification/windows-real-ssh/${{ matrix.scenario }}" | Out-Null
           @{fixture_server_release='10.4.0.0p1-Preview'; server_zip_sha256=$expected; microsoft_signatures_valid=$true; system_ssh_client=$true; system_service_installed=$false} | ConvertTo-Json | Set-Content "build/verification/windows-real-ssh/${{ matrix.scenario }}/provenance.json"
       - name: Actual Windows OpenSSH ${{ matrix.scenario }} scenario
+        if: matrix.scenario != 'managed-pool-512'
         shell: pwsh
         run: |
           python tests/windows_real_ssh_hosted.py --scenario "${{ matrix.scenario }}" --ssh "$env:FLOWBRIDGE_TEST_SSH" --sshd "$env:FLOWBRIDGE_TEST_SSHD" --keygen "$env:FLOWBRIDGE_TEST_KEYGEN" --library target/debug/flowbridge_ffi.dll --output "build/verification/windows-real-ssh/${{ matrix.scenario }}" --churn 10000
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Actual Windows 512-flow owned SSH pool
+        if: matrix.scenario == 'managed-pool-512'
+        shell: pwsh
+        env:
+          FLOWBRIDGE_EXPECTED_SOURCE: ${{ inputs.expected_source }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dll = 'target/release/flowbridge_ffi.dll'
+          $hash = (Get-FileHash -LiteralPath $dll -Algorithm SHA256).Hash.ToLowerInvariant()
+          python tests/windows_real_ssh_hosted.py --scenario managed-pool-512 --ssh "$env:FLOWBRIDGE_TEST_SSH" --sshd "$env:FLOWBRIDGE_TEST_SSHD" --keygen "$env:FLOWBRIDGE_TEST_KEYGEN" --library $dll --output 'build/verification/windows-real-ssh/managed-pool-512' --pool-policy build/windows-pool-policy/Release/FlowBridgeSshPoolRequest.exe --fixture-archive "$env:FLOWBRIDGE_TEST_SSH_ARCHIVE" --expect-source-sha "$env:FLOWBRIDGE_EXPECTED_SOURCE" --expect-ffi-sha256 $hash
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v7.0.0
         if: github.event.repository.private == true && (always())

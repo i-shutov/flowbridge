@@ -6,25 +6,78 @@ configuration. No system sshd service, firewall, machine DNS, existing keys,
 registry settings, or code-integrity policy are changed. No WFP/NE acceptance.
 """
 import argparse
+import base64
 import getpass
 import hashlib
 import json
 import os
 from pathlib import Path
 import platform
+import re
 import socket
 import subprocess
 import sys
 import tempfile
 import threading
 import time
+import zipfile
 
-from ssh_real_integration import ABI, Echo, Server, free_port, require, until, round_trip
+from ssh_real_integration import ABI, Echo, Server, distinct_free_ports, free_port, require, until, round_trip
 from windows_openssh_capacity_vm import windows_handle_count
 
 
 def sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def verify_pool_fixture(archive, sshd, ssh, keygen):
+    expected = 'b67ff8becd203502190ec42ac7787c24c2cd3325ed7700485fe7a1c83d2a7957'
+    require(sha256(archive) == expected, 'Official portable OpenSSH fixture archive hash mismatch')
+    with zipfile.ZipFile(archive) as fixture:
+        for file in (sshd, *(sshd.parent / name for name in
+                             ('sshd-auth.exe', 'sshd-session.exe', 'libcrypto.dll'))):
+            original = hashlib.sha256(fixture.read(f'OpenSSH-Win64/{file.name}')).hexdigest()
+            require(sha256(file) == original, 'Selected SSH server payload differs from the pinned fixture')
+    system = Path(os.environ['WINDIR']) / 'System32'
+    require(ssh.samefile(system / 'OpenSSH/ssh.exe')
+            and keygen.samefile(system / 'OpenSSH/ssh-keygen.exe'),
+            'Select the built-in Windows OpenSSH client and keygen')
+    powershell = system / 'WindowsPowerShell/v1.0/powershell.exe'
+    script = r"""
+$ErrorActionPreference = 'Stop'
+$env:PSModulePath = Join-Path $PSHOME 'Modules'
+Import-Module Microsoft.PowerShell.Security
+foreach ($file in @($env:FLOWBRIDGE_FIXTURE_SSHD, $env:FLOWBRIDGE_FIXTURE_SSH, $env:FLOWBRIDGE_FIXTURE_KEYGEN)) {
+    $signature = Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $file
+    if ($signature.Status -ne 'Valid' -or
+        $signature.SignerCertificate.Subject -notmatch '(^|,\s*)O=Microsoft Corporation(,|$)') { exit 1 }
+}
+"""
+    encoded = base64.b64encode(script.encode('utf-16-le')).decode('ascii')
+    result = subprocess.run([str(powershell), '-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
+                            env=dict(os.environ, FLOWBRIDGE_FIXTURE_SSHD=str(sshd),
+                                     FLOWBRIDGE_FIXTURE_SSH=str(ssh), FLOWBRIDGE_FIXTURE_KEYGEN=str(keygen)),
+                            capture_output=True, timeout=45)
+    require(result.returncode == 0, 'Fixture OpenSSH Authenticode did not verify as Microsoft Corporation')
+    return expected
+
+
+def verify_candidate(manifest_path, expected_source, dll, dll_sha):
+    require(manifest_path and manifest_path.is_file()
+            and re.fullmatch('[0-9a-f]{40}', expected_source or '') is not None,
+            'Native pool evidence requires the exact Windows candidate manifest and source pin')
+    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    require(manifest['schema'] == 'flowbridge-explicit-beta-windows-qa-package-v1'
+            and manifest['source_sha'] == expected_source and manifest['explicit_socks_only'] is True,
+            'Manifest does not describe the pinned explicit Windows candidate')
+    matches = [entry for entry in manifest['payload'] if entry['path'] == 'flowbridge_ffi.dll']
+    require(len(matches) == 1 and matches[0]['sha256'] == dll_sha
+            and matches[0]['bytes'] == dll.stat().st_size,
+            'Native FFI differs from the candidate payload manifest')
+    return {'candidate_source_commit': expected_source,
+            'candidate_version': manifest['candidate'],
+            'candidate_installer_sha256': manifest['installer_sha256'],
+            'candidate_manifest_sha256': sha256(manifest_path)}
 
 
 def secure_test_file(path):
@@ -61,12 +114,30 @@ def main():
                         help='Exact CLI bytes to test; candidate workflow supplies packaged release CLI')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--churn', type=int, default=10000)
-    parser.add_argument('--scenario', required=True, choices=('managed', 'raw'),
-                        help='Independent strict managed acceptance or bare OpenSSH characterization')
+    parser.add_argument('--scenario', required=True, choices=('managed', 'raw', 'managed-pool-512'),
+                        help='Managed 128, managed pool 512, or bare OpenSSH characterization')
+    parser.add_argument('--pool-policy', type=Path,
+                        help='FlowBridgeSshPoolRequest built from the Win32 panel policy at this source')
+    parser.add_argument('--fixture-archive', type=Path,
+                        help='Pinned official portable sshd ZIP for managed-pool-512')
+    parser.add_argument('--expect-source-sha', help='Exact harness Git commit for managed-pool-512')
+    parser.add_argument('--expect-ffi-sha256', help='Exact candidate or hosted release DLL SHA-256')
+    parser.add_argument('--candidate-manifest', type=Path, help='Exact package manifest for native Win11')
+    parser.add_argument('--expect-candidate-source', help='Exact source commit of the native Win11 package')
     args = parser.parse_args()
-    require(sys.platform == 'win32' and os.environ.get('GITHUB_ACTIONS') == 'true'
-            and os.environ.get('FLOWBRIDGE_HOSTED_WINDOWS_SSH') == '1',
-            'Explicit disposable hosted Windows opt-in required')
+    require(sys.platform == 'win32' and os.environ.get('GITHUB_ACTIONS') == 'true',
+            'Run only on an authorized Windows Actions runner')
+    pool_only = args.scenario == 'managed-pool-512'
+    native = pool_only and os.environ.get('FLOWBRIDGE_NATIVE_WINDOWS_SSH') == '1'
+    if native:
+        version = sys.getwindowsversion()
+        require(os.environ.get('RUNNER_ENVIRONMENT') == 'self-hosted'
+                and version.build >= 22000 and version.product_type == 1,
+                'The native pool test requires the authorized Windows 11 workstation runner')
+    else:
+        require(os.environ.get('FLOWBRIDGE_HOSTED_WINDOWS_SSH') == '1'
+                and (not pool_only or os.environ.get('RUNNER_ENVIRONMENT') == 'github-hosted'),
+                'Explicit disposable hosted Windows opt-in required')
     require(0 <= args.churn <= 10000, 'Unbounded churn rejected')
     for name in ('ssh', 'sshd', 'keygen', 'library'):
         value = getattr(args, name).resolve(strict=True)
@@ -75,19 +146,46 @@ def main():
     if args.scenario == 'managed':
         args.cli = args.cli.resolve(strict=True)
         require(args.cli.is_file(), 'Exact managed-test CLI missing')
+    source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+    ffi_digest = sha256(args.library)
+    fixture_digest = None
+    candidate = {}
+    if pool_only:
+        require(re.fullmatch('[0-9a-f]{40}', args.expect_source_sha or '') is not None
+                and args.expect_source_sha == source and args.pool_policy and args.pool_policy.is_file(),
+                'Exact harness commit and compiled Win32 pool policy are required')
+        require(subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--'], check=False).returncode == 0,
+                'Tracked files differ from the pinned harness source')
+        require(re.fullmatch('[0-9a-f]{64}', args.expect_ffi_sha256 or '') is not None
+                and args.expect_ffi_sha256 == ffi_digest,
+                'Exact candidate or hosted release FFI SHA-256 required')
+        require(args.fixture_archive and args.fixture_archive.is_file(),
+                'Pinned portable fixture archive is required')
+        if native:
+            candidate = verify_candidate(args.candidate_manifest, args.expect_candidate_source,
+                                         args.library, ffi_digest)
+        fixture_digest = verify_pool_fixture(args.fixture_archive, args.sshd, args.ssh, args.keygen)
     args.output.mkdir(parents=True, exist_ok=True)
-    report = {'passed': False, 'source_commit': os.environ.get('GITHUB_SHA'),
-              'platform': platform.platform(), 'hosted_windows_runner': True,
+    report = {'passed': False, 'source_commit': source if pool_only else os.environ.get('GITHUB_SHA'),
+              'platform': platform.platform(), 'hosted_windows_runner': not native,
+              'native_windows_11_pool_probe': native,
               'windows_10_11_user_machine_tested': False, 'wfp_driver_loaded': False,
               'native_dns_leaks_verified': False, 'system_configuration_modified': False,
               'network_test_destinations_loopback_only': True,
               'scenario': args.scenario, 'managed_acceptance_proved': False,
               'raw_backend_512_stability_proved': False,
               'ssh_sha256': sha256(args.ssh), 'sshd_sha256': sha256(args.sshd),
-              'ffi_sha256': sha256(args.library),
+              'ffi_sha256': ffi_digest,
               'workflow_run_id': os.environ.get('GITHUB_RUN_ID'),
               'source_tree_sha': subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], text=True).strip(),
               'cli_sha256': sha256(args.cli) if args.scenario == 'managed' else None}
+    if pool_only:
+        report.update(managed_pool_512_proved=False,
+                      win32_gui_interaction_exercised=False,
+                      compiled_win32_pool_policy_sha256=sha256(args.pool_policy),
+                      pinned_fixture_archive_sha256=fixture_digest,
+                      microsoft_fixture_signatures_valid=True)
+        report.update(candidate)
     supervisor = engine = 0
     daemon = None
     abi = ABI(args.library)
@@ -104,7 +202,7 @@ def main():
             authorized = root / 'authorized_keys'
             authorized.write_bytes((root / 'client_key.pub').read_bytes())
             secure_test_file(authorized)
-            ssh_port, socks_port, ingress = free_port(), free_port(), free_port()
+            ssh_port, socks_port, ingress = distinct_free_ports(3)
             require(len({ssh_port,socks_port,ingress,echo.server_address[1]}) == 4,
                     'Port reservation race')
             user = getpass.getuser().lower()
@@ -141,7 +239,20 @@ def main():
                         except OSError:
                             return False
                     until(ready, seconds=20)
-                    if args.scenario == 'managed':
+                    settings = {'host':'127.0.0.1','port':ssh_port,'user':user,
+                                'local_port':socks_port,'ssh_executable':str(args.ssh),
+                                'identity_file':str(root/'client_key'), 'known_hosts_file':str(known),
+                                'health_check_interval_ms':250,'health_check_timeout_ms':1000,
+                                'startup_timeout_ms':15000,'restart_initial_delay_ms':250,
+                                'restart_max_delay_ms':1000,'max_restarts':3,'verbose_diagnostics':True}
+                    if pool_only:
+                        from windows_managed_ssh_pool_capacity import run as pool_capacity
+                        result = pool_capacity(abi, settings, echo.server_address[1],
+                                               args.pool_policy.resolve(strict=True),
+                                               args.output / 'managed-pool-512.json')
+                        require(result['passed'], 'Managed 512-flow gate did not pass')
+                        report['managed_pool_512_proved'] = True
+                    elif args.scenario == 'managed':
                         from ssh_banner_gate import real_authenticated_ssh
                         report['banner_first_real_ssh'] = real_authenticated_ssh(
                             args.cli, args.ssh, root / 'client_key',
@@ -154,12 +265,6 @@ def main():
                              'identity_file':str(root / 'client_key'),
                              'known_hosts_file':str(known)},
                             echo.server_address[1], free_port())
-                        settings = {'host':'127.0.0.1','port':ssh_port,'user':user,
-                                    'local_port':socks_port,'ssh_executable':str(args.ssh),
-                                    'identity_file':str(root/'client_key'), 'known_hosts_file':str(known),
-                                    'health_check_interval_ms':250,'health_check_timeout_ms':1000,
-                                    'startup_timeout_ms':15000,'restart_initial_delay_ms':250,
-                                    'restart_max_delay_ms':1000,'max_restarts':3,'verbose_diagnostics':True}
                         supervisor = abi.call('fb_ssh_create_json',settings)['ssh_id']
                         abi.call('fb_ssh_start_json',supervisor)
                         def snapshot():
@@ -267,6 +372,8 @@ def main():
                                        capture_output=True,timeout=15,check=False)
                         daemon.wait(timeout=10)
     except Exception as error:
+        if pool_only:
+            report['passed'] = report['managed_pool_512_proved'] = False
         report['error_type'] = type(error).__name__
         report['error'] = str(error) if not isinstance(error,subprocess.CalledProcessError) else 'Fixture subprocess failed'
         raise
