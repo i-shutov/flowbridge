@@ -26,6 +26,27 @@ Helper допускает Win10 build 19045 и Win11 build 22000+, требуе�
 среду и отклоняет Server/domain controller. Product acceptance target остаётся
 Win10 Pro 22H2 x64 с `verified=false`.
 
+## Ручной запуск через проверенный runner
+
+В `main` доступен [Windows 11 private local beta.3 build](https://github.com/i-shutov/flowbridge/actions/workflows/win11-private-beta3-build.yml).
+Запускать с ветки `main`: workflow закрепляет QA `86aace2a4696e9717bc2b4423b447a760946aa15`
+и product `44f1fc0eba5ac1552df94f083342e25a1a764937`. Он проверяет стандартные
+каталоги инструментов, нативную архитектуру и повышенную учётную запись,
+активирует MSVC в дочернем процессе и выполняет пробную x64 компиляцию с SDK.
+
+Результат сохраняется в новом `C:\FlowBridge\private-candidates\run-<run_id>-<attempt>`:
+`private-build.log`, `runner-result.json`, `candidate-CHECKPOINT.json` и
+`candidate\artifacts`. У каталога отдельные ACL; существующие кандидаты не
+перезаписываются. Публичная сводка содержит ограниченные статусы и хеши,
+пакет не загружается в GitHub Actions.
+
+[Первая попытка](https://github.com/i-shutov/flowbridge/actions/runs/45984099025)
+обнаружила Git, CMake, MSVC x64 и Windows SDK вне service PATH, но остановилась
+с `PYTHON_3_13_OR_LATER_REQUIRED`. Rust/Cargo также не найдены. Для продолжения
+нужны локальный Python 3.13+ и закреплённый Rust; уже найденные инструменты
+переустанавливать не требуется. Проверка компиляции и сборка пакета ещё не
+проходили. Действующая PowerShell Execution Policy остаётся `Restricted`.
+
 ## Подготовка и сборка
 
 Подставить фактические локальные пути. Назначения должны быть новыми;
@@ -75,6 +96,7 @@ BUILD-METADATA, SHA GUI/CLI/FFI/harness, локальный build log и QA-tool
 
 ## Что ещё не выполнено
 
-Native Win11 preflight, запуск официального NSIS и сборка EXE в этой сессии
-не выполнялись. Self-hosted smoke ожидает авторизованного dispatch.
-Наличие runbook не означает PASS перечисленных сценариев.
+Self-hosted smoke завершён PASS: Windows 11 Pro build 22631, native x64,
+точный runner/host/account и повышенный token. Native build preflight выполнен
+до проверки наличия Python; запуск NSIS и сборка beta.3 EXE пока не выполнялись.
+Наличие runbook и успешный smoke не означают продуктовую приёмку.

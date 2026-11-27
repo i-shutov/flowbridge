@@ -7,7 +7,7 @@
   "distribution": "internal-only",
   "candidate_version": "0.3.0-beta.3",
   "release_target": "Windows 10 Pro 22H2 x64",
-  "new_build_and_engineering_qa_host": "Windows 11 x64; owner-reported, native execution pending",
+  "new_build_and_engineering_qa_host": "Windows 11 Pro build 22631 native x64; exact runner/host/account smoke PASS",
   "product_release_accepted": false,
   "publisher_release_approved": false,
   "release_tag_created": false,
@@ -22,22 +22,66 @@
     "previous_security_baseline": "44e3ba988ac5a9f7cf2d25b16d46c432ff3d8c38",
     "targeted_ci": {
       "run_id": 45976744631,
-      "status": "in_progress",
-      "conclusion": null
+      "status": "completed",
+      "conclusion": "success",
+      "jobs_passed": 3,
+      "jobs_total": 3,
+      "artifacts": 0
     },
-    "rust_local": "NOT_RUN_NO_TOOLCHAIN"
+    "rust_local": "NOT_RUN_NO_TOOLCHAIN",
+    "broad_ci": {
+      "run_id": 45976744692,
+      "conclusion": "success",
+      "jobs_passed": 5,
+      "artifacts": 0,
+      "windows_rerun_job_id": 140444849665,
+      "checkout_merge_sha": "1f51c13d66aeac4afdbcf3a0ac9bf9de30896f61",
+      "checkout_tree_matches_source": true,
+      "prior_failure": "Paired native DNS test WinError 10013; not reproduced on identical tree, cause not established"
+    },
+    "remaining_ci_failures": [
+      {
+        "run_id": 45976744578,
+        "scope": "raw OpenSSH requested 512",
+        "result": "FAIL: existing stream lost at 244, resource evidence; managed gate PASS"
+      },
+      {
+        "run_id": 45976744560,
+        "scope": "hosted WFP G2 ETW",
+        "result": "G2_ETW_CONNECTION_EVIDENCE=FAIL; G2_PACKET_BOUND=UNPROVED"
+      }
+    ],
+    "ci_observation": "evidence/20261127/ci-observation.json"
   },
   "main": {
-    "sha": "cc547d204756712f14d05d38b34e6ace9a3d4a31",
+    "sha": "ee218fcffe9c7d2d69821824ea693698bc382098",
     "runner_smoke_pr": 90,
     "runner_smoke_merge": "40f8b66f356dbe26b75458b6508528c36d1eb0f8",
     "hosted_ci": {
-      "run_id": 45975582511,
+      "run_id": 45982172245,
+      "source_sha": "f1d1e71e703caf805cfc7e492f908db9e0d0c4e4",
       "conclusion": "success",
       "jobs_passed": 5,
       "artifacts": 0
     },
-    "self_hosted_smoke": "BLOCKED_AUTH"
+    "self_hosted_smoke": {
+      "run_id": 45982267687,
+      "job_id": 140448907494,
+      "source_sha": "f1d1e71e703caf805cfc7e492f908db9e0d0c4e4",
+      "conclusion": "success",
+      "runner_name": "win11-flowbridge",
+      "machine_name": "VM-326272",
+      "windows_edition": "Windows 11 Pro",
+      "windows_build": 22631,
+      "native_arch": "x64",
+      "expected_account_verified": true,
+      "elevated_token_verified": true,
+      "execution_policy": "Restricted",
+      "execution_policy_changed": false,
+      "artifact_count": 0,
+      "previous_run_id": 45981565644,
+      "previous_failure": "Default powershell shell dot-sourced a .ps1 while execution policy forbade script files"
+    }
   },
   "local_source_validation": {
     "evidence": "evidence/20261127/beta3-source-verification.json",
@@ -69,8 +113,49 @@
     "global_environment_modified": false,
     "private_staging_required": true,
     "hosted_ci": {
-      "status": "NOT_STARTED",
-      "run_id": null
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 45977468284,
+      "qa_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
+      "checkout_merge_sha": "519b194f5c3f68daeada20bf1aa295b72a7a794e",
+      "checkout_tree_matches_qa": true,
+      "jobs_passed": 2,
+      "artifacts": 0,
+      "product_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+      "staged_cargo_check_and_tunnel_tests": true
+    },
+    "all_qa_pr_jobs": {
+      "passed": 13,
+      "total": 13,
+      "artifact_count": 0,
+      "qa_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
+      "inherited_workflows_test_qa_tree_not_product_pin": true
+    },
+    "native_workflow": {
+      "path": ".github/workflows/win11-private-beta3-build.yml",
+      "source_sha": "ee218fcffe9c7d2d69821824ea693698bc382098",
+      "workflow_sha256": "bfe32434724d1081b037e623f8271df79f50df8256a7c84c45861565ff8da3ca",
+      "run_id": 45984099025,
+      "job_id": 140455165164,
+      "conclusion": "failure",
+      "gate_status": "BLOCKED_PREREQUISITES",
+      "reason": "PYTHON_3_13_OR_LATER_REQUIRED",
+      "found_standard_installations": [
+        "git.exe",
+        "cmake.exe",
+        "msvc-x64",
+        "windows-sdk-headers"
+      ],
+      "missing_standard_installations": [
+        "python.exe",
+        "cargo.exe",
+        "rustc.exe",
+        "nsis-3.13.zip"
+      ],
+      "artifact_count": 0,
+      "installer_built": false,
+      "installed_product": false,
+      "provisioning_next": "Isolated official Python and pinned Rust; reuse existing Git/MSVC/SDK/CMake"
     }
   },
   "historical_beta2": {
@@ -142,9 +227,10 @@
         "size_in_bytes": 514
       }
     ],
-    "cleanup_status": "BLOCKED_AUTH_NOT_DELETED",
+    "cleanup_status": "AWAITING_CONFIRMATION_NOT_DELETED",
     "prevention_main_commit": "cc547d204756712f14d05d38b34e6ace9a3d4a31",
-    "prevention_verified_new_run_artifact_count": 0
+    "prevention_verified_new_run_artifact_count": 0,
+    "browser_auth": "SIGNED_IN_VERIFIED"
   },
   "work": [
     {
@@ -154,28 +240,28 @@
     },
     {
       "id": "R1",
-      "status": "BLOCKED_AUTH",
-      "result": "Manual runner smoke merged; no self-hosted run"
+      "status": "PASS",
+      "result": "Native Win11 runner/host/account/x64/admin smoke accepted; Restricted policy unchanged"
     },
     {
       "id": "R2",
-      "status": "GUARD_DONE_CLEANUP_BLOCKED_AUTH",
-      "result": "Public uploads guarded; old run artifacts remain"
+      "status": "GUARD_DONE_CLEANUP_AWAITING_CONFIRMATION",
+      "result": "New runs contain zero artifacts; 11 old artifacts remain, irreversible deletion confirmation not received"
     },
     {
       "id": "R3",
-      "status": "CI_IN_PROGRESS",
-      "result": "SSH path ambiguity guard and 29 private-only uploads in PR91"
+      "status": "TARGETED_AND_BROAD_PASS_SEPARATE_LIMITS_OPEN",
+      "result": "SSH targeted 3/3, Rust/native latest 5/5; raw512 and G2 ETW remain failed/unproved"
     },
     {
       "id": "R4",
-      "status": "LOCAL_PASS_CI_PENDING",
-      "result": "Deterministic 9-file stage and 118 unique tests"
+      "status": "PASS",
+      "result": "Deterministic 9-file stage, 118 unique local tests, Windows/Linux staging CI 2/2"
     },
     {
       "id": "R5",
-      "status": "READY_NOT_RUN",
-      "result": "Win11 client build host and pinned local NSIS supported"
+      "status": "BLOCKED_PREREQUISITES_PREPARING_LOCAL_TOOLS",
+      "result": "Native preflight found Git/CMake/MSVC/SDK outside service PATH; Python 3.13+ and Rust missing. Installer not built."
     },
     {
       "id": "R6",
@@ -199,13 +285,13 @@
     }
   ],
   "access_blockers": [
-    "GitHub connector exposes no workflow dispatch, runner inventory or artifact deletion",
-    "Cloud browser is not signed into GitHub; no direct remote execution channel to the owner host"
+    "GitHub connector exposes no workflow dispatch, runner inventory or artifact deletion; signed-in browser is available for these operations",
+    "Irreversible artifact cleanup awaits confirmation; no confirmation was supplied in the request form"
   ],
   "next_actions": [
-    "Complete exact-source and staging CI",
-    "Authenticate GitHub for manual main runner smoke and reviewed artifact cleanup",
-    "Execute private local beta3 build on the verified Windows client",
+    "Prepare isolated official Python 3.13+ and Rust 1.100.0; reuse discovered Git/MSVC/SDK/CMake, then rerun native private build",
+    "Build pinned private beta3 on the verified client host once prerequisites are available",
+    "Remove exactly the 11 accidental artifacts after confirmation",
     "Collect exact-byte installer provenance and native Win10 evidence"
   ]
 }

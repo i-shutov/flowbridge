@@ -1,0 +1,375 @@
+{
+  "schema": "flowbridge-ci-observation-v1",
+  "date": "2026-11-27",
+  "source_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+  "qa_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
+  "notes": [
+    "Run jobs queried from the latest attempt; historical failures are not erased by later success.",
+    "QA inherited workflows test the QA branch; only the dedicated staging workflow checks the separately pinned product source.",
+    "No beta.3 installer is produced by hosted staging; legacy CI may build temporary test packages without uploading."
+  ],
+  "runs": [
+    {
+      "run_id": 45976744578,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744578",
+      "jobs": [
+        {
+          "id": 140430311431,
+          "name": "Windows OpenSSH (raw)",
+          "status": "completed",
+          "conclusion": "failure",
+          "head_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744578/job/140430311431"
+        },
+        {
+          "id": 140430311800,
+          "name": "Windows OpenSSH (managed)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744578/job/140430311800"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 45976744631,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744631",
+      "jobs": [
+        {
+          "id": 140430248212,
+          "name": "Rust SSH + C++ source privacy (windows-2025)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744631/job/140430248212"
+        },
+        {
+          "id": 140430248697,
+          "name": "Rust SSH + C++ source privacy (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744631/job/140430248697"
+        },
+        {
+          "id": 140430760417,
+          "name": "Build Windows explicit-only GUI from changed source without packaging",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744631/job/140430760417"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 45976744560,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744560",
+      "jobs": [
+        {
+          "id": 140430585622,
+          "name": "g2-kernel-connection-owner",
+          "status": "completed",
+          "conclusion": "failure",
+          "head_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744560/job/140430585622"
+        },
+        {
+          "id": 140430586059,
+          "name": "integration (windows-2025)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744560/job/140430586059"
+        },
+        {
+          "id": 140430586069,
+          "name": "integration (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744560/job/140430586069"
+        },
+        {
+          "id": 140430586321,
+          "name": "integration (macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744560/job/140430586321"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 45976744859,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744859",
+      "jobs": [
+        {
+          "id": 140430249457,
+          "name": "dns (macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744859/job/140430249457"
+        },
+        {
+          "id": 140430249737,
+          "name": "dns (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744859/job/140430249737"
+        },
+        {
+          "id": 140430249759,
+          "name": "dns (windows-2025)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744859/job/140430249759"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 45976744517,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744517",
+      "jobs": [
+        {
+          "id": 140430248341,
+          "name": "wdk-build",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744517/job/140430248341"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 45976744678,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744678",
+      "jobs": [
+        {
+          "id": 140430248362,
+          "name": "actual-bfe-scope",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744678/job/140430248362"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 45976744692,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744692",
+      "jobs": [
+        {
+          "id": 140444849665,
+          "name": "rust (windows-2025)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744692/job/140444849665"
+        },
+        {
+          "id": 140444851337,
+          "name": "macos-application",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744692/job/140444851337"
+        },
+        {
+          "id": 140444852299,
+          "name": "rust (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744692/job/140444852299"
+        },
+        {
+          "id": 140444910067,
+          "name": "windows-application",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744692/job/140444910067"
+        },
+        {
+          "id": 140444930185,
+          "name": "rust (macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45976744692/job/140444930185"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 45977468222,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977468222",
+      "jobs": [
+        {
+          "id": 140432700582,
+          "name": "windows-application",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977468222/job/140432700582"
+        },
+        {
+          "id": 140432700921,
+          "name": "rust (macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977468222/job/140432700921"
+        },
+        {
+          "id": 140432700937,
+          "name": "rust (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977468222/job/140432700937"
+        },
+        {
+          "id": 140432701009,
+          "name": "macos-application",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977468222/job/140432701009"
+        },
+        {
+          "id": 140432701070,
+          "name": "rust (windows-2025)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977468222/job/140432701070"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 45977468321,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977468321",
+      "jobs": [
+        {
+          "id": 140432702762,
+          "name": "dns (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977468321/job/140432702762"
+        },
+        {
+          "id": 140432703069,
+          "name": "dns (macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977468321/job/140432703069"
+        },
+        {
+          "id": 140432703207,
+          "name": "dns (windows-2025)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977468321/job/140432703207"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 45977468264,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977468264",
+      "jobs": [
+        {
+          "id": 140432700455,
+          "name": "actual-bfe-scope",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977468264/job/140432700455"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 45977468150,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977468150",
+      "jobs": [
+        {
+          "id": 140432700185,
+          "name": "wdk-build",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977468150/job/140432700185"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 45977468284,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977468284",
+      "jobs": [
+        {
+          "id": 140432700801,
+          "name": "Pure version and offline Git isolation tests (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977468284/job/140432700801"
+        },
+        {
+          "id": 140432701112,
+          "name": "Pure version and offline Git isolation tests (windows-2025)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977468284/job/140432701112"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 45977468283,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977468283",
+      "jobs": [
+        {
+          "id": 140432700255,
+          "name": "windows-openssh",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977468283/job/140432700255"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 45977460747,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977460747",
+      "jobs": [
+        {
+          "id": 140432675501,
+          "name": "wdk-build",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977460747/job/140432675501"
+        }
+      ],
+      "artifact_count": 0
+    }
+  ]
+}

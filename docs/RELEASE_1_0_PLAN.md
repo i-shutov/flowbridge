@@ -12,8 +12,9 @@
 
 Владелец предоставил новую машину Windows 11 с runner и Codex и поручил
 продолжить выполнение плана. Используем её для сборки и инженерной QA.
-Наличие машины само по себе не подтверждает доступность runner, проверку
-продукта на Win11 или совместимость с Win10.
+Runner проверен реальным заданием: `win11-flowbridge`, `VM-326272`, Windows 11
+Pro build 22631, native x64 и закреплённая административная учётная запись.
+Это подтверждает среду исполнения; продуктовая приёмка остаётся отдельной.
 
 | Назначение | Действующий объём |
 | --- | --- |
@@ -36,8 +37,9 @@
 | Историческая beta.2 | Source `86583a1a0487b9d383c0122b24558e620bde5b9c`; installer SHA-256 `0699bed4acaa1b9df9b63c658808b08fd65b5953cacdaaddb7a13953389e19f4`; Win10 A0–A3 приняты по оригиналам V4/V5 |
 | Исправления приватности и доверия OpenSSH | Source `44e3ba988ac5a9f7cf2d25b16d46c432ff3d8c38`, [PR #84](https://github.com/i-shutov/flowbridge/pull/84) и [#88](https://github.com/i-shutov/flowbridge/pull/88); [checkpoint](qa/release-1.0/checkpoints/BETA3_OFFLINE_SOURCE_CUT_ACCEPTANCE_20261117.md) |
 | Продолжение source review | [PR #91](https://github.com/i-shutov/flowbridge/pull/91): отказ неоднозначным Windows-путям при проверке подписи SSH и private-only uploads; текущий SHA и CI — в машинном реестре |
-| Runner smoke | [PR #90](https://github.com/i-shutov/flowbridge/pull/90) влит в `main`, commit `40f8b66f356dbe26b75458b6508528c36d1eb0f8`; manual workflow готов, self-hosted smoke ещё не выполнен |
+| Runner smoke | [PR #90](https://github.com/i-shutov/flowbridge/pull/90) влит; исправление запуска команд `f1d1e71e703caf805cfc7e492f908db9e0d0c4e4`; [native smoke PASS](https://github.com/i-shutov/flowbridge/actions/runs/45982267687) |
 | Запрет публичных артефактов main CI | Commit `cc547d204756712f14d05d38b34e6ace9a3d4a31`; сборки и тесты сохранены |
+| QA и staging | [PR #92](https://github.com/i-shutov/flowbridge/pull/92), проверенный QA SHA `86aace2a4696e9717bc2b4423b447a760946aa15`; staging 2/2, все PR jobs 13/13, выгруженных артефактов 0 |
 
 Beta.2 не содержит последующих исправлений SSH. Её установщик не изменяется,
 а прежняя приёмка не переносится на beta.3.
@@ -47,11 +49,11 @@ Beta.2 не содержит последующих исправлений SSH. 
 | Шаг | Работа и результат приёмки | Состояние |
 | --- | --- | --- |
 | R0 | Восстановить точные ветки, исходники, кандидаты и ограничения | DONE |
-| R1 | Manual Win11 smoke: runner/host/account, Windows x64, инструменты; затем Online/Idle | Workflow MERGED; выполнение BLOCKED_AUTH |
-| R2 | Закрыть публичную выгрузку CI; удалить артефакты первого infrastructure run | Guard DONE; очистка BLOCKED_AUTH |
-| R3 | SSH source: приватность журнала, подписанный клиент, однозначный путь проверки/запуска, Windows/Linux CI | PR #91; результаты в реестре |
-| R4 | Beta.3 без remotes: девять изменяемых файлов, точные blobs/modes и Cargo.lock | Два дефекта исправлены; локальная проверка PASS |
-| R5 | Проверить Win11 build host и NSIS ZIP по SHA-256; собрать private candidate без установки | Helper и tests готовы; native build NOT_RUN |
+| R1 | Manual Win11 smoke: runner/host/account, Windows x64, инвентаризация инструментов | PASS; native runner выполнил задание |
+| R2 | Закрыть публичную выгрузку CI; удалить артефакты первого infrastructure run | Guard DONE; удаление ожидает подтверждения |
+| R3 | SSH source: приватность журнала, подписанный клиент, однозначный путь проверки/запуска, Windows/Linux CI | Targeted 3/3, Rust/native 5/5; raw512 и G2 остаются FAIL/UNPROVED |
+| R4 | Beta.3 без remotes: девять изменяемых файлов, точные blobs/modes и Cargo.lock | Локальные 118 тестов PASS; staging CI 2/2 PASS |
+| R5 | Проверить Win11 build host и NSIS ZIP по SHA-256; собрать private candidate без установки | Native preflight выполнен; требуется локальный Python/Rust, beta.3 EXE ещё не собран |
 | R6 | Зафиксировать source/tree и SHA-256 installer/GUI/CLI/FFI/manifest; отсутствие драйвера | Ожидает R5 |
 | R7 | Win10 A3 на новых байтах: жизненный цикл 6/6, GUI, SSH, Stop, восстановление | Ожидает R6; beta.2 PASS не наследуется |
 | R8 | Проверить оригиналы и закрыть сторонние runtime, privacy/security A5/A6 | OPEN |
@@ -59,20 +61,35 @@ Beta.2 не содержит последующих исправлений SSH. 
 
 ### R1: проверка новой машины
 
-Запустить **Windows 11 VPS runner smoke** на `main`, дождаться
-`RUNNER_SMOKE_PASS`, затем проверить `win11-flowbridge` в состоянии Online/Idle.
-Workflow проверяет ранее закреплённый `VM-326272` и сервисную учётную запись.
-Если новая машина имеет другое имя, сначала получить фактическую идентичность
-и согласовать pin; не ослаблять проверку до любого хоста.
+**Выполнено.** Браузерный вход в GitHub подтверждён, runner был `Idle` и принял
+ручное задание на `main`. [Первый запуск](https://github.com/i-shutov/flowbridge/actions/runs/45981565644)
+не дошёл до проверок: PowerShell отклонил загрузку временного `.ps1` при
+`Restricted`. Workflow теперь передаёт команды системному PowerShell через
+`cmd` и `-Command`; политика не изменяется. [Повторный запуск](https://github.com/i-shutov/flowbridge/actions/runs/45982267687)
+подтвердил Windows 11 Pro build 22631, native x64, точный host/account,
+административный token и `RUNNER_SMOKE_PASS`; `Restricted` сохранилась.
+
+В service PATH найдены `ssh.exe` и `python.exe`; не найдены Git, Rust/Cargo,
+CMake, MSVC/MSBuild и NSIS. Сам факт нахождения Python ещё не проверяет его
+версию и исключение Store alias. [Native preflight #45984099025](https://github.com/i-shutov/flowbridge/actions/runs/45984099025)
+нашёл Git, CMake, MSVC x64 и Windows SDK в обычных каталогах установки.
+Python 3.13+ и Rust/Cargo не найдены; сборка остановлена до создания кандидата
+с `PYTHON_3_13_OR_LATER_REQUIRED`. Следующий шаг — изолированные официальные
+Python/Rust в локальном каталоге и повторная проверка компилятора/SDK.
+
+В `main` добавлен [ручной native build workflow](https://github.com/i-shutov/flowbridge/actions/workflows/win11-private-beta3-build.yml),
+commit `ee218fcffe9c7d2d69821824ea693698bc382098`. Он использует закреплённые QA
+и product SHA, сохраняет результат вне Actions workspace в новом каталоге
+с отдельными ACL и не выгружает пакет. Предварительный поиск инструментов
+не является доказательством успешной компиляции: её проверяет следующий этап.
 
 Workflow не делает checkout и не запускает код PR. Smoke доказывает работу
 службы и окружения; интерактивный GUI проверяется локальным Codex в пользовательской
 сессии. Успех службы в Session 0 не является GUI-приёмкой.
 
-**Граница доступа:** доступный GitHub-коннектор не предоставляет
-dispatch/list-runners/delete-artifact; облачный браузер не авторизован в GitHub.
-После входа продолжить R1 и R2. Не создавать обходной public PR trigger на
-административном runner.
+GitHub-коннектор не предоставляет dispatch/list-runners/delete-artifact;
+для этих операций используется авторизованный браузер. Административный runner
+получает только вручную запущенный workflow с проверками точного repo и `main`.
 
 ### R2: устранение несогласованной публикации CI
 
@@ -81,12 +98,23 @@ dispatch/list-runners/delete-artifact; облачный браузер не ав
 и не принятый релиз, но выгрузка противоречит внутреннему режиму.
 Запуск [#45975037904](https://github.com/i-shutov/flowbridge/actions/runs/45975037904)
 отменён последующим исправлением; API перечислял 11 артефактов. Их удаление
-ещё не выполнено; точные ID записаны в реестре для очистки.
+ещё не выполнено; точные ID записаны в реестре для очистки. Вход уже выполнен,
+но подтверждение безвозвратного удаления пока не получено. Удалять только
+эти 11 артефактов; журналы и исходные коммиты сохраняются.
 
 Новый `main` CI разрешает upload только при
 `github.event.repository.private == true`. В продуктовой ветке такая защита
 внесена во все 29 upload-шагов. Сборки и тесты продолжают выполняться.
 Количество новых артефактов проверять отдельно от результата тестов.
+
+На проверенных current source/QA запусках API подтвердил 0 артефактов после
+завершения. Точные результаты и ссылки сохранены в
+[CI observation](qa/release-1.0/evidence/20261127/ci-observation.json).
+Source Rust/native прошёл 5/5 после повторного запуска только Windows job
+на прежнем дереве: первый `WinError 10013` в paired DNS test не повторился.
+Причина первого сбоя не установлена. Managed SSH прошёл; отдельный raw512
+тест потерял соединение на 244 каналах, а hosted G2 ETW остаётся непроверенным.
+Эти два отказа не преобразуются в PASS на основании успешного staging.
 
 ### R4–R6: воспроизводимая приватная сборка
 
@@ -143,7 +171,7 @@ IPv4/IPv6 TCP, no-DIRECT при отказах, DNS/UDP/QUIC политика, �
 
 ## 6. Точка продолжения
 
-Завершить CI и проверку новых source/tooling SHA, выполнить R1/R2 через
-авторизованный GitHub и R5 на новой Win11. После оригинального установщика — R6–R9.
+Source/tooling CI и R1 завершены в указанном объёме. Продолжить R5 на реальной
+Win11 и очистку R2 после подтверждения. После оригинального установщика — R6–R9.
 Фиксировать source/tree, host OS, команду, exit status и оригиналы evidence.
 `NOT_RUN`, `BLOCKED_AUTH`, `FAIL` и `PASS` не взаимозаменяемы.
