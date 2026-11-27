@@ -8,6 +8,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import win11_beta4_headless_lifecycle as qa
+import win11_beta4_recover_retained_lifecycle as recovery
 sys.path.pop(0)
 
 
@@ -152,6 +153,51 @@ class Win11HeadlessLifecycleTest(unittest.TestCase):
                     evidence.write_bytes(json.dumps(dict(result, **{key: value})).encode())
                     with self.assertRaisesRegex(qa.preflight.Blocked, "runner_result_binding_failed"):
                         qa.verify_runner_result(root / "candidate", pins, files)
+
+    def test_nsis_temp_clone_needs_exact_original_uninstaller_bytes(self):
+        with tempfile.TemporaryDirectory() as work:
+            root = Path(work)
+            temp = root / "tmp"
+            temp.mkdir()
+            original, clone_dir = root / "Uninstall.exe", temp / "~nsu1.tmp"
+            original.write_bytes(b"verified")
+            directories = {temp: qa.directory_id(temp)}
+            files = {}
+            self.assertFalse(qa.record_uninstaller_copy(temp, qa.file_snapshot(original), directories, files))
+            clone_dir.mkdir()
+            clone = clone_dir / "Un.exe"
+            clone.write_bytes(b"modified")
+            original_record = qa.file_snapshot(original)
+            with self.assertRaisesRegex(qa.preflight.Blocked, "uninstaller_temp_copy_sha_mismatch"):
+                qa.record_uninstaller_copy(temp, original_record, directories, files)
+            self.assertNotIn(clone, files)
+            clone.write_bytes(b"verified")
+            extra = clone_dir / "unknown.exe"
+            extra.write_bytes(b"verified")
+            with self.assertRaisesRegex(qa.preflight.Blocked, "unexpected_uninstaller_temp_members"):
+                qa.record_uninstaller_copy(temp, original_record, directories, files)
+            self.assertNotIn(clone, files)
+            extra.unlink()
+            self.assertTrue(qa.record_uninstaller_copy(temp, original_record, directories, files))
+            self.assertEqual(files[clone], qa.file_snapshot(clone))
+            qa.remove_owned_tree(temp, directories, files)
+            self.assertFalse(temp.exists())
+
+    def test_recovery_requires_exact_observed_identity_and_contents(self):
+        with tempfile.TemporaryDirectory() as work:
+            root = Path(work)
+            clone = root / "un.exe"
+            clone.write_bytes(b"observed")
+            device, identity, size, sha = qa.file_snapshot(clone)
+            root_identity = qa.directory_id(root)[1]
+            with patch.object(recovery, "DEVICE", device), \
+                    patch.object(recovery, "DIRECTORIES", {"": root_identity}), \
+                    patch.object(recovery, "FILES", {"un.exe": (identity, size, sha)}):
+                recovery.verify_work(root)
+                clone.write_bytes(b"modified")
+                with self.assertRaisesRegex(qa.preflight.Blocked, "file_content_or_identity_changed"):
+                    recovery.verify_work(root)
+                self.assertEqual(clone.read_bytes(), b"modified")
 
     def test_wrong_candidate_never_reaches_lifecycle_on_windows(self):
         args = ["qa", "--candidate-root", r"C:\FlowBridge\private-candidates\run-45986630920-1\candidate"]

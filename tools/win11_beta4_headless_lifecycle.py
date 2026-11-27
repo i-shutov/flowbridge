@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import time
@@ -190,6 +191,64 @@ def empty(directory):
     return preflight.path_status(directory) == "directory" and next(directory.iterdir(), None) is None
 
 
+def system_powershell():
+    system = Path(os.environ.get("SystemRoot", ""))
+    require(system.is_absolute(), "system_powershell_unavailable")
+    executable = system / "System32/WindowsPowerShell/v1.0/powershell.exe"
+    require(preflight.path_status(executable) == "regular_file", "system_powershell_unavailable")
+    return executable
+
+
+def private_work_process_count(work):
+    """Query all image paths and refuse unresolved potentially relevant NSIS names."""
+    script = (
+        "$ErrorActionPreference='Stop';"
+        "$prefix=$env:FLOWBRIDGE_QA_PROCESS_ROOT+'\\';$count=0;$unresolved=0;"
+        "$items=Get-CimInstance -ClassName Win32_Process -Property Name,ExecutablePath;"
+        "foreach($p in $items){"
+        "if($p.ExecutablePath -and $p.ExecutablePath.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase)){"
+        "$count++}elseif(-not $p.ExecutablePath -and $p.Name -in 'Uninstall.exe','Un.exe','Un_A.exe','Au_.exe'){"
+        "$unresolved++}};"
+        "ConvertTo-Json -InputObject @{count=$count;unresolved=$unresolved} -Compress"
+    )
+    env = dict(os.environ, FLOWBRIDGE_QA_PROCESS_ROOT=str(work))
+    data = subprocess.run([str(system_powershell()), "-NoProfile", "-NonInteractive", "-Command", script],
+                          env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=20)
+    require(data.returncode == 0, "private_work_process_query_failed")
+    try:
+        counts = json.loads(data.stdout)
+    except (ValueError, UnicodeError):
+        raise preflight.Blocked("private_work_process_query_invalid") from None
+    require(isinstance(counts, dict) and type(counts.get("count")) is int and counts["count"] >= 0
+            and type(counts.get("unresolved")) is int and counts["unresolved"] == 0,
+            "private_work_process_identity_unresolved")
+    return counts["count"]
+
+
+def record_uninstaller_copy(temp, original, directories, files):
+    """Admit only the known NSIS private clone and the exact generated uninstaller bytes."""
+    require(temp in directories and directory_id(temp) == directories[temp],
+            "private_temp_identity_changed")
+    entries = contents(temp)
+    if not entries:
+        return False
+    names = [item for item in entries if "/" not in item]
+    require(len(names) == 1 and re.fullmatch(r"~?nsu?[0-9a-f]+\.tmp", names[0], re.IGNORECASE),
+            "unexpected_uninstaller_temp_members")
+    folder = temp / names[0]
+    require(len(entries) == 2, "unexpected_uninstaller_temp_members")
+    binary_path = next(item for item in entries if item != names[0])
+    require(binary_path.casefold() == (names[0] + "/un.exe").casefold(),
+            "unexpected_uninstaller_temp_members")
+    copy = temp / binary_path
+    folder_record = directory_id(folder)
+    record = file_snapshot(copy, original[2])
+    require(record[3] == original[3], "uninstaller_temp_copy_sha_mismatch")
+    directories[folder] = folder_record
+    files[copy] = record
+    return True
+
+
 def known_registry(install):
     exe = install / "Uninstall.exe"
     uninstall = {"DisplayName": "FlowBridge", "DisplayVersion": preflight.VERSION,
@@ -255,10 +314,6 @@ def verified_shortcuts(shortcuts, destination):
                 "installed_shortcut_type_mismatch")
     # Read each existing link without saving it. Invoke the trusted Windows
     # binary with an inline command so the configured script policy is kept.
-    system = Path(os.environ.get("SystemRoot", ""))
-    require(system.is_absolute(), "shortcut_query_unavailable")
-    powershell = system / "System32/WindowsPowerShell/v1.0/powershell.exe"
-    require(preflight.path_status(powershell) == "regular_file", "shortcut_query_unavailable")
     script = ("$ErrorActionPreference='Stop';[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);"
               "$shell=New-Object -ComObject WScript.Shell;"
               "$items=[ordered]@{}; Get-ChildItem -LiteralPath $env:FLOWBRIDGE_QA_LINKS -File | "
@@ -266,7 +321,7 @@ def verified_shortcuts(shortcuts, destination):
               "$items[$_.Name]=@{target=$link.TargetPath;arguments=$link.Arguments}};"
               "$items | ConvertTo-Json -Compress")
     env = dict(os.environ, FLOWBRIDGE_QA_LINKS=str(shortcuts))
-    data = subprocess.run([str(powershell), "-NoProfile", "-NonInteractive", "-Command", script],
+    data = subprocess.run([str(system_powershell()), "-NoProfile", "-NonInteractive", "-Command", script],
                           env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=15)
     require(data.returncode == 0, "shortcut_query_failed")
     try:
@@ -447,13 +502,17 @@ class Lifecycle:
         self.recheck_install_owner()
         self.command(uninstaller, ["/S"], 45)
         wait_for(lambda: preflight.path_status(uninstaller) == "absent"
-                 and all(registry_key(UNINSTALL, view) is None for view in registry_views())
-                 and empty(self.temp), "uninstall_completion_timeout")
+                 and all(registry_key(UNINSTALL, view) is None for view in registry_views()),
+                 "uninstall_product_completion_timeout")
+        wait_for(lambda: private_work_process_count(self.work) == 0, "uninstall_owned_process_exit_timeout")
         require(contents(self.install) == {PRESERVE}
                 and preflight.path_status(self.shortcuts) == "absent", "uninstall_payload_remains")
         residue = registry_snapshot()
         verify_uninstall_registry(self.registered, residue)
         self.uninstall_residue = residue
+        self.report["uninstaller_temp_copy_verified"] = record_uninstaller_copy(
+            self.temp, self.files[uninstaller], self.directories, self.files
+        )
         self.mark("uninstall")
         self.verify_synthetic()
         self.mark("profile_preserved")
@@ -469,9 +528,10 @@ class Lifecycle:
         require(directory_id(self.work) == self.directories[self.work], "work_directory_identity_changed")
         if self.started:
             require(preflight.process_count(self.kernel) == 0, "cleanup_product_process_still_running")
-            # A copied NSIS uninstaller may outlive its bootstrapper. The private
-            # TEMP must drain before altering registry/files that it may be using.
-            wait_for(lambda: empty(self.temp), "cleanup_private_temp_not_drained", timeout=15)
+            # The NSIS child can exit after its bootstrapper. Prove all private
+            # test images are gone before any owner-verified cleanup.
+            wait_for(lambda: private_work_process_count(self.work) == 0,
+                     "cleanup_owned_process_exit_timeout", timeout=15)
         failures = {}
         actions = {"work": lambda: remove_owned_tree(self.work, self.directories, self.files)}
         if self.started:
@@ -503,7 +563,8 @@ def main():
     report = {"schema": "flowbridge-win11-beta4-headless-lifecycle-v1",
               "checks": dict.fromkeys(CHECKS, "NOT_RUN"),
               "gui_acceptance": "NOT_RUN", "visual_acceptance": "NOT_RUN",
-              "gui_managed_ssh": "NOT_RUN"}
+              "gui_managed_ssh": "NOT_RUN",
+              "nsis_machine_pending_rename_queue": {"inspection": "NOT_INSPECTED", "qa_direct_write": False}}
     lifecycle = None
     try:
         require(sys.platform == "win32", "wrong_execution_platform")
