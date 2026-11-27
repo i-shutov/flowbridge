@@ -1,0 +1,247 @@
+# This privileged runner accepts only a manual dispatch from trusted main.
+name: Windows 11 private beta.4 build failure diagnostics
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: win11-vps-smoke-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  private-beta4-diagnostic:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'i-shutov/flowbridge' }}
+    runs-on: [self-hosted, Windows, X64, win11-flowbridge]
+    timeout-minutes: 5
+    steps:
+      - name: Read bounded failure signals from run 46037525707 attempt 1
+        shell: cmd
+        working-directory: C:\
+        env:
+          NoDefaultCurrentDirectoryInExePath: '1'
+          FLOWBRIDGE_LOG_GUARD: |
+            import ctypes
+            from ctypes import wintypes
+            import hashlib
+            from io import BytesIO
+            import json
+            import os
+            from pathlib import Path
+            import re
+            import stat
+            import subprocess
+            import sys
+            from zipfile import ZipFile
+
+            BASE = Path(r'C:\FlowBridge\private-candidates')
+            RUN = BASE / 'run-beta4-46037525707-1'
+            PYTHON = BASE / 'toolchain-45986630920-1/python/tools/python.exe'
+            PYTHON_SHA = ('0e667928bb4f19573c6cd88f65133b2e07b243a5c716f335b56aa66bb9ec6f82328'
+                          '256d22c3a29e23a0276ac5c6a6d786211feab524890ad1e56629196c6b29c')
+            os.environ.pop('FLOWBRIDGE_LOG_GUARD', None)
+            os.environ.pop('FLOWBRIDGE_LOG_SCAN', None)
+
+            class Blocked(Exception):
+                pass
+
+            def require(test, reason):
+                if not test:
+                    raise Blocked(reason)
+
+            def check_path(path):
+                for part in (*reversed(path.parents), path):
+                    info = part.lstat()
+                    require(not stat.S_ISLNK(info.st_mode)
+                            and not info.st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT,
+                            'LOCAL_PATH_REPARSE_POINT')
+                return info
+
+            def guard():
+                require(os.name == 'nt' and sys.maxsize > 2**32, 'NATIVE_WINDOWS_X64_REQUIRED')
+                version = sys.getwindowsversion()
+                require(version.product_type == 1 and (version.major, version.minor) == (10, 0)
+                        and version.build >= 22000, 'WINDOWS_11_CLIENT_REQUIRED')
+                require(os.environ.get('COMPUTERNAME', '').casefold() == 'vm-326272'
+                        and os.environ.get('RUNNER_NAME') == 'win11-flowbridge', 'UNEXPECTED_HOST')
+                kernel = ctypes.WinDLL('kernel32.dll')
+                process = kernel.GetCurrentProcess
+                process.restype = wintypes.HANDLE
+                wow64 = kernel.IsWow64Process2
+                wow64.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.USHORT),
+                                  ctypes.POINTER(wintypes.USHORT))
+                wow64.restype = wintypes.BOOL
+                machine, native = wintypes.USHORT(), wintypes.USHORT()
+                require(wow64(process(), ctypes.byref(machine), ctypes.byref(native))
+                        and machine.value == 0 and native.value == 0x8664, 'NATIVE_WINDOWS_X64_REQUIRED')
+                admin = ctypes.WinDLL('shell32.dll').IsUserAnAdmin
+                admin.restype = wintypes.BOOL
+                require(admin(), 'ELEVATED_ADMIN_REQUIRED')
+                session_id = ctypes.WinDLL('kernel32.dll').ProcessIdToSessionId
+                session_id.argtypes = (wintypes.DWORD, ctypes.POINTER(wintypes.DWORD))
+                session_id.restype = wintypes.BOOL
+                session = wintypes.DWORD()
+                require(session_id(os.getpid(), ctypes.byref(session)) and session.value == 0,
+                        'WINDOWS_SERVICE_SESSION_REQUIRED')
+                system = Path(os.environ['SystemRoot']) / 'System32'
+                account = subprocess.check_output([str(system / 'whoami.exe')], timeout=15)
+                require(account.strip().lower() == rb'vm-326272\admin', 'UNEXPECTED_SERVICE_ACCOUNT')
+                powershell = system / 'WindowsPowerShell/v1.0/powershell.exe'
+                policy = subprocess.check_output(
+                    [str(powershell), '-NoProfile', '-NonInteractive', '-Command', 'Get-ExecutionPolicy'],
+                    timeout=15)
+                require(policy.strip() == b'Restricted', 'EXPECTED_RESTRICTED_EXECUTION_POLICY')
+                require(Path(sys.executable) == PYTHON and sys.version_info[:3] == (3, 13, 17),
+                        'PINNED_PYTHON_UNAVAILABLE')
+                check_path(PYTHON)
+                archive = PYTHON.parents[2] / 'python.nupkg'
+                check_path(archive)
+                with archive.open('rb') as stream:
+                    archive_bytes = stream.read(40_000_001)
+                require(len(archive_bytes) <= 40_000_000
+                        and hashlib.sha512(archive_bytes).hexdigest() == PYTHON_SHA, 'PINNED_PYTHON_ARCHIVE_MISMATCH')
+                with ZipFile(BytesIO(archive_bytes)) as package:
+                    for name in ('python.exe', 'python313.dll'):
+                        path = PYTHON.parent / name
+                        check_path(path)
+                        require(path.read_bytes() == package.read('tools/' + name), 'PINNED_PYTHON_BINARY_MISMATCH')
+
+          FLOWBRIDGE_LOG_SCAN: |
+            PHASES = {
+                'version_check_pass': r'"version_consistency"\s*:\s*"PASS"',
+                'cargo_build': r'(?m)^\+ cargo build\b',
+                'cargo_resolve_output': r'(?m)^\s*(?:Downloading|Updating) crates\.io',
+                'rust_compiling': r'(?m)^\s*Compiling (?:flowbridge-|[A-Za-z0-9_]+ v)',
+                'cmake_configure': r'(?m)^\+ cmake -S\b',
+                'cmake_build': r'(?m)^\+ cmake --build\b',
+                'nsis_compile': r'(?mi)^\+ .*makensis\.exe\b',
+            }
+            GIT_OPERATIONS = ('update-index', 'write-tree', 'apply', 'hash-object', 'archive', 'commit-tree',
+                              'update-ref', 'status', 'rev-parse', 'init')
+            MESSAGES = {
+                'source_sha_not_pinned': 'source_sha_not_pinned',
+                'source_tree_not_pinned': 'source_tree_not_pinned',
+                'source_worktree_dirty': 'source_worktree_dirty',
+                'source_archive_changed_tree': 'source_archive_changed_tree',
+                'candidate_tree_not_pinned': 'candidate_tree_not_pinned',
+                'candidate_source_worktree_dirty': 'candidate_source_worktree_dirty',
+                'nsis_compiler_version_check_failed': 'nsis_compiler_version_check_failed',
+                'nsis_zip_sha256_mismatch': 'nsis_zip_sha256_mismatch',
+                'nsis_archive_requires_one_bin_compiler': 'nsis_archive_requires_one_bin_compiler',
+                'nsis_archive_missing_build_resources': 'nsis_archive_missing_build_resources',
+                'nsis_archive_unsafe_path': 'nsis_archive_unsafe_path',
+                'nsis_local_extraction_failed': 'nsis_local_extraction_failed',
+                'windows_11_build_required': 'windows_11_build_required',
+                'local_path_reparse_point': 'local_path_reparse_point',
+                'does not match index': 'git_worktree_index_mismatch',
+                'patch does not apply': 'git_patch_does_not_apply',
+                'needs update': 'git_index_needs_update',
+                'uncommitted source files': 'dirty_metadata_source',
+                'generated native win32 x64 build directory': 'metadata_cmake_directory_rejected',
+                'generated msvc compiler identity': 'metadata_msvc_identity_missing',
+                'incomplete or non-static windows release settings': 'metadata_release_settings_rejected',
+                'invalid x86 pe header in nsis distribution member': 'metadata_nsis_resource_pe_rejected',
+                'nsis compiler must be inside': 'metadata_nsis_compiler_outside_distribution',
+                'rust runtime license missing': 'metadata_rust_license_missing',
+                'no actual license files': 'metadata_crate_license_missing',
+                'failed to get': 'cargo_dependency_error',
+                'download of config.json failed': 'cargo_registry_unavailable',
+                'could not resolve host': 'network_host_resolution_failed',
+                'error: could not compile': 'rust_crate_compile_failed',
+                'file: no files found': 'nsis_input_file_missing',
+                'plugin not found': 'nsis_plugin_not_found',
+                'error in script': 'nsis_script_error',
+                'system cannot find the path specified': 'system_path_missing',
+                'not recognized as an internal or external command': 'command_not_found',
+            }
+            SOURCES = ('stage_internal_beta4.py', 'stage_internal_beta3.py', 'internal_windows_build_preflight.py',
+                       'build-explicit-beta.py', 'explicit_beta_metadata.py', 'subprocess.py', 'pathlib.py',
+                       'explicit_beta_acceptance.py', '__init__.py', '_local.py')
+            ERRORS = ('StagingError', 'WindowsBuildPreflightError', 'CalledProcessError', 'TimeoutExpired',
+                      'FileNotFoundError', 'FileExistsError', 'PermissionError', 'OSError', 'ValueError',
+                      'RuntimeError', 'KeyError', 'UnicodeDecodeError', 'TypeError', 'ImportError',
+                      'ModuleNotFoundError', 'ParseError', 'AttributeError', 'Rejected')
+            PATHS = {
+                'candidate_source': 'candidate',
+                'candidate_git_head': 'candidate/.git/HEAD',
+                'candidate_git_index': 'candidate/.git/index',
+                'nsis_extraction': 'candidate-nsis-toolchain',
+                'ffi_binary': 'candidate/target/release/flowbridge_ffi.dll',
+                'native_cmake_cache': 'candidate/build/windows-explicit-beta/CMakeCache.txt',
+                'native_gui': 'candidate/build/windows-explicit-beta/Release/FlowBridge.exe',
+                'package_metadata': 'candidate/build/explicit-beta-payload/BUILD-METADATA.json',
+                'package_manifest': 'candidate/build/verification/explicit-beta-package.json',
+                'checkpoint': 'candidate-CHECKPOINT.json',
+            }
+
+            def scan(content):
+                lower = content.lower()
+                classes = [name for name in ERRORS if re.search(r'(?m)^\S*\b' + name + r':', content)]
+                traceback_frames = []
+                for line in content.splitlines():
+                    if not line.startswith('  File '):
+                        continue
+                    frame = re.fullmatch(r'  File "[^"\r\n]*[\\/]([^"\\/\r\n]+)", line ([0-9]{1,5}), in .*', line)
+                    if frame and frame[1] in SOURCES:
+                        traceback_frames.append({'file': frame[1], 'line': int(frame[2])})
+                failures = [line for line in content.splitlines() if 'CalledProcessError:' in line]
+                git_failures = sorted({name for name in GIT_OPERATIONS for line in failures
+                                       if "'git'" in line and "'" + name + "'" in line})
+                exit_codes = [int(code) for line in failures
+                              for code in re.findall(r'returned non-zero exit status ([0-9]{1,10})\.', line)]
+                compiler_codes = sorted(set(re.findall(
+                    r'(?i)\berror(?:\[|\s+)(E[0-9]{4}|(?:MSB|LNK|C|RC|NU|NETSDK)[0-9]{4})\b',
+                    content.upper(), flags=re.I)))[:24]
+                windows_codes = sorted({int(code) for code in re.findall(r'\[WinError ([0-9]{1,8})\]', content)})
+                return {'phase_signals': [name for name, pattern in PHASES.items() if re.search(pattern, content)],
+                        'error_signals': sorted({name for marker, name in MESSAGES.items() if marker in lower}),
+                        'python_exceptions': classes,
+                        'traceback_frames': traceback_frames[-24:], 'git_subprocesses_failed': git_failures,
+                        'subprocess_exit_codes': exit_codes[-8:], 'compiler_error_codes': compiler_codes,
+                        'windows_error_codes': windows_codes[:16]}
+
+            def main():
+                guard()
+                log = RUN / 'private-build.log'
+                info = check_path(log)
+                require(stat.S_ISREG(info.st_mode), 'PRIVATE_BUILD_LOG_NOT_REGULAR')
+                with log.open('rb') as stream:
+                    current = os.fstat(stream.fileno())
+                    require(current.st_ino == info.st_ino and current.st_dev == info.st_dev,
+                            'PRIVATE_BUILD_LOG_ID_CHANGED')
+                    size = current.st_size
+                    if size <= 2_097_152:
+                        content = stream.read(2_097_153)
+                    else:
+                        head = stream.read(131_072)
+                        stream.seek(max(131_072, size - 1_048_576))
+                        content = head + b'\n' + stream.read(1_048_576)
+                    require(os.fstat(stream.fileno()).st_size == size, 'PRIVATE_BUILD_LOG_SIZE_CHANGED')
+                presence = {}
+                for name, path in PATHS.items():
+                    try:
+                        check_path(RUN / path)
+                    except FileNotFoundError:
+                        presence[name] = False
+                    else:
+                        presence[name] = True
+                return {'status': 'DIAGNOSTIC_READ', 'log_bytes': size,
+                        'sample_bytes': len(content), 'whole_log_read': len(content) == size,
+                        'private_build_files_present': presence, **scan(content.decode('utf-8', 'replace'))}
+
+            summary = {'schema': 'flowbridge-private-beta4-build-diagnostic-v1', 'source_run': 46037525707,
+                       'source_attempt': 1}
+            try:
+                summary.update(main())
+            except Blocked as exc:
+                summary.update(status='BLOCKED', reason=str(exc))
+            except (OSError, subprocess.SubprocessError, ValueError, KeyError):
+                summary.update(status='BLOCKED', reason='PRIVATE_BUILD_DIAGNOSTIC_INPUT_UNAVAILABLE')
+            print('FLOWBRIDGE_PRIVATE_BUILD_DIAGNOSTIC ' + json.dumps(summary, sort_keys=True))
+            sys.exit(0 if summary['status'] == 'DIAGNOSTIC_READ' else 1)
+        run: |
+          @echo off
+          "C:\FlowBridge\private-candidates\toolchain-45986630920-1\python\tools\python.exe" -I -B -c "import os; exec(os.environ['FLOWBRIDGE_LOG_GUARD'] + os.environ['FLOWBRIDGE_LOG_SCAN'])" 2>nul
+          exit /b %ERRORLEVEL%

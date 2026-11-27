@@ -12,7 +12,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     env:
-      WSK_SOURCE_SHA: 'a7476671a5b9574dfe8d6f5a307148b5fe27ef11'
+      WSK_SOURCE_SHA: 'f5182e971b0a6b203e509fe3dc0e7c11e269251e'
+      WSK_SOURCE_TREE: 'f5be0d3df03813c60ec0841f8598c158a30b93e1'
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -25,6 +26,10 @@ jobs:
           $head = git rev-parse HEAD
           if ($LASTEXITCODE -ne 0 -or $head -cne $env:WSK_SOURCE_SHA) {
             throw 'WDK prototype source mismatch'
+          }
+          $tree = git rev-parse 'HEAD^{tree}'
+          if ($LASTEXITCODE -ne 0 -or $tree -cne $env:WSK_SOURCE_TREE) {
+            throw 'WDK prototype tree mismatch'
           }
           python tests/wsk_binding/test_object_source.py -v
           if ($LASTEXITCODE -ne 0) { throw 'WSK call-site controls failed' }
@@ -47,6 +52,11 @@ jobs:
             throw 'WSK lifecycle fixtures failed'
           }
           Write-Host $lifecycle
+          $owner = & (Join-Path $build 'Release/FlowBridgeWskOwnerTest.exe')
+          if ($LASTEXITCODE -ne 0 -or $owner -cne 'WSK_BINDING_OWNER_CASES_PASS=7') {
+            throw 'WSK owner rundown fixtures failed'
+          }
+          Write-Host $owner
       - name: Compile the prototype object with pinned Microsoft SDK and WDK
         shell: pwsh
         run: |
