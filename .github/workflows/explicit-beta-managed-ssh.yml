@@ -102,7 +102,7 @@ jobs:
           }
           Write-Output "MANAGED_SSH_PASS_EXACT_BETA_SHA=$head; physical Windows 10 acceptance still OPEN"
       - name: Preserve original JSON evidence even on failure
-        if: always()
+        if: github.event.repository.private == true && (always())
         uses: actions/upload-artifact@v4
         with:
           name: FlowBridge-ExplicitBeta-ManagedSSH-Windows-${{ github.run_id }}

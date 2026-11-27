@@ -46,7 +46,7 @@ jobs:
         run: |
           python tests/windows_dpi_matrix_vm.py --gui build/windows/Release/FlowBridge.exe --harness build/windows/Release/FlowBridgeNativeSmoke.exe --expected-dpi ${{ inputs.expected_dpi }} --expected-resolution ${{ inputs.expected_resolution }} --output build/verification/dpi/result.json
       - name: Preserve DPI report and unmodified screenshots even on test failure
-        if: always()
+        if: github.event.repository.private == true && (always())
         uses: actions/upload-artifact@v7.0.0
         with:
           name: FlowBridge-actual-DPI-${{ inputs.expected_dpi }}-${{ inputs.expected_resolution }}

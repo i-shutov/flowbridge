@@ -69,6 +69,7 @@ jobs:
           out.mkdir(parents=True, exist_ok=True)
           (out / ('core-' + os.environ['RUNNER_OS'] + '.json')).write_text(json.dumps(report, indent=2)+'\n', encoding='utf-8')
       - uses: actions/upload-artifact@v4
+        if: github.event.repository.private == true
         with:
           name: FlowBridge-ExplicitBeta-Core-${{ runner.os }}-${{ github.run_id }}
           path: build/verification/explicit-core/core-*.json
@@ -140,7 +141,7 @@ jobs:
           assert not report['a3_a4_full_acceptance'] and not report['release_accepted']
           (output / ('native-qa-' + os.environ['RUNNER_OS'] + '.json')).write_text(json.dumps(report, indent=2)+'\n')
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: github.event.repository.private == true && (always())
         with:
           name: FlowBridge-ExplicitBeta-NativeQARunner-${{ runner.os }}-${{ github.run_id }}
           path: build/verification/native-qa-${{ runner.os }}/
@@ -170,6 +171,7 @@ jobs:
           git archive --format=zip --prefix=flowbridge/ -o build/flowbridge-source-${GITHUB_SHA}.zip HEAD
           sha256sum build/flowbridge-source-${GITHUB_SHA}.zip > build/source-SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
+        if: github.event.repository.private == true
         with:
           name: FlowBridge-ExplicitBeta-VerifiedCandidate-${{ github.run_id }}
           path: |
