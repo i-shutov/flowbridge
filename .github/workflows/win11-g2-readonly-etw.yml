@@ -1,0 +1,107 @@
+name: Win11 local G2 ETW diagnostics (observation only)
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+concurrency:
+  group: win11-vps-smoke-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  observe:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'i-shutov/flowbridge' }}
+    runs-on: [self-hosted, Windows, X64, win11-flowbridge]
+    timeout-minutes: 5
+    steps:
+      - name: Observe loopback TCP ownership events on the verified Win11 host
+        shell: cmd
+        working-directory: C:\
+        env:
+          FLOWBRIDGE_G2_LAUNCH: |
+            import csv
+            import ctypes
+            import hashlib
+            import os
+            from pathlib import Path
+            import re
+            import runpy
+            import socket
+            import stat
+            import subprocess
+            import sys
+            import tempfile
+            import urllib.request
+
+            PROBE_SOURCE = '06c7d7d5cc005be092dd1c944b0c8dcd265d5726'
+            PROBE_SHA256 = 'a4bfd117f70b05798e36d95529a1f9276d44256c149e16cff29388229f7292b8'
+            HOST = 'VM-326272'
+            PHASE = 'HOST_GUARD'
+
+            def check_local(path):
+                for part in (*reversed(path.parents), path):
+                    info = part.lstat()
+                    if stat.S_ISLNK(info.st_mode) or info.st_file_attributes & 0x400:
+                        raise RuntimeError('unexpected local path')
+
+            def main():
+                global PHASE
+                if os.name != 'nt' or sys.maxsize <= 2**32:
+                    raise RuntimeError('Windows x64 required')
+                v = sys.getwindowsversion()
+                if (v.product_type != 1 or v.build < 22000 or socket.gethostname().casefold() != HOST.casefold()
+                        or os.environ.get('RUNNER_NAME') != 'win11-flowbridge'
+                        or not ctypes.windll.shell32.IsUserAnAdmin()):
+                    raise RuntimeError('wrong runner')
+                root = Path('C:/') / 'FlowBridge' / 'private-candidates'
+                check_local(root)
+                check_local(Path(sys.executable))
+                system = Path(os.environ['SystemRoot']) / 'System32'
+                result = subprocess.run([str(system / 'whoami.exe'), '/user', '/fo', 'csv', '/nh'],
+                                        check=True, capture_output=True, text=True, timeout=10)
+                identity, sid = next(csv.reader([result.stdout.strip()]))
+                if (identity.casefold() != HOST.casefold() + r'\admin'
+                        or not re.fullmatch(r'S-1-[0-9]+(?:-[0-9]+)+', sid)):
+                    raise RuntimeError('wrong account')
+                PHASE = 'SOURCE_INTEGRITY'
+                source = PROBE_SOURCE
+                if not re.fullmatch(r'[0-9a-f]{40}', source):
+                    raise RuntimeError('missing workflow source')
+                url = (f'https://raw.githubusercontent.com/i-shutov/flowbridge/{source}'
+                       '/tests/g2_etw_owner_probe.py')
+                with urllib.request.urlopen(url, timeout=15) as response:
+                    payload = response.read(262145)
+                if (not 0 < len(payload) <= 262144
+                        or hashlib.sha256(payload).hexdigest() != PROBE_SHA256):
+                    raise RuntimeError('probe source mismatch')
+                PHASE = 'PRIVATE_WORKSPACE'
+                with tempfile.TemporaryDirectory(prefix='g2-etw-', dir=root) as temporary:
+                    folder = Path(temporary)
+                    subprocess.run([str(system / 'icacls.exe'), str(folder), '/inheritance:r', '/grant:r',
+                                    f'*{sid}:(OI)(CI)F', '*S-1-5-18:(OI)(CI)F',
+                                    '*S-1-5-32-544:(OI)(CI)F'], check=True, capture_output=True, timeout=10)
+                    probe = folder / 'g2_etw_owner_probe.py'
+                    probe.write_bytes(payload)
+                    os.environ['PR_HEAD_SHA'] = source
+                    tempfile.tempdir = str(folder)
+                    PHASE = 'OWNED_LOOPBACK_ETW_OBSERVATION'
+                    verified_probe = runpy.run_path(str(probe))
+                    return verified_probe['main']([
+                        '--consent', 'G2_WIN11_ETW_READ_ONLY_NO_DRIVER',
+                        '--expected-win11', HOST,
+                        '--output', str(folder / 'sanitized.json'),
+                    ])
+
+            try:
+                exit_code = main()
+            except Exception:
+                print('G2_ETW_LAUNCH_BLOCKED=' + PHASE)
+                print('G2_PACKET_BOUND=UNPROVED')
+                exit_code = 1
+            sys.exit(exit_code)
+        run: |
+          @echo off
+          set "FLOWBRIDGE_PRIVATE_PY=C:\"
+          "%FLOWBRIDGE_PRIVATE_PY%FlowBridge\private-candidates\toolchain-45986630920-1\python\tools\python.exe" -I -c "import os; exec(os.environ['FLOWBRIDGE_G2_LAUNCH'])" 2>nul
+          exit /b %ERRORLEVEL%
+
