@@ -53,9 +53,10 @@ function Checkout-Pin {
     Invoke-Logged git @('-C', $Directory, 'init', '--quiet')
     Invoke-Logged git @('-C', $Directory, 'config', 'core.autocrlf', 'false')
     Invoke-Logged git @('-C', $Directory, 'remote', 'add', 'origin', $Remote)
-    # Keep the vcpkg Git trees for its manifest's registry versions.
-    $fetch = @('-C', $Directory, 'fetch', '--quiet', '--no-tags', '--filter=blob:none')
-    if ($Shallow) { $fetch += '--depth=1' }
+    # vcpkg materializes historical port trees with checkout-index, so fetch their
+    # blobs up front. OpenSSH only uses the checked-out revision.
+    $fetch = @('-C', $Directory, 'fetch', '--quiet', '--no-tags')
+    if ($Shallow) { $fetch += @('--depth=1', '--filter=blob:none') }
     Invoke-Logged git ($fetch + @('origin', $Commit))
     Invoke-Logged git @('-C', $Directory, 'checkout', '--quiet', '--detach', $Commit)
 }
