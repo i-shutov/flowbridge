@@ -82,6 +82,18 @@ class PeTests(unittest.TestCase):
             audit.pe_inventory(pe(x86=True))
         self.assertEqual(audit.pe_inventory(pe(x86=True), installer=True)["machine"], "0x014c")
 
+    def test_repeated_dll_descriptors_retained_as_count(self):
+        for delay in (False, True):
+            data = pe(delay=delay)
+            offset, width, index = (768, 32, 13) if delay else (512, 20, 1)
+            data[offset + width:offset + 2 * width] = data[offset:offset + width]
+            struct.pack_into("<I", data, 152 + 112 + index * 8 + 4, 3 * width)
+            result = audit.pe_inventory(data)
+            kind = "delay" if delay else "direct"
+            with self.subTest(delay=delay):
+                self.assertEqual(result[kind + "_import_descriptor_count"], 2)
+                self.assertEqual(len(result[kind + "_imports"]), 1)
+
     def test_delay_rva_and_legacy_va(self):
         for legacy in (False, True):
             with self.subTest(legacy=legacy):

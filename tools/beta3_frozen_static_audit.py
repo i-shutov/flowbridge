@@ -155,18 +155,19 @@ def pe_inventory(data: bytes, *, installer: bool = False) -> dict:
             name.append(value)
         raise Rejected("pe_import_name_unterminated")
 
-    def imports(index: int, width: int) -> list[str]:
+    def imports(index: int, width: int) -> tuple[list[str], int]:
         address, size = directory(index)
         if not address:
-            return []
+            return [], 0
         require(width <= size <= 131072, "pe_import_directory_size")
         rva(address, size)
         names = []
         for offset in range(0, size - width + 1, width):
             record = unpack("<" + "I" * (width // 4), rva(address + offset, width))
             if not any(record):
-                require(len(names) == len(set(names)), "pe_duplicate_import")
-                return sorted(names)
+                # The PE directory need not use a unique descriptor per DLL.
+                # Preserve its count while normalizing the module inventory.
+                return sorted(set(names)), len(names)
             require(len(names) < 128, "pe_import_limit")
             if index == 13:
                 require(record[0] in (0, 1), "pe_delay_attributes")
@@ -177,7 +178,7 @@ def pe_inventory(data: bytes, *, installer: bool = False) -> dict:
             names.append(dll_name(address_name))
         raise Rejected("pe_import_directory_unterminated")
 
-    direct, delayed = imports(1, 20), imports(13, 32)
+    (direct, direct_count), (delayed, delay_count) = imports(1, 20), imports(13, 32)
     require(bool(direct), "pe_direct_imports_missing")
     certificate, certificate_size = directory(4)  # File offset, NOT an RVA.
     if certificate:
@@ -185,6 +186,7 @@ def pe_inventory(data: bytes, *, installer: bool = False) -> dict:
     names = direct + delayed
     return {
         "machine": f"0x{machine:04x}", "direct_imports": direct, "delay_imports": delayed,
+        "direct_import_descriptor_count": direct_count, "delay_import_descriptor_count": delay_count,
         "declared_dll_characteristics": {"dynamic_base": bool(flags & 0x40),
             "nx_compat": bool(flags & 0x100), "high_entropy_va": bool(flags & 0x20),
             "guard_cf": bool(flags & 0x4000)},
