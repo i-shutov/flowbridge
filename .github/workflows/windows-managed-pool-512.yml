@@ -1,0 +1,88 @@
+name: Managed SSH pool 512 (hosted Windows)
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FLOWBRIDGE_QA_SHA: 309397a5f2cd8ae54e8d93d2be8e2f68358479de
+  FLOWBRIDGE_QA_TREE: 512ac58db83fcf94491ea7972924b4ad05e21bb7
+  FLOWBRIDGE_HOSTED_WINDOWS_SSH: '1'
+  PYTHONUTF8: '1'
+
+jobs:
+  managed-pool-512:
+    runs-on: windows-2025
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.FLOWBRIDGE_QA_SHA }}
+          persist-credentials: false
+      - name: Verify exact reviewed QA checkout
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $commit = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $commit -cne $env:FLOWBRIDGE_QA_SHA) {
+            throw 'QA checkout commit differs from the reviewed pin'
+          }
+          $tree = (git rev-parse 'HEAD^{tree}').Trim()
+          if ($LASTEXITCODE -ne 0 -or $tree -cne $env:FLOWBRIDGE_QA_TREE) {
+            throw 'QA checkout tree differs from the reviewed pin'
+          }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Reject false-positive capacity evidence
+        shell: pwsh
+        run: |
+          python -m unittest discover -s tests -p 'test_windows*ssh*.py' -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build release FFI and Win32 pool policy
+        shell: pwsh
+        run: |
+          cargo build --locked --release -p flowbridge-ffi
+          if ($LASTEXITCODE -ne 0) { throw 'Release FFI build failed' }
+          cmake -S native/windows -B build/windows-pool-policy -A x64 -DFLOWBRIDGE_BUILD_NATIVE_TESTS=ON "-DFLOWBRIDGE_FFI_LIBRARY=$env:GITHUB_WORKSPACE/target/release/flowbridge_ffi.dll.lib"
+          if ($LASTEXITCODE -ne 0) { throw 'Win32 policy configure failed' }
+          cmake --build build/windows-pool-policy --config Release --target FlowBridgeSshPoolRequest
+          if ($LASTEXITCODE -ne 0) { throw 'Win32 policy build failed' }
+      - name: Verify 512 held SSH streams, overload, recovery and Stop
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $fixture = Join-Path $env:RUNNER_TEMP 'flowbridge-managed-pool-512-fixture'
+          New-Item -ItemType Directory $fixture | Out-Null
+          $archive = Join-Path $fixture 'OpenSSH-Win64.zip'
+          Invoke-WebRequest 'https://github.com/PowerShell/Win32-OpenSSH/releases/download/10.4.0.0p1-Preview/OpenSSH-Win64.zip' -OutFile $archive
+          $expected = 'b67ff8becd203502190ec42ac7787c24c2cd3325ed7700485fe7a1c83d2a7957'
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -cne $expected) {
+            throw 'Official portable OpenSSH fixture archive hash mismatch'
+          }
+          Expand-Archive -LiteralPath $archive -DestinationPath $fixture
+          $dll = 'target/release/flowbridge_ffi.dll'
+          $hash = (Get-FileHash -LiteralPath $dll -Algorithm SHA256).Hash.ToLowerInvariant()
+          $probe = @(
+            '--scenario', 'managed-pool-512',
+            '--ssh', (Join-Path $env:WINDIR 'System32/OpenSSH/ssh.exe'),
+            '--sshd', (Join-Path $fixture 'OpenSSH-Win64/sshd.exe'),
+            '--keygen', (Join-Path $env:WINDIR 'System32/OpenSSH/ssh-keygen.exe'),
+            '--fixture-archive', $archive,
+            '--library', $dll,
+            '--pool-policy', 'build/windows-pool-policy/Release/FlowBridgeSshPoolRequest.exe',
+            '--expect-source-sha', $env:FLOWBRIDGE_QA_SHA,
+            '--expect-ffi-sha256', $hash,
+            '--output', 'build/verification/windows-managed-pool-512'
+          )
+          python tests/windows_real_ssh_hosted.py @probe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v7.0.0
+        if: github.event.repository.private == true && (always())
+        with:
+          name: FlowBridge-hosted-managed-pool-512-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/verification/windows-managed-pool-512/*.json
+          if-no-files-found: warn
+          retention-days: 14

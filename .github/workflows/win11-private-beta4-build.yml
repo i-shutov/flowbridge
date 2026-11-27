@@ -1,0 +1,377 @@
+# This privileged runner accepts only a manual dispatch from trusted main.
+name: Windows 11 private local beta.4 build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: win11-vps-smoke-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  private-beta4:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'i-shutov/flowbridge' }}
+    runs-on: [self-hosted, Windows, X64, win11-flowbridge]
+    timeout-minutes: 60
+    steps:
+      - name: Check prerequisites and build the pinned candidate privately
+        shell: cmd
+        working-directory: C:\
+        env:
+          NoDefaultCurrentDirectoryInExePath: '1'
+          FLOWBRIDGE_PREFLIGHT_CODE: |
+            import csv
+            import ctypes
+            from ctypes import wintypes
+            import hashlib
+            from io import BytesIO
+            import json
+            import os
+            from pathlib import Path
+            import re
+            import shutil
+            import stat
+            import subprocess
+            import sys
+            from zipfile import ZipFile
+
+            QA = 'ee229778609b6f6ff4a44a2318b239cd1b876a45'
+            QA_TREE = '48e4efdd5cb3a1617446895d2080ad789eef0003'
+            PRODUCT = '1261201d8561ee4e70faccc8699f60606a71c93b'
+            PRODUCT_TREE = 'b42325734201827e6b4d7566b4b3418205d78889'
+            CANDIDATE_TREE = 'ce336e83bb724a65bf512e79e286c97fb0cb3190'
+            PYTHON_ARCHIVE_SHA512 = (
+                '0e667928bb4f19573c6cd88f65133b2e07b243a5c716f335b56aa66bb9ec6f82328'
+                '256d22c3a29e23a0276ac5c6a6d786211feab524890ad1e56629196c6b29c'
+            )
+            RUST_HASHES = {
+                'cargo.exe': 'f381bae27c59588eacf69208e115b2c001a2998afed83a2e9084ea93620737b1',
+                'rustc.exe': 'd4f8a0283de2dba0dc458cd13c333337d2b76c3649eb39e91c4acce618e661a1',
+            }
+            GITHUB = 'https://github.com/i-shutov/flowbridge.git'
+            NSIS_URL = 'https://downloads.sourceforge.net/project/nsis/NSIS%203/3.13/nsis-3.13.zip'
+            NSIS_SHA = 'ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8'
+            BASE = Path(r'C:\FlowBridge\private-candidates')
+            NSIS_LOCAL = BASE.parent / 'toolchains' / 'nsis-3.13.zip'
+            NSIS_PREVIOUS = BASE / 'run-45986630920-1' / 'nsis-3.13.zip'
+            TOOLCHAIN = BASE / 'toolchain-45986630920-1'
+            RUST_BIN = TOOLCHAIN / 'rust/toolchains/1.100.0-x86_64-pc-windows-msvc/bin'
+            state = {'schema': 'flowbridge-private-beta4-runner-v1', 'candidate': '0.3.0-beta.4',
+                     'qa_sha': QA, 'qa_tree': QA_TREE, 'product_sha': PRODUCT, 'product_tree': PRODUCT_TREE}
+            local = None
+            log = None
+            os.environ.pop('FLOWBRIDGE_BUILD_CODE', None)
+            os.environ.pop('FLOWBRIDGE_PREFLIGHT_CODE', None)
+            os.environ.pop('FLOWBRIDGE_INPUT_CODE', None)
+            os.environ.pop('FLOWBRIDGE_RESULT_CODE', None)
+
+            class Blocked(Exception):
+                pass
+
+            def require(test, code):
+                if not test:
+                    raise Blocked(code)
+
+            def run(args, code, *, env=None, timeout=120, capture=False):
+                output = subprocess.PIPE if capture else (log or subprocess.DEVNULL)
+                try:
+                    proc = subprocess.run(args, stdout=output, stderr=log or subprocess.DEVNULL,
+                                          env=env, timeout=timeout, check=True)
+                except (OSError, subprocess.SubprocessError):
+                    raise Blocked(code) from None
+                return proc.stdout.decode('utf-8', 'replace').strip() if capture else None
+
+            def reject_links(path):
+                for part in [*reversed(path.parents), path]:
+                    if os.path.lexists(part):
+                        flags = part.lstat().st_file_attributes
+                        require(not flags & stat.FILE_ATTRIBUTE_REPARSE_POINT, 'LOCAL_PATH_REPARSE_POINT')
+
+            def verify_frozen_beta3():
+                frozen = BASE / 'run-45986630920-1/candidate'
+                files = {
+                    'artifacts/FlowBridge-0.3.0-beta.3-windows-x64-setup.exe':
+                        '6408c0bf595b0ae61a4fc05db17421dc4b03dcda241f3c1f1f997ab6583eec5b',
+                    'build/verification/explicit-beta-package.json':
+                        'f6a94e5e8a87e571d63604ff3b2e417bf21e2e2758343171c587a43717318c99',
+                }
+                for name, digest in files.items():
+                    member = frozen / name
+                    reject_links(member)
+                    require(member.is_file() and hashlib.sha256(member.read_bytes()).hexdigest() == digest,
+                            'FROZEN_BETA3_ORIGINAL_CHANGED')
+
+            def checkout(git, folder, commit, env, expected_tree=None):
+                run([git, 'init', '-q', str(folder)], 'CHECKOUT_INIT_FAILED', env=env)
+                run([git, '-C', str(folder), 'fetch', '--no-tags', '--depth=1',
+                     GITHUB, commit], 'PINNED_GITHUB_FETCH_FAILED', env=env, timeout=180)
+                run([git, '-C', str(folder), 'checkout', '-q', '--detach', commit],
+                    'PINNED_GITHUB_CHECKOUT_FAILED', env=env)
+                actual = run([git, '-C', str(folder), 'rev-parse', 'HEAD'], 'CHECKOUT_SHA_UNAVAILABLE',
+                             env=env, capture=True)
+                status = run([git, '-C', str(folder), 'status', '--porcelain', '--untracked-files=all'],
+                             'CHECKOUT_STATUS_UNAVAILABLE', env=env, capture=True)
+                require(actual == commit and not status, 'CHECKOUT_SHA_OR_CLEANLINESS_MISMATCH')
+                if expected_tree:
+                    tree = run([git, '-C', str(folder), 'rev-parse', 'HEAD^{tree}'],
+                               'CHECKOUT_TREE_UNAVAILABLE', env=env, capture=True)
+                    require(tree == expected_tree, 'CHECKOUT_TREE_MISMATCH')
+
+            def check_native_and_elevated():
+                require(os.name == 'nt' and sys.maxsize > 2**32, 'NATIVE_X64_WINDOWS_REQUIRED')
+                kernel = ctypes.WinDLL('kernel32.dll')
+                current_process = kernel.GetCurrentProcess
+                current_process.restype = wintypes.HANDLE
+                is_wow64 = kernel.IsWow64Process2
+                is_wow64.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.USHORT),
+                                      ctypes.POINTER(wintypes.USHORT))
+                is_wow64.restype = wintypes.BOOL
+                process, hardware = wintypes.USHORT(), wintypes.USHORT()
+                require(is_wow64(current_process(), ctypes.byref(process), ctypes.byref(hardware))
+                        and process.value == 0 and hardware.value == 0x8664,
+                        'NATIVE_X64_WINDOWS_REQUIRED')
+                is_admin = ctypes.WinDLL('shell32.dll').IsUserAnAdmin
+                is_admin.restype = wintypes.BOOL
+                require(is_admin(), 'ELEVATED_ADMIN_TOKEN_REQUIRED')
+                session = wintypes.DWORD()
+                process_session = kernel.ProcessIdToSessionId
+                process_session.argtypes = (wintypes.DWORD, ctypes.POINTER(wintypes.DWORD))
+                process_session.restype = wintypes.BOOL
+                require(process_session(os.getpid(), ctypes.byref(session)) and session.value == 0,
+                        'WINDOWS_SERVICE_SESSION_REQUIRED')
+
+          FLOWBRIDGE_INPUT_CODE: |
+            def discover_tools():
+                user = Path(os.environ['USERPROFILE'])
+                app = Path(os.environ.get('LOCALAPPDATA', str(user / 'AppData/Local')))
+                programs = Path(os.environ['ProgramFiles'])
+                homes = {
+                    'git.exe': [programs / 'Git/cmd', app / 'Programs/Git/cmd'],
+                    'cargo.exe': [RUST_BIN],
+                    'rustc.exe': [RUST_BIN],
+                    'cmake.exe': [programs / 'CMake/bin', app / 'Programs/CMake/bin'],
+                }
+                x86 = Path(os.environ.get('ProgramFiles(x86)', str(programs)))
+                vswhere = x86 / 'Microsoft Visual Studio/Installer/vswhere.exe'
+                dev = None
+                if vswhere.is_file():
+                    reject_links(vswhere)
+                    install = run([str(vswhere), '-latest', '-products', '*', '-requires',
+                                   'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
+                                   '-property', 'installationPath'], 'VSWHERE_DISCOVERY_FAILED', capture=True)
+                    if install:
+                        candidate = Path(install) / 'Common7/Tools/VsDevCmd.bat'
+                        dev = candidate if candidate.is_file() else None
+                        homes['cmake.exe'].append(Path(install) /
+                            'Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin')
+                tools = {tool: next((str(p / tool) for p in dirs if (p / tool).is_file()), shutil.which(tool))
+                         for tool, dirs in homes.items()}
+                missing = [tool for tool, path in tools.items() if not path or not Path(path).is_absolute()]
+                if not dev and not shutil.which('cl.exe'):
+                    missing.append('msvc-x64')
+                state['missing_tools'] = missing
+                require(not missing, 'REQUIRED_NATIVE_TOOLS_NOT_FOUND')
+                for tool in tools.values():
+                    reject_links(Path(tool))
+                if dev:
+                    reject_links(dev)
+                for tool, digest in RUST_HASHES.items():
+                    require(Path(tools[tool]) == RUST_BIN / tool and
+                            hashlib.sha256(Path(tools[tool]).read_bytes()).hexdigest() == digest,
+                            'PINNED_RUST_BINARY_MISMATCH')
+                return tools, dev
+
+          FLOWBRIDGE_BUILD_CODE: |
+            def main():
+                global local, log
+                check_native_and_elevated()
+                system = Path(os.environ['SystemRoot']) / 'System32'
+                v = sys.getwindowsversion()
+                require(v.product_type == 1 and (v.major, v.minor) == (10, 0) and v.build >= 22000,
+                        'WINDOWS_11_CLIENT_REQUIRED')
+                require(os.environ.get('COMPUTERNAME', '').casefold() == 'vm-326272'
+                        and os.environ.get('RUNNER_NAME') == 'win11-flowbridge', 'WRONG_RUNNER_OR_HOST')
+                account = run([str(system / 'whoami.exe')], 'SERVICE_ACCOUNT_UNAVAILABLE', capture=True)
+                require(account.casefold() == r'vm-326272\admin', 'UNEXPECTED_SERVICE_ACCOUNT')
+                powershell = system / 'WindowsPowerShell/v1.0/powershell.exe'
+                policy = run([str(powershell), '-NoProfile', '-NonInteractive',
+                              '-Command', 'Get-ExecutionPolicy'], 'EXECUTION_POLICY_QUERY_FAILED', capture=True)
+                require(policy == 'Restricted', 'EXPECTED_RESTRICTED_EXECUTION_POLICY')
+                verify_frozen_beta3()
+                state['frozen_beta3_installer_and_manifest_verified_before'] = True
+                python = TOOLCHAIN / 'python/tools/python.exe'
+                python_archive = TOOLCHAIN / 'python.nupkg'
+                reject_links(python)
+                reject_links(python_archive)
+                require(Path(sys.executable) == python and sys.version_info[:3] == (3, 13, 17),
+                        'PINNED_PYTHON_VERSION_OR_PATH_MISMATCH')
+                with python_archive.open('rb') as stream:
+                    data = stream.read(40_000_001)
+                require(len(data) <= 40_000_000 and hashlib.sha512(data).hexdigest() == PYTHON_ARCHIVE_SHA512,
+                        'PINNED_PYTHON_ARCHIVE_MISMATCH')
+                with ZipFile(BytesIO(data)) as package:
+                    for name in ('python.exe', 'python313.dll'):
+                        member = python.parent / name
+                        reject_links(member)
+                        require(member.read_bytes() == package.read('tools/' + name),
+                                'PINNED_PYTHON_BINARY_MISMATCH')
+                state['windows_build'] = v.build
+                state['phase'] = 'TOOL_DISCOVERY'
+                tools, dev = discover_tools()
+
+                identity = '-'.join(os.environ[name] for name in ('GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT'))
+                require(re.fullmatch(r'[0-9]+-[0-9]+', identity), 'INVALID_RUN_ID')
+                proposed = BASE / ('run-beta4-' + identity)
+                reject_links(proposed)
+                require(not os.path.lexists(proposed), 'PRIVATE_RUN_DIRECTORY_ALREADY_EXISTS')
+                workspace = Path(os.environ['GITHUB_WORKSPACE']).resolve()
+                require(not proposed.is_relative_to(workspace), 'CANDIDATE_INSIDE_ACTIONS_WORKSPACE')
+                proposed.mkdir(parents=True, exist_ok=False)
+                sid_row = run([str(system / 'whoami.exe'), '/user', '/fo', 'csv', '/nh'],
+                              'SERVICE_SID_UNAVAILABLE', capture=True)
+                sid = next(csv.reader([sid_row]))[-1]
+                require(re.fullmatch(r'S-1-[0-9]+(?:-[0-9]+)+', sid), 'INVALID_SERVICE_SID')
+                run([str(system / 'icacls.exe'), str(proposed), '/inheritance:r', '/grant:r',
+                     f'*{sid}:(OI)(CI)F', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F'],
+                    'PRIVATE_DIRECTORY_ACL_FAILED')
+                local = proposed
+                log = (local / 'private-build.log').open('xb')
+
+                omit = {'GH_TOKEN', 'GITHUB_TOKEN', 'GITHUB_ENV', 'GITHUB_OUTPUT', 'GITHUB_PATH',
+                        'GITHUB_STEP_SUMMARY', 'GITHUB_STATE', 'PYTHONHOME', 'PYTHONPATH'}
+                clean = {k: v for k, v in os.environ.items()
+                         if not k.startswith(('GIT_', 'ACTIONS_', 'CARGO_', 'RUST', 'CMAKE_'))
+                         and k not in omit}
+                clean.update(GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull,
+                             GIT_TERMINAL_PROMPT='0', PYTHONNOUSERSITE='1', GIT_CONFIG_COUNT='3',
+                             CARGO_HOME=str(local / 'cargo'), RUSTC=str(RUST_BIN / 'rustc.exe'),
+                             GIT_CONFIG_KEY_0='user.name', GIT_CONFIG_VALUE_0='FlowBridge Private Build',
+                             GIT_CONFIG_KEY_1='user.email', GIT_CONFIG_VALUE_1='qa@example.invalid',
+                             GIT_CONFIG_KEY_2='core.autocrlf', GIT_CONFIG_VALUE_2='false')
+                state['phase'] = 'NATIVE_PREFLIGHT'
+                if dev:
+                    require(dev.is_absolute() and not any(c in str(dev) for c in '%!\r\n'),
+                            'MSVC_DEV_COMMAND_PATH_INVALID')
+                    command = f'"{system / "cmd.exe"}" /d /s /v:off /c "call "{dev}" -no_logo -arch=x64 -host_arch=x64 >nul 2>&1 && set"'
+                    variables = run(command,
+                                    'MSVC_X64_ENVIRONMENT_UNAVAILABLE', env=clean, capture=True)
+                    for line in variables.splitlines():
+                        if '=' in line and not line.startswith('='):
+                            key, value = line.split('=', 1)
+                            clean[key.upper()] = value
+                trusted_dirs = list(dict.fromkeys(str(Path(p).parent) for p in [*tools.values(), sys.executable]))
+                clean['PATH'] = os.pathsep.join([*trusted_dirs, clean['PATH']])
+                rust = run([tools['rustc.exe'], '-vV'], 'RUST_TOOLCHAIN_UNAVAILABLE', env=clean, capture=True)
+                require('host: x86_64-pc-windows-msvc' in rust.splitlines(), 'RUST_MSVC_X64_REQUIRED')
+                rust_ver = next((l.removeprefix('release: ') for l in rust.splitlines()
+                                 if l.startswith('release: ')), '')
+                require(rust_ver == '1.100.0', 'PINNED_RUST_VERSION_MISMATCH')
+                run([tools['cargo.exe'], '--version'], 'CARGO_UNAVAILABLE', env=clean)
+                cmake = run([tools['cmake.exe'], '--version'], 'CMAKE_UNAVAILABLE', env=clean, capture=True)
+                ver = re.match(r'cmake version ([0-9]+)\.([0-9]+)', cmake)
+                require(ver and tuple(map(int, ver.groups())) >= (3, 24), 'CMAKE_3_24_OR_LATER_REQUIRED')
+                state['rust_version'] = rust_ver
+                state['cmake_version'] = '.'.join(ver.groups())
+                probe = local / 'probe'
+                probe.mkdir()
+                (probe / 'CMakeLists.txt').write_text('cmake_minimum_required(VERSION 3.24)\n'
+                    'project(Probe LANGUAGES CXX)\nif(NOT MSVC)\nmessage(FATAL_ERROR "MSVC required")\nendif()\n'
+                    'add_executable(probe probe.cpp)\n')
+                (probe / 'probe.cpp').write_text('#include <windows.h>\n'
+                    'int main() { return GetCurrentProcessId() == 0; }\n')
+                run([tools['cmake.exe'], '-S', str(probe), '-B', str(probe / 'build'), '-A', 'x64'],
+                    'MSVC_X64_OR_WINDOWS_SDK_UNAVAILABLE', env=clean)
+                run([tools['cmake.exe'], '--build', str(probe / 'build'), '--config', 'Release'],
+                    'MSVC_X64_OR_WINDOWS_SDK_UNAVAILABLE', env=clean)
+
+          FLOWBRIDGE_RESULT_CODE: |2
+                state['phase'] = 'PINNED_INPUTS'
+                qa, src = local / 'qa', local / 'src'
+                checkout(tools['git.exe'], qa, QA, clean, QA_TREE)
+                checkout(tools['git.exe'], src, PRODUCT, clean, PRODUCT_TREE)
+                nsis = NSIS_LOCAL
+                reject_links(nsis)
+                if not nsis.exists():
+                    nsis = NSIS_PREVIOUS
+                    reject_links(nsis)
+                if not nsis.exists():
+                    nsis = local / 'nsis-3.13.zip'
+                    run([str(system / 'curl.exe'), '--disable', '--proto', '=https', '--proto-redir', '=https', '--location',
+                         '--fail', '--silent', '--show-error', '--max-time', '90',
+                         '--max-filesize', '10000000', '--output', str(nsis), NSIS_URL],
+                        'NSIS_DOWNLOAD_FAILED_PROVIDE_PINNED_LOCAL_ZIP')
+                with nsis.open('rb') as archive:
+                    data = archive.read(10_000_001)
+                require(len(data) <= 10_000_000 and hashlib.sha256(data).hexdigest() == NSIS_SHA,
+                        'NSIS_ZIP_SHA256_MISMATCH')
+
+                state['phase'] = 'PRIVATE_BUILD'
+                candidate = local / 'candidate'
+                run([sys.executable, '-I', str(qa / 'tools/stage_internal_beta4.py'), '--source', str(src),
+                     '--out-dir', str(candidate), '--nsis-archive', str(nsis)],
+                    'PRIVATE_BUILD_FAILED_INSPECT_LOCAL_LOG', env=clean, timeout=2700)
+                checkpoint = local / 'candidate-CHECKPOINT.json'
+                reject_links(checkpoint)
+                cp = json.loads(checkpoint.read_text(encoding='utf-8'))
+                require(cp['status'] == 'PRIVATE_LOCAL_INSTALLER_BUILT_QA_NOT_ACCEPTED'
+                        and cp['installer_built'] is True and cp['installer_installed'] is False
+                        and cp['driver_built_or_installed'] is False
+                        and cp['new_version'] == '0.3.0-beta.4'
+                        and cp['original_verified_source_sha'] == PRODUCT
+                        and cp['original_verified_source_tree'] == PRODUCT_TREE
+                        and cp['new_private_git_tree'] == CANDIDATE_TREE
+                        and cp['staged_payload_allowlist_verified'] is True
+                        and cp['nsis_archive_sha256'] == NSIS_SHA
+                        and cp['public_release_or_upload_performed'] is False,
+                        'CANDIDATE_CHECKPOINT_INVALID')
+                hash_keys = ('installer_sha256', 'package_manifest_sha256', 'gui_sha256', 'cli_sha256',
+                             'ffi_sha256', 'qa_harness_sha256', 'acceptance_tool_sha256',
+                             'build_metadata_sha256', 'sbom_sha256',
+                             'nsis_compile_log_sha256', 'nsis_archive_sha256')
+                require(all(isinstance(cp[key], str) and re.fullmatch('[0-9a-f]{64}', cp[key])
+                            for key in hash_keys) and re.fullmatch('[0-9a-f]{40}', cp['new_private_git_commit']),
+                        'CANDIDATE_DIGESTS_INVALID')
+                state.update({key: cp[key] for key in (*hash_keys, 'new_private_git_commit',
+                              'new_private_git_tree', 'staged_payload_allowlist_verified')})
+                state.update(phase='PACKAGE_EVIDENCE', installer_built=True,
+                             driver_included=False, installer_installed=False, win11_product_accepted=False,
+                             nsis_compiler_sha256=cp['nsis_distribution_inputs']['compiler_sha256'],
+                             nsis_compiler_version=cp['nsis_distribution_inputs']['compiler_version'],
+                             msvc_cxx_compiler_version=cp['native_build_inputs']['msvc_cxx_compiler_version'])
+                verify_frozen_beta3()
+                state['frozen_beta3_installer_and_manifest_unchanged'] = True
+
+            try:
+                main()
+                state.update(status='PRIVATE_LOCAL_INSTALLER_BUILT_QA_NOT_ACCEPTED')
+            except Blocked as exc:
+                state.update(status='BLOCKED', reason=str(exc))
+            except Exception:
+                if log:
+                    import traceback
+                    log.write(traceback.format_exc().encode('utf-8'))
+                state.update(status='BLOCKED', reason='LOCAL_RUNNER_FAILURE')
+            finally:
+                if log:
+                    log.close()
+                if local:
+                    try:
+                        summary_path = local / 'runner-result.json'
+                        reject_links(summary_path)
+                        with summary_path.open('x', encoding='utf-8') as summary:
+                            json.dump(state, summary, sort_keys=True)
+                    except (OSError, Blocked):
+                        state.update(status='BLOCKED', reason='PRIVATE_SUMMARY_WRITE_FAILED')
+                print('FLOWBRIDGE_RUNNER_RESULT ' + json.dumps(state, sort_keys=True))
+            sys.exit(0 if state['status'] != 'BLOCKED' else 1)
+        run: |
+          @echo off
+          if not exist "C:\FlowBridge\private-candidates\toolchain-45986630920-1\python\tools\python.exe" (
+            echo FLOWBRIDGE_RUNNER_RESULT {"schema":"flowbridge-private-beta4-runner-v1","status":"BLOCKED","reason":"PINNED_PRIVATE_PYTHON_NOT_FOUND"}
+            exit /b 1
+          )
+          "C:\FlowBridge\private-candidates\toolchain-45986630920-1\python\tools\python.exe" -I -c "import os; exec(''.join(os.environ['FLOWBRIDGE_' + name + '_CODE'] for name in ('PREFLIGHT','INPUT','BUILD','RESULT')))" 2>nul
+          exit /b %ERRORLEVEL%
