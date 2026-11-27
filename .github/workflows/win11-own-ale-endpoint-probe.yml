@@ -1,0 +1,106 @@
+name: Win11 own loopback ALE endpoint handle probe
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+concurrency:
+  group: win11-vps-smoke-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  observe:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'i-shutov/flowbridge' }}
+    runs-on: [self-hosted, Windows, X64, win11-flowbridge]
+    timeout-minutes: 5
+    steps:
+      - name: Query endpoint handles on two owned Win11 loopback sockets
+        shell: cmd
+        working-directory: C:\
+        env:
+          FLOWBRIDGE_ALE_LAUNCH: |
+            import csv
+            from contextlib import redirect_stdout
+            import ctypes
+            import hashlib
+            import io
+            import os
+            from pathlib import Path
+            import re
+            import runpy
+            import socket
+            import stat
+            import subprocess
+            import sys
+            import tempfile
+            import urllib.request
+
+            PROBE_SOURCE = '94b13b0c0ae4bc75c799903e44d55e81a45e10d9'
+            PROBE_SHA256 = 'f21713b3a53784d9e0b6f9c3fadf0c0cafc9a518a74ed6e6c09266f4c5821fce'
+            HOST = 'VM-326272'
+            PHASE = 'HOST_GUARD'
+
+            def check_local(path):
+                for part in (*reversed(path.parents), path):
+                    info = part.lstat()
+                    if stat.S_ISLNK(info.st_mode) or info.st_file_attributes & 0x400:
+                        raise RuntimeError('unexpected local path')
+
+            def main():
+                global PHASE
+                if os.name != 'nt' or sys.maxsize <= 2**32:
+                    raise RuntimeError('Windows x64 required')
+                v = sys.getwindowsversion()
+                if (v.product_type != 1 or v.build < 22000 or socket.gethostname().casefold() != HOST.casefold()
+                        or os.environ.get('RUNNER_NAME') != 'win11-flowbridge'
+                        or not ctypes.windll.shell32.IsUserAnAdmin()):
+                    raise RuntimeError('wrong runner')
+                root = Path('C:/') / 'FlowBridge' / 'private-candidates'
+                check_local(root)
+                check_local(Path(sys.executable))
+                system = Path(os.environ['SystemRoot']) / 'System32'
+                result = subprocess.run([str(system / 'whoami.exe'), '/user', '/fo', 'csv', '/nh'],
+                                        check=True, capture_output=True, text=True, timeout=10)
+                identity, sid = next(csv.reader([result.stdout.strip()]))
+                if (identity.casefold() != HOST.casefold() + r'\admin'
+                        or not re.fullmatch(r'S-1-[0-9]+(?:-[0-9]+)+', sid)):
+                    raise RuntimeError('wrong account')
+                PHASE = 'SOURCE_INTEGRITY'
+                source = PROBE_SOURCE
+                if not re.fullmatch(r'[0-9a-f]{40}', source):
+                    raise RuntimeError('missing workflow source')
+                url = (f'https://raw.githubusercontent.com/i-shutov/flowbridge/{source}'
+                       '/tests/windows_ale_endpoint_handle_probe.py')
+                with urllib.request.urlopen(url, timeout=15) as response:
+                    payload = response.read(262145)
+                if (not 0 < len(payload) <= 262144
+                        or hashlib.sha256(payload).hexdigest() != PROBE_SHA256):
+                    raise RuntimeError('probe source mismatch')
+                PHASE = 'PRIVATE_WORKSPACE'
+                with tempfile.TemporaryDirectory(prefix='own-ale-', dir=root) as temporary:
+                    folder = Path(temporary)
+                    subprocess.run([str(system / 'icacls.exe'), str(folder), '/inheritance:r', '/grant:r',
+                                    f'*{sid}:(OI)(CI)F', '*S-1-5-18:(OI)(CI)F',
+                                    '*S-1-5-32-544:(OI)(CI)F'], check=True, capture_output=True, timeout=10)
+                    probe = folder / 'windows_ale_endpoint_handle_probe.py'
+                    probe.write_bytes(payload)
+                    PHASE = 'OWNED_LOOPBACK_OBSERVATION'
+                    with redirect_stdout(io.StringIO()) as output:
+                        verified_probe = runpy.run_path(str(probe))
+                        outcome = verified_probe['main']()
+                    PHASE = 'PRIVATE_WORKSPACE_CLEANUP'
+                print(output.getvalue(), end='')
+                return outcome
+
+            try:
+                exit_code = main()
+            except Exception:
+                print('ALE_ENDPOINT_PROBE_LAUNCH_BLOCKED=' + PHASE)
+                print('G2_PACKET_BOUND=UNPROVED')
+                exit_code = 1
+            sys.exit(exit_code)
+        run: |
+          @echo off
+          set "FLOWBRIDGE_PRIVATE_PY=C:\"
+          "%FLOWBRIDGE_PRIVATE_PY%FlowBridge\private-candidates\toolchain-45986630920-1\python\tools\python.exe" -I -c "import os; exec(os.environ['FLOWBRIDGE_ALE_LAUNCH'])" 2>nul
+          exit /b %ERRORLEVEL%
