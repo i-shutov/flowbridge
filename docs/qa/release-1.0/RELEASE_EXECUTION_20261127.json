@@ -60,9 +60,13 @@
     "hosted_ci": {
       "run_id": 46007168400,
       "source_sha": "0a3771bf5e39e7397f5af4c62cd51d7f7b79cf99",
-      "status": "in_progress",
-      "conclusion": null,
-      "evidence": "evidence/20261127/main-diagnostic-ci.json"
+      "status": "completed",
+      "conclusion": "success",
+      "evidence": "evidence/20261127/main-diagnostic-ci.json",
+      "attempt": 1,
+      "jobs_passed": 5,
+      "jobs_total": 5,
+      "artifacts": 0
     },
     "self_hosted_smoke": {
       "run_id": 45982267687,
@@ -362,8 +366,8 @@
     },
     {
       "id": "R3",
-      "status": "SOURCE_PASS_DIAGNOSTICS_IMPLEMENTED_LIMITS_OPEN",
-      "result": "macOS QA fixture fixed and first-attempt broad CI 5/5; strict raw512 diagnostics and G2 counts in PR93; native Win11 confirms four zero connids; raw512 and PacketBound not accepted"
+      "status": "SOURCE_PASS_RAW512_LAB_PASS_PRODUCTION_G2_OPEN",
+      "result": "Exact-source unsigned hosted OpenSSH lab held512 and recovered16 with cleanup; production signed-runtime adoption and G2 remain unaccepted; frozen beta3 unchanged"
     },
     {
       "id": "R4",
@@ -398,8 +402,7 @@
   ],
   "access_blockers": [],
   "next_actions": [
-    "Finish exact-source OpenSSH expanded-FD laboratory build and strict512 held/16 recovery observation; experimental unsigned binaries cannot authorize production adoption",
-    "Validate separated all-platform DNS pairing/conflict fixtures in QA CI without hiding real bind errors",
+    "Identify and review an adequate-capacity Microsoft-signed portable client and exact QA pair, preserving the current signer/path/lock guard; another publisher needs a separate product trust-policy decision; signed files require new hashes and strict512/16 validation",
     "Prepare separately reviewed signed kernel laboratory execution for the accepted WSK object prototype, with bounded rundown and anti-transplant/packet lineage checks",
     "Finish licensing obligations, non-Cargo/dynamic runtime and exact-candidate privacy/security review; retain formal A5/A6 open",
     "Keep R7/Win10 deferred until owner changes scope; retain unchanged frozen beta3 installer and private kit"
@@ -514,7 +517,8 @@
       "explicit_conflict_keeps_owned_tcp_listener": true,
       "new_retries": false,
       "underlying_windows_10013_cause": "UNDETERMINED",
-      "native_ci_status": "NOT_YET_RUN"
+      "native_ci_status": "WINDOWS_UNIT_AND_THREE_PLATFORM_DNS_PASS",
+      "ci_evidence": "evidence/20261127/qa-872657-terminal-ci.json"
     }
   },
   "native_win11_g2": {
@@ -544,7 +548,9 @@
     "strict_probe_recovery": "NOT_REACHED_CAPACITY_MINIMUM_FAILED",
     "strict_probe_resource_markers_observed": false,
     "accepted": false,
-    "dependency_source_max_fds": 256
+    "dependency_source_max_fds": 256,
+    "scope": "Historical signed fixture results; separate later unsigned lab does not promote this gate",
+    "later_unsigned_lab_evidence": "evidence/20261127/raw512-source-lab.json"
   },
   "native_win11_owned_endpoint": {
     "evidence": "evidence/20261127/native-win11-ale-endpoint.json",
@@ -626,7 +632,7 @@
     "source_sha": "78f5ec602500ab3478632a249afe55f334b593c0",
     "tree": "747cf28924a2e9e01a1ef4235e3e78d6215b4e48",
     "run_id": 46007206276,
-    "status": "IN_PROGRESS_FULL_HISTORY_FIX",
+    "status": "LAB_STRICT_512_PASS",
     "upstream_openssh_sha": "274893f8d1fe86c4d128b514c3af4bc10cdc0c99",
     "max_fds": 1024,
     "required_single_transport_held": 512,
@@ -635,6 +641,59 @@
     "production_raw512_accepted": false,
     "production_adoption_approved": false,
     "frozen_beta3_changed": false,
-    "evidence": "evidence/20261127/raw512-source-lab.json"
+    "evidence": "evidence/20261127/raw512-source-lab.json",
+    "job_id": 140533273025,
+    "peak_held": 512,
+    "recovery_successes": 16,
+    "actual_connection_attempts": 528,
+    "hold_integrity_verified": true,
+    "lab_binary_pins_match": true,
+    "artifacts": 0,
+    "owned_temp_cleanup": "PASS",
+    "same_source_stock_control_compared": false,
+    "os_handle_recovery_bound": "initial_baseline +32 within15s after16 recovered echoes",
+    "numeric_handle_samples_publicly_emitted": false,
+    "production_signer_requirement": "Authenticode Valid plus signer Subject organization Microsoft Corporation",
+    "compatible_signed_larger_fd_candidate_identified": false
+  },
+  "qa_paired_dns_ci": {
+    "source_sha": "872657679b4a5f5a2f53f7209516614732b4f672",
+    "tree": "630a964ad32c39e8ea7281008958fad04b77df6f",
+    "executed_merge_sha": "6803bca842e24ac957e98ffea5c8a9f441ffd610",
+    "executed_merge_tree_matches_head": true,
+    "workflows_passed": 5,
+    "workflows_total": 6,
+    "jobs_passed": 12,
+    "jobs_total": 13,
+    "all_attempts": 1,
+    "artifacts": 0,
+    "windows_paired_dns_tests": "PASS_21_FFI_TESTS",
+    "real_dns_vertical": "PASS_3_PLATFORMS",
+    "legacy_windows_ssh": {
+      "run_id": 46007854819,
+      "job_id": 140535473821,
+      "status": "FAIL_RAW_BACKEND",
+      "managed_held": 128,
+      "managed_rejected": 1152,
+      "managed_churn": 10000,
+      "managed_churn_failed": 0,
+      "managed_worker_processes": 4,
+      "raw_peak_held": 244,
+      "raw_attempts": 245,
+      "raw_recovery_successes": 0,
+      "raw_recovery_verified": false,
+      "raw_client_error": 10054,
+      "actual_server_markers": [
+        "postauth_notify_pipe_too_many_open_files",
+        "ppoll_not_enough_space"
+      ]
+    },
+    "evidence": "evidence/20261127/qa-872657-terminal-ci.json"
+  },
+  "documentation_only_completion": {
+    "validated_code_head": "872657679b4a5f5a2f53f7209516614732b4f672",
+    "final_changes_scope": "docs and evidence only; source/tests/workflows byte-identical to validated head",
+    "validation_result": "12/13 jobs; inherited signed raw backend failure retained",
+    "new_automatic_head_ci_not_claimed": "Any automatic repeats on the documentation head are separate observations, not inherited PASS"
   }
 }

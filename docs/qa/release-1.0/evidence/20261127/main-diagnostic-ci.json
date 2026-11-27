@@ -49,7 +49,128 @@
       }
     ]
   },
-  "latest": {
+  "subsequent_runs": [
+    {
+      "id": 46004830039,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/46004830039",
+      "event": "push",
+      "head_sha": "c3e56a3d777cdfa36ad5ddf4b36693836ef891f8",
+      "status": "completed",
+      "conclusion": "failure",
+      "attempt": 1,
+      "started_at": "2026-11-27T13:10:32Z",
+      "updated_at": "2026-11-27T13:14:28Z",
+      "artifact_count": 0,
+      "jobs_passed": 4,
+      "jobs_total": 5,
+      "failure": {
+        "job_id": 140525417921,
+        "job_name": "rust (windows-2025)",
+        "unit_test": "native_dns::tests::paired_ephemeral_port_and_explicit_conflict_are_distinct",
+        "location": "crates/flowbridge-ffi/src/native_dns.rs:493",
+        "observed_os_error": 10013,
+        "kind": "PermissionDenied",
+        "failed_operation": "initial_real_bind_pair_ephemeral",
+        "exact_os_resource_cause": "UNDETERMINED",
+        "whole_run_retried": false
+      }
+    },
+    {
+      "id": 46006474166,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/46006474166",
+      "event": "push",
+      "head_sha": "464cba6b2a0f8abd95055f334e8b752c011e86cc",
+      "status": "completed",
+      "conclusion": "cancelled",
+      "attempt": 1,
+      "started_at": "2026-11-27T13:21:56Z",
+      "updated_at": "2026-11-27T13:26:48Z",
+      "artifact_count": 0,
+      "jobs": [
+        {
+          "id": 140530783063,
+          "name": "macos-application",
+          "status": "completed",
+          "conclusion": "cancelled"
+        },
+        {
+          "id": 140530783594,
+          "name": "rust (windows-2025)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 140530783608,
+          "name": "rust (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 140530783639,
+          "name": "rust (macos-15)",
+          "status": "completed",
+          "conclusion": "cancelled"
+        },
+        {
+          "id": 140530783706,
+          "name": "windows-application",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cancellation": {
+        "cause_inferred": "superseded_by_newer_main_push_in_same_concurrency_group",
+        "newer_run_id": 46007168400,
+        "newer_main_sha": "0a3771bf5e39e7397f5af4c62cd51d7f7b79cf99"
+      }
+    },
+    {
+      "id": 46007168400,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/46007168400",
+      "event": "push",
+      "head_sha": "0a3771bf5e39e7397f5af4c62cd51d7f7b79cf99",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "started_at": "2026-11-27T13:26:46Z",
+      "updated_at": "2026-11-27T13:30:19Z",
+      "artifact_count": 0,
+      "jobs": [
+        {
+          "id": 140533142201,
+          "name": "rust (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 140533142480,
+          "name": "rust (macos-15)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 140533142532,
+          "name": "macos-application",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 140533142576,
+          "name": "windows-application",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 140533142795,
+          "name": "rust (windows-2025)",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ],
+  "latest_observed_run_id": 46007168400,
+  "superseded_intermediate": {
     "id": 46004438911,
     "url": "https://github.com/i-shutov/flowbridge/actions/runs/46004438911",
     "event": "push",
@@ -130,31 +251,48 @@
       }
     }
   },
-  "subsequent_runs": [
-    {
-      "id": 46004830039,
-      "url": "https://github.com/i-shutov/flowbridge/actions/runs/46004830039",
-      "event": "push",
-      "head_sha": "c3e56a3d777cdfa36ad5ddf4b36693836ef891f8",
-      "status": "completed",
-      "conclusion": "failure",
-      "attempt": 1,
-      "started_at": "2026-11-27T13:10:32Z",
-      "updated_at": "2026-11-27T13:14:28Z",
-      "artifact_count": 0,
-      "jobs_passed": 4,
-      "jobs_total": 5,
-      "failure": {
-        "job_id": 140525417921,
-        "job_name": "rust (windows-2025)",
-        "unit_test": "native_dns::tests::paired_ephemeral_port_and_explicit_conflict_are_distinct",
-        "location": "crates/flowbridge-ffi/src/native_dns.rs:493",
-        "observed_os_error": 10013,
-        "kind": "PermissionDenied",
-        "failed_operation": "initial_real_bind_pair_ephemeral",
-        "exact_os_resource_cause": "UNDETERMINED",
-        "whole_run_retried": false
+  "latest": {
+    "id": 46007168400,
+    "url": "https://github.com/i-shutov/flowbridge/actions/runs/46007168400",
+    "event": "push",
+    "head_sha": "0a3771bf5e39e7397f5af4c62cd51d7f7b79cf99",
+    "status": "completed",
+    "conclusion": "success",
+    "attempt": 1,
+    "started_at": "2026-11-27T13:26:46Z",
+    "updated_at": "2026-11-27T13:30:19Z",
+    "artifact_count": 0,
+    "jobs": [
+      {
+        "id": 140533142201,
+        "name": "rust (ubuntu-24.04)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 140533142480,
+        "name": "rust (macos-15)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 140533142532,
+        "name": "macos-application",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 140533142576,
+        "name": "windows-application",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 140533142795,
+        "name": "rust (windows-2025)",
+        "status": "completed",
+        "conclusion": "success"
       }
-    }
-  ]
+    ]
+  }
 }
