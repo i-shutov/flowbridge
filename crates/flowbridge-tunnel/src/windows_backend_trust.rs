@@ -94,9 +94,10 @@ fn powershell_literal_path(executable: &Path) -> io::Result<&str> {
     if raw.len() < 4 || !raw[0].is_ascii_alphabetic() || raw[1] != b':' || raw[2] != b'\\' {
         return Err(denied());
     }
-    if path[3..].split('\\').any(|part| {
-        part.is_empty() || part.ends_with(['.', ' ']) || part.contains(['/', ':'])
-    }) {
+    if path[3..]
+        .split('\\')
+        .any(|part| part.is_empty() || part.ends_with(['.', ' ']) || part.contains(['/', ':']))
+    {
         return Err(denied());
     }
     Ok(path)
