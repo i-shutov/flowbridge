@@ -253,7 +253,7 @@ jobs:
         if: always()
         run: cargo fmt --all -- --check
       - uses: actions/upload-artifact@v7.0.0
-        if: success() && runner.os == 'Windows'
+        if: github.event.repository.private == true && (success() && runner.os == 'Windows')
         with:
           name: FlowBridge-Native-Self-Tools-Windows
           path: build/native-self-tools/
@@ -268,14 +268,14 @@ jobs:
           git diff --binary > build/capture-format/format.patch
           git rev-parse HEAD > build/capture-format/source-sha.txt
       - uses: actions/upload-artifact@v7.0.0
-        if: always()
+        if: github.event.repository.private == true && (always())
         with:
           name: FlowBridge-Rust-Capture-${{ matrix.os }}
           path: build/capture-candidate/
           if-no-files-found: warn
           retention-days: 14
       - uses: actions/upload-artifact@v7.0.0
-        if: failure()
+        if: github.event.repository.private == true && (failure())
         with:
           name: FlowBridge-Capture-Format-${{ matrix.os }}
           path: build/capture-format/
@@ -300,7 +300,7 @@ jobs:
       - name: Real independent OS curl IPv4 and IPv6 kernel owner evidence (no driver)
         run: python tests/g2_etw_owner_probe.py --consent G2_HOSTED_ETW_READ_ONLY_NO_DRIVER --output build/g2-etw/sanitized.json
       - name: Preserve sanitized verdict only (never ETL, XML, PID, path or endpoints)
-        if: always()
+        if: github.event.repository.private == true && (always())
         uses: actions/upload-artifact@v7.0.0
         with:
           name: FlowBridge-G2-Kernel-Connection-Owner

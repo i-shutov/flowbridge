@@ -95,6 +95,7 @@ jobs:
           Write-Output ("EXPLICIT_ONLY_BETA_QA PASS; source=$sha; Windows hosted only; kernel G2=NO_GO")
       - name: Preserve one source-correlated Windows beta installer and QA
         uses: actions/upload-artifact@v4
+        if: github.event.repository.private == true
         with:
           name: FlowBridge-Explicit-SOCKS-EngineeringCandidate-Windows-${{ github.run_id }}
           path: |
@@ -108,7 +109,7 @@ jobs:
           retention-days: 30
           if-no-files-found: error
       - name: Publish errors for diagnosis but never call these release artifacts
-        if: failure()
+        if: github.event.repository.private == true && (failure())
         uses: actions/upload-artifact@v4
         with:
           name: FlowBridge-ExplicitBeta-Windows-Failure-${{ github.run_id }}

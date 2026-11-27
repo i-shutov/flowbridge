@@ -60,6 +60,7 @@ jobs:
           echo "EXPLICIT_MAC_PACKAGE_QA_PASS_HOSTED_ONLY; WFP/NE release NO_GO"
       - name: Preserve exact hosted beta package for independent review
         uses: actions/upload-artifact@v4
+        if: github.event.repository.private == true
         with:
           name: FlowBridge-Explicit-SOCKS-EngineeringCandidate-macOS-${{ github.run_id }}
           path: |
@@ -73,7 +74,7 @@ jobs:
           retention-days: 30
           if-no-files-found: error
       - name: Capture diagnostics without claiming a release
-        if: failure()
+        if: github.event.repository.private == true && (failure())
         uses: actions/upload-artifact@v4
         with:
           name: FlowBridge-ExplicitBeta-macOS-Failure-${{ github.run_id }}

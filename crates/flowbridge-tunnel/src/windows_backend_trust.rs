@@ -84,6 +84,25 @@ fn encoded_powershell_command(script: &str) -> String {
     out
 }
 
+fn powershell_literal_path(executable: &Path) -> io::Result<&str> {
+    // Windows PowerShell 5.1 providers may require an ordinary drive path.
+    // Only drop the verbatim prefix when DOS path normalization won't change
+    // any component. In particular, trailing dots can address different files.
+    let name = executable.to_str().ok_or_else(denied)?;
+    let path = name.strip_prefix(r"\\?\").unwrap_or(name);
+    let raw = path.as_bytes();
+    if raw.len() < 4 || !raw[0].is_ascii_alphabetic() || raw[1] != b':' || raw[2] != b'\\' {
+        return Err(denied());
+    }
+    if path[3..]
+        .split('\\')
+        .any(|part| part.is_empty() || part.ends_with(['.', ' ']) || part.contains(['/', ':']))
+    {
+        return Err(denied());
+    }
+    Ok(path)
+}
+
 fn verify_microsoft_signature(executable: &Path) -> io::Result<()> {
     // Executed only from the kernel-resolved Windows system directory.
     // The PowerShell script is literal; the untrusted user path enters only
@@ -124,21 +143,12 @@ if ($s.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or
 if ($s.SignerCertificate.Subject -notmatch '(^|,\s*)O=Microsoft Corporation(,|$)') { exit 16 }
 exit 0
 "#;
+    let shell_path = powershell_literal_path(executable)?;
     let powershell = system_directory()?
         .join("WindowsPowerShell")
         .join("v1.0")
         .join("powershell.exe");
     reject_reparse_components(&powershell)?;
-    // std::fs::canonicalize yields an extended \\?\C:\ path on Windows.
-    // Windows PowerShell 5.1 providers are not required to accept that
-    // prefix, so pass the equivalent local drive path as literal data.
-    // Reject UNC and invalid/unpaired UTF-16 paths rather than guessing.
-    let name = executable.to_str().ok_or_else(denied)?;
-    let shell_path = name.strip_prefix(r"\\?\").unwrap_or(name);
-    let raw = shell_path.as_bytes();
-    if raw.len() < 3 || !raw[0].is_ascii_alphabetic() || raw[1] != b':' || raw[2] != b'\\' {
-        return Err(denied());
-    }
     let mut process = Command::new(powershell);
     let encoded = encoded_powershell_command(SCRIPT);
     process
@@ -238,6 +248,29 @@ mod tests {
         assert_eq!(encoded_powershell_command("A"), "QQA=");
         assert_eq!(encoded_powershell_command(""), "");
         assert_eq!(encoded_powershell_command("AB"), "QQBCAA==");
+    }
+
+    #[test]
+    fn powershell_signature_path_refuses_ambiguous_verbatim_components() {
+        assert_eq!(
+            powershell_literal_path(Path::new(r"\\?\C:\Portable Tools\OpenSSH\ssh.exe")).unwrap(),
+            r"C:\Portable Tools\OpenSSH\ssh.exe"
+        );
+        for path in [
+            r"\\?\C:\OpenSSH.\ssh.exe",
+            r"\\?\C:\OpenSSH \ssh.exe",
+            r"\\?\C:\Tools\..\OpenSSH\ssh.exe",
+            r"\\?\C:\Tools\.\OpenSSH\ssh.exe",
+            r"\\?\C:\Tools\\OpenSSH\ssh.exe",
+            r"\\?\C:\Tools/OpenSSH\ssh.exe",
+            r"\\?\C:\Tools\OpenSSH\binary.exe:ssh.exe",
+            r"\\?\UNC\server\share\ssh.exe",
+        ] {
+            assert_eq!(
+                powershell_literal_path(Path::new(path)).unwrap_err().kind(),
+                io::ErrorKind::PermissionDenied
+            );
+        }
     }
 
     #[test]

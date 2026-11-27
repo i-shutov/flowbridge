@@ -60,6 +60,7 @@ jobs:
           Get-FileHash build/wfp-driver/FlowBridgeWfp.sys -Algorithm SHA256 | Format-List
       - name: Upload unsigned development driver
         uses: actions/upload-artifact@v7.0.0
+        if: github.event.repository.private == true
         with:
           name: FlowBridge-WFP-UNSIGNED-DEVELOPMENT
           path: |
@@ -68,7 +69,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Upload WDK diagnostics
-        if: always()
+        if: github.event.repository.private == true && (always())
         uses: actions/upload-artifact@v7.0.0
         with:
           name: FlowBridge-WFP-build-log
