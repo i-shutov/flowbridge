@@ -1,0 +1,38 @@
+name: Win32 OpenSSH expanded-table raw 512 lab
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: win32-openssh-raw512-lab-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  isolated-compiler-fixture:
+    if: github.repository == 'i-shutov/flowbridge' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    # Match the upstream v143 + Windows SDK 22621 build, not the VS 2026 image.
+    runs-on: windows-2022
+    timeout-minutes: 55
+    env:
+      PYTHONUTF8: '1'
+      FLOWBRIDGE_LAB_SOURCE: '6e48d625e98a76faa1e7b3ea3961531334b0114e'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.FLOWBRIDGE_LAB_SOURCE }}
+          persist-credentials: false
+      - name: Verify the pinned laboratory source
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD) -cne $env:FLOWBRIDGE_LAB_SOURCE) { throw 'Laboratory source pin mismatch' }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13.17'
+      - name: Verify strict evidence and source patch contracts
+        run: python -m unittest discover -s tests -p 'test_win32_openssh_capacity_lab.py' -v
+      - name: Compile official upstream sources and exercise the raw loopback gate
+        shell: pwsh
+        run: ./tools/qa/win32_openssh_capacity_lab.ps1
