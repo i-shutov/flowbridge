@@ -1,0 +1,190 @@
+name: Frozen internal beta3 RustSec lockfile audit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit-lockfile:
+    if: github.repository == 'i-shutov/flowbridge' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PRODUCT_SOURCE: '44f1fc0eba5ac1552df94f083342e25a1a764937'
+      STAGING_SOURCE: '86aace2a4696e9717bc2b4423b447a760946aa15'
+      FROZEN_TREE: '19df7a94071f38be6b8aa3530e1ded7a954a02a8'
+      ORIGINAL_LOCK_SHA256: '7873affb09ffbb45dcb811b30555ad3844c0e4ce4da995e4a7f22130483d4b29'
+      FROZEN_LOCK_SHA256: 'd1f0a9399a48ab48e8ccce61aedd484bf7efce0c1142a69ed8e2738d46aa30e6'
+      THIRD_PARTY_RECORDS_SHA256: 'd0c87f02ed4673856444e8747c3ea10c01a815cd5a25fbe136c1a7efa20c6b78'
+      CARGO_AUDIT_VERSION: '0.23.0'
+      RUST_TOOLCHAIN: '1.100.0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.PRODUCT_SOURCE }}
+          path: frozen-product-source
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.STAGING_SOURCE }}
+          path: trusted-staging-tool
+          persist-credentials: false
+      - name: Reproduce frozen tree and verify both lockfiles
+        shell: bash
+        run: |
+          work="$RUNNER_TEMP/frozen-beta3-rustsec"
+          product="$GITHUB_WORKSPACE/frozen-product-source"
+          tools="$GITHUB_WORKSPACE/trusted-staging-tool"
+          test "$(git -C "$product" rev-parse HEAD)" = "$PRODUCT_SOURCE"
+          test "$(git -C "$tools" rev-parse HEAD)" = "$STAGING_SOURCE"
+          mkdir "$work"
+          git -C "$product" config user.name 'FlowBridge lockfile QA'
+          git -C "$product" config user.email 'flowbridge-lockfile-qa@example.invalid'
+          if ! python3 -I -B "$tools/tools/stage_internal_beta3.py" --source "$product" \
+              --out-dir "$work/staged" >"$work/staging.log" 2>&1; then
+            echo 'FROZEN_LOCK_AUDIT_BLOCKED=STAGING'
+            exit 1
+          fi
+          test "$(git -C "$work/staged" rev-parse 'HEAD^{tree}')" = "$FROZEN_TREE"
+          python3 -I - "$product/Cargo.lock" "$work/staged/Cargo.lock" <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import sys
+          import tomllib
+
+          def prove(original, staged):
+              def load(path, sha):
+                  blob = path.read_bytes()
+                  assert hashlib.sha256(blob).hexdigest() == os.environ[sha]
+                  entries = tomllib.loads(blob.decode("utf-8"))["package"]
+                  assert len(entries) == 75
+                  external = [item for item in entries if "source" in item]
+                  local = {item["name"]: item for item in entries if "source" not in item}
+                  assert len(external) == 68 and len(local) == 7
+                  assert all(item["source"] == "registry+https://github.com/rust-lang/crates.io-index"
+                             and re.fullmatch(r"[0-9a-f]{64}", item["checksum"])
+                             for item in external)
+                  return sorted(json.dumps(item, sort_keys=True, separators=(",", ":"))
+                                for item in external), local
+
+              old, own_before = load(original, "ORIGINAL_LOCK_SHA256")
+              new, own_after = load(staged, "FROZEN_LOCK_SHA256")
+              assert old == new
+              assert hashlib.sha256(("\n".join(new) + "\n").encode()).hexdigest() == os.environ[
+                  "THIRD_PARTY_RECORDS_SHA256"]
+              assert set(own_before) == set(own_after) == {
+                  "flowbridge-core", "flowbridge-capture", "flowbridge-net", "flowbridge-cli",
+                  "flowbridge-ffi", "flowbridge-runtime", "flowbridge-tunnel"}
+              for name, before in own_before.items():
+                  assert before["version"] == "0.3.0-beta.2"
+                  assert own_after[name] == {**before, "version": "0.3.0-beta.3"}
+
+          try:
+              prove(*map(Path, sys.argv[1:]))
+          except Exception:
+              print("FROZEN_LOCK_AUDIT_BLOCKED=LOCK_PROVENANCE")
+              sys.exit(1)
+
+          evidence = {key.lower(): os.environ[key] for key in (
+              "PRODUCT_SOURCE", "STAGING_SOURCE", "FROZEN_TREE", "ORIGINAL_LOCK_SHA256",
+              "FROZEN_LOCK_SHA256", "THIRD_PARTY_RECORDS_SHA256")}
+          evidence.update(locked_packages=75, identical_third_party_records=68, workspace_version_changes=7)
+          print("FROZEN_BETA3_LOCK_PROVENANCE " + json.dumps(evidence, sort_keys=True))
+          PY
+      - name: Scan exact staged lock against the current official RustSec snapshot
+        shell: bash
+        run: |
+          work="$RUNNER_TEMP/frozen-beta3-rustsec"
+          cd "$work"
+          export CARGO_HOME="$work/cargo-home"
+          if ! {
+            rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal &&
+            cargo +"$RUST_TOOLCHAIN" install cargo-audit --version "=$CARGO_AUDIT_VERSION" \
+              --locked --root "$work/audit-tool" &&
+            git clone --quiet --depth=1 --single-branch https://github.com/RustSec/advisory-db.git "$work/db"
+          } >"$work/audit-bootstrap.log" 2>&1; then
+            echo 'FROZEN_LOCK_AUDIT_BLOCKED=OFFICIAL_TOOL_OR_DATABASE'
+            exit 1
+          fi
+          export PATH="$work/audit-tool/bin:$PATH"
+          export RUSTSEC_COMMIT RUSTSEC_TREE RUSTSEC_SNAPSHOT_TIME
+          RUSTSEC_COMMIT="$(git -C "$work/db" rev-parse HEAD)"
+          RUSTSEC_TREE="$(git -C "$work/db" rev-parse 'HEAD^{tree}')"
+          RUSTSEC_SNAPSHOT_TIME="$(git -C "$work/db" show -s --format=%cI HEAD)"
+          verify_snapshot() {
+            local head tree changes
+            head="$(git -C "$work/db" rev-parse HEAD)" || return 1
+            tree="$(git -C "$work/db" rev-parse 'HEAD^{tree}')" || return 1
+            changes="$(git -C "$work/db" status --porcelain --untracked-files=all)" || return 1
+            test "$head" = "$RUSTSEC_COMMIT" && test "$tree" = "$RUSTSEC_TREE" && test -z "$changes"
+          }
+          if ! verify_snapshot; then
+            echo 'FROZEN_LOCK_AUDIT_BLOCKED=DATABASE_SNAPSHOT'
+            exit 1
+          fi
+          audit_exit=0
+          cargo +"$RUST_TOOLCHAIN" audit --db "$work/db" --no-fetch --no-yanked --deny warnings \
+            --file "$work/staged/Cargo.lock" --json >"$work/result.json" 2>"$work/audit.log" || audit_exit=$?
+          if ! verify_snapshot; then
+            echo 'FROZEN_LOCK_AUDIT_BLOCKED=DATABASE_SNAPSHOT'
+            exit 1
+          fi
+          python3 -I - "$work/result.json" "$audit_exit" <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import sys
+
+          try:
+              report = json.loads(Path(sys.argv[1]).read_bytes())
+              scan_exit = int(sys.argv[2])
+              assert scan_exit in (0, 1)
+              database = report["database"]
+              # --no-fetch opens the local directory without populating Git metadata.
+              assert database["last-commit"] in (None, os.environ["RUSTSEC_COMMIT"])
+              advisory_count = database["advisory-count"]
+              assert type(advisory_count) is int and advisory_count > 0
+              assert report["lockfile"]["dependency-count"] == 75
+              assert report["settings"]["ignore"] == []
+              vulnerabilities = report["vulnerabilities"]
+              warned = report["warnings"]
+              assert isinstance(warned, dict) and all(isinstance(items, list) for items in warned.values())
+              vulnerability_count = vulnerabilities["count"]
+              assert type(vulnerability_count) is int and vulnerability_count == len(vulnerabilities["list"])
+              assert vulnerabilities["found"] is (vulnerability_count > 0)
+              warning_count = sum(map(len, warned.values()))
+              entries = vulnerabilities["list"] + [entry for items in warned.values() for entry in items]
+              identities = sorted({entry["advisory"]["id"] for entry in entries})
+              assert all(re.fullmatch(r"RUSTSEC-\d{4}-\d{4,}", identity) for identity in identities)
+              assert scan_exit == 0 or vulnerability_count or warning_count
+          except Exception:
+              print("FROZEN_LOCK_AUDIT_BLOCKED=SCANNER_RESULT")
+              sys.exit(1)
+
+          findings = vulnerability_count + warning_count
+          result = {
+              "status": "RUSTSEC_FINDINGS" if findings else "RUSTSEC_NO_KNOWN_ADVISORIES",
+              "cargo_audit_version": os.environ["CARGO_AUDIT_VERSION"],
+              "rustsec_commit": os.environ["RUSTSEC_COMMIT"],
+              "rustsec_tree": os.environ["RUSTSEC_TREE"],
+              "rustsec_commit_time": os.environ["RUSTSEC_SNAPSHOT_TIME"],
+              "advisory_database_entries": advisory_count,
+              "locked_packages_audited": 75,
+              "frozen_lock_sha256": os.environ["FROZEN_LOCK_SHA256"],
+              "vulnerabilities": vulnerability_count,
+              "warnings": warning_count,
+              "rustsec_ids": identities,
+              "a5_accepted": False,
+              "a6_accepted": False,
+              "a7_approved": False,
+              "publisher_release_approved": False,
+          }
+          print("FROZEN_BETA3_RUSTSEC_RESULT " + json.dumps(result, sort_keys=True))
+          sys.exit(int(bool(findings)))
+          PY
