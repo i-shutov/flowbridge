@@ -26,7 +26,7 @@ jobs:
             import types
             import urllib.request
 
-            QA = '78cb1448d66972f842e138645289a7466d461281'
+            QA = '88dea407442493250d07781dd4c1dd8118212fb3'
 
             def load(source, name, expected):
                 url = f'https://raw.githubusercontent.com/i-shutov/flowbridge/{source}/tools/{name}.py'
@@ -54,7 +54,7 @@ jobs:
                 library(QA, 'win11_beta4_headless_lifecycle',
                         '4633a894c8ca373f7b38a79ff033695859b43cec1341f8902dbe755b8bd70b0a')
                 recovery = load(QA, 'win11_beta4_recover_retained_lifecycle',
-                                '8fcda8cef839e5458c95b43c805bee20c17f905e7b32698a9a95fb81e07522ea')
+                                'd1ec8193a63688b980db40e39ccffe6677e9b04afb365f8f567426133403f154')
                 phase = 'RECOVERY'
                 exec(recovery, {'__name__': '__main__'})
             except Exception:
