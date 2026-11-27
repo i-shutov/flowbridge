@@ -9,8 +9,10 @@ The result is a bounded inventory, not security, legal or release acceptance.
 from __future__ import annotations
 
 import csv
+from collections import Counter
 import ctypes
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -21,6 +23,8 @@ import struct
 import subprocess
 import sys
 import tomllib
+import xml.etree.ElementTree as ET
+import zipfile
 
 VERSION = "0.3.0-beta.3"
 SOURCE = "c6ead0f31de4c118453913d733f537ba421af616"
@@ -28,6 +32,20 @@ TREE = "19df7a94071f38be6b8aa3530e1ded7a954a02a8"
 MANIFEST_SHA = "f6a94e5e8a87e571d63604ff3b2e417bf21e2e2758343171c587a43717318c99"
 INSTALLER_SHA = "6408c0bf595b0ae61a4fc05db17421dc4b03dcda241f3c1f1f997ab6583eec5b"
 HARNESS_SHA = "d41905fdcb2fc5f77e042d61c9aac5d640b23ca60ea0cf0965a4567dc9b105ff"
+NLOHMANN_REF = "pkg:github/nlohmann/json@v3.11.3"
+NSIS_VERSION = "3.13"
+NSIS_ARCHIVE_SHA = "ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8"
+NSIS_PLUGIN_NAMES = ("LangDLL.dll", "System.dll")
+RUST_NOTICE_FILES = ("licenses/Apache-2.0.txt", "licenses/MIT.txt", "COPYRIGHT-library.html")
+REVIEWED_SOURCE_SHA = {
+    "LICENSE": "01bb3a9549ddc554a2ebe3c2c2f923576b56cd04551484e5da1b2e42f7a3c89f",
+    "third_party/nlohmann/LICENSE.MIT": "86b998c792894ccb911a1cb7994f7a9652894e7a094c0b5e45be2f553f45cf14",
+    "third_party/nlohmann/json.hpp": "9bea4c8066ef4a1c206b2be5a36302f8926f7fdc6087af5d20b417d0cf103ea6",
+    ".cargo/config.toml": "2722b76d4f9305c8595daa09fc0f477f7d6c7b74edbf13e18eb82c9a5b9064d0",
+    "native/windows/CMakeLists.txt": "f2b5e88f7f9e6792f0490a85fa7c68bd9255debe16cbcccd291a2e2752ac08e6",
+    "packaging/windows/FlowBridgeExplicitBeta.nsi": "68eec9ddbb9dc84319c3231065cbdad433f979d031c94311d44ced5f5c633b7a",
+    "crates/flowbridge-tunnel/src/windows_backend_trust.rs": "9d716c8abab6d7852aa1bbfd31f2d8f94fd8b1a5c9f57390f1fa87d965c3be70",
+}
 BINARIES = {
     "FlowBridge.exe": "8137a43a27eae62ba3988baeb5dffde0ee03fa983c96e8440480d77b1072b4d0",
     "flowbridge-cli.exe": "10182b2d58d9d0728f301afe3deb21be33b7aff9b99c627f4f37507bec7b70ab",
@@ -69,6 +87,181 @@ def local_bytes(path: Path, limit: int = 134217728) -> bytes:
         data = stream.read(limit + 1)
     require(0 < len(data) <= limit, "local_file_size")
     return data
+
+
+def license_notice_bytes(notices: bytes, inventory: list[dict], rustc: str) -> dict[tuple[str, str], bytes]:
+    """Match the generator's ordered headings and hash the exact intervening bytes."""
+    header = (f"FlowBridge {VERSION} explicit beta — resolved component notices\n"
+              "Targets: x86_64-pc-windows-msvc\n"
+              "Includes production and build inputs of the shipped Cargo roots; exact binary retention is not asserted.\n"
+              "Externally installed OpenSSH and OS frameworks are not redistributed by this package.\n").encode()
+    require(notices.startswith(header), "notice_header")
+    require([entry["component"] for entry in inventory] == sorted(
+        entry["component"] for entry in inventory if entry["component"].startswith("pkg:cargo/"))
+        + [NLOHMANN_REF, "NSIS installer runtime", rustc], "notice_component_order")
+    sections = []
+    for entry in inventory:
+        component = entry["component"]
+        files = entry["files"]
+        if component.startswith("pkg:cargo/"):
+            first = f"\n{'=' * 72}\n{component}\n"
+            headings = [f"\n--- {item['name']} ---\n" for item in files]
+            headings[0] = first + headings[0]
+        elif component == NLOHMANN_REF:
+            require([item["name"] for item in files] == ["LICENSE.MIT"], "notice_nlohmann_license")
+            headings = ["\n=== nlohmann/json 3.11.3 — vendored Windows GUI header ===\n"]
+        elif component == "NSIS installer runtime":
+            require([item["name"] for item in files] == ["COPYING"], "notice_nsis_license")
+            headings = ["\n=== NSIS installer runtime distribution COPYING ===\n"]
+        else:
+            require([item["name"] for item in files] == list(RUST_NOTICE_FILES), "notice_rust_license")
+            headings = [f"\n=== Rust runtime / {item['name']} ===\n" for item in files]
+        sections.extend((heading.encode(), (component, item["name"]), item["sha256"])
+                        for heading, item in zip(headings, files, strict=True))
+
+    cursor = len(header)
+    verified = {}
+    for index, (heading, key, expected) in enumerate(sections):
+        require(notices.startswith(heading, cursor) and key not in verified, "notice_section_heading")
+        begin = cursor + len(heading)
+        if index + 1 == len(sections):
+            cursor = len(notices)
+            require(notices.endswith(b"\n"), "notice_section_end")
+        else:
+            delimiter = b"\n" + sections[index + 1][0]
+            boundary = notices.find(delimiter, begin)
+            while boundary >= 0 and sha(notices[begin:boundary]) != expected:
+                boundary = notices.find(delimiter, boundary + 1)
+            require(boundary >= 0, "notice_text_hash")
+            cursor = boundary + 1
+        text = notices[begin:cursor - 1]
+        require(len(text) > 0 and sha(text) == expected, "notice_text_hash")
+        verified[key] = text
+    return verified
+
+
+def read_nsis_archive(paths: tuple[Path, ...]) -> bytes:
+    for path in paths:
+        try:
+            archive = local_bytes(path, 10_000_000)
+        except FileNotFoundError:
+            continue
+        if sha(archive) == NSIS_ARCHIVE_SHA:
+            return archive
+    raise Rejected("pinned_nsis_archive_required")
+
+
+def nsis_archive_inventory(archive: bytes, copying: bytes) -> dict:
+    require(sha(archive) == NSIS_ARCHIVE_SHA, "nsis_archive_sha256")
+    plugins = {}
+    with zipfile.ZipFile(io.BytesIO(archive)) as distribution:
+        names = distribution.namelist()
+        for relative in ("COPYING", *(f"Plugins/x86-unicode/{name}" for name in NSIS_PLUGIN_NAMES)):
+            matching = [name for name in names if name in {relative, f"nsis-{NSIS_VERSION}/{relative}"}]
+            require(len(matching) == 1, "nsis_archive_file_identity")
+            entry = distribution.getinfo(matching[0])
+            require(0 < entry.file_size <= 1048576, "nsis_archive_file_size")
+            data = distribution.read(entry)
+            if relative == "COPYING":
+                require(data == copying, "nsis_copying_mismatch")
+            else:
+                name = relative.rsplit("/", 1)[-1]
+                image = pe_inventory(data, installer=True)
+                require(image["machine"] == "0x014c", "nsis_plugin_pe_machine")
+                plugins[name] = {"sha256": sha(data), **image}
+    return {"version": NSIS_VERSION, "archive_sha256": sha(archive), "copying_sha256": sha(copying),
+            "upstream_plugin_files": plugins, "embedded_plugin_bytes_verified": False}
+
+
+def notice_coverage(files: dict[str, bytes], source: dict[str, bytes], archive: bytes) -> dict:
+    meta = json.loads(files["BUILD-METADATA.json"])
+    components = json.loads(files["SBOM.cdx.json"])["components"]
+    rustc = meta["rustc"]
+    rust = re.fullmatch(r"rustc (\d+\.\d+\.\d+) \([0-9a-f]{9} \d{4}-\d{2}-\d{2}\)", rustc)
+    require(rust is not None, "licensed_rustc_version")
+    texts = license_notice_bytes(files["licenses/THIRD_PARTY_NOTICES.txt"], meta["license_inventory"], rustc)
+    require(files["LICENSE"] == source["LICENSE"], "project_license_source_bytes")
+    nlohmann = texts[(NLOHMANN_REF, "LICENSE.MIT")]
+    require(nlohmann == files["licenses/nlohmann-json-LICENSE.MIT"]
+            == source["third_party/nlohmann/LICENSE.MIT"], "nlohmann_license_source_bytes")
+
+    nsis_ref = "pkg:generic/nsis@" + NSIS_VERSION
+    rust_ref = "pkg:generic/rust-standard-library@" + rust.group(1)
+    native = {item["purl"]: item for item in components if not item["purl"].startswith("pkg:cargo/")}
+    require(set(native) == {NLOHMANN_REF, nsis_ref, rust_ref}, "non_cargo_sbom_coverage")
+    require(native[NLOHMANN_REF].get("hashes") == [{"alg": "SHA-256",
+        "content": sha(source["third_party/nlohmann/json.hpp"])}], "nlohmann_sbom_source_bytes")
+
+    declared = Counter()
+    cargo_records = {component for component, _ in texts if component.startswith("pkg:cargo/")}
+    for item in components:
+        ref = item["purl"]
+        if not ref.startswith("pkg:cargo/") or "hashes" not in item:
+            continue
+        require(ref in cargo_records and len(item["licenses"]) == 1, "cargo_notice_license_declaration")
+        expression = item["licenses"][0].get("expression")
+        require(type(expression) is str and re.fullmatch(r"[a-zA-Z0-9+_.() /-]{1,200}", expression),
+                "cargo_notice_unsafe_license_expression")
+        declared[expression] += 1
+        cargo_records.remove(ref)
+    require(not cargo_records, "unmapped_cargo_notice_section")
+    return {
+        "notice_file_bytes_verified": len(texts),
+        "cargo_declared_license_expression_counts": dict(sorted(declared.items())),
+        "project_license_sha256": sha(files["LICENSE"]),
+        "nlohmann_json_header_sha256": sha(source["third_party/nlohmann/json.hpp"]),
+        "nlohmann_license_sha256": sha(nlohmann),
+        "nsis": nsis_archive_inventory(archive, texts[("NSIS installer runtime", "COPYING")]),
+        "rustc": rustc,
+        "rust_standard_library_notice_sha256": {name: sha(texts[(rustc, name)]) for name in RUST_NOTICE_FILES},
+        "non_cargo_sbom_refs": sorted(native),
+        "source_files_verified": {name: sha(data) for name, data in source.items()},
+        "static_msvc_runtime_configured_by_source": ["FlowBridge.exe", "flowbridge-cli.exe", "flowbridge_ffi.dll", "qa_harness"],
+        "static_msvc_runtime_separately_identified_in_sbom": False,
+        "external_runtime_dependencies_identified_by_source": [
+            "Windows OpenSSH client", "Windows PowerShell", "Microsoft.PowerShell.Security"],
+        "runtime_execution_observed": False,
+        "license_obligations_accepted": False,
+    }
+
+
+def generated_msvc_settings(build: Path) -> dict:
+    """Read generator outputs without invoking the compiler or exposing absolute paths."""
+    def setting(data: bytes, pattern: bytes, code: str) -> str:
+        matches = re.findall(pattern, data, re.MULTILINE)
+        require(len(matches) == 1, code)
+        return matches[0].decode("ascii")
+
+    cache = local_bytes(build / "CMakeCache.txt", 1048576)
+    cmake = ".".join(setting(cache, rb"^CMAKE_CACHE_" + name + rb"_VERSION:INTERNAL=(\d+)\r?$",
+                             "cmake_cache_version") for name in (b"MAJOR", b"MINOR", b"PATCH"))
+    compiler = local_bytes(build / "CMakeFiles" / cmake / "CMakeCXXCompiler.cmake", 1048576)
+    require(re.search(rb'^set\(CMAKE_CXX_COMPILER_ID "MSVC"\)\r?$', compiler, re.MULTILINE) is not None,
+            "cmake_cxx_compiler_id")
+    msvc = setting(compiler, rb'^set\(CMAKE_CXX_COMPILER_VERSION "(\d+\.\d+\.\d+(?:\.\d+)?)"\)\r?$',
+                   "cmake_cxx_compiler_version")
+    targets = {}
+    for target in ("FlowBridge", "FlowBridgeNativeSmoke"):
+        doc = local_bytes(build / (target + ".vcxproj"), 1048576)
+        tree = ET.fromstring(doc)
+        release = lambda element: re.fullmatch(
+            r"\s*'\$\(Configuration\)\|\$\(Platform\)'\s*==\s*'Release\|x64'\s*",
+            element.get("Condition", "")) is not None
+        groups = (element for element in tree.findall("{*}ItemDefinitionGroup") if release(element))
+        runtime = {node.text for group in groups for node in group.findall("{*}ClCompile/{*}RuntimeLibrary")}
+        require(runtime == {"MultiThreaded"}, "msvc_release_static_runtime")
+        groups = (element for element in tree.findall("{*}PropertyGroup") if release(element))
+        toolset = {node.text for group in groups for node in group.findall("{*}PlatformToolset")}
+        sdk = {node.text for group in tree.findall("{*}PropertyGroup")
+               for node in group.findall("{*}WindowsTargetPlatformVersion")}
+        require(len(toolset) == 1 and re.fullmatch(r"v\d{3}", next(iter(toolset))) is not None,
+                "msvc_release_toolset")
+        require(len(sdk) == 1 and re.fullmatch(r"\d+\.\d+\.\d+(?:\.\d+)?", next(iter(sdk))) is not None,
+                "msvc_windows_sdk")
+        targets[target] = {"runtime_library": next(iter(runtime)), "platform_toolset": next(iter(toolset)),
+                           "windows_target_platform_version": next(iter(sdk)), "project_sha256": sha(doc)}
+    return {"cmake": cmake, "msvc_cxx_compiler_version": msvc, "cmake_cxx_compiler_sha256": sha(compiler),
+            "targets": targets, "static_linker_members_verified": False}
 
 
 def payload_paths(stage: Path) -> set[str]:
@@ -256,7 +449,7 @@ def metadata_inventory(files: dict[str, bytes], lock_bytes: bytes, contract_byte
                     and re.fullmatch(r"[0-9a-f]{64}", item["sha256"]) is not None, "license_inventory_hash")
             license_files += 1
     require(external_cargo <= inventories
-            and {"pkg:github/nlohmann/json@v3.11.3", "NSIS installer runtime", metadata.get("rustc")} <= inventories,
+            and {NLOHMANN_REF, "NSIS installer runtime", metadata.get("rustc")} <= inventories,
             "license_inventory_coverage")
     return {"components": len(components), "cargo_components": cargo_count,
         "external_cargo_lock_checksums_verified": len(external_cargo),
@@ -307,9 +500,19 @@ def audit(candidate: Path) -> dict:
     harness = local_bytes(candidate / "build/windows-explicit-beta/Release/FlowBridgeNativeSmoke.exe")
     require(sha(harness) == HARNESS_SHA and len(harness) == manifest["qa_harness"]["bytes"], "harness_sha256")
     images["qa_harness"] = {"sha256": HARNESS_SHA, **pe_inventory(harness)}
+    PHASE = "NOTICE_AND_NON_CARGO_COVERAGE"
+    sources = {name: local_bytes(candidate / name, 1048576) for name in REVIEWED_SOURCE_SHA}
+    require(all(sha(sources[name]) == expected for name, expected in REVIEWED_SOURCE_SHA.items()), "reviewed_source_sha256")
+    nsis = read_nsis_archive((candidate.parent / "nsis-3.13.zip", Path("C:/FlowBridge/toolchains/nsis-3.13.zip")))
+    coverage = notice_coverage(files, sources, nsis)
+    try:
+        coverage["generated_msvc_settings"] = generated_msvc_settings(candidate / "build/windows-explicit-beta")
+    except (Rejected, OSError, ET.ParseError) as error:
+        coverage["generated_msvc_settings"] = {"status": "UNVERIFIED", "reason":
+            str(error) if isinstance(error, Rejected) else "build_record_unavailable"}
     return {"schema": "flowbridge-frozen-beta3-static-inventory-v1", "status": "TECHNICAL_STATIC_INVENTORY_COMPLETE",
         "source_sha": SOURCE, "source_tree_sha": TREE, "manifest_sha256": MANIFEST_SHA,
-        "payload_files_verified": len(files), "metadata": metadata, "pe_images": images,
+        "payload_files_verified": len(files), "metadata": metadata, "pe_images": images, "notice_coverage": coverage,
         "candidate_executed": False, "candidate_changed": False, "installer_executed": False,
         "win10_accessed": False, "a5_accepted": False, "a6_accepted": False, "a7_approved": False}
 

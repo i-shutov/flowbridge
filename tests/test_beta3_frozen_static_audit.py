@@ -9,6 +9,7 @@ import struct
 import tempfile
 import unittest
 from unittest import mock
+import zipfile
 
 SPEC = importlib.util.spec_from_file_location("audit", Path(__file__).resolve().parents[1] / "tools/beta3_frozen_static_audit.py")
 audit = importlib.util.module_from_spec(SPEC)
@@ -67,6 +68,41 @@ def metadata_fixture():
         meta[key] = False
     files["BUILD-METADATA.json"] = encode(meta)
     return files, lock, contract
+
+
+def notice_fixture():
+    ref = "pkg:cargo/sample@1.0.0"
+    rustc = "rustc 1.100.0 (ab0123456 2026-11-27)"
+    header = (f"FlowBridge {audit.VERSION} explicit beta — resolved component notices\n"
+              "Targets: x86_64-pc-windows-msvc\n"
+              "Includes production and build inputs of the shipped Cargo roots; exact binary retention is not asserted.\n"
+              "Externally installed OpenSSH and OS frameworks are not redistributed by this package.\n").encode()
+    fixture = {
+        ref: [("LICENSE-APACHE", b"first\n\n--- LICENSE-MIT ---\nembedded marker\r\n",
+               f"\n{'=' * 72}\n{ref}\n\n--- LICENSE-APACHE ---\n"),
+              ("LICENSE-MIT", b"second\r\n", "\n--- LICENSE-MIT ---\n")],
+        audit.NLOHMANN_REF: [("LICENSE.MIT", b"nlohmann MIT",
+                            "\n=== nlohmann/json 3.11.3 — vendored Windows GUI header ===\n")],
+        "NSIS installer runtime": [("COPYING", b"NSIS copying", "\n=== NSIS installer runtime distribution COPYING ===\n")],
+        rustc: [(name, ("actual text " + name).encode(), f"\n=== Rust runtime / {name} ===\n")
+                for name in audit.RUST_NOTICE_FILES],
+    }
+    notices = header + b"".join(heading.encode() + data + b"\n" for entries in fixture.values()
+                                for _, data, heading in entries)
+    inventory = [{"component": component, "files": [{"name": name, "sha256": audit.sha(data)}
+                 for name, data, _ in entries]} for component, entries in fixture.items()]
+    return notices, inventory, rustc
+
+
+def nsis_fixture(*, duplicate=False):
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as distribution:
+        distribution.writestr("nsis-3.13/COPYING", b"NSIS copying")
+        if duplicate:
+            distribution.writestr("COPYING", b"NSIS copying")
+        for name in audit.NSIS_PLUGIN_NAMES:
+            distribution.writestr("nsis-3.13/Plugins/x86-unicode/" + name, pe(x86=True))
+    return archive.getvalue()
 
 
 class PeTests(unittest.TestCase):
@@ -220,6 +256,97 @@ class InventoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, mock.patch.object(audit.os, "walk", side_effect=bad_walk):
             with self.assertRaisesRegex(audit.Rejected, "payload_enumeration_failed"):
                 audit.payload_paths(Path(directory))
+
+
+class NoticeCoverageTests(unittest.TestCase):
+    def test_verified_sections_preserve_crlf_and_handle_embedded_heading(self):
+        notices, inventory, rustc = notice_fixture()
+        result = audit.license_notice_bytes(notices, inventory, rustc)
+        self.assertEqual(len(result), 7)
+        self.assertEqual(result[("pkg:cargo/sample@1.0.0", "LICENSE-MIT")], b"second\r\n")
+        self.assertEqual(result[(audit.NLOHMANN_REF, "LICENSE.MIT")], b"nlohmann MIT")
+
+    def test_notice_hash_detects_content_changes_and_trailing_text(self):
+        notices, inventory, rustc = notice_fixture()
+        for invalid in (notices.replace(b"second\r\n", b"other\r\n"), notices + b"added\n", notices[:-1]):
+            with self.subTest(invalid=invalid[-12:]), self.assertRaises(audit.Rejected):
+                audit.license_notice_bytes(invalid, inventory, rustc)
+
+    def test_missing_or_reordered_license_section_is_rejected(self):
+        notices, inventory, rustc = notice_fixture()
+        inventory = [inventory[0], inventory[2], inventory[1], inventory[3]]
+        with self.assertRaisesRegex(audit.Rejected, "notice_component_order"):
+            audit.license_notice_bytes(notices, inventory, rustc)
+
+    def test_nsis_copying_and_plugin_bytes_are_read_from_the_pinned_archive(self):
+        archive = nsis_fixture()
+        with mock.patch.object(audit, "NSIS_ARCHIVE_SHA", audit.sha(archive)):
+            report = audit.nsis_archive_inventory(archive, b"NSIS copying")
+            self.assertEqual(set(report["upstream_plugin_files"]), set(audit.NSIS_PLUGIN_NAMES))
+            self.assertEqual(report["copying_sha256"], audit.sha(b"NSIS copying"))
+            self.assertEqual(report["upstream_plugin_files"]["LangDLL.dll"]["direct_imports"], ["kernel32.dll"])
+            self.assertFalse(report["embedded_plugin_bytes_verified"])
+            with self.assertRaisesRegex(audit.Rejected, "nsis_copying_mismatch"):
+                audit.nsis_archive_inventory(archive, b"changed")
+
+    def test_nsis_pin_and_ambiguous_member_are_rejected(self):
+        archive = nsis_fixture(duplicate=True)
+        with self.assertRaisesRegex(audit.Rejected, "nsis_archive_sha256"):
+            audit.nsis_archive_inventory(archive, b"NSIS copying")
+        with mock.patch.object(audit, "NSIS_ARCHIVE_SHA", audit.sha(archive)), \
+                self.assertRaisesRegex(audit.Rejected, "nsis_archive_file_identity"):
+            audit.nsis_archive_inventory(archive, b"NSIS copying")
+
+    def test_complete_notice_coverage_matches_public_scope_and_local_vendor_bytes(self):
+        notices, inventory, rustc = notice_fixture()
+        archive = nsis_fixture()
+        ref = "pkg:cargo/sample@1.0.0"
+        source = {"LICENSE": b"project", "third_party/nlohmann/LICENSE.MIT": b"nlohmann MIT",
+                  "third_party/nlohmann/json.hpp": b"header"}
+        components = [{"purl": ref, "hashes": [], "licenses": [{"expression": "MIT OR Apache-2.0"}]},
+                      {"purl": audit.NLOHMANN_REF, "hashes": [{"alg": "SHA-256", "content": audit.sha(b"header")}]},
+                      {"purl": "pkg:generic/nsis@3.13"}, {"purl": "pkg:generic/rust-standard-library@1.100.0"}]
+        files = {"licenses/THIRD_PARTY_NOTICES.txt": notices, "licenses/nlohmann-json-LICENSE.MIT": b"nlohmann MIT",
+                 "LICENSE": b"project", "SBOM.cdx.json": json.dumps({"components": components}).encode(),
+                 "BUILD-METADATA.json": json.dumps({"license_inventory": inventory, "rustc": rustc}).encode()}
+        with mock.patch.object(audit, "NSIS_ARCHIVE_SHA", audit.sha(archive)):
+            report = audit.notice_coverage(files, source, archive)
+            self.assertEqual(report["notice_file_bytes_verified"], 7)
+            self.assertEqual(report["cargo_declared_license_expression_counts"], {"MIT OR Apache-2.0": 1})
+            self.assertEqual(len(report["non_cargo_sbom_refs"]), 3)
+            self.assertFalse(report["license_obligations_accepted"])
+            files["licenses/nlohmann-json-LICENSE.MIT"] = b"modified"
+            with self.assertRaisesRegex(audit.Rejected, "nlohmann_license_source_bytes"):
+                audit.notice_coverage(files, source, archive)
+
+    def test_generated_msvc_settings_report_release_static_runtime_and_toolchain(self):
+        project = """<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup><WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion></PropertyGroup>
+    <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+        <PlatformToolset>v143</PlatformToolset>
+    </PropertyGroup>
+    <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+        <ClCompile><RuntimeLibrary>MultiThreaded</RuntimeLibrary></ClCompile>
+    </ItemDefinitionGroup>
+</Project>"""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "CMakeCache.txt").write_bytes(b"CMAKE_CACHE_MAJOR_VERSION:INTERNAL=4\r\n"
+                b"CMAKE_CACHE_MINOR_VERSION:INTERNAL=1\r\nCMAKE_CACHE_PATCH_VERSION:INTERNAL=3\r\n")
+            cmake_root = root / "CMakeFiles/4.1.3"
+            cmake_root.mkdir(parents=True)
+            (cmake_root / "CMakeCXXCompiler.cmake").write_bytes(b'set(CMAKE_CXX_COMPILER_ID "MSVC")\n'
+                b'set(CMAKE_CXX_COMPILER_VERSION "19.44.35207.0")\n')
+            for name in ("FlowBridge", "FlowBridgeNativeSmoke"):
+                (root / (name + ".vcxproj")).write_text(project)
+            result = audit.generated_msvc_settings(root)
+            self.assertEqual(result["msvc_cxx_compiler_version"], "19.44.35207.0")
+            self.assertEqual(result["targets"]["FlowBridge"]["runtime_library"], "MultiThreaded")
+            self.assertFalse(result["static_linker_members_verified"])
+            (root / "FlowBridge.vcxproj").write_text(project.replace("MultiThreaded", "MultiThreadedDLL"))
+            with self.assertRaisesRegex(audit.Rejected, "msvc_release_static_runtime"):
+                audit.generated_msvc_settings(root)
 
 
 if __name__ == "__main__":
