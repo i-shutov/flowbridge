@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes
 import hashlib
 import json
+import ntpath
 from pathlib import Path
 import subprocess
 import sys
@@ -37,9 +38,22 @@ require = preflight.require
 
 
 def verify_work(work):
-    require(qa.contents(work) == ((DIRECTORIES.keys() - {""}) | FILES.keys()), "work_inventory_changed")
-    directories = {work / name: (DEVICE, identity) for name, identity in DIRECTORIES.items()}
-    files = {work / name: (DEVICE, identity, size, sha) for name, (identity, size, sha) in FILES.items()}
+    expected = (DIRECTORIES.keys() - {""}) | FILES.keys()
+    expected_normalized = {ntpath.normcase(name) for name in expected}
+    observed = {}
+    for name in qa.contents(work):
+        normalized = ntpath.normcase(name)
+        require(normalized not in observed, "work_inventory_case_collision")
+        observed[normalized] = name
+    require(len(observed) == len(expected) and observed.keys() == expected_normalized,
+            "work_inventory_changed")
+
+    # The observer normalized known NSIS names. Resolve their actual spelling
+    # before requiring the exact observed file IDs and bytes.
+    directories = {work / observed[ntpath.normcase(name)] if name else work: (DEVICE, identity)
+                   for name, identity in DIRECTORIES.items()}
+    files = {work / observed[ntpath.normcase(name)]: (DEVICE, identity, size, sha)
+             for name, (identity, size, sha) in FILES.items()}
     for path, expected in directories.items():
         require(qa.directory_id(path) == expected, "observed_work_directory_identity_changed")
     for path in files:

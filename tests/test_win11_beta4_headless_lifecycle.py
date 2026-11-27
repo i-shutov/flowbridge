@@ -186,14 +186,24 @@ class Win11HeadlessLifecycleTest(unittest.TestCase):
     def test_recovery_requires_exact_observed_identity_and_contents(self):
         with tempfile.TemporaryDirectory() as work:
             root = Path(work)
-            clone = root / "un.exe"
+            clone = root / "Un.exe"
             clone.write_bytes(b"observed")
             device, identity, size, sha = qa.file_snapshot(clone)
             root_identity = qa.directory_id(root)[1]
             with patch.object(recovery, "DEVICE", device), \
                     patch.object(recovery, "DIRECTORIES", {"": root_identity}), \
                     patch.object(recovery, "FILES", {"un.exe": (identity, size, sha)}):
-                recovery.verify_work(root)
+                _, files = recovery.verify_work(root)
+                self.assertEqual(files.keys(), {clone})
+                extra = root / "unexpected.txt"
+                extra.write_bytes(b"preserve")
+                with self.assertRaisesRegex(qa.preflight.Blocked, "work_inventory_changed"):
+                    recovery.verify_work(root)
+                self.assertEqual(extra.read_bytes(), b"preserve")
+                extra.unlink()
+                with patch.object(qa, "contents", return_value={"Un.exe", "un.exe"}):
+                    with self.assertRaisesRegex(qa.preflight.Blocked, "work_inventory_case_collision"):
+                        recovery.verify_work(root)
                 clone.write_bytes(b"modified")
                 with self.assertRaisesRegex(qa.preflight.Blocked, "file_content_or_identity_changed"):
                     recovery.verify_work(root)
