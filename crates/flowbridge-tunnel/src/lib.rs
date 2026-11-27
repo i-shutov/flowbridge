@@ -1326,18 +1326,21 @@ mod tests {
             })
     }
 
-    fn started_mock_with_preflight_retry(
+    fn started_mock_with_preflight_retry(cfg: Config, mode: &'static str) -> (Supervisor, usize) {
+        started_mock_until_with_preflight_retry(cfg, mode, |s| s.status.state == "ready")
+    }
+
+    fn started_mock_until_with_preflight_retry(
         mut cfg: Config,
         mode: &'static str,
+        observed: impl Fn(&Snapshot) -> bool,
     ) -> (Supervisor, usize) {
         const MAX_PREFLIGHT_RETRIES: usize = 3;
         for retries in 0..=MAX_PREFLIGHT_RETRIES {
             let candidate = supervisor(cfg.clone(), mode);
             candidate.start().unwrap();
-            let snapshot = wait(&candidate, |s| {
-                s.status.state == "ready" || s.status.state == "failed"
-            });
-            if snapshot.status.state == "ready" {
+            let snapshot = wait(&candidate, |s| observed(s) || s.status.state == "failed");
+            if observed(&snapshot) {
                 return (candidate, retries);
             }
             assert!(
@@ -1488,9 +1491,8 @@ mod tests {
     fn overload_is_reported_coalesced_and_recovers_without_restarting() {
         let mut cfg = config();
         cfg.overload_quiet_ms = 300;
-        let supervisor = supervisor(cfg, "ready");
-        supervisor.start().unwrap();
-        let ready = wait(&supervisor, |s| s.status.state == "ready");
+        let (supervisor, _) = started_mock_with_preflight_retry(cfg, "ready");
+        let ready = supervisor.snapshot();
         for _ in 0..10000 {
             stderr_line(&supervisor.state, b"accept: Too many open files");
         }
@@ -1840,13 +1842,12 @@ mod tests {
     }
     #[test]
     fn stop_does_not_wait_for_a_descendant_holding_stderr_open() {
-        let supervisor = supervisor(config(), "descendant_stderr");
-        supervisor.start().unwrap();
-        wait(&supervisor, |s| {
-            s.stderr
-                .iter()
-                .any(|line| line.contains("descendant diagnostic writer is alive"))
-        });
+        let (supervisor, _) =
+            started_mock_until_with_preflight_retry(config(), "descendant_stderr", |s| {
+                s.stderr
+                    .iter()
+                    .any(|line| line.contains("descendant diagnostic writer is alive"))
+            });
         let started = Instant::now();
         let stopped = supervisor.stop().unwrap();
         assert!(
