@@ -1,6 +1,6 @@
 # FlowBridge — генеральный план выпуска
 
-**Обновлено 27 ноября 2026, 22:52 МСК.** Ближайшая цель — внутренний **0.3.0:
+**Обновлено 27 ноября 2026, 23:36 МСК.** Ближайшая цель — внутренний **0.3.0:
 SSH/SOCKS5-клиент для Windows 11** с управляемым пулом SSH, профилями, GUI,
 watchdog и установщиком. Прозрачное перенаправление приложений через WFP
 разрабатывается параллельно и выпускается отдельным этапом.
@@ -10,6 +10,58 @@ watchdog и установщиком. Прозрачное перенаправ�
 испытаний сохранены. [Предыдущая редакция](https://github.com/i-shutov/flowbridge/blob/63936d4967529b2794e98d547e275fabe01d9f65/docs/RELEASE_1_0_PLAN.md).
 [Реестр выполнения](qa/release-1.0/RELEASE_EXECUTION_20261127.json).
 [Задачи и результаты субагентов](qa/release-1.0/RELEASE_WORKPACKAGES_20261127.json).
+
+## 0. Возобновление B2 — 27.11.2026, 23:36 МСК
+
+Точка продолжения: `4116afa5e72cc3dd5f24b1c1a7d1190593152a33` (draft PR #92).
+Кандидат остаётся оригинальным beta.4 из run 46040903481. Повторная сборка,
+перевыпуск и повтор уже успешных P2/P3/headless P4 без обнаруженного дефекта
+не нужны. Сначала публикуется эта редакция, затем закрываются P4–P6.
+
+### Новые наблюдения по CI точки останова
+
+По данным GitHub Actions на head PR #92: 6 завершённых workflows, 12/13 jobs
+PASS, 0 artifacts по API во всех шести runs. Это CI ветки документации, не
+original-byte beta.4 acceptance. Исполнявшийся merge SHA SSH job:
+`0bd9dca168a662d3075cb611f86ac6ed908a3bd6`.
+
+| Run | Результат |
+| --- | --- |
+| [46059819755](https://github.com/i-shutov/flowbridge/actions/runs/46059819755) | Rust/native 5/5 PASS |
+| [46059819814](https://github.com/i-shutov/flowbridge/actions/runs/46059819814) | DNS 3/3 PASS |
+| [46059819833](https://github.com/i-shutov/flowbridge/actions/runs/46059819833) | WFP BFE scope 1/1 PASS, не G2 |
+| [46059819913](https://github.com/i-shutov/flowbridge/actions/runs/46059819913) | staging contract 2/2 PASS |
+| [46059819882](https://github.com/i-shutov/flowbridge/actions/runs/46059819882) | WDK 1/1 PASS, не runtime |
+| [46059819781](https://github.com/i-shutov/flowbridge/actions/runs/46059819781) | SSH 0/1: managed 128/10000 churn (0 failures) и owned lifecycle PASS; отдельный bare OpenSSH peak 244, WinError 10054, exit 1 |
+
+Последний FAIL не исправлен и не маскируется; он относится к отдельной
+bare-backend пробе, а не к проверенному original beta.4 pool512. Не запускать
+повторно этот отрицательный эксперимент ради зелёного статуса. В P5 проверить
+соответствие будущей release ветки исходнику кандидата и отделить диагностику
+raw single от продуктового gate без снижения его собственного порога.
+
+### Порядок исполнения B2
+
+- B2-A (release_qa): проверить доступный desktop только на Win11, запустить
+  pinned протокол, если доступен. Без desktop — BLOCKED, не повторять headless.
+- B2-B (release_candidate): original-byte A5 review, список зависимостей,
+  notices, ограничения unsigned installer, подготовка внутренней инструкции
+  и checksum handoff; не заявлять юридическую/издательскую приёмку.
+- B2-C (release_ssh_pool): exact-source security/privacy и RustSec, разделить
+  frozen beta.3 scan и beta.4; каждое неподтверждённое условие оставить открытым.
+- B2-D (release_review): сверка A5/A6/A7, хешей, исходников, CI и результатов
+  B2-A–C; независимый reviewer после фактических результатов.
+
+Запланированные исполнители остаются GPT-6.2 Sol / high; начало и завершение
+фиксируются только при фактическом запуске/получении результатов. В текущем
+сеансе GitHub API доступен, но средства запуска дочерних моделей, Windows
+desktop/runner dispatch не обнаружены. Допустимы только прямые read-only
+проверки GitHub и подготовка документов. Не приписывать их субагентам и не
+считать проверку desktop свежей без настоящего наблюдения.
+
+Сборка unsigned beta.4 и подготовка внутреннего комплекта не означают
+разрешение на доставку. До закрытия P4/P5 и решения A7 статус **NO GO**.
+Win10 запрещён, публичных бинарников/tag нет, security-policy без изменений.
 
 ## 1. Что выпускаем и что сейчас мешает
 
