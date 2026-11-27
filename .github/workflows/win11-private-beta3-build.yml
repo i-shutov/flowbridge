@@ -17,6 +17,173 @@ jobs:
     runs-on: [self-hosted, Windows, X64, win11-flowbridge]
     timeout-minutes: 60
     steps:
+      - name: Provision pinned Python and Rust in a private local directory
+        shell: cmd
+        working-directory: C:\
+        timeout-minutes: 15
+        env:
+          FLOWBRIDGE_PROVISION_SETUP: |
+            $ErrorActionPreference = 'Stop'
+            $ProgressPreference = 'SilentlyContinue'
+            $env:FLOWBRIDGE_PROVISION_SETUP = $null
+            $env:FLOWBRIDGE_PROVISION_CODE = $null
+            $phase = 'EXPECTED_WIN11_RUNNER'
+            $log = $null
+            $script:nativeExit = 0
+            $system = Join-Path $env:SystemRoot 'System32'
+            $pythonVersion = '3.13.17'
+            $rustVersion = '1.100.0'
+            $rustupVersion = '1.29.3'
+            $target = 'x86_64-pc-windows-msvc'
+            $toolchain = $rustVersion + '-' + $target
+            $distribution = 'https://static.rust-lang.org'
+            $nuget = 'https://api.nuget.org'
+
+            function Invoke-Local([string]$Executable, [string[]]$Arguments) {
+              $ErrorActionPreference = 'Continue'
+              & $Executable @Arguments *>> $log
+              $script:nativeExit = $LASTEXITCODE
+              if ($script:nativeExit -ne 0) { throw 'native command failed' }
+            }
+            function Download([string]$Url, [string]$Name, [string]$Limit) {
+              Invoke-Local (Join-Path $system 'curl.exe') @('--disable', '--proto', '=https', '--proto-redir', '=https',
+                '--location', '--compressed', '--fail', '--silent', '--show-error', '--connect-timeout', '20', '--max-time', '120',
+                '--max-filesize', $Limit, '--output', $Name, $Url)
+            }
+            function Report($Data) {
+              Write-Host ('FLOWBRIDGE_TOOLCHAIN_RESULT ' + ($Data | ConvertTo-Json -Compress))
+            }
+
+          FLOWBRIDGE_PROVISION_CODE: |
+            try {
+              $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+              $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+              $os = Get-CimInstance Win32_OperatingSystem
+              $processors = @(Get-CimInstance Win32_Processor)
+              if ($env:COMPUTERNAME -ine 'VM-326272' -or $env:RUNNER_NAME -ine 'win11-flowbridge' -or
+                  $identity.Name -ine 'VM-326272\Admin' -or
+                  -not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) -or
+                  -not [Environment]::Is64BitProcess -or -not $processors.Count -or
+                  @($processors | Where-Object Architecture -ne 9).Count -or
+                  $os.ProductType -ne 1 -or [int]$os.BuildNumber -lt 22000) { throw 'host mismatch' }
+
+              $phase = 'PRIVATE_TOOLCHAIN_DIRECTORY'
+              $parent = 'C:\FlowBridge\private-candidates'
+              $run = $env:GITHUB_RUN_ID + '-' + $env:GITHUB_RUN_ATTEMPT
+              if ($run -cnotmatch '^[0-9]+-[0-9]+$') { throw 'invalid run identifier' }
+              foreach ($path in @('C:\FlowBridge', $parent)) {
+                if ((Test-Path -LiteralPath $path) -and
+                    ((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                  throw 'reparse point'
+                }
+              }
+              [void][IO.Directory]::CreateDirectory($parent)
+              $root = Join-Path $parent ('toolchain-' + $run)
+              New-Item -ItemType Directory -Path $root | Out-Null
+              $sid = '*' + $identity.User.Value + ':(OI)(CI)F'
+              $ErrorActionPreference = 'Continue'
+              & (Join-Path $system 'icacls.exe') $root /inheritance:r /grant:r $sid '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' *> $null
+              $script:nativeExit = $LASTEXITCODE
+              $ErrorActionPreference = 'Stop'
+              if ($script:nativeExit -ne 0) { throw 'private ACL failed' }
+              $log = Join-Path $root 'provision.log'
+
+              $phase = 'PYTHON_REGISTRATION_DOWNLOAD'
+              $registrationFile = Join-Path $root 'python.registration.json'
+              Download ($nuget + '/v3/registration5-gz-semver2/python/' + $pythonVersion + '.json') $registrationFile '1048576'
+              $phase = 'PYTHON_CATALOG_DOWNLOAD'
+              $entry = Get-Content -LiteralPath $registrationFile -Raw | ConvertFrom-Json
+              $catalogUrl = [Uri]$entry.catalogEntry
+              if (-not $catalogUrl.IsAbsoluteUri -or $catalogUrl.Scheme -cne 'https' -or
+                  $catalogUrl.Host -cne 'api.nuget.org' -or -not $catalogUrl.IsDefaultPort -or
+                  $catalogUrl.UserInfo -or $catalogUrl.Query -or $catalogUrl.Fragment -or
+                  $catalogUrl.AbsolutePath -cnotmatch '^/v3/catalog0/data/[^/]+/python\.3\.13\.17\.json$') {
+                throw 'unexpected NuGet catalog URL'
+              }
+              $catalogFile = Join-Path $root 'python.catalog.json'
+              Download $catalogUrl.AbsoluteUri $catalogFile '2097152'
+              $phase = 'PYTHON_SHA512_METADATA'
+              $catalog = Get-Content -LiteralPath $catalogFile -Raw | ConvertFrom-Json
+              if ($catalog.id -ine 'python' -or $catalog.version -cne $pythonVersion -or
+                  $catalog.packageHashAlgorithm -ine 'SHA512') { throw 'unexpected NuGet catalog identity' }
+              $bytes = [Convert]::FromBase64String($catalog.packageHash)
+              if ($bytes.Length -ne 64) { throw 'invalid SHA512' }
+              $pythonHash = [BitConverter]::ToString($bytes).Replace('-', '')
+              $phase = 'PYTHON_ARCHIVE_DOWNLOAD'
+              $pythonZip = Join-Path $root 'python.nupkg'
+              Download ($nuget + '/v3-flatcontainer/python/' + $pythonVersion + '/python.' + $pythonVersion + '.nupkg') $pythonZip '40000000'
+              $phase = 'PYTHON_ARCHIVE_SHA512'
+              if ((Get-FileHash -LiteralPath $pythonZip -Algorithm SHA512).Hash -cne $pythonHash) {
+                throw 'Python hash mismatch'
+              }
+              $phase = 'PYTHON_EXTRACTION_AND_VERSION'
+              $pythonRoot = Join-Path $root 'python'
+              New-Item -ItemType Directory -Path $pythonRoot | Out-Null
+              Invoke-Local (Join-Path $system 'tar.exe') @('-xf', $pythonZip, '-C', $pythonRoot)
+              $python = Join-Path $pythonRoot 'tools\python.exe'
+              Invoke-Local $python @('-I', '-c', 'import sys; sys.exit(0 if sys.version_info[:3] == (3,13,17) and sys.maxsize > 2**32 else 1)')
+
+              $phase = 'RUSTUP_INPUT_DOWNLOAD'
+              $rustup = Join-Path $root 'rustup.exe'
+              $rustupUrl = $distribution + '/rustup/archive/' + $rustupVersion + '/' + $target + '/rustup-init.exe'
+              $rustupDigest = Join-Path $root 'rustup.sha256'
+              Download ($rustupUrl + '.sha256') $rustupDigest '8192'
+              Download $rustupUrl $rustup '25000000'
+              $phase = 'RUSTUP_INPUT_SHA256'
+              $sidecar = (Get-Content -LiteralPath $rustupDigest -Raw).Trim()
+              $digest = [Regex]::Match($sidecar, '^([0-9a-fA-F]{64})(?:\s+\*?rustup-init\.exe)?$')
+              if (-not $digest.Success) { throw 'invalid SHA256 sidecar' }
+              $rustupHash = $digest.Groups[1].Value.ToUpperInvariant()
+              if ((Get-FileHash -LiteralPath $rustup -Algorithm SHA256).Hash -cne $rustupHash) { throw 'Rustup hash mismatch' }
+
+              $phase = 'RUST_TOOLCHAIN_INSTALL'
+              $env:CARGO_HOME = Join-Path $root 'cargo'
+              $env:RUSTUP_HOME = Join-Path $root 'rust'
+              $env:RUSTUP_DIST_SERVER = $distribution
+              $env:RUSTUP_UPDATE_ROOT = $distribution + '/rustup'
+              $env:RUSTUP_AUTO_INSTALL = '0'
+              $env:RUSTUP_TOOLCHAIN = $null
+              # The verified binary is named rustup.exe to use CLI mode, which does not run installer setup.
+              Invoke-Local $rustup @('set', 'auto-self-update', 'disable')
+              Invoke-Local $rustup @('toolchain', 'install', $toolchain, '--profile', 'minimal', '--component', 'rust-docs')
+              $env:RUSTUP_TOOLCHAIN = $toolchain
+              $phase = 'RUST_TOOLCHAIN_VALIDATION'
+              $sysroot = Join-Path $env:RUSTUP_HOME ('toolchains\' + $toolchain)
+              $binDir = Join-Path $sysroot 'bin'
+              Invoke-Local (Join-Path $binDir 'rustc.exe') @('-vV')
+              Invoke-Local (Join-Path $binDir 'cargo.exe') @('--version')
+              $detail = Get-Content -LiteralPath $log -Raw
+              if ($detail -notmatch '(?m)^release: 1\.100\.0\r?$' -or
+                  $detail -notmatch '(?m)^host: x86_64-pc-windows-msvc\r?$' -or
+                  $detail -notmatch '(?m)^cargo 1\.100\.0(?:\s|$)') { throw 'Rust toolchain mismatch' }
+              foreach ($license in @('licenses\Apache-2.0.txt', 'licenses\MIT.txt', 'COPYRIGHT-library.html')) {
+                if (-not (Test-Path -LiteralPath (Join-Path $sysroot ('share\doc\rust\' + $license)) -PathType Leaf)) {
+                  throw 'Rust documentation licenses missing'
+                }
+              }
+
+              $phase = 'JOB_TOOLCHAIN_HANDOFF'
+              foreach ($name in @('CARGO_HOME', 'RUSTUP_HOME', 'RUSTUP_DIST_SERVER', 'RUSTUP_UPDATE_ROOT', 'RUSTUP_AUTO_INSTALL', 'RUSTUP_TOOLCHAIN')) {
+                [IO.File]::AppendAllText($env:GITHUB_ENV, $name + '=' + [Environment]::GetEnvironmentVariable($name) + [Environment]::NewLine)
+              }
+              [IO.File]::AppendAllText($env:GITHUB_ENV, 'FLOWBRIDGE_PRIVATE_PYTHON=' + $python + [Environment]::NewLine +
+                'FLOWBRIDGE_PRIVATE_RUST_BIN=' + $binDir + [Environment]::NewLine)
+              [IO.File]::AppendAllText($env:GITHUB_PATH, (Split-Path -Parent $python) + [Environment]::NewLine + $binDir + [Environment]::NewLine)
+              $result = @{status='READY'; python=$pythonVersion; python_sha512=$pythonHash.ToLowerInvariant();
+                rust=$rustVersion; rustup=$rustupVersion; rustup_sha256=$rustupHash.ToLowerInvariant();
+                rustc_sha256=(Get-FileHash -LiteralPath (Join-Path $binDir 'rustc.exe') -Algorithm SHA256).Hash.ToLowerInvariant();
+                cargo_sha256=(Get-FileHash -LiteralPath (Join-Path $binDir 'cargo.exe') -Algorithm SHA256).Hash.ToLowerInvariant()}
+              [IO.File]::WriteAllText((Join-Path $root 'toolchain-result.json'), ($result | ConvertTo-Json))
+              Report $result
+            } catch {
+              if ($log) { $_ | Out-String | Add-Content -LiteralPath $log -ErrorAction SilentlyContinue }
+              Report @{status='BLOCKED'; phase=$phase; native_exit=$script:nativeExit}
+              exit 1
+            }
+        run: >-
+          "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command
+          "try { & ([scriptblock]::Create($env:FLOWBRIDGE_PROVISION_SETUP + $env:FLOWBRIDGE_PROVISION_CODE)) }
+          catch { Write-Host ('FLOWBRIDGE_TOOLCHAIN_RESULT ' + (@{status='BLOCKED'; phase='POWERSHELL_BOOTSTRAP_COMPILE'} | ConvertTo-Json -Compress)); exit 1 }" 2>nul
       - name: Inventory standard local tool installations
         shell: cmd
         working-directory: C:\
@@ -146,6 +313,9 @@ jobs:
                     'rustc.exe': [user / '.cargo/bin'],
                     'cmake.exe': [programs / 'CMake/bin', app / 'Programs/CMake/bin'],
                 }
+                if private_rust := os.environ.get('FLOWBRIDGE_PRIVATE_RUST_BIN'):
+                    for tool in ('cargo.exe', 'rustc.exe'):
+                        homes[tool].insert(0, Path(private_rust))
                 x86 = Path(os.environ.get('ProgramFiles(x86)', str(programs)))
                 vswhere = x86 / 'Microsoft Visual Studio/Installer/vswhere.exe'
                 dev = None
@@ -313,6 +483,11 @@ jobs:
           "%FLOWBRIDGE_PYTHON%" -I -c "import os; exec(os.environ['FLOWBRIDGE_PREFLIGHT_CODE'] + os.environ['FLOWBRIDGE_BUILD_CODE'])" 2>nul
           exit /b %ERRORLEVEL%
           :find_python
+          if defined FLOWBRIDGE_PRIVATE_PYTHON (
+            call :probe_python "%FLOWBRIDGE_PRIVATE_PYTHON%"
+            if not errorlevel 1 exit /b 0
+            exit /b 1
+          )
           for %%P in ("%LOCALAPPDATA%\Programs\Python\Python313\python.exe" "%LOCALAPPDATA%\Programs\Python\Python314\python.exe" "%ProgramFiles%\Python313\python.exe" "%ProgramFiles%\Python314\python.exe") do (
             call :probe_python "%%~P"
             if not errorlevel 1 exit /b 0
