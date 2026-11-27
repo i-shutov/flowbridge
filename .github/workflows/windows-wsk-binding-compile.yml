@@ -12,7 +12,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     env:
-      WSK_SOURCE_SHA: '229e37263b5927167795eb2f76097299e4b9770a'
+      WSK_SOURCE_SHA: 'a7476671a5b9574dfe8d6f5a307148b5fe27ef11'
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -42,6 +42,11 @@ jobs:
             throw 'WSK authority fixtures failed'
           }
           Write-Host $result
+          $lifecycle = & (Join-Path $build 'Release/FlowBridgeWskLifecycleTest.exe')
+          if ($LASTEXITCODE -ne 0 -or $lifecycle -cne 'WSK_BINDING_LIFECYCLE_CASES_PASS=9') {
+            throw 'WSK lifecycle fixtures failed'
+          }
+          Write-Host $lifecycle
       - name: Compile the prototype object with pinned Microsoft SDK and WDK
         shell: pwsh
         run: |
