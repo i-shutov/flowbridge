@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 55
     env:
       PYTHONUTF8: '1'
-      FLOWBRIDGE_LAB_SOURCE: 'beba4b63abe4713cbed3a6ab57b7373a4458d826'
+      FLOWBRIDGE_LAB_SOURCE: '78f5ec602500ab3478632a249afe55f334b593c0'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
