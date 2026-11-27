@@ -313,11 +313,11 @@
   ],
   "access_blockers": [],
   "next_actions": [
-    "Refresh original-candidate Win11 desktop/isolation preflight and execute interactive GUI/SSH acceptance if the existing unlocked Admin desktop is available",
-    "Complete candidate-specific A5 composition/notices/runtime review and prepare internal-only release notes and exact checksum handoff",
-    "Complete bounded Windows/SSH/diagnostic security/privacy review and fresh RustSec dependency evidence for original beta4 source",
-    "Independently reconcile evidence and A5/A6/A7 readiness, then commit and push the completed block",
-    "Keep WFP/G2 as a separate 0.4 track; Win10 remains excluded and original beta3/beta4 bytes remain frozen"
+    "Win11: fresh interactive-desktop/isolation preflight and exact original beta4 GUI/SSH acceptance using pinned desktop card (not Session 0)",
+    "A5: original NSIS embedded member evidence, MSVC link/runtime and distribution terms, component obligations review",
+    "A6: fresh exact-tree RustSec and native negative/privacy cases; focused signature-verifier exceptional child cleanup review",
+    "Independent A5/A6/A7 review and internal delivery decision; draft handoff prepared; no public binaries",
+    "Keep Win10 untouched and WFP/G2 separate; preserve frozen candidate"
   ],
   "candidate": {
     "version": "0.3.0-beta.4",
@@ -1058,5 +1058,25 @@
     "model": "gpt-6.2-sol",
     "workpackages": "RELEASE_WORKPACKAGES_20261127.json",
     "repeat_passed_native_gates_without_new_risk": false
+  },
+  "b2_resume_review": {
+    "date": "2026-11-27",
+    "plan_commit": "a9d1e6f14bd701363c7cd37b9ceab168aa24e31b",
+    "status": "PARTIAL_SOURCE_RECONSTRUCTION_PASS_DESKTOP_AND_FINAL_REVIEWS_OPEN",
+    "evidence": "evidence/20261127/beta4-b2-source-and-gate-reconciliation.json",
+    "handoff": "checkpoints/BETA4_B2_REVIEW_AND_HANDOFF_20261127.md",
+    "reconstructed_candidate_tree": "ce336e83bb724a65bf512e79e286c97fb0cb3190",
+    "source_patch_blobs_verified": 10,
+    "tree_entries": 359,
+    "unchanged_external_lock_records": 68,
+    "receipt_checks_passed": 15,
+    "source_privacy_checks_passed": 6,
+    "fresh_beta4_rustsec": "NOT_RUN",
+    "desktop_current": "NOT_OBSERVED_THIS_SESSION",
+    "prior_desktop_status": "BLOCKED_NO_ACTIVE_DESKTOP",
+    "actual_subagents_launched_this_session": 0,
+    "internal_delivery": "NO_GO",
+    "product_bytes_changed": false,
+    "win10_accessed": false
   }
 }

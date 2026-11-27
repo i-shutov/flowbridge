@@ -37,8 +37,10 @@
       ],
       "model": "gpt-6.2-sol",
       "reasoning_effort": "high",
-      "status": "PLANNED_AFTER_PLAN_PUSH",
-      "candidate_run": 46040903481
+      "status": "BLOCKED_FRESH_NATIVE_DESKTOP_PREFLIGHT_UNAVAILABLE",
+      "candidate_run": 46040903481,
+      "direct_work": "Read and verified existing desktop card and original lifecycle receipt; no fresh native observation",
+      "actual_child_launch_this_session": false
     },
     {
       "id": "release_candidate",
@@ -54,8 +56,10 @@
       ],
       "model": "gpt-6.2-sol",
       "reasoning_effort": "high",
-      "status": "PLANNED_AFTER_PLAN_PUSH",
-      "candidate_run": 46040903481
+      "status": "DIRECT_PARTIAL_COMPOSITION_AND_DRAFT_HANDOFF",
+      "candidate_run": 46040903481,
+      "direct_work": "Reconciled original static inventory and all pins; draft release notes and handoff ready, exact obligations/embedded/link member review OPEN",
+      "actual_child_launch_this_session": false
     },
     {
       "id": "release_ssh_pool",
@@ -72,8 +76,10 @@
       ],
       "model": "gpt-6.2-sol",
       "reasoning_effort": "high",
-      "status": "PLANNED_AFTER_PLAN_PUSH",
-      "candidate_run": 46040903481
+      "status": "DIRECT_PARTIAL_SOURCE_AND_LOCK_REVIEW",
+      "candidate_run": 46040903481,
+      "direct_work": "Reconstructed exact staged tree, unchanged third-party lock, six source assertions PASS; fresh scan/native negative/privacy OPEN",
+      "actual_child_launch_this_session": false
     },
     {
       "id": "release_review",
@@ -89,11 +95,13 @@
       ],
       "model": "gpt-6.2-sol",
       "reasoning_effort": "high",
-      "status": "PLANNED_AFTER_PLAN_PUSH",
-      "candidate_run": 46040903481
+      "status": "AWAITING_ACTUAL_INDEPENDENT_REVIEW",
+      "candidate_run": 46040903481,
+      "direct_work": "15 cross-receipt checks reconciled by main assistant; not independent subagent acceptance",
+      "actual_child_launch_this_session": false
     }
   ],
-  "plan_commit_before_delegation": "THIS_REVISION_TO_BE_PUBLISHED_BEFORE_TASK_START",
+  "plan_commit_before_delegation": "a9d1e6f14bd701363c7cd37b9ceab168aa24e31b",
   "four_distinct_agents_started": false,
   "historical_blocks": [
     {
@@ -223,5 +231,14 @@
       ]
     }
   ],
-  "active_block": "B2_FINAL_ACCEPTANCE_AND_INTERNAL_HANDOFF"
+  "active_block": "B2_FINAL_ACCEPTANCE_AND_INTERNAL_HANDOFF",
+  "current_session_execution": {
+    "mode": "DIRECT_API_PARTIAL_EXECUTION_NO_CHILD_AGENT_RUNTIME",
+    "agent_launches": 0,
+    "prior_agent_outputs_recovered": false,
+    "report": "checkpoints/BETA4_B2_REVIEW_AND_HANDOFF_20261127.md",
+    "source_reconstruction": "PASS",
+    "receipt_checks_passed": 15,
+    "privacy_source_assertions_passed": 6
+  }
 }

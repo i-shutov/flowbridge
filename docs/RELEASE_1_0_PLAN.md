@@ -63,6 +63,12 @@ desktop/runner dispatch не обнаружены. Допустимы тольк
 разрешение на доставку. До закрытия P4/P5 и решения A7 статус **NO GO**.
 Win10 запрещён, публичных бинарников/tag нет, security-policy без изменений.
 
+### B2: результаты продолжения
+
+[Отчёт и проект внутреннего handoff](qa/release-1.0/checkpoints/BETA4_B2_REVIEW_AND_HANDOFF_20261127.md) · [машиночитаемая сверка](qa/release-1.0/evidence/20261127/beta4-b2-source-and-gate-reconciliation.json).
+
+Новая независимая реконструкция staged source: 10/10 изменённых blob-хешей, 359 элементов, корневой tree **точно совпал** с оригинальной beta.4; 68/68 внешних Cargo.lock записей неизменны. 15/15 сверок original build/pool/lifecycle/inventory PASS; 6/6 адресных source privacy assertions PASS. Проект внутренней инструкции и checksum handoff готов. Fresh RustSec, A5 obligations/native member provenance, interactive GUI/SSH и независимый reviewer остаются открытыми. Новый native desktop не наблюдался; текущий сеанс не предоставляет dispatch/desktop/subagent runtime. Дочерние агенты не объявлены запущенными без факта запуска. A7 **NO GO**, кандидат не изменён.
+
 ## 1. Что выпускаем и что сейчас мешает
 
 Новый **0.3.0-beta.4 собран и проверен на Win11** с исправленными notices/metadata

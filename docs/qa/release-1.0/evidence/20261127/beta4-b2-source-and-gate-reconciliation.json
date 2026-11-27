@@ -1,0 +1,200 @@
+{
+  "schema": "flowbridge-beta4-b2-source-gate-reconciliation-v1",
+  "date": "2026-11-27",
+  "plan_commit": "a9d1e6f14bd701363c7cd37b9ceab168aa24e31b",
+  "prior_checkpoint": "4116afa5e72cc3dd5f24b1c1a7d1190593152a33",
+  "method": "Direct GitHub API source/receipt review. Applied unified patch to fetched UTF-8 blobs; recomputed all 10 Git object hashes and recursive tree object hashes with SHA-1 in a separate JS calculation. No local access to candidate or native host.",
+  "product_commit": "1261201d8561ee4e70faccc8699f60606a71c93b",
+  "product_tree": "b42325734201827e6b4d7566b4b3418205d78889",
+  "stage_tooling_commit": "16b385c90160956bd3c64e602953d75434e5bc8e",
+  "stage_patch_blob": "0627f2734b64e890f524eb97f94cb07f54fc65c2",
+  "source_reconstruction": {
+    "status": "PASS",
+    "changed_blobs_verified": 10,
+    "tree_entries": 359,
+    "tree_truncated": false,
+    "expected": "ce336e83bb724a65bf512e79e286c97fb0cb3190",
+    "computed": "ce336e83bb724a65bf512e79e286c97fb0cb3190",
+    "blob_pairs": [
+      {
+        "path": ".github/workflows/explicit-socks-beta-macos.yml",
+        "before": "c34f598978ac564c6ed4b5884720f72c07b72154",
+        "after": "4a8e1dd202fce3ab3e642be359905b612ffba6c1",
+        "verified": true
+      },
+      {
+        "path": ".github/workflows/explicit-socks-beta-windows.yml",
+        "before": "0fb8b0bf501abd1843b3e48a8b5c3ea961fa7dd3",
+        "after": "e8d58861850ef0ea0547a96a0aa6a75a6da17b74",
+        "verified": true
+      },
+      {
+        "path": "Cargo.lock",
+        "before": "0d9730d4064167105f59bfba320ee4246cc1d400",
+        "after": "565859018d6ecac5bcf53722ca74f059695b18a1",
+        "verified": true
+      },
+      {
+        "path": "Cargo.toml",
+        "before": "04219576e94e551cd9c9a91f3c1c6f9a7c7e5303",
+        "after": "3b33bb81fcba26a6274b89d5dea6ce1756160474",
+        "verified": true
+      },
+      {
+        "path": "packaging/explicit-beta.json",
+        "before": "3155db7e966eb91d16d75e965b865f1a3614fe37",
+        "after": "6ceac62621bc13878bdebb36ccf13425d4a8c22d",
+        "verified": true
+      },
+      {
+        "path": "packaging/windows/README-EXPLICIT-BETA.txt",
+        "before": "86f3bf1d282eddeefd1c124adc9c7113f5b30012",
+        "after": "f53f0b48477dff4ec97d22f8145d64110612d52a",
+        "verified": true
+      },
+      {
+        "path": "packaging/windows/build-explicit-beta.py",
+        "before": "db090a74490008bf65e15d0b7f46537b6657c146",
+        "after": "a1e726201812afc1e73d1adcaf5361f5708fc41c",
+        "verified": true
+      },
+      {
+        "path": "tests/test_explicit_beta_candidate.py",
+        "before": "c48fb28e4adaefc17031c30241382ac4482ccd0b",
+        "after": "352cc4e0955813a4d2c0ade152eed7af3b283856",
+        "verified": true
+      },
+      {
+        "path": "tests/test_explicit_beta_metadata.py",
+        "before": "3e67885c3cfd489ef29664979b78050b1a6dcc5a",
+        "after": "29db0e1258964bf9ad8c4be8199106efb3abf746",
+        "verified": true
+      },
+      {
+        "path": "tools/explicit_beta_metadata.py",
+        "before": "a443dfabe19dade7ef1760451109931c7bb1576a",
+        "after": "c88a1344c23ec435c0d43ebbd33f484e19dd3c87",
+        "verified": true
+      }
+    ],
+    "private_commit_readable_via_github": false,
+    "private_commit_identity_source": "native build receipt"
+  },
+  "lockfile": {
+    "package_records": 75,
+    "external_records": 68,
+    "external_records_identical": true,
+    "workspace_versions_changed": 7,
+    "original_product_blob": "0d9730d4064167105f59bfba320ee4246cc1d400",
+    "staged_beta4_blob": "565859018d6ecac5bcf53722ca74f059695b18a1",
+    "security_baseline_blob_identical": true,
+    "prior_rustsec_run": 46006587890,
+    "prior_rustsec_database": "c5279d0b0c9e8b70df666eb6d1edbabcfd1176bd",
+    "prior_rustsec_vulnerabilities": 0,
+    "prior_rustsec_warnings": 0,
+    "beta4_fresh_cargo_audit_executed": false,
+    "scope": "External-record equivalence to previously scanned beta3 is evidence of unchanged locked dependencies, not fresh beta4 scan or non-Cargo audit."
+  },
+  "receipt_checks": {
+    "source": true,
+    "tree": true,
+    "installer": true,
+    "manifest": true,
+    "gui": true,
+    "cli": true,
+    "ffi": true,
+    "harness": true,
+    "acceptance_tool": true,
+    "sbom": true,
+    "build_metadata": true,
+    "managed_pool": true,
+    "headless": true,
+    "inventory": true,
+    "authority_still_false": true
+  },
+  "receipt_checks_passed": 15,
+  "live_jobs": [
+    {
+      "run": 46040903481,
+      "job": 140648094899,
+      "result": "success",
+      "artifacts": 0
+    },
+    {
+      "run": 46043398994,
+      "job": 140656558094,
+      "result": "success",
+      "artifacts": 0
+    },
+    {
+      "run": 46043764383,
+      "job": 140657761417,
+      "result": "success",
+      "artifacts": 0
+    },
+    {
+      "run": 46042486760,
+      "job": 140653450546,
+      "result": "success",
+      "artifacts": 0
+    },
+    {
+      "run": 46006587890,
+      "job": 140531169076,
+      "result": "success",
+      "artifacts": 0
+    }
+  ],
+  "incident_run": 45975037904,
+  "incident_remaining_artifacts": 0,
+  "previous_pr_ci": {
+    "head": "4116afa5e72cc3dd5f24b1c1a7d1190593152a33",
+    "jobs_total": 13,
+    "jobs_passed": 12,
+    "artifacts": 0,
+    "ssh_job": 140711086694,
+    "ssh_merge_sha": "0bd9dca168a662d3075cb611f86ac6ed908a3bd6",
+    "managed_128_and_10000_churn": "PASS",
+    "owned_pool_lifecycle": "PASS",
+    "bare_backend_peak": 244,
+    "bare_backend_winerror": 10054,
+    "bare_backend_status": "FAIL"
+  },
+  "source_privacy_checks": {
+    "method": "Six direct JS source assertions on exact product blobs, four mirror repository Python source assertions; not compiled/runtime tests.",
+    "passed": 6,
+    "total": 6,
+    "checks": [
+      "fixed stderr categories",
+      "identity failure categories",
+      "GUI health redaction",
+      "GUI allowlisted export",
+      "at most four worker records",
+      "numeric/boolean-only counters"
+    ],
+    "source_blobs": {
+      "tunnel": "6825c0030a7725128245a01113cf5c58fc069838",
+      "windows_backend_trust": "7e1280541467c5ff92d045536f8e38ce8d70b4f7",
+      "gui": "d277dfe16c860f5c265d6fedcca5b25c453a0b7a",
+      "ffi": "28dfeb2006fb87e00f9617d535c4c08ca1b1440c",
+      "diagnostics": "8b715e5ba54d3d3f1a56e3099ce1fede6614abe0"
+    },
+    "guard_review": "Production Supervisor requires Windows signature; locked executable held through version probe and ChildGuard::spawn; DNS discovery applies guard separately; raw SSH stderr fixed categories, allowlisted offline diagnostic report."
+  },
+  "open": {
+    "desktop_current": "NOT_OBSERVED_THIS_SESSION; last preflight NO_ACTIVE_DESKTOP",
+    "gui": "NOT_RUN",
+    "fresh_rustsec": "NOT_RUN",
+    "license_obligations": "OPEN",
+    "static_link_member_and_nsis_embedded_member_provenance": "OPEN",
+    "native_privacy_negative_cases": "NOT_RUN",
+    "independent_review": "NOT_RUN",
+    "delivery": "NO_GO"
+  },
+  "actual_subagents_launched_this_session": 0,
+  "prior_agent_results_recovered": false,
+  "win10_accessed": false,
+  "product_bytes_changed": false,
+  "release_tag_created": false,
+  "public_binaries_published": false
+}
