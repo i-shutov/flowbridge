@@ -4,11 +4,12 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import tomllib
 import unittest
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import stage_internal_beta4 as candidate
@@ -16,6 +17,33 @@ from stage_internal_beta3 import LOCAL_PACKAGE_NAMES, StagingError
 
 
 class PrivateBeta4SourceCut(unittest.TestCase):
+    def test_redirected_builder_uses_explicit_utf8_despite_isolated_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            out = root / "candidate"
+            nsis = root / "nsis.zip"
+            host = {"os": "Windows 11"}
+            toolchain = {"distribution_relative_path": "nsis-3.13",
+                         "compiler_relative_path": "Bin/makensis.exe", "archive_sha256": "0" * 64}
+            environment = {"PYTHONIOENCODING": "cp1252"}
+            with (
+                patch.object(candidate, "stage_source", return_value="1" * 40),
+                patch.object(candidate.windows_build, "detect_windows_build_host", return_value=host),
+                patch.object(candidate.windows_build, "prepare_windows_build_environment",
+                             return_value=(environment, {"nsis": toolchain, "build_host": host})),
+                patch.object(candidate, "verify_package", return_value={}),
+                patch.object(candidate.subprocess, "run") as run,
+            ):
+                candidate.stage(root / "source", out, nsis_archive=nsis)
+            compiler = root / "candidate-nsis-toolchain/nsis-3.13/Bin/makensis.exe"
+            self.assertIn(call([sys.executable, "-I", "-X", "utf8", "packaging/windows/build-explicit-beta.py",
+                                "--nsis-compiler", str(compiler)],
+                               cwd=out, check=True, timeout=2400, env=environment), run.mock_calls)
+            result = subprocess.run([sys.executable, "-I", "-X", "utf8", "-c",
+                                     "print(chr(0xfffd))"], env={**os.environ, **environment},
+                                    capture_output=True, check=True)
+            self.assertEqual(result.stdout.strip(), b"\xef\xbf\xbd")
+
     def test_windows_10_is_excluded_before_staging(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -194,7 +194,9 @@ def stage(source: Path, destination: Path, *, nsis_archive: Path | None = None) 
         nsis_root = directory / toolchain["distribution_relative_path"]
         compiler = nsis_root / toolchain["compiler_relative_path"]
         reject_links(compiler)
-        subprocess.run([sys.executable, "-I", "packaging/windows/build-explicit-beta.py",
+        # -I ignores Python encoding environment variables. Use a UTF-8 log even
+        # when the Windows runner redirects the builder to a non-console stream.
+        subprocess.run([sys.executable, "-I", "-X", "utf8", "packaging/windows/build-explicit-beta.py",
                         "--nsis-compiler", str(compiler)],
                        cwd=destination, check=True, timeout=2400, env=env)
         result.update(verify_package(destination, commit, nsis_root, toolchain))
