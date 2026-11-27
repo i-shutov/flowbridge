@@ -35,7 +35,7 @@ HARNESS_SHA = "d41905fdcb2fc5f77e042d61c9aac5d640b23ca60ea0cf0965a4567dc9b105ff"
 NLOHMANN_REF = "pkg:github/nlohmann/json@v3.11.3"
 NSIS_VERSION = "3.13"
 NSIS_ARCHIVE_SHA = "ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8"
-NSIS_PLUGIN_NAMES = ("LangDLL.dll", "System.dll")
+NSIS_PLUGIN_NAMES = ("LangDLL.dll", "nsDialogs.dll", "System.dll")
 RUST_NOTICE_FILES = ("licenses/Apache-2.0.txt", "licenses/MIT.txt", "COPYRIGHT-library.html")
 REVIEWED_SOURCE_SHA = {
     "LICENSE": "01bb3a9549ddc554a2ebe3c2c2f923576b56cd04551484e5da1b2e42f7a3c89f",
