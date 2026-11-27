@@ -67,9 +67,9 @@ jobs:
                 exec(load("562ac8fb5087d820a4b213b08dffb24c4ed1680e", preflight.__name__,
                           "89fcff121b1cd12c6b8a0e315bfdf73599157dd1d11e79cc713a90a73230e858"),
                      preflight.__dict__)
-                lifecycle = load("65898a7da16a54c5f845938213bffcbab551bc74",
+                lifecycle = load("78cb1448d66972f842e138645289a7466d461281",
                                  "win11_beta4_headless_lifecycle",
-                                 "319e8308ce1eea80890f7479c6a3771618591fbc37c0a73769dce16e7a9de722")
+                                 "4633a894c8ca373f7b38a79ff033695859b43cec1341f8902dbe755b8bd70b0a")
                 phase = "LIFECYCLE"
                 candidate = (r"C:\FlowBridge\private-candidates"
                              + rf"\run-beta4-{CANDIDATE_RUN_ID}-{CANDIDATE_RUN_ATTEMPT}\candidate")

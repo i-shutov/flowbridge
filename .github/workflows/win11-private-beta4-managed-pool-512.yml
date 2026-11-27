@@ -200,6 +200,81 @@ jobs:
                 check_path(cmake)
                 return git, cmake, install
 
+            def compiler_identity(path):
+                text = path.read_text(encoding='utf-8')
+                values = dict(re.findall(r'^set\((CMAKE_CXX_COMPILER(?:_ID|_VERSION)?) "([^"]+)"\)$',
+                                         text, re.MULTILINE))
+                require(values.get('CMAKE_CXX_COMPILER_ID') == 'MSVC'
+                        and re.fullmatch(r'19\.\d+\.\d+(?:\.\d+)?',
+                                         values.get('CMAKE_CXX_COMPILER_VERSION', '')),
+                        'MSVC_COMPILER_IDENTITY_UNAVAILABLE')
+                compiler = Path(values.get('CMAKE_CXX_COMPILER', ''))
+                require(compiler.is_absolute() and compiler.name.lower() == 'cl.exe',
+                        'MSVC_COMPILER_PATH_INVALID')
+                check_path(compiler)
+                require(compiler.is_file(), 'MSVC_COMPILER_MISSING')
+                return compiler, values['CMAKE_CXX_COMPILER_VERSION']
+
+            def candidate_toolchain(manifest, cmake, msvc):
+                metadata_path = CANDIDATE / 'build/explicit-beta-payload/BUILD-METADATA.json'
+                check_path(metadata_path)
+                expected = json.loads(manifest.read_text(encoding='utf-8'))['build_metadata_sha256']
+                require(digest(metadata_path) == expected, 'CANDIDATE_BUILD_METADATA_MISMATCH')
+                metadata = json.loads(metadata_path.read_text(encoding='utf-8'))
+                native = metadata['windows_native_build_inputs']
+                version = native['cmake']
+                require(metadata['source_sha'] == CANDIDATE_SHA and native['generator_platform'] == 'x64'
+                        and re.fullmatch(r'\d+\.\d+\.\d+', version), 'CANDIDATE_NATIVE_BUILD_METADATA_INVALID')
+                original = CANDIDATE / 'build/windows-explicit-beta'
+                cache = original / 'CMakeCache.txt'
+                config = original / 'CMakeFiles' / version / 'CMakeCXXCompiler.cmake'
+                for path, pin in ((cache, native['cmake_cache_sha256']),
+                                  (config, native['cmake_compiler_config_sha256'])):
+                    check_path(path)
+                    require(digest(path) == pin, 'CANDIDATE_NATIVE_BUILD_INPUT_MISMATCH')
+                values = dict(re.findall(r'^([A-Z_]+):[A-Z_]+=(.*)$',
+                                         cache.read_text(encoding='utf-8'), re.MULTILINE))
+                generator = values.get('CMAKE_GENERATOR', '')
+                platform = values.get('CMAKE_GENERATOR_PLATFORM', '')
+                instance = Path(values.get('CMAKE_GENERATOR_INSTANCE', ''))
+                require(re.fullmatch(r'Visual Studio \d{2} 20\d{2}', generator) and platform == 'x64'
+                        and instance == msvc and Path(values.get('CMAKE_COMMAND', '')) == cmake,
+                        'CANDIDATE_GENERATOR_OR_INSTALLATION_MISMATCH')
+                compiler, compiler_version = compiler_identity(config)
+                require(compiler.is_relative_to(msvc)
+                        and compiler_version == native['msvc_cxx_compiler_version'],
+                        'CANDIDATE_MSVC_COMPILER_MISMATCH')
+                sdk = native['generated_targets']['FlowBridge']['windows_target_platform_version']
+                require(re.fullmatch(r'10\.0\.\d+\.\d+', sdk), 'CANDIDATE_WINDOWS_SDK_INVALID')
+                RESULT.update(candidate_compiler_inputs_verified=True, msvc_generator=generator,
+                              msvc_cxx_compiler_version=compiler_version, windows_sdk_version=sdk)
+                return generator, platform, instance, version, compiler, sdk, compiler_version
+
+            def prepare_msvc_environment(system, instance, clean, compiler, sdk):
+                dev = instance / 'Common7/Tools/VsDevCmd.bat'
+                check_path(dev)
+                require(dev.is_file() and not any(c in str(dev) for c in '%!\r\n'),
+                        'MSVC_DEV_COMMAND_PATH_INVALID')
+                env = {key.upper(): value for key, value in clean.items()}
+                env['PATH'] = os.pathsep.join((env['PATH'], str(system.parent), str(system / 'Wbem'),
+                                             str(system / 'WindowsPowerShell/v1.0')))
+                command = f'"{system / "cmd.exe"}" /d /s /v:off /c "call "{dev}" -no_logo -arch=x64 -host_arch=x64 >nul 2>&1 && set"'
+                variables = run(command, env=env, capture=True, timeout=60)
+                for line in variables.splitlines():
+                    if '=' in line and not line.startswith('='):
+                        key, value = line.split('=', 1)
+                        env[key.upper()] = value
+                tool_dir = Path(env.get('VCTOOLSINSTALLDIR', ''))
+                require(env.get('VSCMD_ARG_HOST_ARCH', '').lower() == 'x64'
+                        and env.get('VSCMD_ARG_TGT_ARCH', '').lower() == 'x64'
+                        and Path(env.get('VSINSTALLDIR', '')) == instance
+                        and tool_dir / 'bin/Hostx64/x64/cl.exe' == compiler
+                        and env.get('WINDOWSSDKVERSION', '').rstrip('\\/') == sdk
+                        and all(env.get(key) for key in ('INCLUDE', 'LIB', 'LIBPATH')),
+                        'MSVC_ENVIRONMENT_DIFFERS_FROM_CANDIDATE_TOOLCHAIN')
+                RESULT['msvc_dev_environment_verified'] = True
+                return env
+
             def checkout(git, path, env):
                 run([str(git), 'init', '-q', '--template=', str(path)], env=env)
                 run([str(git), '-C', str(path), 'fetch', '--no-tags', '--depth=1',
@@ -436,7 +511,7 @@ jobs:
                 temp = local / 'temp'
                 temp.mkdir()
                 env_keys = (
-                    'SystemRoot', 'WINDIR', 'ComSpec', 'USERPROFILE', 'USERNAME', 'USERDOMAIN',
+                    'SystemRoot', 'SystemDrive', 'WINDIR', 'ComSpec', 'PATHEXT', 'USERPROFILE', 'USERNAME', 'USERDOMAIN',
                     'LOCALAPPDATA', 'APPDATA', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramData',
                     'ProgramW6432', 'HOMEDRIVE', 'HOMEPATH', 'COMPUTERNAME', 'NUMBER_OF_PROCESSORS',
                     'PROCESSOR_ARCHITECTURE',
@@ -451,13 +526,23 @@ jobs:
                 RESULT['phase'] = 'EXACT_QA_CHECKOUT'
                 qa = local / 'qa'
                 checkout(git, qa, clean)
+                RESULT['phase'] = 'VERIFIED_CANDIDATE_NATIVE_TOOLCHAIN'
+                generator, platform, instance, cmake_version, compiler, sdk, compiler_version = (
+                    candidate_toolchain(manifest, cmake, msvc))
+                RESULT['phase'] = 'INITIALIZE_MSVC_X64'
+                compiler_env = prepare_msvc_environment(system, instance, clean, compiler, sdk)
                 RESULT['phase'] = 'COMPILED_WIN32_POLICY'
                 build = local / 'build'
-                run([str(cmake), '-S', str(qa / 'native/windows'), '-B', str(build), '-A', 'x64',
-                     f'-DCMAKE_GENERATOR_INSTANCE={msvc}', '-DFLOWBRIDGE_BUILD_NATIVE_TESTS=ON',
-                     f'-DFLOWBRIDGE_FFI_LIBRARY={import_lib}'], env=clean, cwd=local, timeout=180)
+                run([str(cmake), '-S', str(qa / 'native/windows'), '-B', str(build),
+                     '-G', generator, '-A', platform, f'-DCMAKE_GENERATOR_INSTANCE={instance}',
+                     '-DFLOWBRIDGE_BUILD_NATIVE_TESTS=ON', f'-DFLOWBRIDGE_FFI_LIBRARY={import_lib}'],
+                    env=compiler_env, cwd=local, timeout=180)
+                configured = build / 'CMakeFiles' / cmake_version / 'CMakeCXXCompiler.cmake'
+                check_path(configured)
+                require(compiler_identity(configured) == (compiler, compiler_version),
+                        'WIN32_POLICY_SELECTED_DIFFERENT_MSVC')
                 run([str(cmake), '--build', str(build), '--config', 'Release', '--target',
-                     'FlowBridgeSshPoolRequest'], env=clean, cwd=local, timeout=180)
+                     'FlowBridgeSshPoolRequest'], env=compiler_env, cwd=local, timeout=180)
                 policy = build / 'Release/FlowBridgeSshPoolRequest.exe'
                 check_path(policy)
                 require(policy.is_file(), 'COMPILED_WIN32_POLICY_MISSING')

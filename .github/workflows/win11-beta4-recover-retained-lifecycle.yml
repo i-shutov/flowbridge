@@ -1,0 +1,67 @@
+name: Win11 beta.4 retained lifecycle recovery
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+concurrency:
+  group: win11-vps-smoke-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'i-shutov/flowbridge' }}
+    runs-on: [self-hosted, Windows, X64, win11-flowbridge]
+    timeout-minutes: 5
+    steps:
+      - name: Remove only verified state from retained lifecycle run 46041604814
+        shell: cmd
+        working-directory: C:\
+        env:
+          FLOWBRIDGE_WIN11_RETAINED_RECOVERY: |
+            import hashlib
+            import os
+            import socket
+            import sys
+            import types
+            import urllib.request
+
+            QA = '78cb1448d66972f842e138645289a7466d461281'
+
+            def load(source, name, expected):
+                url = f'https://raw.githubusercontent.com/i-shutov/flowbridge/{source}/tools/{name}.py'
+                with urllib.request.urlopen(url, timeout=15) as response:
+                    contents = response.read(65537)
+                if not 0 < len(contents) <= 65536 or hashlib.sha256(contents).hexdigest() != expected:
+                    raise RuntimeError('QA source pin mismatch')
+                return compile(contents, f'<pinned-{name}>', 'exec')
+
+            def library(source, name, expected):
+                module = types.ModuleType(name)
+                sys.modules[name] = module
+                exec(load(source, name, expected), module.__dict__)
+
+            phase = 'HOST'
+            try:
+                if (sys.platform != 'win32' or sys.maxsize <= 2**32
+                        or sys.getwindowsversion().build != 22631
+                        or socket.gethostname().casefold() != 'vm-326272'
+                        or os.environ.get('RUNNER_NAME') != 'win11-flowbridge'):
+                    raise RuntimeError('Wrong runner')
+                phase = 'PINNED_SOURCE'
+                library('562ac8fb5087d820a4b213b08dffb24c4ed1680e', 'win11_explicit_beta_preflight',
+                        '89fcff121b1cd12c6b8a0e315bfdf73599157dd1d11e79cc713a90a73230e858')
+                library(QA, 'win11_beta4_headless_lifecycle',
+                        '4633a894c8ca373f7b38a79ff033695859b43cec1341f8902dbe755b8bd70b0a')
+                recovery = load(QA, 'win11_beta4_recover_retained_lifecycle',
+                                '8fcda8cef839e5458c95b43c805bee20c17f905e7b32698a9a95fb81e07522ea')
+                phase = 'RECOVERY'
+                exec(recovery, {'__name__': '__main__'})
+            except Exception:
+                print('WIN11_BETA4_RECOVERY_LAUNCH_BLOCKED=' + phase)
+                sys.exit(1)
+        run: |
+          @echo off
+          set "FLOWBRIDGE_PRIVATE_PY=C:\"
+          "%FLOWBRIDGE_PRIVATE_PY%FlowBridge\private-candidates\toolchain-45986630920-1\python\tools\python.exe" -I -X utf8 -B -c "import os; exec(os.environ['FLOWBRIDGE_WIN11_RETAINED_RECOVERY'])" 2>nul
+          exit /b %ERRORLEVEL%
