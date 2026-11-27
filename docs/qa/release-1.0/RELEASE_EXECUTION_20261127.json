@@ -54,16 +54,15 @@
     "ci_observation": "evidence/20261127/ci-observation.json"
   },
   "main": {
-    "sha": "46b766f1e8604d27401764c3c1987fa2d42e5e28",
+    "sha": "0a3771bf5e39e7397f5af4c62cd51d7f7b79cf99",
     "runner_smoke_pr": 90,
     "runner_smoke_merge": "40f8b66f356dbe26b75458b6508528c36d1eb0f8",
     "hosted_ci": {
-      "run_id": 45999775594,
-      "source_sha": "46b766f1e8604d27401764c3c1987fa2d42e5e28",
-      "conclusion": "success",
-      "attempt": 1,
-      "jobs_passed": 5,
-      "artifacts": 0
+      "run_id": 46007168400,
+      "source_sha": "0a3771bf5e39e7397f5af4c62cd51d7f7b79cf99",
+      "status": "in_progress",
+      "conclusion": null,
+      "evidence": "evidence/20261127/main-diagnostic-ci.json"
     },
     "self_hosted_smoke": {
       "run_id": 45982267687,
@@ -99,6 +98,24 @@
         }
       ],
       "native_win10_runner_present": false
+    },
+    "manual_diagnostics": {
+      "frozen_static_inventory": {
+        "source_sha": "8355c01b9d8c3d444f371e4b7b6fcb317b65bdb7",
+        "run_id": 46004506024
+      },
+      "frozen_rustsec": {
+        "workflow_sha": "464cba6b2a0f8abd95055f334e8b752c011e86cc",
+        "run_id": 46006587890
+      },
+      "wsk_object_compile": {
+        "source_sha": "229e37263b5927167795eb2f76097299e4b9770a",
+        "run_id": 46003874189
+      },
+      "raw512_expanded_table_lab": {
+        "source_sha": "78f5ec602500ab3478632a249afe55f334b593c0",
+        "run_id": 46007206276
+      }
     }
   },
   "local_source_validation": {
@@ -308,16 +325,24 @@
         "size_in_bytes": 514
       }
     ],
-    "cleanup_status": "BLOCKED_AUTOMATIC_APPROVAL_REVIEW",
+    "cleanup_status": "DONE_EXACT_11_DELETED",
     "prevention_main_commit": "cc547d204756712f14d05d38b34e6ace9a3d4a31",
     "prevention_verified_new_run_artifact_count": 0,
     "browser_auth": "SIGNED_IN_VERIFIED",
     "owner_authorized": true,
     "deletion_attempted": true,
-    "deleted_count": 0,
-    "remaining_count": 11,
-    "verification": "Authenticated UI and artifact API after rejected final confirmation both show the original 11 IDs",
-    "rejection_reason": "Automatic approval review demanded a fresh action-time confirmation for irreversible deletion and did not accept the owner instruction. First confirmation dialog dismissed; no workaround attempted."
+    "deleted_count": 11,
+    "remaining_count": 0,
+    "verification": "Authenticated UI confirmed each named deletion; artifact API returned []; run remains completed/cancelled at original SHA; original Windows application job log is readable",
+    "prior_approval_block": {
+      "cleanup_status": "BLOCKED_AUTOMATIC_APPROVAL_REVIEW",
+      "deleted_count": 0,
+      "remaining_count": 11,
+      "rejection_reason": "Automatic approval review demanded a fresh action-time confirmation for irreversible deletion and did not accept the owner instruction. First confirmation dialog dismissed; no workaround attempted."
+    },
+    "action_time_owner_confirmation": true,
+    "completed_at_utc": "2026-11-27T12:54:05Z",
+    "evidence": "evidence/20261127/artifact-cleanup.json"
   },
   "work": [
     {
@@ -332,8 +357,8 @@
     },
     {
       "id": "R2",
-      "status": "GUARD_DONE_CLEANUP_BLOCKED_AUTO_REVIEW",
-      "result": "Owner confirmed exact 11-artifact deletion; automatic approval review rejected final confirmation; API still reports all 11, deleted 0"
+      "status": "DONE",
+      "result": "Private-only upload guards active; exact 11 approved artifacts deleted after fresh action-time confirmation; API remaining 0, run/logs/commits retained"
     },
     {
       "id": "R3",
@@ -362,8 +387,8 @@
     },
     {
       "id": "R8",
-      "status": "OPEN",
-      "result": "Independent A5/A6 review on materialized candidate pending"
+      "status": "STATIC_INVENTORY_AND_CURRENT_RUSTSEC_PASS_FORMAL_A5_A6_OPEN",
+      "result": "Exact frozen13-file payload and5 PE inventoried; exact75-entry lock audited with0 known advisories/0 warnings in recorded official snapshot; licensing obligations, dynamic runtime and formal A5/A6 remain open"
     },
     {
       "id": "R9",
@@ -371,14 +396,13 @@
       "result": "Owner internal-pilot GO after exact-byte acceptance"
     }
   ],
-  "access_blockers": [
-    "Exact 11-artifact cleanup is owner-authorized but blocked by automatic approval review at the browser final confirmation; all 11 remain."
-  ],
+  "access_blockers": [],
   "next_actions": [
-    "Resolve the raw512 signed dependency/backend capacity prerequisite before repeating a native load test",
-    "Prepare a separately reviewed kernel prototype tying the same accepted socket object to kernel-owned redirect records, origin epoch, policy generation and one-use claim ticket; own-socket endpoint availability is now confirmed, but no signed kernel run has occurred",
-    "Delete only the 11 approved accidental artifacts when action-time approval review permits; retain logs/commits",
-    "Keep R7/Win10 deferred until the owner changes scope; retain frozen beta3 installer and private kit"
+    "Finish exact-source OpenSSH expanded-FD laboratory build and strict512 held/16 recovery observation; experimental unsigned binaries cannot authorize production adoption",
+    "Validate separated all-platform DNS pairing/conflict fixtures in QA CI without hiding real bind errors",
+    "Prepare separately reviewed signed kernel laboratory execution for the accepted WSK object prototype, with bounded rundown and anti-transplant/packet lineage checks",
+    "Finish licensing obligations, non-Cargo/dynamic runtime and exact-candidate privacy/security review; retain formal A5/A6 open",
+    "Keep R7/Win10 deferred until owner changes scope; retain unchanged frozen beta3 installer and private kit"
   ],
   "candidate": {
     "version": "0.3.0-beta.3",
@@ -437,7 +461,8 @@
       "CI fixture reliability"
     ],
     "codex_on_win11_required": false,
-    "exact_11_artifact_cleanup_authorized": true
+    "exact_11_artifact_cleanup_authorized": true,
+    "exact_11_artifact_cleanup_completed": true
   },
   "diagnostic_changes": {
     "pr": "https://github.com/i-shutov/flowbridge/pull/93",
@@ -479,6 +504,17 @@
       "raw_peak": 246,
       "raw_recovery": 16,
       "strict_raw512_proved": false
+    },
+    "paired_dns_followup": {
+      "local_review_commit": "c33994d180b6bea443cbbe2d7a17066d72d3d2dd",
+      "base_sha": "ec0a8ebb649f1b8692726e276b632bf500b31ece",
+      "file_sha256": "254a7ef2564f7554d564317f5313126c493afbaf50f5d08915cb4a3c4e22fd9a",
+      "production_bytes_unchanged": true,
+      "positive_pair_test_on_all_platforms": true,
+      "explicit_conflict_keeps_owned_tcp_listener": true,
+      "new_retries": false,
+      "underlying_windows_10013_cause": "UNDETERMINED",
+      "native_ci_status": "NOT_YET_RUN"
     }
   },
   "native_win11_g2": {
@@ -523,5 +559,82 @@
     "artifact_count": 0,
     "origin_process_bound": false,
     "g2_accepted": false
+  },
+  "qa_final_document_head_ci": {
+    "source_sha": "ec0a8ebb649f1b8692726e276b632bf500b31ece",
+    "jobs_passed": 13,
+    "jobs_total": 13,
+    "workflow_count": 6,
+    "first_attempt_all": true,
+    "artifacts": 0,
+    "evidence": "evidence/20261127/qa-ec0-terminal-ci.json",
+    "strict_raw512_proved": false
+  },
+  "frozen_beta3_static_review": {
+    "source_sha": "8355c01b9d8c3d444f371e4b7b6fcb317b65bdb7",
+    "run_id": 46004506024,
+    "job_id": 140524170302,
+    "status": "TECHNICAL_STATIC_INVENTORY_COMPLETE",
+    "payload_files_verified": 13,
+    "sbom_components": 71,
+    "cargo_components": 68,
+    "external_cargo_checksums_verified": 61,
+    "license_inventory_entries": 64,
+    "license_file_hash_records": 113,
+    "pe_files": 5,
+    "direct_or_delay_dynamic_msvc_runtime_imports_observed": false,
+    "a5_accepted": false,
+    "a6_accepted": false,
+    "a7_approved": false,
+    "frozen_candidate_changed": false,
+    "evidence": "evidence/20261127/frozen-beta3-static-inventory.json"
+  },
+  "wsk_accepted_socket_prototype": {
+    "source_sha": "229e37263b5927167795eb2f76097299e4b9770a",
+    "tree": "336529d9446d7eedd6396fe7879c47dd778eda25",
+    "base_sha": "f1ac3b04369163ece245c4fea9520571cec112bf",
+    "run_id": 46003874189,
+    "job_id": 140522049766,
+    "status": "HOSTED_WDK_OBJECT_COMPILE_PASS_RUNTIME_UNPROVED",
+    "native_cpp_authority_cases_passed": 9,
+    "structural_source_mutants_rejected": 8,
+    "warnings": 0,
+    "errors": 0,
+    "driver_loaded": false,
+    "g2_accepted": false,
+    "origin_process_bound": false,
+    "packet_owner_bound": false,
+    "evidence": "evidence/20261127/wsk-accepted-socket-compile.json"
+  },
+  "frozen_beta3_rustsec": {
+    "run_id": 46006587890,
+    "job_id": 140531169076,
+    "status": "RUSTSEC_NO_KNOWN_ADVISORIES",
+    "cargo_audit_version": "0.23.0",
+    "database_sha": "c5279d0b0c9e8b70df666eb6d1edbabcfd1176bd",
+    "locked_packages_audited": 75,
+    "unchanged_third_party_records": 68,
+    "vulnerabilities": 0,
+    "warnings": 0,
+    "crates_io_yanked_status_checked": false,
+    "a5_accepted": false,
+    "a6_accepted": false,
+    "a7_approved": false,
+    "evidence": "evidence/20261127/frozen-beta3-rustsec.json"
+  },
+  "raw512_source_lab": {
+    "source_sha": "78f5ec602500ab3478632a249afe55f334b593c0",
+    "tree": "747cf28924a2e9e01a1ef4235e3e78d6215b4e48",
+    "run_id": 46007206276,
+    "status": "IN_PROGRESS_FULL_HISTORY_FIX",
+    "upstream_openssh_sha": "274893f8d1fe86c4d128b514c3af4bc10cdc0c99",
+    "max_fds": 1024,
+    "required_single_transport_held": 512,
+    "required_recovery": 16,
+    "previous_compile_and_raw_probe_reached": false,
+    "production_raw512_accepted": false,
+    "production_adoption_approved": false,
+    "frozen_beta3_changed": false,
+    "evidence": "evidence/20261127/raw512-source-lab.json"
   }
 }

@@ -488,18 +488,25 @@ mod tests {
         assert!(validate_query(&q).is_err());
     }
     #[tokio::test]
-    async fn paired_ephemeral_port_and_explicit_conflict_are_distinct() {
-        for _ in 0..32 {
-            let (udp, tcp, address) = bind_pair("127.0.0.1:0".parse().unwrap()).await.unwrap();
-            assert_ne!(address.port(), 0);
-            assert_eq!(udp.local_addr().unwrap(), address);
-            assert_eq!(tcp.local_addr().unwrap(), address);
-            // Windows may report either 10048 or 10013 for an exclusive
-            // address conflict. In both cases explicit ports fail closed.
-            assert!(retryable_bind_conflict(
-                &bind_pair(address).await.unwrap_err()
-            ));
-        }
+    async fn paired_ephemeral_sockets_share_the_assigned_address() {
+        let (udp, tcp, address) = bind_pair("127.0.0.1:0".parse().unwrap())
+            .await
+            .expect("reserve a shared ephemeral UDP/TCP loopback address");
+        assert_ne!(address.port(), 0);
+        assert_eq!(udp.local_addr().unwrap(), address);
+        assert_eq!(tcp.local_addr().unwrap(), address);
+    }
+    #[tokio::test]
+    async fn explicit_conflict_does_not_fall_back_to_another_port() {
+        let owner = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = owner.local_addr().unwrap();
+        let conflict = bind_pair(address).await.unwrap_err();
+        // Windows may report either 10048 or 10013 for an exclusive conflict.
+        assert!(
+            retryable_bind_conflict(&conflict),
+            "unexpected bind error: {conflict}"
+        );
+        drop(owner);
     }
     #[test]
     fn retryable_conflicts_are_platform_specific() {

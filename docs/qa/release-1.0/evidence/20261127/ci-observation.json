@@ -10,7 +10,7 @@
     "Native beta3 R5/R6 evidence is recorded separately in native-beta3-build.json; hosted main builds are not the private beta3 candidate.",
     "QA fixture revision295fd passed all13 jobs; its inherited raw characterization requires128, so peak246 plus recovery16 is not strict512 proof.",
     "Diagnostic PR93 requires512 and keeps raw and G2 failures visible; native Win11 confirmed zero ETW connid but a separate own-socket endpoint query passed without granting G2 authority.",
-    "Win10 is deferred by owner instruction. Old11-artifact cleanup was authorized but blocked by automatic approval review; none deleted."
+    "Win10 is deferred by owner instruction. After fresh action-time owner confirmation, exactly11 approved artifacts were deleted; artifact API returned0 and original run/logs were retained."
   ],
   "runs": [
     {

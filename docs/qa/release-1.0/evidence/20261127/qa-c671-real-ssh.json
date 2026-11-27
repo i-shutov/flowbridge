@@ -73,6 +73,8 @@
     "selected": 11,
     "deleted": 0,
     "remaining": 11,
-    "source": "parent cleanup verification"
+    "source": "parent cleanup verification",
+    "record_scope": "HISTORICAL_SNAPSHOT_BEFORE_FRESH_ACTION_TIME_CONFIRMATION",
+    "superseded_by": "artifact-cleanup.json"
   }
 }

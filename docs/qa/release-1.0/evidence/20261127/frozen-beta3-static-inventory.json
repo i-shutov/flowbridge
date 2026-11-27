@@ -1,0 +1,242 @@
+{
+  "schema": "flowbridge-frozen-beta3-static-inventory-evidence-v1",
+  "date": "2026-11-27",
+  "timezone": "Europe/Moscow",
+  "tool_source": {
+    "sha": "8355c01b9d8c3d444f371e4b7b6fcb317b65bdb7",
+    "tree": "de80d3ce844202c62ae1bd9d39521b631ecd3a15",
+    "helper_sha256": "2c5846414bd10e9bbab1f3e8cb6e89ae4c03a6b6fd68f42aed8713b2a34fa0c1"
+  },
+  "workflow_sha256": "d297ce41c8b188b2e32534c3d60c556ca19d61308e8d1435f3b1fae75f3357aa",
+  "runner": "win11-flowbridge",
+  "host": "VM-326272",
+  "first": {
+    "id": 46003837637,
+    "url": "https://github.com/i-shutov/flowbridge/actions/runs/46003837637",
+    "event": "workflow_dispatch",
+    "head_sha": "116067f71367517cf032373a7ff6706c8c409d8f",
+    "status": "completed",
+    "conclusion": "failure",
+    "attempt": 1,
+    "started_at": "2026-11-27T13:03:40Z",
+    "updated_at": "2026-11-27T13:03:45Z",
+    "artifact_count": 0,
+    "jobs": [
+      {
+        "id": 140521923359,
+        "name": "observe",
+        "status": "completed",
+        "conclusion": "failure",
+        "steps": [
+          {
+            "name": "Read exact frozen beta.3 payload metadata and PE imports",
+            "conclusion": "failure"
+          }
+        ]
+      }
+    ],
+    "observed_result": {
+      "a5_accepted": false,
+      "a6_accepted": false,
+      "a7_approved": false,
+      "error_code": "pe_duplicate_import",
+      "phase": "PE_STATIC_INVENTORY",
+      "schema": "flowbridge-frozen-beta3-static-inventory-v1",
+      "status": "BLOCKED"
+    }
+  },
+  "second": {
+    "id": 46004506024,
+    "url": "https://github.com/i-shutov/flowbridge/actions/runs/46004506024",
+    "event": "workflow_dispatch",
+    "head_sha": "1e86f2251bf4e111ef0616cd577c04676e72d161",
+    "status": "completed",
+    "conclusion": "success",
+    "attempt": 1,
+    "started_at": "2026-11-27T13:08:15Z",
+    "updated_at": "2026-11-27T13:08:22Z",
+    "artifact_count": 0,
+    "jobs": [
+      {
+        "id": 140524170302,
+        "name": "observe",
+        "status": "completed",
+        "conclusion": "success",
+        "steps": []
+      }
+    ],
+    "observed_result": {
+      "a5_accepted": false,
+      "a6_accepted": false,
+      "a7_approved": false,
+      "candidate_changed": false,
+      "candidate_executed": false,
+      "installer_executed": false,
+      "manifest_sha256": "f6a94e5e8a87e571d63604ff3b2e417bf21e2e2758343171c587a43717318c99",
+      "metadata": {
+        "build_metadata_sha256": "09cf00994971904a9e4d055a17f8fe28c7c67b1013b08998b1a4e1bd8669240f",
+        "cargo_components": 68,
+        "components": 71,
+        "current_vulnerability_database_checked": false,
+        "external_cargo_lock_checksums_verified": 61,
+        "license_file_hash_records": 113,
+        "license_inventory_entries": 64,
+        "license_text_obligations_reviewed": false,
+        "notices_sha256": "ea0d775d41a3088a7ce7f14a6f3ad814efd1d43bde51a4df2d6e7aa416865c66",
+        "resolved_graph_recomputed": false,
+        "sbom_sha256": "8154003de5cbf45e3438e35c655bc3e755567b5633d6d93e19df170b5dcb3247"
+      },
+      "payload_files_verified": 13,
+      "pe_images": {
+        "FlowBridge.exe": {
+          "authenticode_verified": false,
+          "declared_dll_characteristics": {
+            "dynamic_base": true,
+            "guard_cf": false,
+            "high_entropy_va": true,
+            "nx_compat": true
+          },
+          "delay_import_descriptor_count": 0,
+          "delay_imports": [],
+          "direct_import_descriptor_count": 10,
+          "direct_imports": [
+            "advapi32.dll",
+            "comctl32.dll",
+            "comdlg32.dll",
+            "flowbridge_ffi.dll",
+            "gdi32.dll",
+            "kernel32.dll",
+            "ntdll.dll",
+            "ole32.dll",
+            "shell32.dll",
+            "user32.dll"
+          ],
+          "direct_or_delay_msvc_runtime_imports": [],
+          "embedded_certificate_table_present": false,
+          "machine": "0x8664",
+          "recursive_or_dynamic_loads_inspected": false,
+          "sha256": "8137a43a27eae62ba3988baeb5dffde0ee03fa983c96e8440480d77b1072b4d0"
+        },
+        "flowbridge-cli.exe": {
+          "authenticode_verified": false,
+          "declared_dll_characteristics": {
+            "dynamic_base": true,
+            "guard_cf": false,
+            "high_entropy_va": true,
+            "nx_compat": true
+          },
+          "delay_import_descriptor_count": 0,
+          "delay_imports": [],
+          "direct_import_descriptor_count": 6,
+          "direct_imports": [
+            "api-ms-win-core-synch-l1-2-0.dll",
+            "bcryptprimitives.dll",
+            "kernel32.dll",
+            "ntdll.dll",
+            "ws2_32.dll"
+          ],
+          "direct_or_delay_msvc_runtime_imports": [],
+          "embedded_certificate_table_present": false,
+          "machine": "0x8664",
+          "recursive_or_dynamic_loads_inspected": false,
+          "sha256": "10182b2d58d9d0728f301afe3deb21be33b7aff9b99c627f4f37507bec7b70ab"
+        },
+        "flowbridge_ffi.dll": {
+          "authenticode_verified": false,
+          "declared_dll_characteristics": {
+            "dynamic_base": true,
+            "guard_cf": false,
+            "high_entropy_va": true,
+            "nx_compat": true
+          },
+          "delay_import_descriptor_count": 0,
+          "delay_imports": [],
+          "direct_import_descriptor_count": 9,
+          "direct_imports": [
+            "advapi32.dll",
+            "api-ms-win-core-synch-l1-2-0.dll",
+            "bcryptprimitives.dll",
+            "iphlpapi.dll",
+            "kernel32.dll",
+            "ntdll.dll",
+            "ws2_32.dll"
+          ],
+          "direct_or_delay_msvc_runtime_imports": [],
+          "embedded_certificate_table_present": false,
+          "machine": "0x8664",
+          "recursive_or_dynamic_loads_inspected": false,
+          "sha256": "cb933d0a0c312932d80c60ece25549a749f9664807e225dd339da2e57dad5b4e"
+        },
+        "installer": {
+          "authenticode_verified": false,
+          "declared_dll_characteristics": {
+            "dynamic_base": true,
+            "guard_cf": false,
+            "high_entropy_va": false,
+            "nx_compat": true
+          },
+          "delay_import_descriptor_count": 0,
+          "delay_imports": [],
+          "direct_import_descriptor_count": 7,
+          "direct_imports": [
+            "advapi32.dll",
+            "comctl32.dll",
+            "gdi32.dll",
+            "kernel32.dll",
+            "ole32.dll",
+            "shell32.dll",
+            "user32.dll"
+          ],
+          "direct_or_delay_msvc_runtime_imports": [],
+          "embedded_certificate_table_present": false,
+          "machine": "0x014c",
+          "recursive_or_dynamic_loads_inspected": false,
+          "sha256": "6408c0bf595b0ae61a4fc05db17421dc4b03dcda241f3c1f1f997ab6583eec5b"
+        },
+        "qa_harness": {
+          "authenticode_verified": false,
+          "declared_dll_characteristics": {
+            "dynamic_base": true,
+            "guard_cf": false,
+            "high_entropy_va": true,
+            "nx_compat": true
+          },
+          "delay_import_descriptor_count": 0,
+          "delay_imports": [],
+          "direct_import_descriptor_count": 8,
+          "direct_imports": [
+            "bcrypt.dll",
+            "flowbridge_ffi.dll",
+            "gdi32.dll",
+            "iphlpapi.dll",
+            "kernel32.dll",
+            "ntdll.dll",
+            "user32.dll",
+            "ws2_32.dll"
+          ],
+          "direct_or_delay_msvc_runtime_imports": [],
+          "embedded_certificate_table_present": false,
+          "machine": "0x8664",
+          "recursive_or_dynamic_loads_inspected": false,
+          "sha256": "d41905fdcb2fc5f77e042d61c9aac5d640b23ca60ea0cf0965a4567dc9b105ff"
+        }
+      },
+      "schema": "flowbridge-frozen-beta3-static-inventory-v1",
+      "source_sha": "c6ead0f31de4c118453913d733f537ba421af616",
+      "source_tree_sha": "19df7a94071f38be6b8aa3530e1ded7a954a02a8",
+      "status": "TECHNICAL_STATIC_INVENTORY_COMPLETE",
+      "win10_accessed": false
+    },
+    "duplicates_observed": {
+      "flowbridge-cli.exe": {
+        "descriptors": 6,
+        "unique_modules": 5
+      },
+      "flowbridge_ffi.dll": {
+        "descriptors": 9,
+        "unique_modules": 7
+      }
+    },
+    "independent_focused_tests_passed": 20
+  }
+}

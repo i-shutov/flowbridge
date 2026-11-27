@@ -1,0 +1,229 @@
+{
+  "schema": "flowbridge-qa-pr92-ec0-ci-observation-v1",
+  "pr": 92,
+  "head_sha": "ec0a8ebb649f1b8692726e276b632bf500b31ece",
+  "checked_merge_sha": "ad217e7a7e6c5da6390c4ce4b04063fb92e1b2d5",
+  "total_jobs": 13,
+  "runs": {
+    "rust_native": {
+      "id": 46000881144,
+      "name": "rust-and-native-applications",
+      "head_sha": "ec0a8ebb649f1b8692726e276b632bf500b31ece",
+      "event": "pull_request",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/i-shutov/flowbridge/actions/runs/46000881144",
+      "artifact_count": 0,
+      "jobs": [
+        {
+          "id": 140511902377,
+          "name": "windows-application",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/46000881144/job/140511902377"
+        },
+        {
+          "id": 140511902884,
+          "name": "rust (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/46000881144/job/140511902884"
+        },
+        {
+          "id": 140511902978,
+          "name": "rust (windows-2025)",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/46000881144/job/140511902978"
+        },
+        {
+          "id": 140511903000,
+          "name": "rust (macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/46000881144/job/140511903000"
+        },
+        {
+          "id": 140511903027,
+          "name": "macos-application",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/46000881144/job/140511903027"
+        }
+      ]
+    },
+    "ssh": {
+      "id": 46000881128,
+      "name": "Real Windows OpenSSH acceptance",
+      "head_sha": "ec0a8ebb649f1b8692726e276b632bf500b31ece",
+      "event": "pull_request",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/i-shutov/flowbridge/actions/runs/46000881128",
+      "artifact_count": 0,
+      "jobs": [
+        {
+          "id": 140511902986,
+          "name": "windows-openssh",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/46000881128/job/140511902986"
+        }
+      ]
+    },
+    "wdk": {
+      "id": 46000881125,
+      "name": "windows-wfp-driver",
+      "head_sha": "ec0a8ebb649f1b8692726e276b632bf500b31ece",
+      "event": "pull_request",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/i-shutov/flowbridge/actions/runs/46000881125",
+      "artifact_count": 0,
+      "jobs": [
+        {
+          "id": 140511902823,
+          "name": "wdk-build",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/46000881125/job/140511902823"
+        }
+      ]
+    },
+    "bfe": {
+      "id": 46000881173,
+      "name": "Windows real WFP application scope",
+      "head_sha": "ec0a8ebb649f1b8692726e276b632bf500b31ece",
+      "event": "pull_request",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/i-shutov/flowbridge/actions/runs/46000881173",
+      "artifact_count": 0,
+      "jobs": [
+        {
+          "id": 140511902908,
+          "name": "actual-bfe-scope",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/46000881173/job/140511902908"
+        }
+      ]
+    },
+    "dns": {
+      "id": 46000881111,
+      "name": "Native DNS vertical",
+      "head_sha": "ec0a8ebb649f1b8692726e276b632bf500b31ece",
+      "event": "pull_request",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/i-shutov/flowbridge/actions/runs/46000881111",
+      "artifact_count": 0,
+      "jobs": [
+        {
+          "id": 140511902515,
+          "name": "dns (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/46000881111/job/140511902515"
+        },
+        {
+          "id": 140511902892,
+          "name": "dns (macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/46000881111/job/140511902892"
+        },
+        {
+          "id": 140511903061,
+          "name": "dns (windows-2025)",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/46000881111/job/140511903061"
+        }
+      ]
+    },
+    "staging": {
+      "id": 46000881212,
+      "name": "Internal beta3 LOCAL source staging contract — no release artifacts",
+      "head_sha": "ec0a8ebb649f1b8692726e276b632bf500b31ece",
+      "event": "pull_request",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/i-shutov/flowbridge/actions/runs/46000881212",
+      "artifact_count": 0,
+      "jobs": [
+        {
+          "id": 140511903486,
+          "name": "Pure version and offline Git isolation tests (windows-2025)",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/46000881212/job/140511903486"
+        },
+        {
+          "id": 140511904048,
+          "name": "Pure version and offline Git isolation tests (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success",
+          "failed_steps": [],
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/46000881212/job/140511904048"
+        }
+      ]
+    }
+  },
+  "macos_rust": {
+    "job_id": 140511903000,
+    "failed": 0,
+    "flowbridge_tunnel_passed": 20,
+    "test_cases": [
+      "overload_is_reported_coalesced_and_recovers_without_restarting",
+      "stop_does_not_wait_for_a_descendant_holding_stderr_open"
+    ]
+  },
+  "windows_real_ssh": {
+    "job_id": 140511902986,
+    "platform": "Windows-2025Server-10.0.26100-SP0",
+    "managed": {
+      "passed": true,
+      "held": 128,
+      "churn": 10000,
+      "rejected": 1152
+    },
+    "owned_pool": {
+      "passed": true,
+      "independent_children": 4
+    },
+    "churn_failed": 0,
+    "raw_historical_baseline": {
+      "selected_held_ceiling": 512,
+      "minimum_required_held": 128,
+      "peak_held": 246,
+      "recovery_successes": 16,
+      "capacity_baseline_verified": true,
+      "raw_512_proved": false
+    }
+  },
+  "scope": {
+    "product_candidate_source_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+    "candidate_validation_scope": "qa_source_and_hosted_tests",
+    "product_acceptance": false,
+    "native_win10_accessed": false
+  }
+}
