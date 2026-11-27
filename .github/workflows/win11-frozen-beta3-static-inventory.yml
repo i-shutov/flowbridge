@@ -35,8 +35,8 @@ jobs:
             import tempfile
             import urllib.request
 
-            PROBE_SOURCE = '5728cc9786243dedf9c34932768dae0d77e140ff'
-            PROBE_SHA256 = '86b7c02c6b13e7241afe811f3e71e279ded7cb81a9ac8b7779015e96e57bb59b'
+            PROBE_SOURCE = '8355c01b9d8c3d444f371e4b7b6fcb317b65bdb7'
+            PROBE_SHA256 = '2c5846414bd10e9bbab1f3e8cb6e89ae4c03a6b6fd68f42aed8713b2a34fa0c1'
             HOST = 'VM-326272'
             PHASE = 'HOST_GUARD'
 
