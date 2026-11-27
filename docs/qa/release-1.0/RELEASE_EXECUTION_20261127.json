@@ -11,7 +11,7 @@
   "product_release_accepted": false,
   "publisher_release_approved": false,
   "release_tag_created": false,
-  "installer_built": false,
+  "installer_built": true,
   "win10_beta3_native_accepted": false,
   "win11_product_accepted": false,
   "wfp_g2_accepted": false,
@@ -54,13 +54,14 @@
     "ci_observation": "evidence/20261127/ci-observation.json"
   },
   "main": {
-    "sha": "ee218fcffe9c7d2d69821824ea693698bc382098",
+    "sha": "ad3b7b2576b060345aa6892498f0db0897228666",
     "runner_smoke_pr": 90,
     "runner_smoke_merge": "40f8b66f356dbe26b75458b6508528c36d1eb0f8",
     "hosted_ci": {
-      "run_id": 45982172245,
-      "source_sha": "f1d1e71e703caf805cfc7e492f908db9e0d0c4e4",
+      "run_id": 45988114739,
+      "source_sha": "ad3b7b2576b060345aa6892498f0db0897228666",
       "conclusion": "success",
+      "attempt": 1,
       "jobs_passed": 5,
       "artifacts": 0
     },
@@ -81,6 +82,23 @@
       "artifact_count": 0,
       "previous_run_id": 45981565644,
       "previous_failure": "Default powershell shell dot-sourced a .ps1 while execution policy forbade script files"
+    },
+    "registered_runners_observed": {
+      "method": "authenticated GitHub repository Settings > Actions > Runners",
+      "date": "2026-11-27",
+      "runners": [
+        {
+          "name": "win11-flowbridge",
+          "labels": [
+            "self-hosted",
+            "Windows",
+            "X64",
+            "win11-flowbridge"
+          ],
+          "status": "Active"
+        }
+      ],
+      "native_win10_runner_present": false
     }
   },
   "local_source_validation": {
@@ -133,29 +151,92 @@
     },
     "native_workflow": {
       "path": ".github/workflows/win11-private-beta3-build.yml",
-      "source_sha": "ee218fcffe9c7d2d69821824ea693698bc382098",
-      "workflow_sha256": "bfe32434724d1081b037e623f8271df79f50df8256a7c84c45861565ff8da3ca",
-      "run_id": 45984099025,
-      "job_id": 140455165164,
-      "conclusion": "failure",
-      "gate_status": "BLOCKED_PREREQUISITES",
-      "reason": "PYTHON_3_13_OR_LATER_REQUIRED",
+      "source_sha": "7d6597eb738d16839ff7a969c5ff6644194df975",
+      "workflow_sha256": "9682590ac543cbb73629ff80321064dbb9553ac85737b6c462dbca8796f0c3a6",
+      "run_id": 45986630920,
+      "job_id": 140463855261,
+      "conclusion": "success",
+      "gate_status": "PRIVATE_LOCAL_INSTALLER_BUILT_QA_NOT_ACCEPTED",
+      "reason": null,
       "found_standard_installations": [
         "git.exe",
         "cmake.exe",
         "msvc-x64",
         "windows-sdk-headers"
       ],
-      "missing_standard_installations": [
+      "artifact_count": 0,
+      "installer_built": true,
+      "installed_product": false,
+      "preparation_status": "PASS",
+      "previous_attempts": [
+        {
+          "source_sha": "ee218fcffe9c7d2d69821824ea693698bc382098",
+          "workflow_sha256": "bfe32434724d1081b037e623f8271df79f50df8256a7c84c45861565ff8da3ca",
+          "run_id": 45984099025,
+          "job_id": 140455165164,
+          "conclusion": "failure",
+          "gate_status": "BLOCKED_PREREQUISITES",
+          "reason": "PYTHON_3_13_OR_LATER_REQUIRED",
+          "artifact_count": 0,
+          "installer_built": false
+        },
+        {
+          "source_sha": "cc3ed937b5be14c601742d640a65aee580de61f6",
+          "workflow_sha256": "790c281a352d734078b83787b39ecd29fcd5ae691d7e16f54a77fb17d5d3e82f",
+          "run_id": 45985845724,
+          "job_id": 140461138748,
+          "conclusion": "failure",
+          "gate_status": "BLOCKED",
+          "reason": "PYTHON_REGISTRATION_DOWNLOAD: curl native_exit=2",
+          "artifact_count": 0,
+          "installer_built": false
+        }
+      ],
+      "isolated_toolchain": {
+        "rustup": "1.29.3",
+        "cargo_sha256": "f381bae27c59588eacf69208e115b2c001a2998afed83a2e9084ea93620737b1",
+        "python": "3.13.17",
+        "rustup_sha256": "38027d51d69a5d05493627a0634dbea52d6cd793c8f072d2373d3f4163eec7db",
+        "status": "READY",
+        "rust": "1.100.0",
+        "python_sha512": "0e667928bb4f19573c6cd88f65133b2e07b243a5c716f335b56aa66bb9ec6f82328256d22c3a29e23a0276ac5c6a6d786211feab524890ad1e56629196c6b29c",
+        "rustc_sha256": "d4f8a0283de2dba0dc458cd13c333337d2b76c3649eb39e91c4acce618e661a1"
+      },
+      "missing_tools": [],
+      "first_preflight_missing_standard_installations": [
         "python.exe",
         "cargo.exe",
         "rustc.exe",
         "nsis-3.13.zip"
       ],
-      "artifact_count": 0,
-      "installer_built": false,
-      "installed_product": false,
-      "provisioning_next": "Isolated official Python and pinned Rust; reuse existing Git/MSVC/SDK/CMake"
+      "evidence": "evidence/20261127/native-beta3-build.json",
+      "result": {
+        "cli_sha256": "10182b2d58d9d0728f301afe3deb21be33b7aff9b99c627f4f37507bec7b70ab",
+        "cmake_version": "4.1",
+        "driver_included": false,
+        "ffi_sha256": "cb933d0a0c312932d80c60ece25549a749f9664807e225dd339da2e57dad5b4e",
+        "gui_sha256": "8137a43a27eae62ba3988baeb5dffde0ee03fa983c96e8440480d77b1072b4d0",
+        "installer_built": true,
+        "installer_sha256": "6408c0bf595b0ae61a4fc05db17421dc4b03dcda241f3c1f1f997ab6583eec5b",
+        "missing_tools": [],
+        "new_private_git_commit": "c6ead0f31de4c118453913d733f537ba421af616",
+        "new_private_git_tree": "19df7a94071f38be6b8aa3530e1ded7a954a02a8",
+        "package_manifest_sha256": "f6a94e5e8a87e571d63604ff3b2e417bf21e2e2758343171c587a43717318c99",
+        "phase": "PACKAGE_EVIDENCE",
+        "product_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+        "qa_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
+        "rust_version": "1.100.0",
+        "schema": "flowbridge-private-beta3-runner-v1",
+        "staged_payload_allowlist_verified": true,
+        "status": "PRIVATE_LOCAL_INSTALLER_BUILT_QA_NOT_ACCEPTED",
+        "windows_build": 22631
+      },
+      "curl_compressed_option_exit": 2
+    },
+    "w2b2_private_producer_guard": {
+      "workflow": ".github/workflows/flowbridge-win10-w2b2-exact-gui-installer.yml",
+      "job": "exact-beta-gui-installer",
+      "reason": "Skip artifact producer and needs-bound consumer in a public repository; prevent a download of the deliberately absent artifact on future base-branch push"
     }
   },
   "historical_beta2": {
@@ -260,18 +341,18 @@
     },
     {
       "id": "R5",
-      "status": "BLOCKED_PREREQUISITES_PREPARING_LOCAL_TOOLS",
-      "result": "Native preflight found Git/CMake/MSVC/SDK outside service PATH; Python 3.13+ and Rust missing. Installer not built."
+      "status": "PASS",
+      "result": "Pinned private beta3 installer built on verified native Win11 with official Python/Rust/NSIS and existing MSVC/SDK; no installation or upload"
     },
     {
       "id": "R6",
-      "status": "NOT_RUN",
-      "result": "No new installer exists"
+      "status": "PASS",
+      "result": "Actual installer, original manifest and all 13 staged payload files rehashed; source tree matches validated stage; GUI/CLI/FFI pinned, driver absent"
     },
     {
       "id": "R7",
-      "status": "NOT_RUN",
-      "result": "Win10 beta3 original-byte native acceptance pending"
+      "status": "BLOCKED_NATIVE_WIN10_ACCESS",
+      "result": "Historical route is local Codex under existing Admin on VM-910136 interactive RDP; no connected Win10 runner/session available; exact beta3 bytes still required"
     },
     {
       "id": "R8",
@@ -286,12 +367,59 @@
   ],
   "access_blockers": [
     "GitHub connector exposes no workflow dispatch, runner inventory or artifact deletion; signed-in browser is available for these operations",
-    "Irreversible artifact cleanup awaits confirmation; no confirmation was supplied in the request form"
+    "Irreversible artifact cleanup awaits confirmation; no confirmation was supplied in the request form",
+    "Native Win10 VM-910136 interactive Codex/RDP session is not connected; authenticated runner inventory shows only win11-flowbridge"
   ],
   "next_actions": [
-    "Prepare isolated official Python 3.13+ and Rust 1.100.0; reuse discovered Git/MSVC/SDK/CMake, then rerun native private build",
-    "Build pinned private beta3 on the verified client host once prerequisites are available",
+    "Transfer the ready 2057147-byte private QA ZIP to VM-910136 through the owner-approved private channel; verify its published SHA before extraction",
     "Remove exactly the 11 accidental artifacts after confirmation",
-    "Collect exact-byte installer provenance and native Win10 evidence"
-  ]
+    "Transfer the private kit to the existing Win10 Codex session; execute native lifecycle/GUI/SSH and independently review original-byte A5/A6 evidence",
+    "Present exact candidate evidence for owner internal-pilot A7 decision"
+  ],
+  "candidate": {
+    "version": "0.3.0-beta.3",
+    "source_commit": "c6ead0f31de4c118453913d733f537ba421af616",
+    "source_tree": "19df7a94071f38be6b8aa3530e1ded7a954a02a8",
+    "original_product_commit": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+    "installer_sha256": "6408c0bf595b0ae61a4fc05db17421dc4b03dcda241f3c1f1f997ab6583eec5b",
+    "gui_sha256": "8137a43a27eae62ba3988baeb5dffde0ee03fa983c96e8440480d77b1072b4d0",
+    "cli_sha256": "10182b2d58d9d0728f301afe3deb21be33b7aff9b99c627f4f37507bec7b70ab",
+    "ffi_sha256": "cb933d0a0c312932d80c60ece25549a749f9664807e225dd339da2e57dad5b4e",
+    "manifest_sha256": "f6a94e5e8a87e571d63604ff3b2e417bf21e2e2758343171c587a43717318c99",
+    "payload_files": 13,
+    "driver_included": false,
+    "installed": false,
+    "signed": false,
+    "status": "PRIVATE_LOCAL_INSTALLER_BUILT_QA_NOT_ACCEPTED",
+    "evidence": "evidence/20261127/native-beta3-build.json",
+    "qa_harness_sha256": "d41905fdcb2fc5f77e042d61c9aac5d640b23ca60ea0cf0965a4567dc9b105ff",
+    "acceptance_tool_sha256": "faf62aabeea95ef316f5c0935177a65820ea4679ac94afe8b5461138dd17a33c",
+    "private_kit_sha256": "60e13a2c9d35e441469c0b6e95b5115fa0d4e3212be8fd2f072e2c5d5baba085"
+  },
+  "private_qa_kit": {
+    "workflow_source_sha": "ad3b7b2576b060345aa6892498f0db0897228666",
+    "workflow_sha256": "3b14bb743f3acb8487b2c961e859895053e9a99e786f00460aaa7d2d200a6506",
+    "run_id": 45988214013,
+    "job_id": 140469137208,
+    "artifact_count": 0,
+    "result": {
+      "acceptance_tool_bytes": 25507,
+      "acceptance_tool_sha256": "faf62aabeea95ef316f5c0935177a65820ea4679ac94afe8b5461138dd17a33c",
+      "candidate_index_sha256": "dbc6b7b8150378e3ca44747ed9344a8a04efc2618196b9e27da4d72a045f5348",
+      "harness_bytes": 573440,
+      "harness_sha256": "d41905fdcb2fc5f77e042d61c9aac5d640b23ca60ea0cf0965a4567dc9b105ff",
+      "installer_sha256": "6408c0bf595b0ae61a4fc05db17421dc4b03dcda241f3c1f1f997ab6583eec5b",
+      "kit_bytes": 2057147,
+      "kit_sha256": "60e13a2c9d35e441469c0b6e95b5115fa0d4e3212be8fd2f072e2c5d5baba085",
+      "manifest_sha256": "f6a94e5e8a87e571d63604ff3b2e417bf21e2e2758343171c587a43717318c99",
+      "native_build_run_attempt": 1,
+      "native_build_run_id": "45986630920",
+      "original_product_source_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+      "private_source_commit": "c6ead0f31de4c118453913d733f537ba421af616",
+      "private_source_tree": "19df7a94071f38be6b8aa3530e1ded7a954a02a8",
+      "status": "PRIVATE_KIT_READY_WIN10_NOT_RUN"
+    },
+    "evidence": "evidence/20261127/private-beta3-kit.json",
+    "win10_handoff": "checkpoints/WIN10_BETA3_NATIVE_ACCEPTANCE_HANDOFF_20261127.md"
+  }
 }

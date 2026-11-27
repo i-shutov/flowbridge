@@ -6,7 +6,8 @@
   "notes": [
     "Run jobs queried from the latest attempt; historical failures are not erased by later success.",
     "QA inherited workflows test the QA branch; only the dedicated staging workflow checks the separately pinned product source.",
-    "No beta.3 installer is produced by hosted staging; legacy CI may build temporary test packages without uploading."
+    "No beta.3 installer is produced by hosted staging; legacy CI may build temporary test packages without uploading.",
+    "Native beta3 R5/R6 evidence is recorded separately in native-beta3-build.json; hosted main builds are not the private beta3 candidate."
   ],
   "runs": [
     {
@@ -367,6 +368,182 @@
           "conclusion": "success",
           "head_sha": "86aace2a4696e9717bc2b4423b447a760946aa15",
           "url": "https://github.com/i-shutov/flowbridge/actions/runs/45977460747/job/140432675501"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 45985773997,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45985773997",
+      "head_sha": "cc3ed937b5be14c601742d640a65aee580de61f6",
+      "jobs": [
+        {
+          "id": 140460893074,
+          "name": "macos-application",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "cc3ed937b5be14c601742d640a65aee580de61f6",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45985773997/job/140460893074"
+        },
+        {
+          "id": 140460893366,
+          "name": "rust (macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "cc3ed937b5be14c601742d640a65aee580de61f6",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45985773997/job/140460893366"
+        },
+        {
+          "id": 140460893620,
+          "name": "windows-application",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "cc3ed937b5be14c601742d640a65aee580de61f6",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45985773997/job/140460893620"
+        },
+        {
+          "id": 140460893801,
+          "name": "rust (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "cc3ed937b5be14c601742d640a65aee580de61f6",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45985773997/job/140460893801"
+        },
+        {
+          "id": 140460893934,
+          "name": "rust (windows-2025)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "cc3ed937b5be14c601742d640a65aee580de61f6",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45985773997/job/140460893934"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 45986544080,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45986544080",
+      "head_sha": "7d6597eb738d16839ff7a969c5ff6644194df975",
+      "jobs": [
+        {
+          "id": 140463538801,
+          "name": "windows-application",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "7d6597eb738d16839ff7a969c5ff6644194df975",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45986544080/job/140463538801"
+        },
+        {
+          "id": 140463539048,
+          "name": "rust (windows-2025)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "7d6597eb738d16839ff7a969c5ff6644194df975",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45986544080/job/140463539048"
+        },
+        {
+          "id": 140463539165,
+          "name": "macos-application",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "7d6597eb738d16839ff7a969c5ff6644194df975",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45986544080/job/140463539165"
+        },
+        {
+          "id": 140463539216,
+          "name": "rust (macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "7d6597eb738d16839ff7a969c5ff6644194df975",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45986544080/job/140463539216"
+        },
+        {
+          "id": 140463539234,
+          "name": "rust (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "7d6597eb738d16839ff7a969c5ff6644194df975",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45986544080/job/140463539234"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 45986630920,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45986630920",
+      "head_sha": "7d6597eb738d16839ff7a969c5ff6644194df975",
+      "jobs": [
+        {
+          "id": 140463855261,
+          "name": "private-beta3",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "7d6597eb738d16839ff7a969c5ff6644194df975",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45986630920/job/140463855261"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 45988214013,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45988214013",
+      "head_sha": "ad3b7b2576b060345aa6892498f0db0897228666",
+      "jobs": [
+        {
+          "id": 140469137208,
+          "name": "private-kit",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "ad3b7b2576b060345aa6892498f0db0897228666",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45988214013/job/140469137208"
+        }
+      ],
+      "artifact_count": 0
+    },
+    {
+      "run_id": 45988114739,
+      "url": "https://github.com/i-shutov/flowbridge/actions/runs/45988114739",
+      "head_sha": "ad3b7b2576b060345aa6892498f0db0897228666",
+      "jobs": [
+        {
+          "id": 140468798566,
+          "name": "windows-application",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "ad3b7b2576b060345aa6892498f0db0897228666",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45988114739/job/140468798566"
+        },
+        {
+          "id": 140468798829,
+          "name": "rust (windows-2025)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "ad3b7b2576b060345aa6892498f0db0897228666",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45988114739/job/140468798829"
+        },
+        {
+          "id": 140468798891,
+          "name": "rust (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "ad3b7b2576b060345aa6892498f0db0897228666",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45988114739/job/140468798891"
+        },
+        {
+          "id": 140468799004,
+          "name": "rust (macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "ad3b7b2576b060345aa6892498f0db0897228666",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45988114739/job/140468799004"
+        },
+        {
+          "id": 140468799232,
+          "name": "macos-application",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "ad3b7b2576b060345aa6892498f0db0897228666",
+          "url": "https://github.com/i-shutov/flowbridge/actions/runs/45988114739/job/140468799232"
         }
       ],
       "artifact_count": 0

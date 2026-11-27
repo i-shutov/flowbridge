@@ -40,12 +40,37 @@ Win10 Pro 22H2 x64 с `verified=false`.
 перезаписываются. Публичная сводка содержит ограниченные статусы и хеши,
 пакет не загружается в GitHub Actions.
 
-[Первая попытка](https://github.com/i-shutov/flowbridge/actions/runs/45984099025)
-обнаружила Git, CMake, MSVC x64 и Windows SDK вне service PATH, но остановилась
-с `PYTHON_3_13_OR_LATER_REQUIRED`. Rust/Cargo также не найдены. Для продолжения
-нужны локальный Python 3.13+ и закреплённый Rust; уже найденные инструменты
-переустанавливать не требуется. Проверка компиляции и сборка пакета ещё не
-проходили. Действующая PowerShell Execution Policy остаётся `Restricted`.
+## Фактический результат
+
+[Сборка #3](https://github.com/i-shutov/flowbridge/actions/runs/45986630920) на
+`7d6597eb738d16839ff7a969c5ff6644194df975` завершена PASS 27 ноября 2026, 14:01 МСК.
+Python 3.13.17 и Rust 1.100.0/rustup 1.29.3 подготовлены в отдельном каталоге
+`C:\FlowBridge\private-candidates\toolchain-45986630920-1` из официальных пакетов
+с проверкой SHA; Rust содержит необходимые для упаковки лицензии. Изменения PATH
+ограничены заданием. Действующая PowerShell Execution Policy остаётся `Restricted`.
+
+Оригинальный установщик:
+`C:\FlowBridge\private-candidates\run-45986630920-1\candidate\artifacts\FlowBridge-0.3.0-beta.3-windows-x64-setup.exe`.
+SHA-256: `6408c0bf595b0ae61a4fc05db17421dc4b03dcda241f3c1f1f997ab6583eec5b`.
+Standalone source commit — `c6ead0f31de4c118453913d733f537ba421af616`, tree —
+`19df7a94071f38be6b8aa3530e1ded7a954a02a8`. Это новый source cut из закреплённого
+product `44f1fc0`, а не изменение исторической beta.2.
+
+Workflow повторно сверил оригинальный installer, manifest и все 13 разрешённых
+файлов payload, включая GUI/CLI/FFI. Полные результаты и хеши:
+[нативный build evidence](../evidence/20261127/native-beta3-build.json).
+Установщик не запускался. Публичных artifacts — 0; product acceptance не присвоена.
+
+Готовый комплект передачи: `C:\FlowBridge\private-candidates\kit-45988214013-1\FlowBridge-0.3.0-beta.3-Win10-private-QA.zip`.
+SHA-256: `60e13a2c9d35e441469c0b6e95b5115fa0d4e3212be8fd2f072e2c5d5baba085`.
+[Упаковка PASS](https://github.com/i-shutov/flowbridge/actions/runs/45988214013),
+[машинный результат](../evidence/20261127/private-beta3-kit.json). Он содержит
+исходные байты этого build; заново собирать installer для R7 не требуется.
+
+Предыдущие попытки сохранены в журнале истории: [#1](https://github.com/i-shutov/flowbridge/actions/runs/45984099025)
+нашла Git/CMake/MSVC/SDK, но не Python/Rust; [#2](https://github.com/i-shutov/flowbridge/actions/runs/45985845724)
+остановилась на `curl --compressed` (код 2). В #3 локальная проба подтвердила код 2,
+загрузка без этого флага и ограниченная gzip-распаковка NuGet JSON прошли.
 
 ## Подготовка и сборка
 
@@ -96,7 +121,8 @@ BUILD-METADATA, SHA GUI/CLI/FFI/harness, локальный build log и QA-tool
 
 ## Что ещё не выполнено
 
-Self-hosted smoke завершён PASS: Windows 11 Pro build 22631, native x64,
-точный runner/host/account и повышенный token. Native build preflight выполнен
-до проверки наличия Python; запуск NSIS и сборка beta.3 EXE пока не выполнялись.
-Наличие runbook и успешный smoke не означают продуктовую приёмку.
+R5 и R6 выполнены на исходных байтах. Нативная Win10 A3 с install/upgrade/uninstall,
+интерактивным GUI и реальным managed SSH ещё не запускалась. Win11 не получает
+продуктовую приёмку автоматически. Приватный комплект готов; далее —
+[задание локальному Codex на Win10](WIN10_BETA3_NATIVE_ACCEPTANCE_HANDOFF_20261127.md),
+независимые A5/A6 и решение о внутреннем пилоте A7.

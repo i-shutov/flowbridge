@@ -53,9 +53,9 @@ Beta.2 не содержит последующих исправлений SSH. 
 | R2 | Закрыть публичную выгрузку CI; удалить артефакты первого infrastructure run | Guard DONE; удаление ожидает подтверждения |
 | R3 | SSH source: приватность журнала, подписанный клиент, однозначный путь проверки/запуска, Windows/Linux CI | Targeted 3/3, Rust/native 5/5; raw512 и G2 остаются FAIL/UNPROVED |
 | R4 | Beta.3 без remotes: девять изменяемых файлов, точные blobs/modes и Cargo.lock | Локальные 118 тестов PASS; staging CI 2/2 PASS |
-| R5 | Проверить Win11 build host и NSIS ZIP по SHA-256; собрать private candidate без установки | Native preflight выполнен; требуется локальный Python/Rust, beta.3 EXE ещё не собран |
-| R6 | Зафиксировать source/tree и SHA-256 installer/GUI/CLI/FFI/manifest; отсутствие драйвера | Ожидает R5 |
-| R7 | Win10 A3 на новых байтах: жизненный цикл 6/6, GUI, SSH, Stop, восстановление | Ожидает R6; beta.2 PASS не наследуется |
+| R5 | Проверить Win11 build host и NSIS ZIP по SHA-256; собрать private candidate без установки | PASS; оригинальный beta.3 EXE собран, не установлен, uploads 0 |
+| R6 | Зафиксировать source/tree и SHA-256 installer/GUI/CLI/FFI/manifest; отсутствие драйвера | PASS; исходное дерево и все 13 файлов payload проверены |
+| R7 | Win10 A3 на новых байтах: жизненный цикл 6/6, GUI, SSH, Stop, восстановление | После R6; нет подключённой Win10-сессии, beta.2 PASS не наследуется |
 | R8 | Проверить оригиналы и закрыть сторонние runtime, privacy/security A5/A6 | OPEN |
 | R9 | Предъявить пакет, ограничения и доказательства для решения о внутреннем пилоте A7 | После R7/R8; публикация пока не разрешена |
 
@@ -73,17 +73,21 @@ Beta.2 не содержит последующих исправлений SSH. 
 CMake, MSVC/MSBuild и NSIS. Сам факт нахождения Python ещё не проверяет его
 версию и исключение Store alias. [Native preflight #45984099025](https://github.com/i-shutov/flowbridge/actions/runs/45984099025)
 нашёл Git, CMake, MSVC x64 и Windows SDK в обычных каталогах установки.
-Python 3.13+ и Rust/Cargo не найдены; сборка остановлена до создания кандидата
-с `PYTHON_3_13_OR_LATER_REQUIRED`. Следующий шаг — изолированные официальные
-Python/Rust в локальном каталоге и повторная проверка компилятора/SDK.
+В первой попытке Python 3.13+ и Rust/Cargo не найдены; сборка остановилась до
+создания кандидата с `PYTHON_3_13_OR_LATER_REQUIRED`. В R5 эти зависимости
+подготовлены из официальных пакетов в отдельном локальном каталоге; пробная
+компиляция с MSVC/SDK и полный beta.3 build завершились успешно.
 
 В `main` добавлен [ручной native build workflow](https://github.com/i-shutov/flowbridge/actions/workflows/win11-private-beta3-build.yml),
-commit `ee218fcffe9c7d2d69821824ea693698bc382098`. Он использует закреплённые QA
+первый commit `ee218fcffe9c7d2d69821824ea693698bc382098`, успешная версия
+`7d6597eb738d16839ff7a969c5ff6644194df975`. Он использует закреплённые QA
 и product SHA, сохраняет результат вне Actions workspace в новом каталоге
 с отдельными ACL и не выгружает пакет. Предварительный поиск инструментов
-не является доказательством успешной компиляции: её проверяет следующий этап.
+не является доказательством компиляции сам по себе; фактические результаты R5/R6
+приведены ниже.
 
-Workflow не делает checkout и не запускает код PR. Smoke доказывает работу
+Smoke workflow не делает checkout и не запускает код PR. Отдельная сборка
+получает закреплённые product/QA SHA. Smoke доказывает работу
 службы и окружения; интерактивный GUI проверяется локальным Codex в пользовательской
 сессии. Успех службы в Session 0 не является GUI-приёмкой.
 
@@ -135,8 +139,30 @@ Source Rust/native прошёл 5/5 после повторного запуск
   SHA-256 и Windows client x64. NSIS извлекается отдельно, глобальный PATH не
   меняется. Windows Server не засчитывается как client acceptance.
 
-Win11 build даёт build evidence. Поле `new_win10_owner_qa_accepted` остаётся
-`false` до реальных Win10 тестов. Новые исполняемые файлы не выгружаются публично.
+**Нативная сборка завершена 27 ноября, 14:01 МСК.** [Запуск на Win11](https://github.com/i-shutov/flowbridge/actions/runs/45986630920)
+прошёл; GitHub Actions artifacts — 0. Python 3.13.17, Rust 1.100.0 и официальный
+NSIS 3.13 проверены перед использованием; использованы установленные MSVC/SDK/CMake.
+Первая попытка подготовки инструментов выявила неподдерживаемый `curl --compressed`
+(exit 2); загрузка теперь использует обычные байты с ограниченной gzip-распаковкой JSON.
+
+- Standalone beta.3 commit: `c6ead0f31de4c118453913d733f537ba421af616`.
+- Tree: `19df7a94071f38be6b8aa3530e1ded7a954a02a8`, совпадает с проверенным staging.
+- Installer SHA-256: `6408c0bf595b0ae61a4fc05db17421dc4b03dcda241f3c1f1f997ab6583eec5b`.
+- Исходный manifest, GUI/CLI/FFI и все 13 файлов payload повторно проверены;
+  драйвер, capture helper и служба в payload отсутствуют.
+
+Полные хеши и результат — в [native build evidence](qa/release-1.0/evidence/20261127/native-beta3-build.json).
+Установщик и исходные журналы остаются на Win11 в приватном каталоге сборки.
+
+**Комплект для передачи готов.** [Упаковка](https://github.com/i-shutov/flowbridge/actions/runs/45988214013)
+создала приватный ZIP размером 2 057 147 байт: исходные installer/manifest/harness,
+проверочный скрипт, candidate index и контрольные суммы. SHA-256 архива:
+`60e13a2c9d35e441469c0b6e95b5115fa0d4e3212be8fd2f072e2c5d5baba085`.
+[Задание локальному Codex на Win10](qa/release-1.0/checkpoints/WIN10_BETA3_NATIVE_ACCEPTANCE_HANDOFF_20261127.md)
+содержит все ожидаемые хеши и процедуру R7.
+
+Win11 build даёт build evidence. Win10 A3, независимые A5/A6 и внутренний пилот A7
+остаются открыты. Установщик не запускался; новые файлы не выгружались публично.
 
 ## 4. Приёмка beta.3 на Win10
 
@@ -171,7 +197,10 @@ IPv4/IPv6 TCP, no-DIRECT при отказах, DNS/UDP/QUIC политика, �
 
 ## 6. Точка продолжения
 
-Source/tooling CI и R1 завершены в указанном объёме. Продолжить R5 на реальной
-Win11 и очистку R2 после подтверждения. После оригинального установщика — R6–R9.
+Source/tooling CI, R1, R4, R5 и R6 завершены в указанном объёме. Следующие шаги —
+передача готового приватного комплекта, R7–R9 и очистка R2 после подтверждения. В проверенном списке
+репозитория зарегистрирован только Win11 runner. Для R7 остаётся исторический
+путь через локальный Codex в интерактивной сессии существующего Admin на VM-910136;
+доступа к этой Win10-сессии из текущей среды нет.
 Фиксировать source/tree, host OS, команду, exit status и оригиналы evidence.
 `NOT_RUN`, `BLOCKED_AUTH`, `FAIL` и `PASS` не взаимозаменяемы.
