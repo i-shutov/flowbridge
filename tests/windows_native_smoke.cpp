@@ -717,6 +717,25 @@ static void nativeOwnedPoolLifecycleTest() {
                 need(item["admission"]["limits"]["max_flows"]==64,"pause changed worker budget");
         }
         const Json clear={{"endpoint",nullptr},{"ready",false},{"grace_ms",0}};
+        Socket thirdSocket,fourthSocket;
+        for(auto port:{listenOn(thirdSocket),listenOn(fourthSocket)}) {
+            const Json settings={{"host","qa.invalid"},{"user","qa"},{"local_port",port}};
+            owned.push_back(result(fb_ssh_create_json(settings.dump().c_str())).at("ssh_id").get<uint64_t>());
+        }
+        for(size_t count:{3,4}) {
+            result(fb_engine_set_upstream_gate_json(engine,clear.dump().c_str()));
+            const std::vector<uint64_t> members(owned.begin(),owned.begin()+count);
+            for(bool enabled:{false,true}) {
+                const auto request=ssh_pool_policy::ownedRequest(members,enabled);
+                result(fb_engine_sync_owned_ssh_pool_json(engine,request.dump().c_str()));
+                const auto pool=result(fb_engine_snapshot_json(engine)).at("managed_pool");
+                need(pool["workers"].size()==count,"owned GUI pool omitted workers");
+                need(pool["ready_workers"]==0,"stopped SSH falsely marked ready");
+                need(pool["aggregate_max_flows"]==(count==4?512:128),"owned GUI pool aggregate budget drifted");
+                for(const auto& item:pool["workers"])
+                    need(item["admission"]["limits"]["max_flows"]==(count==4?128:42),"owned GUI worker budget drifted");
+            }
+        }
         result(fb_engine_set_upstream_gate_json(engine,clear.dump().c_str()));
         const Json single={{"endpoint",{{"host","127.0.0.1"},{"port",first}}},
                            {"ready",false},{"grace_ms",30000}};
@@ -724,9 +743,10 @@ static void nativeOwnedPoolLifecycleTest() {
         need(result(fb_engine_snapshot_json(engine))["managed_upstream"]["limits"]["max_flows"]==128,
              "stopped pool budget not released before single-worker restart");
         result(fb_engine_set_upstream_gate_json(engine,clear.dump().c_str()));
-        auto request=ssh_pool_policy::ownedRequest(owned,false);
+        const std::vector<uint64_t> pair(owned.begin(),owned.begin()+2);
+        auto request=ssh_pool_policy::ownedRequest(pair,false);
         result(fb_engine_sync_owned_ssh_pool_json(engine,request.dump().c_str()));
-        const auto stale=owned.back();fb_ssh_destroy(stale);owned.pop_back();
+        const auto stale=owned[1];fb_ssh_destroy(stale);owned.erase(owned.begin()+1);
         char* rejected=fb_engine_sync_owned_ssh_pool_json(engine,request.dump().c_str());
         need(rejected!=nullptr,"stale response missing");
         auto failure=Json::parse(rejected);fb_string_free(rejected);
@@ -746,7 +766,7 @@ static void nativeOwnedPoolLifecycleTest() {
     need(captureAvailable(false,false,false,false,false,false,false,false),"external capture unavailable when stopped");
     need(!captureAvailable(false,true,false,true,false,false,false,false),"external capture competes with engine");
     need(!captureAvailable(true,true,false,true,false,false,false,true),"capture enabled while helper is stopping");
-    std::puts("PASS owned GUI pool: pause/resume limits, 2->1->2, stale IDs, managed capture button state");
+    std::puts("PASS owned GUI pool: pause/resume limits, 2->3->4->1->2, stale IDs, managed capture button state");
 }
 int wmain(int argc,wchar_t** argv) {
     WSADATA data{}; if(WSAStartup(MAKEWORD(2,2),&data)) return 1;
