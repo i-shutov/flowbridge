@@ -4,6 +4,7 @@
 
 #define FB_WSK_POOL_TAG 'bWbF'
 #define FB_WSK_RECORD_CAP 4096u
+#define FB_WSK_WAIT_BUDGET_100NS (3ULL * 10 * 1000 * 1000)
 
 C_ASSERT(AF_INET == FB_WSK_AF_INET);
 C_ASSERT(AF_INET6 == FB_WSK_AF_INET6);
@@ -11,11 +12,19 @@ C_ASSERT(sizeof(FbRedirectContext) == FB_REDIRECT_CONTEXT_BYTES);
 
 struct FbWskBoundConnection {
     PWSK_SOCKET accepted;
-    PIRP request;
-    KEVENT finished;
     SIZE_T records_size;
     FbRedirectContext context;
     UCHAR records[FB_WSK_RECORD_CAP];
+};
+
+struct FbWskDrain {
+    FbWskBoundConnection bound;
+    FbWskBindingLifetime* lifetime;
+    PIRP request;
+    KEVENT finished;
+    SOCKADDR_STORAGE local;
+    FbWskOperation operation;
+    BOOLEAN cancel_requested;
 };
 
 static IO_COMPLETION_ROUTINE FbWskComplete;
@@ -23,47 +32,88 @@ static NTSTATUS NTAPI FbWskComplete(PDEVICE_OBJECT device, PIRP irp, PVOID conte
 {
     UNREFERENCED_PARAMETER(device);
     UNREFERENCED_PARAMETER(irp);
+    /* The owner may reclaim or reuse the request after observing the event. */
     KeSetEvent((PKEVENT)context, IO_NO_INCREMENT, FALSE);
     return STATUS_MORE_PROCESSING_REQUIRED;
 }
 
-static void FbWskPrepare(FbWskBoundConnection* connection)
+_IRQL_requires_(PASSIVE_LEVEL)
+void FbWskInitializeBindingLifetime(FbWskBindingLifetime* lifetime)
+{
+    KeInitializeSpinLock(&lifetime->lock);
+    lifetime->gate.outstanding = 0;
+    lifetime->gate.stopping = 0;
+}
+
+_IRQL_requires_(PASSIVE_LEVEL)
+NTSTATUS FbWskStopBinding(FbWskBindingLifetime* lifetime, PULONG outstanding)
+{
+    ULONG count;
+    KIRQL irql;
+    KeAcquireSpinLock(&lifetime->lock, &irql);
+    count = FbWskGateStop(&lifetime->gate);
+    KeReleaseSpinLock(&lifetime->lock, irql);
+    *outstanding = count;
+    return count == 0 ? STATUS_SUCCESS : STATUS_DEVICE_BUSY;
+}
+
+static void FbWskLeaveBinding(FbWskBindingLifetime* lifetime)
+{
+    KIRQL irql;
+    KeAcquireSpinLock(&lifetime->lock, &irql);
+    FbWskGateLeave(&lifetime->gate);
+    KeReleaseSpinLock(&lifetime->lock, irql);
+}
+
+static void FbWskPrepare(FbWskDrain* connection, FbWskOperation operation)
 {
     IoReuseIrp(connection->request, STATUS_UNSUCCESSFUL);
     KeClearEvent(&connection->finished);
     IoSetCompletionRoutine(connection->request, FbWskComplete,
                            &connection->finished, TRUE, TRUE, TRUE);
+    connection->operation = operation;
+    connection->cancel_requested = FALSE;
 }
 
-/* WSK completes each IRP even on an immediate return. After a timed wait the
- * IRP and buffers remain owned by WSK until cancellation is fully drained. */
+/* WSK completes each IRP even on an immediate return. The timeout leaves
+ * everything the provider may still access in the cleanup handle. */
 _IRQL_requires_(PASSIVE_LEVEL)
-static BOOLEAN FbWskWait(FbWskBoundConnection* connection, BOOLEAN timed)
+static int FbWskWait(FbWskDrain* connection, ULONG64 started)
 {
     LARGE_INTEGER timeout;
-    timeout.QuadPart = -3LL * 10 * 1000 * 1000;
-    if (KeWaitForSingleObject(&connection->finished, Executive, KernelMode,
-                              FALSE, timed ? &timeout : NULL) == STATUS_TIMEOUT) {
-        (void)IoCancelIrp(connection->request);
-        (void)KeWaitForSingleObject(&connection->finished, Executive, KernelMode,
-                                    FALSE, NULL);
+    ULONG64 elapsed = KeQueryInterruptTime() - started;
+    if (elapsed >= FB_WSK_WAIT_BUDGET_100NS)
         return FALSE;
-    }
-    return TRUE;
+    timeout.QuadPart = -(LONGLONG)(FB_WSK_WAIT_BUDGET_100NS - elapsed);
+    return KeWaitForSingleObject(&connection->finished, Executive, KernelMode,
+                                 FALSE, &timeout) == STATUS_SUCCESS &&
+           KeQueryInterruptTime() - started < FB_WSK_WAIT_BUDGET_100NS;
+}
+
+static NTSTATUS FbWskCollectAcceptedObject(FbWskDrain* connection)
+{
+    NTSTATUS status = connection->request->IoStatus.Status;
+    if (status == STATUS_SUCCESS)
+        connection->bound.accepted = (PWSK_SOCKET)connection->request->IoStatus.Information;
+    connection->operation = FbWskIdle;
+    return status;
 }
 
 _IRQL_requires_(PASSIVE_LEVEL)
 static NTSTATUS FbWskQuery(
-    FbWskBoundConnection* connection, const WSK_PROVIDER_BASIC_DISPATCH* dispatch,
-    ULONG code, SIZE_T capacity, PVOID output, SIZE_T* length)
+    FbWskDrain* connection, const WSK_PROVIDER_BASIC_DISPATCH* dispatch,
+    ULONG code, SIZE_T capacity, PVOID output, SIZE_T* length, ULONG64 started)
 {
-    FbWskPrepare(connection);
-    (void)dispatch->WskControlSocket(connection->accepted, WskIoctl, code, 0,
+    if (KeQueryInterruptTime() - started >= FB_WSK_WAIT_BUDGET_100NS)
+        return STATUS_IO_TIMEOUT;
+    FbWskPrepare(connection, FbWskQuerySocket);
+    (void)dispatch->WskControlSocket(connection->bound.accepted, WskIoctl, code, 0,
                                     0, NULL, capacity, output, NULL,
                                     connection->request);
-    if (!FbWskWait(connection, TRUE))
+    if (!FbWskWait(connection, started))
         return STATUS_IO_TIMEOUT;
 
+    connection->operation = FbWskIdle;
     *length = connection->request->IoStatus.Information;
     return connection->request->IoStatus.Status;
 }
@@ -91,74 +141,145 @@ static BOOLEAN FbWskIsExpectedLoopback(const SOCKADDR_STORAGE* local,
 }
 
 _IRQL_requires_(PASSIVE_LEVEL)
-NTSTATUS FbWskReleaseBound(FbWskBoundConnection* connection)
+FbWskDrain* FbWskReleaseBound(FbWskBoundConnection** connection)
 {
-    NTSTATUS status = STATUS_SUCCESS;
-    if (connection == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
-        return STATUS_INVALID_PARAMETER;
+    FbWskDrain* drain;
+    if (connection == NULL || *connection == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+        return NULL;
+    drain = CONTAINING_RECORD(*connection, FbWskDrain, bound);
+    *connection = NULL;
+    return drain;
+}
 
-    if (connection->accepted != NULL) {
-        const WSK_PROVIDER_BASIC_DISPATCH* dispatch = connection->accepted->Dispatch;
-        FbWskPrepare(connection);
-        (void)dispatch->WskCloseSocket(connection->accepted, connection->request);
-        (void)FbWskWait(connection, FALSE);
-        status = connection->request->IoStatus.Status;
-    }
-
+static NTSTATUS FbWskFreeDrain(FbWskDrain** handle)
+{
+    FbWskDrain* connection = *handle;
+    FbWskBindingLifetime* lifetime = connection->lifetime;
+    *handle = NULL;
     IoFreeIrp(connection->request);
     RtlSecureZeroMemory(connection, sizeof(*connection));
     ExFreePoolWithTag(connection, FB_WSK_POOL_TAG);
-    return status;
+    FbWskLeaveBinding(lifetime);
+    return STATUS_SUCCESS;
+}
+
+_IRQL_requires_(PASSIVE_LEVEL)
+NTSTATUS FbWskDrainBound(FbWskDrain** handle)
+{
+    FbWskDrain* connection;
+    const WSK_PROVIDER_BASIC_DISPATCH* dispatch;
+    PWSK_SOCKET socket;
+    LARGE_INTEGER no_wait = {0};
+    int complete;
+    NTSTATUS close_status = STATUS_PENDING;
+
+    if (handle == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+        return STATUS_INVALID_PARAMETER;
+    connection = *handle;
+    if (connection == NULL)
+        return STATUS_SUCCESS;
+
+    complete = connection->operation != FbWskIdle &&
+        KeWaitForSingleObject(&connection->finished, Executive, KernelMode,
+                              FALSE, &no_wait) == STATUS_SUCCESS;
+    if (complete && connection->operation == FbWskClose)
+        close_status = connection->request->IoStatus.Status;
+    switch (FbWskNextDrainStep(connection->operation, complete, connection->cancel_requested,
+                               connection->bound.accepted != NULL,
+                               close_status == STATUS_SUCCESS)) {
+    case FbWskWaitForCompletion:
+        return STATUS_PENDING;
+    case FbWskRequestCancel:
+        /* This owner holds the IRP across cancellation, even if it completes inline. */
+        connection->cancel_requested = TRUE;
+        (void)IoCancelIrp(connection->request);
+        return STATUS_PENDING;
+    case FbWskCollectAccept:
+        /* Completion can succeed even when cancellation was requested. */
+        (void)FbWskCollectAcceptedObject(connection);
+        return STATUS_PENDING;
+    case FbWskDiscardQuery:
+        connection->operation = FbWskIdle;
+        return STATUS_PENDING;
+    case FbWskStartClose:
+        socket = connection->bound.accepted;
+        dispatch = socket->Dispatch;
+        FbWskPrepare(connection, FbWskClose);
+        connection->bound.accepted = NULL;
+        (void)dispatch->WskCloseSocket(socket, connection->request);
+        return STATUS_PENDING;
+    case FbWskHoldCloseFailure:
+        /* WSK forbids further calls on the socket after close was issued.
+         * Leave any failed close observable and hold the lifetime gate. */
+        return close_status;
+    case FbWskFree:
+        return FbWskFreeDrain(handle);
+    }
+
+    return STATUS_INTERNAL_ERROR;
 }
 
 _IRQL_requires_(PASSIVE_LEVEL)
 NTSTATUS FbWskAcceptBound(
-    PWSK_SOCKET listener, const FbWskListenerEpoch* listener_epoch,
+    FbWskBindingLifetime* lifetime, PWSK_SOCKET listener, const FbWskListenerEpoch* listener_epoch,
     PKSPIN_LOCK policy_lock, FbWskClaimPolicy* policy_state,
-    FbWskBoundConnection** result)
+    FbWskBoundConnection** result, FbWskDrain** drain)
 {
     const WSK_PROVIDER_LISTEN_DISPATCH* listen_dispatch;
     const WSK_PROVIDER_BASIC_DISPATCH* accepted_dispatch;
-    FbWskBoundConnection* connection;
-    SOCKADDR_STORAGE local = {0};
+    FbWskDrain* connection;
     SIZE_T context_size = 0;
-    BOOLEAN completed;
+    ULONG64 started = KeQueryInterruptTime();
+    int admitted;
     NTSTATUS status;
     KIRQL irql;
 
-    if (result == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    if (result == NULL || drain == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
         return STATUS_INVALID_PARAMETER;
     *result = NULL;
-    if (listener == NULL || listener_epoch == NULL || policy_lock == NULL ||
-        policy_state == NULL)
+    *drain = NULL;
+    if (lifetime == NULL || listener == NULL || listener_epoch == NULL ||
+        policy_lock == NULL || policy_state == NULL)
         return STATUS_INVALID_PARAMETER;
 
+    KeAcquireSpinLock(&lifetime->lock, &irql);
+    admitted = FbWskGateEnter(&lifetime->gate);
+    KeReleaseSpinLock(&lifetime->lock, irql);
+    if (!admitted)
+        return STATUS_DEVICE_BUSY;
+
     connection = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*connection), FB_WSK_POOL_TAG);
-    if (connection == NULL)
+    if (connection == NULL) {
+        FbWskLeaveBinding(lifetime);
         return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    connection->lifetime = lifetime;
     connection->request = IoAllocateIrp(1, FALSE);
     if (connection->request == NULL) {
         ExFreePoolWithTag(connection, FB_WSK_POOL_TAG);
+        FbWskLeaveBinding(lifetime);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
     KeInitializeEvent(&connection->finished, NotificationEvent, FALSE);
-    listen_dispatch = listener->Dispatch;
-    FbWskPrepare(connection);
-    (void)listen_dispatch->WskAccept(listener, 0, NULL, NULL,
-                                    (PSOCKADDR)&local, NULL, connection->request);
-    completed = FbWskWait(connection, TRUE);
-    status = connection->request->IoStatus.Status;
-    if (status == STATUS_SUCCESS)
-        connection->accepted = (PWSK_SOCKET)connection->request->IoStatus.Information;
-    if (!completed) {
+    if (KeQueryInterruptTime() - started >= FB_WSK_WAIT_BUDGET_100NS) {
         status = STATUS_IO_TIMEOUT;
         goto reject;
     }
+    listen_dispatch = listener->Dispatch;
+    FbWskPrepare(connection, FbWskAccept);
+    (void)listen_dispatch->WskAccept(listener, 0, NULL, NULL,
+                                    (PSOCKADDR)&connection->local, NULL, connection->request);
+    if (!FbWskWait(connection, started)) {
+        status = STATUS_IO_TIMEOUT;
+        goto reject;
+    }
+    status = FbWskCollectAcceptedObject(connection);
     if (status != STATUS_SUCCESS)
         goto reject;
 
-    if (connection->accepted == NULL || !FbWskIsExpectedLoopback(&local, listener_epoch)) {
+    if (connection->bound.accepted == NULL ||
+        !FbWskIsExpectedLoopback(&connection->local, listener_epoch)) {
         status = STATUS_ACCESS_DENIED;
         goto reject;
     }
@@ -166,36 +287,43 @@ NTSTATUS FbWskAcceptBound(
     /* Both queries receive the only accepted object in this transaction.
      * Irp->IoStatus.Information contains bytes here, not an object pointer.
      * Nothing in this function accepts redirect bytes from its caller. */
-    accepted_dispatch = connection->accepted->Dispatch;
+    accepted_dispatch = connection->bound.accepted->Dispatch;
     status = FbWskQuery(connection, accepted_dispatch, SIO_QUERY_WFP_CONNECTION_REDIRECT_CONTEXT,
-                        sizeof(connection->context), &connection->context, &context_size);
+                        sizeof(connection->bound.context), &connection->bound.context,
+                        &context_size, started);
     if (status != STATUS_SUCCESS)
         goto reject;
-    if (context_size != sizeof(connection->context)) {
+    if (context_size != sizeof(connection->bound.context)) {
         status = STATUS_INFO_LENGTH_MISMATCH;
         goto reject;
     }
 
     status = FbWskQuery(connection, accepted_dispatch, SIO_QUERY_WFP_CONNECTION_REDIRECT_RECORDS,
-                        sizeof(connection->records), connection->records, &connection->records_size);
+                        sizeof(connection->bound.records), connection->bound.records,
+                        &connection->bound.records_size, started);
     if (status != STATUS_SUCCESS)
         goto reject;
-    if (!connection->records_size || connection->records_size > sizeof(connection->records)) {
+    if (!connection->bound.records_size ||
+        connection->bound.records_size > sizeof(connection->bound.records)) {
         status = STATUS_INFO_LENGTH_MISMATCH;
         goto reject;
     }
 
     KeAcquireSpinLock(policy_lock, &irql);
-    status = FbWskCommitAcceptedContext(policy_state, listener_epoch, &connection->context)
-        ? STATUS_SUCCESS : STATUS_ACCESS_DENIED;
+    if (KeQueryInterruptTime() - started >= FB_WSK_WAIT_BUDGET_100NS) {
+        status = STATUS_IO_TIMEOUT;
+    } else {
+        status = FbWskCommitAcceptedContext(policy_state, listener_epoch, &connection->bound.context)
+            ? STATUS_SUCCESS : STATUS_ACCESS_DENIED;
+    }
     KeReleaseSpinLock(policy_lock, irql);
     if (status != STATUS_SUCCESS)
         goto reject;
 
-    *result = connection;
+    *result = &connection->bound;
     return STATUS_SUCCESS;
 
 reject:
-    (void)FbWskReleaseBound(connection);
+    *drain = connection;
     return status;
 }

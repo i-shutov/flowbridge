@@ -33,6 +33,7 @@
   <ItemGroup>
     <ClCompile Include="wsk_binding.c" />
     <ClInclude Include="claim.h" />
+    <ClInclude Include="lifecycle.h" />
     <ClInclude Include="wsk_binding.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
