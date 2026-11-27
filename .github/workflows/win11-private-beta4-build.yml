@@ -38,8 +38,8 @@ jobs:
             import sys
             from zipfile import ZipFile
 
-            QA = 'ee229778609b6f6ff4a44a2318b239cd1b876a45'
-            QA_TREE = '48e4efdd5cb3a1617446895d2080ad789eef0003'
+            QA = '16b385c90160956bd3c64e602953d75434e5bc8e'
+            QA_TREE = 'f0906b312c580f419db9e34ada6c31bf9ff72af8'
             PRODUCT = '1261201d8561ee4e70faccc8699f60606a71c93b'
             PRODUCT_TREE = 'b42325734201827e6b4d7566b4b3418205d78889'
             CANDIDATE_TREE = 'ce336e83bb724a65bf512e79e286c97fb0cb3190'
