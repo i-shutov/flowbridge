@@ -1,0 +1,343 @@
+{
+  "schema": "flowbridge-frozen-beta3-notice-coverage-v1",
+  "observed_date": "2026-11-27",
+  "timezone": "Europe/Moscow",
+  "source_sha": "03858fb0710e414992f2ed872b3384c08ee7ac8b",
+  "source_tree": "985966a7b7ad1d7ab2df10cd96732729b0508bd6",
+  "helper_sha256": "630db376dfcc0c0bdaa5073a91a896c0369f054903491e0ebd2ddfb1263ddab9",
+  "workflow_sha": "1a76621cad77e9056734f44fb1460a6efc2bb5c8",
+  "run_id": 46025031777,
+  "job_id": 140594113911,
+  "run_url": "https://github.com/i-shutov/flowbridge/actions/runs/46025031777",
+  "run_attempt": 1,
+  "conclusion": "success",
+  "created_at_utc": "2026-11-27T15:27:10Z",
+  "completed_at_utc": "2026-11-27T15:27:16Z",
+  "artifact_count": 0,
+  "host": {
+    "runner_name": "win11-flowbridge",
+    "machine": "VM-326272",
+    "account_guard_verified": true,
+    "windows_11_native_x64_admin_guard_verified": true,
+    "product_acceptance": false
+  },
+  "local_helper_tests": {
+    "passed": 27,
+    "failed": 0
+  },
+  "original_log_observation": {
+    "a5_accepted": false,
+    "a6_accepted": false,
+    "a7_approved": false,
+    "candidate_changed": false,
+    "candidate_executed": false,
+    "installer_executed": false,
+    "manifest_sha256": "f6a94e5e8a87e571d63604ff3b2e417bf21e2e2758343171c587a43717318c99",
+    "metadata": {
+      "build_metadata_sha256": "09cf00994971904a9e4d055a17f8fe28c7c67b1013b08998b1a4e1bd8669240f",
+      "cargo_components": 68,
+      "components": 71,
+      "current_vulnerability_database_checked": false,
+      "external_cargo_lock_checksums_verified": 61,
+      "license_file_hash_records": 113,
+      "license_inventory_entries": 64,
+      "license_text_obligations_reviewed": false,
+      "notices_sha256": "ea0d775d41a3088a7ce7f14a6f3ad814efd1d43bde51a4df2d6e7aa416865c66",
+      "resolved_graph_recomputed": false,
+      "sbom_sha256": "8154003de5cbf45e3438e35c655bc3e755567b5633d6d93e19df170b5dcb3247"
+    },
+    "notice_coverage": {
+      "cargo_declared_license_expression_counts": {
+        "(MIT OR Apache-2.0) AND Unicode-3.0": 1,
+        "Apache-2.0 OR MIT": 2,
+        "MIT": 15,
+        "MIT OR Apache-2.0": 41,
+        "Unlicense OR MIT": 2
+      },
+      "external_runtime_dependencies_identified_by_source": [
+        "Windows OpenSSH client",
+        "Windows PowerShell",
+        "Microsoft.PowerShell.Security"
+      ],
+      "generated_msvc_settings": {
+        "cmake": "4.1.1",
+        "cmake_cxx_compiler_sha256": "3293eb1f6dd8650e896af8ee82a718bf26032955cabd819e363b5866ac8056cb",
+        "msvc_cxx_compiler_version": "19.44.35230.0",
+        "static_linker_members_verified": false,
+        "targets": {
+          "FlowBridge": {
+            "platform_toolset": "v143",
+            "project_sha256": "ea76d32f705fa39da852ef297e07607859f8d1d1e6ae94756d763d39b33b2d19",
+            "runtime_library": "MultiThreaded",
+            "windows_target_platform_version": "10.0.26100.0"
+          },
+          "FlowBridgeNativeSmoke": {
+            "platform_toolset": "v143",
+            "project_sha256": "51a1031939bb9d82131aa92381380b9aa3100212450cc862a37c375c70afbb02",
+            "runtime_library": "MultiThreaded",
+            "windows_target_platform_version": "10.0.26100.0"
+          }
+        }
+      },
+      "license_obligations_accepted": false,
+      "nlohmann_json_header_sha256": "9bea4c8066ef4a1c206b2be5a36302f8926f7fdc6087af5d20b417d0cf103ea6",
+      "nlohmann_license_sha256": "86b998c792894ccb911a1cb7994f7a9652894e7a094c0b5e45be2f553f45cf14",
+      "non_cargo_sbom_refs": [
+        "pkg:generic/nsis@3.13",
+        "pkg:generic/rust-standard-library@1.100.0",
+        "pkg:github/nlohmann/json@v3.11.3"
+      ],
+      "notice_file_bytes_verified": 113,
+      "nsis": {
+        "archive_sha256": "ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8",
+        "copying_sha256": "388357c1215ff403c5ebde3a5ecd273e68f8b79a579996775245d1ee65442aba",
+        "embedded_plugin_bytes_verified": false,
+        "upstream_plugin_files": {
+          "LangDLL.dll": {
+            "authenticode_verified": false,
+            "declared_dll_characteristics": {
+              "dynamic_base": true,
+              "guard_cf": false,
+              "high_entropy_va": false,
+              "nx_compat": true
+            },
+            "delay_import_descriptor_count": 0,
+            "delay_imports": [],
+            "direct_import_descriptor_count": 3,
+            "direct_imports": [
+              "gdi32.dll",
+              "kernel32.dll",
+              "user32.dll"
+            ],
+            "direct_or_delay_msvc_runtime_imports": [],
+            "embedded_certificate_table_present": false,
+            "machine": "0x014c",
+            "recursive_or_dynamic_loads_inspected": false,
+            "sha256": "3c8b2629048c118e4fcf80188cbcdaad3a668270e49fd95d2809feccc98fe220"
+          },
+          "System.dll": {
+            "authenticode_verified": false,
+            "declared_dll_characteristics": {
+              "dynamic_base": true,
+              "guard_cf": false,
+              "high_entropy_va": false,
+              "nx_compat": true
+            },
+            "delay_import_descriptor_count": 0,
+            "delay_imports": [],
+            "direct_import_descriptor_count": 3,
+            "direct_imports": [
+              "kernel32.dll",
+              "ole32.dll",
+              "user32.dll"
+            ],
+            "direct_or_delay_msvc_runtime_imports": [],
+            "embedded_certificate_table_present": false,
+            "machine": "0x014c",
+            "recursive_or_dynamic_loads_inspected": false,
+            "sha256": "afe032f942e2ed0bf7494ec08ba813f5739fb522c640bde81d30ecaf9f894432"
+          },
+          "nsDialogs.dll": {
+            "authenticode_verified": false,
+            "declared_dll_characteristics": {
+              "dynamic_base": true,
+              "guard_cf": false,
+              "high_entropy_va": false,
+              "nx_compat": true
+            },
+            "delay_import_descriptor_count": 0,
+            "delay_imports": [],
+            "direct_import_descriptor_count": 6,
+            "direct_imports": [
+              "comdlg32.dll",
+              "gdi32.dll",
+              "kernel32.dll",
+              "ole32.dll",
+              "shell32.dll",
+              "user32.dll"
+            ],
+            "direct_or_delay_msvc_runtime_imports": [],
+            "embedded_certificate_table_present": false,
+            "machine": "0x014c",
+            "recursive_or_dynamic_loads_inspected": false,
+            "sha256": "9c76f4d53ceee2a471c936e0899688405e1009ce962d140e9acb49ed68d114cb"
+          }
+        },
+        "version": "3.13"
+      },
+      "project_license_sha256": "01bb3a9549ddc554a2ebe3c2c2f923576b56cd04551484e5da1b2e42f7a3c89f",
+      "runtime_execution_observed": false,
+      "rust_standard_library_notice_sha256": {
+        "COPYRIGHT-library.html": "626556344c12679d7cab2c1aa2ce80de01937b62c2c88c62f0650a469be18799",
+        "licenses/Apache-2.0.txt": "074e6e32c86a4c0ef8b3ed25b721ca23aca83df277cd88106ef7177c354615ff",
+        "licenses/MIT.txt": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0"
+      },
+      "rustc": "rustc 1.100.0 (0ef1bc386 2026-11-09)",
+      "source_files_verified": {
+        ".cargo/config.toml": "2722b76d4f9305c8595daa09fc0f477f7d6c7b74edbf13e18eb82c9a5b9064d0",
+        "LICENSE": "01bb3a9549ddc554a2ebe3c2c2f923576b56cd04551484e5da1b2e42f7a3c89f",
+        "crates/flowbridge-tunnel/src/windows_backend_trust.rs": "9d716c8abab6d7852aa1bbfd31f2d8f94fd8b1a5c9f57390f1fa87d965c3be70",
+        "native/windows/CMakeLists.txt": "f2b5e88f7f9e6792f0490a85fa7c68bd9255debe16cbcccd291a2e2752ac08e6",
+        "packaging/windows/FlowBridgeExplicitBeta.nsi": "68eec9ddbb9dc84319c3231065cbdad433f979d031c94311d44ced5f5c633b7a",
+        "third_party/nlohmann/LICENSE.MIT": "86b998c792894ccb911a1cb7994f7a9652894e7a094c0b5e45be2f553f45cf14",
+        "third_party/nlohmann/json.hpp": "9bea4c8066ef4a1c206b2be5a36302f8926f7fdc6087af5d20b417d0cf103ea6"
+      },
+      "static_msvc_runtime_configured_by_source": [
+        "FlowBridge.exe",
+        "flowbridge-cli.exe",
+        "flowbridge_ffi.dll",
+        "qa_harness"
+      ],
+      "static_msvc_runtime_separately_identified_in_sbom": false
+    },
+    "payload_files_verified": 13,
+    "pe_images": {
+      "FlowBridge.exe": {
+        "authenticode_verified": false,
+        "declared_dll_characteristics": {
+          "dynamic_base": true,
+          "guard_cf": false,
+          "high_entropy_va": true,
+          "nx_compat": true
+        },
+        "delay_import_descriptor_count": 0,
+        "delay_imports": [],
+        "direct_import_descriptor_count": 10,
+        "direct_imports": [
+          "advapi32.dll",
+          "comctl32.dll",
+          "comdlg32.dll",
+          "flowbridge_ffi.dll",
+          "gdi32.dll",
+          "kernel32.dll",
+          "ntdll.dll",
+          "ole32.dll",
+          "shell32.dll",
+          "user32.dll"
+        ],
+        "direct_or_delay_msvc_runtime_imports": [],
+        "embedded_certificate_table_present": false,
+        "machine": "0x8664",
+        "recursive_or_dynamic_loads_inspected": false,
+        "sha256": "8137a43a27eae62ba3988baeb5dffde0ee03fa983c96e8440480d77b1072b4d0"
+      },
+      "flowbridge-cli.exe": {
+        "authenticode_verified": false,
+        "declared_dll_characteristics": {
+          "dynamic_base": true,
+          "guard_cf": false,
+          "high_entropy_va": true,
+          "nx_compat": true
+        },
+        "delay_import_descriptor_count": 0,
+        "delay_imports": [],
+        "direct_import_descriptor_count": 6,
+        "direct_imports": [
+          "api-ms-win-core-synch-l1-2-0.dll",
+          "bcryptprimitives.dll",
+          "kernel32.dll",
+          "ntdll.dll",
+          "ws2_32.dll"
+        ],
+        "direct_or_delay_msvc_runtime_imports": [],
+        "embedded_certificate_table_present": false,
+        "machine": "0x8664",
+        "recursive_or_dynamic_loads_inspected": false,
+        "sha256": "10182b2d58d9d0728f301afe3deb21be33b7aff9b99c627f4f37507bec7b70ab"
+      },
+      "flowbridge_ffi.dll": {
+        "authenticode_verified": false,
+        "declared_dll_characteristics": {
+          "dynamic_base": true,
+          "guard_cf": false,
+          "high_entropy_va": true,
+          "nx_compat": true
+        },
+        "delay_import_descriptor_count": 0,
+        "delay_imports": [],
+        "direct_import_descriptor_count": 9,
+        "direct_imports": [
+          "advapi32.dll",
+          "api-ms-win-core-synch-l1-2-0.dll",
+          "bcryptprimitives.dll",
+          "iphlpapi.dll",
+          "kernel32.dll",
+          "ntdll.dll",
+          "ws2_32.dll"
+        ],
+        "direct_or_delay_msvc_runtime_imports": [],
+        "embedded_certificate_table_present": false,
+        "machine": "0x8664",
+        "recursive_or_dynamic_loads_inspected": false,
+        "sha256": "cb933d0a0c312932d80c60ece25549a749f9664807e225dd339da2e57dad5b4e"
+      },
+      "installer": {
+        "authenticode_verified": false,
+        "declared_dll_characteristics": {
+          "dynamic_base": true,
+          "guard_cf": false,
+          "high_entropy_va": false,
+          "nx_compat": true
+        },
+        "delay_import_descriptor_count": 0,
+        "delay_imports": [],
+        "direct_import_descriptor_count": 7,
+        "direct_imports": [
+          "advapi32.dll",
+          "comctl32.dll",
+          "gdi32.dll",
+          "kernel32.dll",
+          "ole32.dll",
+          "shell32.dll",
+          "user32.dll"
+        ],
+        "direct_or_delay_msvc_runtime_imports": [],
+        "embedded_certificate_table_present": false,
+        "machine": "0x014c",
+        "recursive_or_dynamic_loads_inspected": false,
+        "sha256": "6408c0bf595b0ae61a4fc05db17421dc4b03dcda241f3c1f1f997ab6583eec5b"
+      },
+      "qa_harness": {
+        "authenticode_verified": false,
+        "declared_dll_characteristics": {
+          "dynamic_base": true,
+          "guard_cf": false,
+          "high_entropy_va": true,
+          "nx_compat": true
+        },
+        "delay_import_descriptor_count": 0,
+        "delay_imports": [],
+        "direct_import_descriptor_count": 8,
+        "direct_imports": [
+          "bcrypt.dll",
+          "flowbridge_ffi.dll",
+          "gdi32.dll",
+          "iphlpapi.dll",
+          "kernel32.dll",
+          "ntdll.dll",
+          "user32.dll",
+          "ws2_32.dll"
+        ],
+        "direct_or_delay_msvc_runtime_imports": [],
+        "embedded_certificate_table_present": false,
+        "machine": "0x8664",
+        "recursive_or_dynamic_loads_inspected": false,
+        "sha256": "d41905fdcb2fc5f77e042d61c9aac5d640b23ca60ea0cf0965a4567dc9b105ff"
+      }
+    },
+    "schema": "flowbridge-frozen-beta3-static-inventory-v1",
+    "source_sha": "c6ead0f31de4c118453913d733f537ba421af616",
+    "source_tree_sha": "19df7a94071f38be6b8aa3530e1ded7a954a02a8",
+    "status": "TECHNICAL_STATIC_INVENTORY_COMPLETE",
+    "win10_accessed": false
+  },
+  "scope_limits": [
+    "Source and frozen payload read only; no candidate or installer execution",
+    "NSIS plugin hashes identify pinned upstream build inputs, not extracted compressed installer members",
+    "MSVC compiler and Release runtime configuration observed; exact static linker members and entitlement not verified",
+    "Declared licenses and included notice byte identity do not establish all distribution obligations",
+    "A5/A6/A7 remain false"
+  ],
+  "frozen_candidate_changed": false,
+  "win10_accessed": false
+}

@@ -54,19 +54,19 @@
     "ci_observation": "evidence/20261127/ci-observation.json"
   },
   "main": {
-    "sha": "0a3771bf5e39e7397f5af4c62cd51d7f7b79cf99",
+    "sha": "7ec261fde7ca15e20830143131bd116e8fa36f19",
     "runner_smoke_pr": 90,
     "runner_smoke_merge": "40f8b66f356dbe26b75458b6508528c36d1eb0f8",
     "hosted_ci": {
-      "run_id": 46007168400,
-      "source_sha": "0a3771bf5e39e7397f5af4c62cd51d7f7b79cf99",
+      "run_id": 46025445113,
+      "source_sha": "7ec261fde7ca15e20830143131bd116e8fa36f19",
       "status": "completed",
       "conclusion": "success",
-      "evidence": "evidence/20261127/main-diagnostic-ci.json",
       "attempt": 1,
       "jobs_passed": 5,
       "jobs_total": 5,
-      "artifacts": 0
+      "artifacts": 0,
+      "evidence": "evidence/20261127/main-7ec261-terminal-ci.json"
     },
     "self_hosted_smoke": {
       "run_id": 45982267687,
@@ -119,8 +119,30 @@
       "raw512_expanded_table_lab": {
         "source_sha": "78f5ec602500ab3478632a249afe55f334b593c0",
         "run_id": 46007206276
+      },
+      "frozen_notice_coverage": {
+        "source_sha": "03858fb0710e414992f2ed872b3384c08ee7ac8b",
+        "run_id": 46025031777,
+        "status": "PASS_READ_ONLY"
+      },
+      "wsk_lifecycle_object_compile": {
+        "source_sha": "a7476671a5b9574dfe8d6f5a307148b5fe27ef11",
+        "run_id": 46025550513,
+        "status": "PASS_OBJECT_ONLY"
       }
-    }
+    },
+    "prior_hosted_ci": {
+      "run_id": 46007168400,
+      "source_sha": "0a3771bf5e39e7397f5af4c62cd51d7f7b79cf99",
+      "status": "completed",
+      "conclusion": "success",
+      "evidence": "evidence/20261127/main-diagnostic-ci.json",
+      "attempt": 1,
+      "jobs_passed": 5,
+      "jobs_total": 5,
+      "artifacts": 0
+    },
+    "tree": "e7b13dcd9c68744b8403a5a2b1794ea74bb8f9a0"
   },
   "local_source_validation": {
     "evidence": "evidence/20261127/beta3-source-verification.json",
@@ -366,8 +388,8 @@
     },
     {
       "id": "R3",
-      "status": "SOURCE_PASS_RAW512_LAB_PASS_PRODUCTION_G2_OPEN",
-      "result": "Exact-source unsigned hosted OpenSSH lab held512 and recovered16 with cleanup; production signed-runtime adoption and G2 remain unaccepted; frozen beta3 unchanged"
+      "status": "SOURCE_PASS_RAW512_LAB_PASS_SIGNED_RUNTIME_BLOCKED_G2_OPEN",
+      "result": "Unsigned laboratory512+16 passed; exact latest official Microsoft preview client/session remain256-slot, no adequate signed candidate identified; WSK lifecycle object compiles but native authority remains open"
     },
     {
       "id": "R4",
@@ -391,8 +413,8 @@
     },
     {
       "id": "R8",
-      "status": "STATIC_INVENTORY_AND_CURRENT_RUSTSEC_PASS_FORMAL_A5_A6_OPEN",
-      "result": "Exact frozen13-file payload and5 PE inventoried; exact75-entry lock audited with0 known advisories/0 warnings in recorded official snapshot; licensing obligations, dynamic runtime and formal A5/A6 remain open"
+      "status": "FROZEN_NOTICE_BYTES_AND_RUSTSEC_PASS_NEXT_METADATA_SOURCE_PREPARED_FORMAL_A5_A6_OPEN",
+      "result": "113 notice sections and three NSIS distribution plugins verified against original frozen files; MSVC configuration observed; future metadata/attribution correction published in draft PR94 and51 focused tests passed; legal/runtime/privacy acceptance remains open"
     },
     {
       "id": "R9",
@@ -402,10 +424,11 @@
   ],
   "access_blockers": [],
   "next_actions": [
-    "Identify and review an adequate-capacity Microsoft-signed portable client and exact QA pair, preserving the current signer/path/lock guard; another publisher needs a separate product trust-policy decision; signed files require new hashes and strict512/16 validation",
-    "Prepare separately reviewed signed kernel laboratory execution for the accepted WSK object prototype, with bounded rundown and anti-transplant/packet lineage checks",
-    "Finish licensing obligations, non-Cargo/dynamic runtime and exact-candidate privacy/security review; retain formal A5/A6 open",
-    "Keep R7/Win10 deferred until owner changes scope; retain unchanged frozen beta3 installer and private kit"
+    "Review draft PR94 and native input selection/linkage/licensing scope; integrate accepted source into a new separately versioned private candidate with new hashes, preserving frozen beta3",
+    "Finish exact-candidate privacy/security and non-Cargo/dynamic-runtime review; A5/A6 remain open",
+    "Define WSK listener/provider/policy ownership and callback/worker rundown, then prepare a pinned signed isolated-lab package and rollback before native redirected-socket/packet/Verifier acceptance",
+    "Resume strict production raw512 only with an identified Microsoft-signed adequate-capacity pair; another publisher or backend requires an explicit product trust/architecture decision; do not re-run known256-slot binaries as a substitute",
+    "Keep R7/Win10 deferred under the owner instruction; pilot A7 follows exact-candidate A3/A5/A6, and full1.0 additionally requires G2/native WFP and signed RC"
   ],
   "candidate": {
     "version": "0.3.0-beta.3",
@@ -459,9 +482,10 @@
     "win10_actions": "FORBIDDEN_BY_OWNER_CURRENT_SCOPE",
     "r7": "DEFERRED_BY_OWNER",
     "focus": [
-      "raw512 dependency limit",
-      "G2 connection and packet binding evidence",
-      "CI fixture reliability"
+      "candidate composition and security review",
+      "signed raw512 dependency qualification",
+      "G2 WSK lifecycle and native readiness",
+      "evidence-driven master release plan"
     ],
     "codex_on_win11_required": false,
     "exact_11_artifact_cleanup_authorized": true,
@@ -567,14 +591,18 @@
     "g2_accepted": false
   },
   "qa_final_document_head_ci": {
-    "source_sha": "ec0a8ebb649f1b8692726e276b632bf500b31ece",
-    "jobs_passed": 13,
+    "source_sha": "f99812701b4b3db60e22bc3077e5657a397e3a17",
+    "tree_sha": "f6ceb30ae11ae525a4b85ecc36bd1fd57cc3cd62",
+    "executed_merge_sha": "ce39a9668e11bcaad8313bdbe8b76488f71823c8",
+    "jobs_passed": 12,
     "jobs_total": 13,
     "workflow_count": 6,
+    "workflows_passed": 5,
     "first_attempt_all": true,
     "artifacts": 0,
-    "evidence": "evidence/20261127/qa-ec0-terminal-ci.json",
-    "strict_raw512_proved": false
+    "evidence": "evidence/20261127/qa-f998127-terminal-ci.json",
+    "strict_raw512_proved": false,
+    "meaning": "Latest completed preceding document-head observation; later plan commit may trigger fresh automatic CI"
   },
   "frozen_beta3_static_review": {
     "source_sha": "8355c01b9d8c3d444f371e4b7b6fcb317b65bdb7",
@@ -695,5 +723,113 @@
     "final_changes_scope": "docs and evidence only; source/tests/workflows byte-identical to validated head",
     "validation_result": "12/13 jobs; inherited signed raw backend failure retained",
     "new_automatic_head_ci_not_claimed": "Any automatic repeats on the documentation head are separate observations, not inherited PASS"
+  },
+  "master_plan_revision": {
+    "date": "2026-11-27",
+    "timezone": "Europe/Moscow",
+    "overview": "../../PLAN.md",
+    "plan": "../../RELEASE_1_0_PLAN.md",
+    "previous_plan_archive": "../../RELEASE_1_0_PLAN_HISTORY_20261127.md",
+    "milestone_order": [
+      "B0 infrastructure/provenance",
+      "B1 candidate composition and A5/A6",
+      "B2 native A3 deferred by owner",
+      "B3 internal pilot A7",
+      "B4 raw512 and G2 authority",
+      "B5 native WFP validation",
+      "B6 signed RC and 1.0"
+    ],
+    "parallel_active_blocks": [
+      "B1",
+      "B4"
+    ],
+    "release_go": false
+  },
+  "qa_historical_document_head_ci": {
+    "source_sha": "ec0a8ebb649f1b8692726e276b632bf500b31ece",
+    "jobs_passed": 13,
+    "jobs_total": 13,
+    "workflow_count": 6,
+    "first_attempt_all": true,
+    "artifacts": 0,
+    "evidence": "evidence/20261127/qa-ec0-terminal-ci.json",
+    "strict_raw512_proved": false
+  },
+  "frozen_beta3_notice_coverage": {
+    "source_sha": "03858fb0710e414992f2ed872b3384c08ee7ac8b",
+    "run_id": 46025031777,
+    "job_id": 140594113911,
+    "status": "TECHNICAL_NOTICE_BYTES_AND_BUILD_INPUTS_VERIFIED",
+    "notice_file_sections_verified": 113,
+    "nsis_distribution_plugins_verified": 3,
+    "compiler_version": "19.44.35230.0",
+    "sdk_version": "10.0.26100.0",
+    "license_obligations_accepted": false,
+    "a5_accepted": false,
+    "a6_accepted": false,
+    "a7_approved": false,
+    "frozen_candidate_changed": false,
+    "artifact_count": 0,
+    "evidence": "evidence/20261127/frozen-beta3-notice-coverage.json"
+  },
+  "next_candidate_native_metadata": {
+    "source_sha": "cc0106245d10e3e26ca3847c33397522db91b59f",
+    "tree_sha": "27d7d73906c21f8752c464f1f9d691c691721f7d",
+    "base_product_sha": "44f1fc0eba5ac1552df94f083342e25a1a764937",
+    "pr": "https://github.com/i-shutov/flowbridge/pull/94",
+    "draft": true,
+    "status": "SOURCE_PREPARED_LOCAL_AND_INDEPENDENT_TESTS_PASS_NATIVE_BUILD_OPEN",
+    "files_changed": 5,
+    "focused_tests_passed": 51,
+    "native_installer_built": false,
+    "frozen_beta3_changed": false,
+    "evidence": "evidence/20261127/next-candidate-native-metadata.json",
+    "hosted_ci": {
+      "rust_native_jobs_passed": 5,
+      "capture_integration_jobs_passed": 3,
+      "g2_failed": true,
+      "g2_error_code": "kernel_connection_id_missing",
+      "jobs_passed": 8,
+      "jobs_total": 9,
+      "first_attempt_all": true,
+      "artifacts": 0,
+      "evidence": "evidence/20261127/next-candidate-native-metadata-ci.json"
+    }
+  },
+  "raw512_signed_runtime_review": {
+    "status": "NO_CREDIBLE_MICROSOFT_SIGNED_LARGER_DESCRIPTOR_CANDIDATE_FOUND",
+    "latest_official_preview": "10.4.0.0p1-Preview",
+    "exact_latest_x64_client_and_session_slots": 256,
+    "exact_latest_x64_sshd_matches_observed_failure": true,
+    "windows_authenticode_trust_retested": false,
+    "product_trust_guard_changed": false,
+    "new_stock_capacity_run_needed": false,
+    "production_raw512_accepted": false,
+    "evidence": "evidence/20261127/raw512-signed-runtime-review.json"
+  },
+  "wsk_accepted_socket_lifecycle": {
+    "source_sha": "a7476671a5b9574dfe8d6f5a307148b5fe27ef11",
+    "tree_sha": "8dc0424a5b97c337bb7b93d098094cf51f786d02",
+    "parent_source_sha": "229e37263b5927167795eb2f76097299e4b9770a",
+    "workflow_sha": "7ec261fde7ca15e20830143131bd116e8fa36f19",
+    "run_id": 46025550513,
+    "job_id": 140595900897,
+    "warnings": 0,
+    "errors": 0,
+    "driver_linked": false,
+    "driver_signed": false,
+    "driver_loaded": false,
+    "native_kernel_runtime_executed": false,
+    "g2_accepted": false,
+    "origin_process_bound": false,
+    "packet_owner_bound": false,
+    "artifact_count": 0,
+    "status": "HOSTED_WDK_LIFECYCLE_OBJECT_COMPILE_PASS_NATIVE_KERNEL_OPEN",
+    "authority_cases_passed": 9,
+    "lifecycle_cases_passed": 9,
+    "source_mutations_rejected": 20,
+    "completion_wait_budget_ms": 3000,
+    "total_provider_cleanup_or_unload_time_bounded": false,
+    "evidence": "evidence/20261127/wsk-accepted-socket-lifecycle.json"
   }
 }

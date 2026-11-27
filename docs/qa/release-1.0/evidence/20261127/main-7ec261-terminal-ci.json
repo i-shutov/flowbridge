@@ -1,0 +1,92 @@
+{
+  "schema": "flowbridge-main-manual-diagnostics-ci-v1",
+  "date": "2026-11-27",
+  "timezone": "Europe/Moscow",
+  "source_sha": "7ec261fde7ca15e20830143131bd116e8fa36f19",
+  "tree_sha": "e7b13dcd9c68744b8403a5a2b1794ea74bb8f9a0",
+  "run_id": 46025445113,
+  "url": "https://github.com/i-shutov/flowbridge/actions/runs/46025445113",
+  "status": "completed",
+  "conclusion": "success",
+  "attempt": 1,
+  "created_at_utc": "2026-11-27T15:30:03Z",
+  "completed_at_utc": "2026-11-27T15:34:05Z",
+  "jobs": [
+    {
+      "job_id": 140595717951,
+      "name": "macos-application",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "job_id": 140595718300,
+      "name": "rust (macos-15)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "job_id": 140595718318,
+      "name": "windows-application",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "job_id": 140595718391,
+      "name": "rust (ubuntu-24.04)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "job_id": 140595718449,
+      "name": "rust (windows-2025)",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "jobs_passed": 5,
+  "jobs_total": 5,
+  "artifact_count": 0,
+  "preceding_main_commit": {
+    "sha": "1a76621cad77e9056734f44fb1460a6efc2bb5c8",
+    "run_id": 46024879538,
+    "conclusion": "cancelled",
+    "reason": "Superseded by subsequent main change under existing CI concurrency policy",
+    "jobs": [
+      {
+        "job_id": 140593577200,
+        "name": "macos-application",
+        "status": "completed",
+        "conclusion": "cancelled"
+      },
+      {
+        "job_id": 140593577639,
+        "name": "rust (ubuntu-24.04)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "job_id": 140593577667,
+        "name": "rust (windows-2025)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "job_id": 140593577721,
+        "name": "windows-application",
+        "status": "completed",
+        "conclusion": "cancelled"
+      },
+      {
+        "job_id": 140593577748,
+        "name": "rust (macos-15)",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ],
+    "artifact_count": 0,
+    "accepted_as_complete": false
+  },
+  "scope": "Workflow launcher pins and prototype fixture invocation only; no product source changed",
+  "product_release_accepted": false,
+  "win10_accessed": false
+}
