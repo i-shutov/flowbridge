@@ -1,0 +1,229 @@
+diff --git a/.github/workflows/explicit-socks-beta-macos.yml b/.github/workflows/explicit-socks-beta-macos.yml
+index c34f598978ac564c6ed4b5884720f72c07b72154..4a8e1dd202fce3ab3e642be359905b612ffba6c1 100644
+--- a/.github/workflows/explicit-socks-beta-macos.yml
++++ b/.github/workflows/explicit-socks-beta-macos.yml
+@@ -56 +56 @@ jobs:
+-          pkg=build/macos/explicit-beta/packages/FlowBridge-0.3.0-beta.2-macOS-universal-explicit-beta.pkg
++          pkg=build/macos/explicit-beta/packages/FlowBridge-0.3.0-beta.4-macOS-universal-explicit-beta.pkg
+@@ -67,2 +67,2 @@ jobs:
+-            build/macos/explicit-beta/packages/FlowBridge-0.3.0-beta.2-macOS-universal-explicit-beta.pkg
+-            build/macos/explicit-beta/packages/FlowBridge-0.3.0-beta.2-macOS-universal-explicit-beta.pkg.sha256
++            build/macos/explicit-beta/packages/FlowBridge-0.3.0-beta.4-macOS-universal-explicit-beta.pkg
++            build/macos/explicit-beta/packages/FlowBridge-0.3.0-beta.4-macOS-universal-explicit-beta.pkg.sha256
+diff --git a/.github/workflows/explicit-socks-beta-windows.yml b/.github/workflows/explicit-socks-beta-windows.yml
+index 0fb8b0bf501abd1843b3e48a8b5c3ea961fa7dd3..e8d58861850ef0ea0547a96a0aa6a75a6da17b74 100644
+--- a/.github/workflows/explicit-socks-beta-windows.yml
++++ b/.github/workflows/explicit-socks-beta-windows.yml
+@@ -102,2 +102,2 @@ jobs:
+-            artifacts/FlowBridge-0.3.0-beta.2-windows-x64-setup.exe
+-            artifacts/FlowBridge-0.3.0-beta.2-windows-x64-setup.exe.sha256
++            artifacts/FlowBridge-0.3.0-beta.4-windows-x64-setup.exe
++            artifacts/FlowBridge-0.3.0-beta.4-windows-x64-setup.exe.sha256
+diff --git a/Cargo.lock b/Cargo.lock
+index 0d9730d4064167105f59bfba320ee4246cc1d400..565859018d6ecac5bcf53722ca74f059695b18a1 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -146 +146 @@ name = "flowbridge-capture"
+-version = "0.3.0-beta.2"
++version = "0.3.0-beta.4"
+@@ -161 +161 @@ name = "flowbridge-cli"
+-version = "0.3.0-beta.2"
++version = "0.3.0-beta.4"
+@@ -177 +177 @@ name = "flowbridge-core"
+-version = "0.3.0-beta.2"
++version = "0.3.0-beta.4"
+@@ -187 +187 @@ name = "flowbridge-ffi"
+-version = "0.3.0-beta.2"
++version = "0.3.0-beta.4"
+@@ -202 +202 @@ name = "flowbridge-net"
+-version = "0.3.0-beta.2"
++version = "0.3.0-beta.4"
+@@ -212 +212 @@ name = "flowbridge-runtime"
+-version = "0.3.0-beta.2"
++version = "0.3.0-beta.4"
+@@ -224 +224 @@ name = "flowbridge-tunnel"
+-version = "0.3.0-beta.2"
++version = "0.3.0-beta.4"
+diff --git a/Cargo.toml b/Cargo.toml
+index 04219576e94e551cd9c9a91f3c1c6f9a7c7e5303..3b33bb81fcba26a6274b89d5dea6ce1756160474 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -14 +14 @@ resolver = "2"
+-version = "0.3.0-beta.2"
++version = "0.3.0-beta.4"
+diff --git a/packaging/explicit-beta.json b/packaging/explicit-beta.json
+index 3155db7e966eb91d16d75e965b865f1a3614fe37..6ceac62621bc13878bdebb36ccf13425d4a8c22d 100644
+--- a/packaging/explicit-beta.json
++++ b/packaging/explicit-beta.json
+@@ -3,2 +3,2 @@
+-  "version": "0.3.0-beta.2",
+-  "windows_file_version": "0.3.0.2",
++  "version": "0.3.0-beta.4",
++  "windows_file_version": "0.3.0.4",
+@@ -6,3 +6,3 @@
+-  "macos_bundle_version": "3.0.2",
+-  "windows_installer": "FlowBridge-0.3.0-beta.2-windows-x64-setup.exe",
+-  "macos_installer": "FlowBridge-0.3.0-beta.2-macOS-universal-explicit-beta.pkg",
++  "macos_bundle_version": "3.0.4",
++  "windows_installer": "FlowBridge-0.3.0-beta.4-windows-x64-setup.exe",
++  "macos_installer": "FlowBridge-0.3.0-beta.4-macOS-universal-explicit-beta.pkg",
+diff --git a/packaging/windows/README-EXPLICIT-BETA.txt b/packaging/windows/README-EXPLICIT-BETA.txt
+index 86f3bf1d282eddeefd1c124adc9c7113f5b30012..f53f0b48477dff4ec97d22f8145d64110612d52a 100644
+--- a/packaging/windows/README-EXPLICIT-BETA.txt
++++ b/packaging/windows/README-EXPLICIT-BETA.txt
+@@ -5 +5 @@ ENGINEERING CANDIDATE, NOT A PRODUCTION RELEASE
+-Candidate version: 0.3.0-beta.2, explicit SOCKS-only engineering build.
++Candidate version: 0.3.0-beta.4, explicit SOCKS-only engineering build.
+diff --git a/packaging/windows/build-explicit-beta.py b/packaging/windows/build-explicit-beta.py
+index db090a74490008bf65e15d0b7f46537b6657c146..a1e726201812afc1e73d1adcaf5361f5708fc41c 100644
+--- a/packaging/windows/build-explicit-beta.py
++++ b/packaging/windows/build-explicit-beta.py
+@@ -6 +6 @@ in the payload and requires the GUI to have the compile-time beta scope gate.
+-It creates an unsigned QA installer, not the production v0.3.0-beta.2 release.
++It creates an unsigned QA installer, not the production v0.3.0-beta.4 release.
+@@ -36,2 +36,2 @@ def digest(path: Path) -> str:
+-def run(args: list[str]) -> str:
+-    proc = subprocess.run(args, cwd=ROOT, check=True, capture_output=True, text=True,
++def run(args: list[str], *, env: dict[str, str] | None = None) -> str:
++    proc = subprocess.run(args, cwd=ROOT, env=env, capture_output=True, text=True,
+@@ -42,0 +43 @@ def run(args: list[str]) -> str:
++    proc.check_returncode()
+@@ -74,0 +76,2 @@ def main() -> None:
++    parser.add_argument("--nsis-compiler", type=Path,
++                        help="Explicit compiler from the verified portable NSIS distribution")
+@@ -100 +103 @@ def main() -> None:
+-    nsis = nsis_compiler()
++    nsis = args.nsis_compiler.resolve(strict=True) if args.nsis_compiler else nsis_compiler()
+@@ -101,0 +105 @@ def main() -> None:
++    nsis_env = {**os.environ, "NSISDIR": str(nsis_root)}
+@@ -103 +107,2 @@ def main() -> None:
+-    build_metadata = generate("windows", metadata_dir, nsis_root=nsis_root, native_build=BUILD_DIR)
++    build_metadata = generate("windows", metadata_dir, nsis_root=nsis_root, native_build=BUILD_DIR,
++                              nsis_compiler=nsis)
+@@ -138,4 +143,7 @@ def main() -> None:
+-    run([str(nsis), "/INPUTCHARSET", "UTF8", "/DPAYLOAD_DIR=" + str(STAGE),
+-         "/DOUTPUT_FILE=" + str(OUTPUT), "/DVERSION=" + VERSION_CONTRACT["version"],
+-         "/DFILE_VERSION=" + VERSION_CONTRACT["windows_file_version"],
+-         "packaging/windows/FlowBridgeExplicitBeta.nsi"])
++    transcript = run([str(nsis), "/NOCONFIG", "/V4", "/INPUTCHARSET", "UTF8",
++                      "/DPAYLOAD_DIR=" + str(STAGE), "/DOUTPUT_FILE=" + str(OUTPUT),
++                      "/DVERSION=" + VERSION_CONTRACT["version"],
++                      "/DFILE_VERSION=" + VERSION_CONTRACT["windows_file_version"],
++                      "packaging/windows/FlowBridgeExplicitBeta.nsi"], env=nsis_env)
++    nsis_log = BUILD_DIR / "nsis-compile.log"
++    nsis_log.write_text(transcript + "\n", encoding="utf-8")
+@@ -156,0 +165 @@ def main() -> None:
++        "nsis_compile_log_sha256": digest(nsis_log),
+diff --git a/tests/test_explicit_beta_candidate.py b/tests/test_explicit_beta_candidate.py
+index c48fb28e4adaefc17031c30241382ac4482ccd0b..352cc4e0955813a4d2c0ade152eed7af3b283856 100644
+--- a/tests/test_explicit_beta_candidate.py
++++ b/tests/test_explicit_beta_candidate.py
+@@ -30 +30 @@ RUN = "123456789"
+-VERSION = "0.3.0-beta.2"
++VERSION = "0.3.0-beta.4"
+@@ -57,2 +57,2 @@ class EvidenceFixture:
+-                                 "windows_file_version": "0.3.0.2", "macos_short_version": "0.3.0",
+-                                 "macos_bundle_version": "3.0.2",
++                                 "windows_file_version": "0.3.0.4", "macos_short_version": "0.3.0",
++                                 "macos_bundle_version": "3.0.4",
+diff --git a/tests/test_explicit_beta_metadata.py b/tests/test_explicit_beta_metadata.py
+index 3e67885c3cfd489ef29664979b78050b1a6dcc5a..29db0e1258964bf9ad8c4be8199106efb3abf746 100644
+--- a/tests/test_explicit_beta_metadata.py
++++ b/tests/test_explicit_beta_metadata.py
+@@ -34 +34 @@ class MetadataTests(unittest.TestCase):
+-            lock.write_text(lock.read_text().replace('version = "0.3.0-beta.2"', 'version = "0.3.0"', 1))
++            lock.write_text(lock.read_text().replace('version = "0.3.0-beta.4"', 'version = "0.3.0"', 1))
+@@ -102 +102 @@ class MetadataTests(unittest.TestCase):
+-            build = root / "build/windows-explicit-beta"
++            build = root / "native-build-fixture"
+@@ -108 +108,4 @@ class MetadataTests(unittest.TestCase):
+-                "CMAKE_CACHE_MINOR_VERSION:INTERNAL=1\nCMAKE_CACHE_PATCH_VERSION:INTERNAL=3\n")
++                "CMAKE_CACHE_MINOR_VERSION:INTERNAL=1\nCMAKE_CACHE_PATCH_VERSION:INTERNAL=3\n"
++                "CMAKE_GENERATOR:INTERNAL=Visual Studio 17 2022\nCMAKE_GENERATOR_PLATFORM:INTERNAL=x64\n"
++                f"CMAKE_HOME_DIRECTORY:INTERNAL={root / 'native/windows'}\n"
++                f"CMAKE_CACHEFILE_DIR:INTERNAL={build}\n")
+@@ -133,0 +137,4 @@ class MetadataTests(unittest.TestCase):
++            compiler_input = nsis / "Bin/makensis.exe"
++            compiler_input.parent.mkdir()
++            compiler_input.write_bytes(b"exact compiler input")
++            (nsis / "makensis.exe").write_bytes(b"decoy compiler input")
+@@ -150 +157 @@ class MetadataTests(unittest.TestCase):
+-                        (str(nsis / "makensis.exe"), "/VERSION"): "v3.13",
++                        (str(compiler_input.resolve()), "/VERSION"): "v3.13",
+@@ -156 +163,2 @@ class MetadataTests(unittest.TestCase):
+-                result = META.generate("windows", output, root=root, nsis_root=nsis)
++                result = META.generate("windows", output, root=root, nsis_root=nsis, native_build=build,
++                                       nsis_compiler=compiler_input)
+@@ -174 +182,7 @@ class MetadataTests(unittest.TestCase):
+-                "compiler_input_selection_verified": False, "installer_embedded_members_verified": False,
++                "compiler_relative_path": "Bin/makensis.exe",
++                "compiler_sha256": META.digest(compiler_input.read_bytes()),
++                "compiler_version": "3.13",
++                "copying_sha256": META.digest((nsis / "COPYING").read_bytes()),
++                "resource_sha256": {rel: META.digest((nsis / rel).read_bytes()) for rel in runtime_inputs},
++                "compiler_passed_explicitly": True,
++                "installer_embedded_members_verified": False,
+@@ -179,0 +194,4 @@ class MetadataTests(unittest.TestCase):
++            self.assertEqual(native["generator_platform"], "x64")
++            self.assertEqual(native["cmake_cache_sha256"], META.digest((build / "CMakeCache.txt").read_bytes()))
++            self.assertEqual(native["generated_targets"]["FlowBridge"]["vcxproj_sha256"],
++                             META.digest((build / "FlowBridge.vcxproj").read_bytes()))
+@@ -183,0 +202,2 @@ class MetadataTests(unittest.TestCase):
++            with self.assertRaisesRegex(ValueError, "native Win32 x64 build directory"):
++                META.windows_build_inputs(root / "unrelated-source-root", build)
+diff --git a/tools/explicit_beta_metadata.py b/tools/explicit_beta_metadata.py
+index a443dfabe19dade7ef1760451109931c7bb1576a..c88a1344c23ec435c0d43ebbd33f484e19dd3c87 100644
+--- a/tools/explicit_beta_metadata.py
++++ b/tools/explicit_beta_metadata.py
+@@ -140 +140,8 @@ def windows_build_inputs(root: Path, build: Path) -> dict:
+-    cache = (build / "CMakeCache.txt").read_text(encoding="utf-8")
++    cache_path = build / "CMakeCache.txt"
++    cache = cache_path.read_text(encoding="utf-8")
++    cache_fields = dict(re.findall(r"^(CMAKE_[A-Z_]+):INTERNAL=(.*)$", cache, re.M))
++    generator = cache_fields.get("CMAKE_GENERATOR", "")
++    if (not generator.startswith("Visual Studio ") or cache_fields.get("CMAKE_GENERATOR_PLATFORM") != "x64"
++            or Path(cache_fields.get("CMAKE_HOME_DIRECTORY", "")).resolve() != (root / "native/windows").resolve()
++            or Path(cache_fields.get("CMAKE_CACHEFILE_DIR", "")).resolve() != build.resolve()):
++        raise ValueError("Windows metadata requires the generated native Win32 x64 build directory")
+@@ -146 +153,2 @@ def windows_build_inputs(root: Path, build: Path) -> dict:
+-    compiler = (build / "CMakeFiles" / cmake / "CMakeCXXCompiler.cmake").read_text(encoding="utf-8")
++    compiler_path = build / "CMakeFiles" / cmake / "CMakeCXXCompiler.cmake"
++    compiler = compiler_path.read_text(encoding="utf-8")
+@@ -152 +160,2 @@ def windows_build_inputs(root: Path, build: Path) -> dict:
+-        tree = ET.parse(build / (name + ".vcxproj"))
++        project = (build / (name + ".vcxproj")).read_bytes()
++        tree = ET.fromstring(project)
+@@ -167 +176 @@ def windows_build_inputs(root: Path, build: Path) -> dict:
+-                         "windows_target_platform_version": sdk_version}
++                         "windows_target_platform_version": sdk_version, "vcxproj_sha256": digest(project)}
+@@ -172 +181,4 @@ def windows_build_inputs(root: Path, build: Path) -> dict:
+-    return {"cmake": cmake, "msvc_cxx_compiler_version": version.group(1), "generated_targets": targets,
++    return {"cmake": cmake, "generator": generator, "generator_platform": "x64",
++            "cmake_cache_sha256": digest(cache_path.read_bytes()),
++            "cmake_compiler_config_sha256": digest(compiler_path.read_bytes()),
++            "msvc_cxx_compiler_version": version.group(1), "generated_targets": targets,
+@@ -200 +212,2 @@ def generate(platform: str, output: Path, *, root: Path = ROOT, offline: bool =
+-             nsis_root: Path | None = None, native_build: Path | None = None) -> dict:
++             nsis_root: Path | None = None, native_build: Path | None = None,
++             nsis_compiler: Path | None = None) -> dict:
+@@ -283,3 +296,9 @@ def generate(platform: str, output: Path, *, root: Path = ROOT, offline: bool =
+-        compiler = nsis_root / "Bin/makensis.exe"
+-        if not compiler.is_file():
+-            compiler = nsis_root / "makensis.exe"
++        compiler = nsis_compiler
++        if compiler is None:
++            compiler = nsis_root / "Bin/makensis.exe"
++            if not compiler.is_file():
++                compiler = nsis_root / "makensis.exe"
++        compiler = compiler.resolve(strict=nsis_compiler is not None)
++        compiler_relative = compiler.relative_to(nsis_root.resolve()).as_posix()
++        if compiler_relative.casefold() not in {"bin/makensis.exe", "makensis.exe"}:
++            raise ValueError("NSIS compiler must be inside the selected distribution")
+@@ -344 +363,6 @@ def generate(platform: str, output: Path, *, root: Path = ROOT, offline: bool =
+-            "compiler_input_selection_verified": False,
++            "compiler_relative_path": compiler_relative,
++            "compiler_sha256": digest(compiler.read_bytes()),
++            "compiler_version": nsis_version,
++            "copying_sha256": digest((nsis_root / "COPYING").read_bytes()),
++            "resource_sha256": {item["name"]: item["hashes"][0]["content"] for item in nsis_inputs},
++            "compiler_passed_explicitly": nsis_compiler is not None,
