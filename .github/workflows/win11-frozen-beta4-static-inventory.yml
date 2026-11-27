@@ -1,0 +1,123 @@
+name: Win11 frozen beta.4 static inventory
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+concurrency:
+  group: win11-vps-smoke-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  observe:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'i-shutov/flowbridge' }}
+    runs-on: [self-hosted, Windows, X64, win11-flowbridge]
+    timeout-minutes: 5
+    steps:
+      - name: Verify exact beta.4 package, notices and native inputs
+        shell: cmd
+        working-directory: C:\
+        env:
+          NoDefaultCurrentDirectoryInExePath: '1'
+          FLOWBRIDGE_STATIC_AUDIT_LAUNCH: |
+            import ctypes
+            from ctypes import wintypes
+            import hashlib
+            from io import BytesIO
+            import os
+            from pathlib import Path
+            import re
+            import stat
+            import subprocess
+            import sys
+            import types
+            import urllib.request
+            from zipfile import ZipFile
+
+            PROBE_SOURCE = '7e9a284431a1c40dd20718e0b866a0ab07087ee8'
+            PROBES = {
+                'beta3_frozen_static_audit': '35ebb3e881d533952e0960f777716391e042a3e91be8d1349a6aaad52775f0c8',
+                'beta4_frozen_static_audit': '5105389bd5c968b69442a4899163adca6f05bdc1f00d39b93be438d7259d4fa4',
+            }
+            PYTHON = Path(r'C:\FlowBridge\private-candidates\toolchain-45986630920-1\python\tools\python.exe')
+            PYTHON_SHA = ('0e667928bb4f19573c6cd88f65133b2e07b243a5c716f335b56aa66bb9ec6f82328'
+                          '256d22c3a29e23a0276ac5c6a6d786211feab524890ad1e56629196c6b29c')
+            PHASE = 'HOST_GUARD'
+            os.environ.pop('FLOWBRIDGE_STATIC_AUDIT_LAUNCH', None)
+
+            def require(test):
+                if not test:
+                    raise RuntimeError('guard failed')
+
+            def local(path, limit):
+                for part in (*reversed(path.parents), path):
+                    info = part.lstat()
+                    require(not stat.S_ISLNK(info.st_mode)
+                            and not info.st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+                require(stat.S_ISREG(info.st_mode))
+                with path.open('rb') as stream:
+                    data = stream.read(limit + 1)
+                require(0 < len(data) <= limit)
+                return data
+
+            def guard():
+                require(os.name == 'nt' and sys.maxsize > 2**32)
+                v = sys.getwindowsversion()
+                require(v.product_type == 1 and (v.major, v.minor) == (10, 0) and v.build >= 22000
+                        and os.environ.get('COMPUTERNAME', '').casefold() == 'vm-326272'
+                        and os.environ.get('RUNNER_NAME') == 'win11-flowbridge'
+                        and ctypes.windll.shell32.IsUserAnAdmin())
+                kernel = ctypes.WinDLL('kernel32', winmode=0x800)
+                current = kernel.GetCurrentProcess
+                current.restype = wintypes.HANDLE
+                wow64 = kernel.IsWow64Process2
+                wow64.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.USHORT), ctypes.POINTER(wintypes.USHORT))
+                wow64.restype = wintypes.BOOL
+                process, architecture = wintypes.USHORT(), wintypes.USHORT()
+                require(wow64(current(), ctypes.byref(process), ctypes.byref(architecture))
+                        and process.value == 0 and architecture.value == 0x8664)
+                session_query = kernel.ProcessIdToSessionId
+                session_query.argtypes = (wintypes.DWORD, ctypes.POINTER(wintypes.DWORD))
+                session_query.restype = wintypes.BOOL
+                session = wintypes.DWORD()
+                require(session_query(os.getpid(), ctypes.byref(session)) and session.value == 0)
+                system = Path(os.environ['SystemRoot']) / 'System32'
+                require(subprocess.check_output([str(system / 'whoami.exe')], timeout=15).strip().lower()
+                        == rb'vm-326272\admin')
+                powershell = system / 'WindowsPowerShell/v1.0/powershell.exe'
+                require(subprocess.check_output([str(powershell), '-NoProfile', '-NonInteractive',
+                        '-Command', 'Get-ExecutionPolicy'], timeout=15).strip() == b'Restricted')
+                require(Path(sys.executable) == PYTHON and sys.version_info[:3] == (3, 13, 17))
+                package = local(PYTHON.parents[2] / 'python.nupkg', 40_000_000)
+                require(hashlib.sha512(package).hexdigest() == PYTHON_SHA)
+                with ZipFile(BytesIO(package)) as archive:
+                    for name in ('python.exe', 'python313.dll'):
+                        require(local(PYTHON.parent / name, 12_000_000) == archive.read('tools/' + name))
+
+            def main():
+                global PHASE
+                guard()
+                PHASE = 'PINNED_HELPER_SOURCE'
+                require(re.fullmatch(r'[0-9a-f]{40}', PROBE_SOURCE))
+                for name, digest in PROBES.items():
+                    url = f'https://raw.githubusercontent.com/i-shutov/flowbridge/{PROBE_SOURCE}/tools/{name}.py'
+                    with urllib.request.urlopen(url, timeout=20) as response:
+                        payload = response.read(131_073)
+                    require(0 < len(payload) <= 131_072 and hashlib.sha256(payload).hexdigest() == digest)
+                    module = types.ModuleType(name)
+                    sys.modules[name] = module
+                    exec(compile(payload, name + '.py', 'exec'), module.__dict__)
+                PHASE = 'EXACT_BETA4_READ_ONLY_AUDIT'
+                return sys.modules['beta4_frozen_static_audit'].main()
+
+            try:
+                exit_code = main()
+            except Exception:
+                print('BETA4_STATIC_INVENTORY_LAUNCH_BLOCKED=' + PHASE)
+                print('BETA4_A5_A6_ACCEPTED=false')
+                exit_code = 1
+            sys.exit(exit_code)
+        run: |
+          @echo off
+          "C:\FlowBridge\private-candidates\toolchain-45986630920-1\python\tools\python.exe" -I -B -X utf8 -c "import os; exec(os.environ['FLOWBRIDGE_STATIC_AUDIT_LAUNCH'])" 2>nul
+          exit /b %ERRORLEVEL%

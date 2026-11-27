@@ -1,0 +1,277 @@
+name: Win11 managed pool 512 policy build read-only diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+concurrency:
+  group: win11-vps-smoke-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  retained-policy-build:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'i-shutov/flowbridge' }}
+    runs-on: [self-hosted, Windows, X64, win11-flowbridge]
+    timeout-minutes: 5
+    steps:
+      - name: Read bounded retained policy build errors and CMake generator metadata
+        shell: cmd
+        working-directory: C:\
+        env:
+          NoDefaultCurrentDirectoryInExePath: '1'
+          FLOWBRIDGE_LOG_GUARD: |
+            import ctypes
+            from ctypes import wintypes
+            import hashlib
+            from io import BytesIO
+            import json
+            import os
+            from pathlib import Path
+            import re
+            import stat
+            import subprocess
+            import sys
+            from zipfile import ZipFile
+
+            BASE = Path(r'C:\FlowBridge\private-candidates')
+            RUN = BASE / 'run-beta4-managed-pool-512-46041606345-1'
+            PYTHON = BASE / 'toolchain-45986630920-1/python/tools/python.exe'
+            PYTHON_SHA = ('0e667928bb4f19573c6cd88f65133b2e07b243a5c716f335b56aa66bb9ec6f82328'
+                          '256d22c3a29e23a0276ac5c6a6d786211feab524890ad1e56629196c6b29c')
+
+            class Blocked(Exception):
+                pass
+
+            def require(test, reason):
+                if not test:
+                    raise Blocked(reason)
+
+            def check_path(path):
+                for part in (*reversed(path.parents), path):
+                    info = part.lstat()
+                    require(not stat.S_ISLNK(info.st_mode)
+                            and not info.st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT,
+                            'LOCAL_PATH_REPARSE_POINT')
+                return info
+
+            def guard():
+                require(os.name == 'nt' and sys.maxsize > 2**32, 'NATIVE_WINDOWS_X64_REQUIRED')
+                version = sys.getwindowsversion()
+                require(version.product_type == 1 and (version.major, version.minor) == (10, 0)
+                        and version.build >= 22000, 'WINDOWS_11_CLIENT_REQUIRED')
+                require(os.environ.get('COMPUTERNAME', '').casefold() == 'vm-326272'
+                        and os.environ.get('RUNNER_NAME') == 'win11-flowbridge', 'UNEXPECTED_HOST')
+                kernel = ctypes.WinDLL('kernel32.dll')
+                process = kernel.GetCurrentProcess
+                process.restype = wintypes.HANDLE
+                wow64 = kernel.IsWow64Process2
+                wow64.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.USHORT),
+                                  ctypes.POINTER(wintypes.USHORT))
+                wow64.restype = wintypes.BOOL
+                machine, native = wintypes.USHORT(), wintypes.USHORT()
+                require(wow64(process(), ctypes.byref(machine), ctypes.byref(native))
+                        and machine.value == 0 and native.value == 0x8664, 'NATIVE_WINDOWS_X64_REQUIRED')
+                admin = ctypes.WinDLL('shell32.dll').IsUserAnAdmin
+                admin.restype = wintypes.BOOL
+                require(admin(), 'ELEVATED_ADMIN_REQUIRED')
+                session_id = ctypes.WinDLL('kernel32.dll').ProcessIdToSessionId
+                session_id.argtypes = (wintypes.DWORD, ctypes.POINTER(wintypes.DWORD))
+                session_id.restype = wintypes.BOOL
+                session = wintypes.DWORD()
+                require(session_id(os.getpid(), ctypes.byref(session)) and session.value == 0,
+                        'WINDOWS_SERVICE_SESSION_REQUIRED')
+                system = Path(os.environ['SystemRoot']) / 'System32'
+                account = subprocess.check_output([str(system / 'whoami.exe')], timeout=15)
+                require(account.strip().lower() == rb'vm-326272\admin', 'UNEXPECTED_SERVICE_ACCOUNT')
+                powershell = system / 'WindowsPowerShell/v1.0/powershell.exe'
+                policy = subprocess.check_output(
+                    [str(powershell), '-NoProfile', '-NonInteractive', '-Command', 'Get-ExecutionPolicy'],
+                    timeout=15)
+                require(policy.strip() == b'Restricted', 'EXPECTED_RESTRICTED_EXECUTION_POLICY')
+                require(Path(sys.executable) == PYTHON and sys.version_info[:3] == (3, 13, 17),
+                        'PINNED_PYTHON_UNAVAILABLE')
+                check_path(PYTHON)
+                archive = PYTHON.parents[2] / 'python.nupkg'
+                check_path(archive)
+                with archive.open('rb') as stream:
+                    archive_bytes = stream.read(40_000_001)
+                require(len(archive_bytes) <= 40_000_000
+                        and hashlib.sha512(archive_bytes).hexdigest() == PYTHON_SHA, 'PINNED_PYTHON_ARCHIVE_MISMATCH')
+                with ZipFile(BytesIO(archive_bytes)) as package:
+                    for name in ('python.exe', 'python313.dll'):
+                        path = PYTHON.parent / name
+                        check_path(path)
+                        require(path.read_bytes() == package.read('tools/' + name), 'PINNED_PYTHON_BINARY_MISMATCH')
+          FLOWBRIDGE_POLICY_DIAGNOSTIC: |
+            import codecs
+
+            def read_bounded(path, limit):
+                info = check_path(path)
+                require(stat.S_ISREG(info.st_mode), 'RETAINED_INPUT_NOT_A_FILE')
+                with path.open('rb') as stream:
+                    data = stream.read(limit + 1)
+                require(len(data) <= limit, 'RETAINED_INPUT_TOO_LARGE')
+                return data
+
+            def read_log(path, limit=196608):
+                info = check_path(path)
+                require(stat.S_ISREG(info.st_mode), 'RETAINED_LOG_NOT_A_FILE')
+                with path.open('rb') as log:
+                    log.seek(max(0, info.st_size - limit))
+                    data = log.read(limit)
+                if data.startswith(codecs.BOM_UTF16_LE) or (data and data.count(b'\0') > len(data) // 4):
+                    return data.decode('utf-16-le', 'replace')
+                return data.decode('utf-8-sig', 'replace')
+
+            SIGNALS = {
+                'cmake_instance_without_generator': 'generator instance specification',
+                'cmake_instance_requires_generator': 'generator does not support instance specification',
+                'cmake_could_not_find_vs': 'could not find any instance of visual studio',
+                'cmake_unrecognized_vs_instance': 'the instance specified',
+                'cmake_no_compiler': 'no cmake_cxx_compiler could be found',
+                'cmake_compiler_works_failed': 'is not able to compile a simple test program',
+                'cmake_compiler_abi_failed': 'detecting cxx compiler abi info - failed',
+                'cmake_platform_error': 'does not support platform specification',
+                'cmake_configure_incomplete': 'configuring incomplete, errors occurred',
+                'cmake_configure_complete': 'configuring done',
+                'cmake_generate_complete': 'generating done',
+                'cmake_run_without_cache': 'could not load cache',
+                'cmake_command_target_missing': 'no rule to make target',
+                'cmake_path_invalid': 'does not appear to contain cmakelists.txt',
+                'required_ffi_import_library_missing': 'build flowbridge-ffi, then set',
+                'msvc_msbuild_missing': 'msbuild was not found',
+                'windows_sdk_missing': 'windows sdk version',
+                'compiler_toolset_missing': 'the build tools for',
+                'windows_access_denied': 'access is denied',
+                'windows_system_path_not_found': 'the system cannot find the path specified',
+            }
+            WORDS = set("""
+                a able about accept access add added after all already an and any argument associated at
+                be because before being build building cache called cannot change check cached cmake cmakelists
+                code command compiler compiling complete compilation component configure configuring
+                could cxx current default detected detecting directory does done driver edition enable enabled
+                environment error errors exception executable expected exists exit failed failure file finding
+                find flag for found from generate generated generating generator given has have identifier in
+                incomplete information input instance invalid is it known language library link list load
+                loaded local location make missing module msvc must name never no none not of on one only
+                option or output path platform please present program project property provided required
+                requires run same sdk selected set simple source specification specified specifying
+                started studio supported supports system target terminal test tested the then this to tool
+                toolchain tools toolset unable unavailable unknown unsupported use using value variable version
+                visual was were which will windows with x64 x86 ninja nmake msbuild win32
+            """.split())
+            SAFE_IDENTIFIERS = set("""
+                CMAKE_GENERATOR CMAKE_GENERATOR_INSTANCE CMAKE_GENERATOR_PLATFORM CMAKE_CXX_COMPILER
+                CMAKE_MAKE_PROGRAM CMAKE_ROOT FLOWBRIDGE_FFI_LIBRARY FlowBridgeSshPoolRequest
+                MSVC CMakeDetermineCXXCompiler.cmake CMakeTestCXXCompiler.cmake CMakeLists.txt
+            """.split())
+
+            def safe_message(line):
+                output = []
+                for token in line[:1024].split()[:48]:
+                    word = token.strip(' \'".,;:?!()[]{}<>')
+                    if word in SAFE_IDENTIFIERS or re.fullmatch(r'[0-9]{1,8}(?:\.[0-9]{1,8}){0,3}', word):
+                        safe = word
+                    elif re.fullmatch(r'(?:MSB|LNK|C|RC)[0-9]{4}', word, re.I):
+                        safe = word.upper()
+                    elif word.lower() in WORDS:
+                        safe = word.lower()
+                    else:
+                        safe = '[redacted]'
+                    if safe != '[redacted]' or not output or output[-1] != safe:
+                        output.append(safe)
+                return ' '.join(output)[:240]
+
+            def analyze_log(content):
+                lower = content.lower()
+                lines = content.splitlines()
+                calls = [line for line in lines if 'CalledProcessError:' in line and 'cmake' in line.lower()]
+                phases = set()
+                for line in calls:
+                    if re.search(r"""['"]--build['"]""", line):
+                        phases.add('cmake_build')
+                    if re.search(r"""['"]-s['"]""", line, re.I):
+                        phases.add('cmake_configure')
+                errors = []
+                for index, line in enumerate(lines):
+                    if re.search(r'\b(?:CMake Error|fatal error|error (?:MSB|LNK|C|RC)[0-9]{4})\b', line, re.I):
+                        errors.append(safe_message(line))
+                        errors.extend(safe_message(next_line) for next_line in lines[index + 1:index + 3]
+                                      if next_line.strip() and not next_line.lstrip().startswith('File '))
+                return {
+                    'failed_subcommands': sorted(phases),
+                    'exit_codes': [int(code) for line in calls for code in
+                                   re.findall(r'returned non-zero exit status ([0-9]{1,10})\.', line)][-6:],
+                    'numeric_compiler_errors': sorted(set(re.findall(r'\b(?:MSB|LNK|C|RC)[0-9]{4}\b', content)))[:12],
+                    'known_message_signals': sorted(label for label, marker in SIGNALS.items() if marker in lower),
+                    'sanitized_error_context': errors[-12:],
+                }
+
+            def analyze_cache(text):
+                entries = {}
+                for line in text.splitlines():
+                    match = re.fullmatch(r'([A-Za-z_0-9]+):[A-Z_]+=(.*)', line)
+                    if match:
+                        entries[match[1]] = match[2]
+                safe = {}
+                generator = entries.get('CMAKE_GENERATOR', '')
+                if re.fullmatch(r'Visual Studio [0-9]{1,2} 20[0-9]{2}|NMake Makefiles|Ninja(?: Multi-Config)?', generator):
+                    safe['generator'] = generator
+                for key in ('CMAKE_GENERATOR_PLATFORM', 'CMAKE_GENERATOR_TOOLSET', 'CMAKE_VS_PLATFORM_TOOLSET',
+                            'CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION', 'CMAKE_SYSTEM_VERSION',
+                            'CMAKE_CACHE_MAJOR_VERSION', 'CMAKE_CACHE_MINOR_VERSION', 'CMAKE_CACHE_PATCH_VERSION'):
+                    value = entries.get(key, '')
+                    if re.fullmatch(r'x64|Win32|ARM64|v?[0-9]{1,6}(?:\.[0-9]{1,6}){0,3}', value):
+                        safe[key] = value
+                for key in ('CMAKE_GENERATOR_INSTANCE', 'CMAKE_CXX_COMPILER', 'CMAKE_MAKE_PROGRAM',
+                            'FLOWBRIDGE_FFI_LIBRARY'):
+                    safe[key + '_PRESENT'] = bool(entries.get(key))
+                visual_studio = re.search(r'(?i)Visual Studio[\\/](20[0-9]{2})[\\/](BuildTools|Community|Professional|Enterprise)\b',
+                                          entries.get('CMAKE_GENERATOR_INSTANCE', ''))
+                if visual_studio:
+                    safe['visual_studio_year'], safe['visual_studio_edition'] = visual_studio.groups()
+                return safe
+
+            def main():
+                guard()
+                previous = json.loads(read_bounded(RUN / 'runner-result.json', 16384))
+                require(previous['schema'] == 'flowbridge-native-win11-candidate-managed-pool-512-v1'
+                        and previous['phase'] == 'COMPILED_WIN32_POLICY' and previous['status'] == 'BLOCKED'
+                        and previous['error_type'] == 'CalledProcessError'
+                        and previous['candidate_build_runner_result_verified'] is True
+                        and previous['candidate_sha'] == 'c8881dada43e3183a0340dc823105bdcdac71171'
+                        and previous['qa_sha'] == 'c45fce1675706bcf5612f7b5fceeea54a1d56594',
+                        'RETAINED_RUN_PHASE_OR_PIN_MISMATCH')
+                result = {'schema': 'flowbridge-native-managed-pool-policy-build-diagnostic-v1',
+                          'source_run': 46041606345, 'source_attempt': 1, 'phase': previous['phase'],
+                          'status': 'READ_ONLY_DIAGNOSTIC_COLLECTED',
+                          'log_signals': analyze_log(read_log(RUN / 'private-run.log'))}
+                build = RUN / 'build'
+                cache = build / 'CMakeCache.txt'
+                result['cache_present'] = cache.exists()
+                if cache.exists():
+                    result['cmake_cache'] = analyze_cache(read_bounded(cache, 1048576).decode('utf-8-sig', 'replace'))
+                files = {'policy_executable_present': build / 'Release/FlowBridgeSshPoolRequest.exe',
+                         'policy_vcxproj_present': build / 'FlowBridgeSshPoolRequest.vcxproj',
+                         'fixture_directory_present': RUN / 'fixture'}
+                for name, path in files.items():
+                    result[name] = path.exists()
+                    if path.exists():
+                        check_path(path)
+                return result
+
+            try:
+                report = main()
+                status = 0
+            except Blocked as error:
+                report = {'status': 'BLOCKED', 'reason': str(error)}
+                status = 1
+            except Exception:
+                report = {'status': 'BLOCKED', 'reason': 'RETAINED_DIAGNOSTIC_UNAVAILABLE'}
+                status = 1
+            print('FLOWBRIDGE_WIN11_POOL_POLICY_BUILD_DIAGNOSTIC ' + json.dumps(report, sort_keys=True))
+            sys.exit(status)
+        run: |
+          @echo off
+          "C:\FlowBridge\private-candidates\toolchain-45986630920-1\python\tools\python.exe" -I -X utf8 -c "import os; exec(os.environ.pop('FLOWBRIDGE_LOG_GUARD') + '\n' + os.environ.pop('FLOWBRIDGE_POLICY_DIAGNOSTIC'))" 2>nul
+          exit /b %ERRORLEVEL%
