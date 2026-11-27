@@ -44,9 +44,11 @@ jobs:
         with:
           python-version: '3.13'
       - uses: dtolnay/rust-toolchain@stable
+        if: matrix.scenario == 'managed'
       - name: Reject false-positive capacity probes
         run: python -m unittest discover -s tests -p test_windows_ssh_probe.py -v
       - run: cargo build --locked -p flowbridge-ffi -p flowbridge-capture -p flowbridge-cli
+        if: matrix.scenario == 'managed'
       - name: Fetch pinned official sshd without installing a system service
         shell: pwsh
         run: |
@@ -74,7 +76,11 @@ jobs:
       - name: Actual Windows OpenSSH ${{ matrix.scenario }} scenario
         shell: pwsh
         run: |
-          python tests/windows_real_ssh_hosted.py --scenario "${{ matrix.scenario }}" --ssh "$env:FLOWBRIDGE_TEST_SSH" --sshd "$env:FLOWBRIDGE_TEST_SSHD" --keygen "$env:FLOWBRIDGE_TEST_KEYGEN" --library target/debug/flowbridge_ffi.dll --output "build/verification/windows-real-ssh/${{ matrix.scenario }}" --churn 10000
+          $scenario = '${{ matrix.scenario }}'
+          $probeArgs = @('--scenario', $scenario, '--ssh', $env:FLOWBRIDGE_TEST_SSH, '--sshd', $env:FLOWBRIDGE_TEST_SSHD,
+                         '--keygen', $env:FLOWBRIDGE_TEST_KEYGEN, '--output', "build/verification/windows-real-ssh/$scenario")
+          if ($scenario -eq 'managed') { $probeArgs += @('--library', 'target/debug/flowbridge_ffi.dll', '--churn', '10000') }
+          python tests/windows_real_ssh_hosted.py @probeArgs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v7.0.0
         if: github.event.repository.private == true && (always())

@@ -9,6 +9,9 @@ from collections import Counter
 import threading
 from typing import Callable, Any
 
+RAW_CAPACITY = 512
+RECOVERY_CONNECTIONS = 16
+
 
 class ResourceErrors:
     """Count allowlisted resource markers without keeping raw SSH stderr."""
@@ -26,16 +29,40 @@ class ResourceErrors:
             if any(value in text for value in patterns):
                 with self._lock:
                     self._counts[name] += 1
+        if (b"pipe(notify_pipe) failed" in text and b"postauth" in text
+                and b"too many open files" in text):
+            with self._lock:
+                self._counts["postauth_notify_pipe_file_limit"] += 1
 
     def snapshot(self) -> dict[str, int]:
         with self._lock:
             return dict(self._counts)
 
 
+def raw_capacity_verified(report: dict) -> bool:
+    """Accept the strict single-backend gate only after full load and recovery."""
+    attempts = report.get("attempts")
+    if not isinstance(attempts, list) or not attempts or not isinstance(attempts[-1], dict):
+        return False
+    final = attempts[-1]
+    return (report.get("passed") is True
+            and report.get("minimum_required_held") == RAW_CAPACITY
+            and report.get("selected_held_ceiling") == RAW_CAPACITY
+            and report.get("peak_held") == RAW_CAPACITY
+            and final.get("requested_tier") == RAW_CAPACITY
+            and final.get("target_held") == RAW_CAPACITY
+            and final.get("accepted_held") == RAW_CAPACITY
+            and final.get("test_ceiling_applied") is False
+            and report.get("capacity_baseline_verified") is True
+            and report.get("recovery_successes") == RECOVERY_CONNECTIONS
+            and report.get("resource_recovery_verified") is True)
+
+
 def probe_capacity(connect: Callable[[], Any], echo: Callable[[Any, bytes], None],
                    child_alive: Callable[[], bool], sample: Callable[[str], None],
                    report: dict, *, held_limit: int, min_held: int,
-                   tiers=(64, 128, 192, 256, 512), recovery_count: int = 16) -> None:
+                   tiers=(64, 128, 192, 256, RAW_CAPACITY),
+                   recovery_count: int = RECOVERY_CONNECTIONS) -> None:
     """Require real baseline channels/bytes and post-release reconnects.
 
     A requested tier greater than held_limit is visibly capped. One failed
