@@ -1,0 +1,14 @@
+nlohmann/json 3.11.3 single-header attributions
+
+The amalgamated header carries Copyright (c) 2013-2023 Niels Lohmann.
+Its UTF-8 decoder carries Copyright (c) 2008-2009 Björn Hoehrmann.
+Its Grisu2 implementation carries Copyright (c) 2009 Florian Loitsch.
+These notices accompany the MIT permission text in LICENSE.MIT.
+
+The upstream release also identifies Hedley by Evan Nemerson (CC0-1.0) and
+an Apache-2.0 Google Abseil fallback for builds without C++14. The Windows
+GUI and QA harness are configured to build as C++17.
+
+Upstream release and source attribution:
+https://github.com/nlohmann/json/releases/tag/v3.11.3
+https://github.com/nlohmann/json/tree/v3.11.3#license

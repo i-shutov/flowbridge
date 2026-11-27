@@ -42,5 +42,9 @@ Project and updates: https://github.com/i-shutov/flowbridge
 
 BUILD-METADATA.json identifies the exact clean source commit and Cargo.lock.
 SBOM.cdx.json inventories resolved production/build inputs for this target.
-licenses/THIRD_PARTY_NOTICES.txt contains the actual corresponding license texts.
-This inventory does not certify binary linkage, security or independent license review.
+licenses/THIRD_PARTY_NOTICES.txt contains the Cargo, Rust standard library,
+nlohmann/json and NSIS license texts and attributions.
+Windows metadata identifies the configured static CRT and host requirements
+for managed SSH. NSIS hashes cover x86 Unicode distribution members. Compiler
+input selection, embedded installer content, exact linkage and review of
+Microsoft Visual Studio and Windows SDK terms remain pending.

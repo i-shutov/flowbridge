@@ -3,6 +3,7 @@ import importlib.util
 import json
 from pathlib import Path
 import shutil
+import struct
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -87,6 +88,108 @@ class MetadataTests(unittest.TestCase):
                        "license_file": "../external-license"}
             with self.assertRaisesRegex(ValueError, "escapes crate source"):
                 META.licenses(package, root)
+
+    def test_windows_generator_includes_native_input_provenance_and_attributions(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.fixture(root)
+            for relative in (".cargo/config.toml", "third_party/nlohmann/LICENSE.MIT",
+                             "third_party/nlohmann/ATTRIBUTIONS.txt", "third_party/nlohmann/json.hpp"):
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(ROOT / relative, target)
+
+            build = root / "build/windows-explicit-beta"
+            compiler = build / "CMakeFiles/4.1.3/CMakeCXXCompiler.cmake"
+            compiler.parent.mkdir(parents=True)
+            compiler.write_text('set(CMAKE_CXX_COMPILER_ID "MSVC")\n'
+                                'set(CMAKE_CXX_COMPILER_VERSION "19.44.35207.0")\n')
+            (build / "CMakeCache.txt").write_text("CMAKE_CACHE_MAJOR_VERSION:INTERNAL=4\n"
+                "CMAKE_CACHE_MINOR_VERSION:INTERNAL=1\nCMAKE_CACHE_PATCH_VERSION:INTERNAL=3\n")
+            project = """<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup><WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion></PropertyGroup>
+    <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+        <PlatformToolset>v143</PlatformToolset>
+    </PropertyGroup>
+    <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+        <ClCompile><RuntimeLibrary>MultiThreaded</RuntimeLibrary></ClCompile>
+    </ItemDefinitionGroup>
+</Project>"""
+            for name in ("FlowBridge", "FlowBridgeNativeSmoke"):
+                (build / (name + ".vcxproj")).write_text(project)
+
+            nsis = root / "nsis"
+            runtime_inputs = ("Stubs/lzma_solid-x86-unicode", "Plugins/x86-unicode/System.dll",
+                              "Plugins/x86-unicode/LangDLL.dll", "Plugins/x86-unicode/nsDialogs.dll")
+            for relative in runtime_inputs:
+                target = nsis / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                header = bytearray(70)
+                header[:2] = b"MZ"
+                struct.pack_into("<I", header, 0x3c, 64)
+                header[64:] = b"PE\0\0\x4c\x01"
+                target.write_bytes(header + relative.encode())
+            (nsis / "COPYING").write_text("NSIS license text")
+
+            sysroot = root / "rust"
+            for relative in ("licenses/Apache-2.0.txt", "licenses/MIT.txt", "COPYRIGHT-library.html"):
+                target = sysroot / "share/doc/rust" / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("Rust license text")
+            version = META.read_contract(root)["version"]
+            roots = META.ROOTS["windows"]
+            cargo = {"packages": [{"id": name, "name": name, "version": version, "targets": [{"kind": ["lib"]}]}
+                                  for name in roots],
+                     "workspace_members": roots,
+                     "resolve": {"nodes": [{"id": name, "deps": []} for name in roots]}}
+            commands = {("git", "rev-parse", "HEAD"): "1" * 40,
+                        ("git", "status", "--porcelain", "--untracked-files=normal"): "",
+                        ("cargo", "metadata", "--locked", "--format-version", "1", "--filter-platform",
+                         "x86_64-pc-windows-msvc"): json.dumps(cargo),
+                        (str(nsis / "makensis.exe"), "/VERSION"): "v3.13",
+                        ("rustc", "--print", "sysroot"): str(sysroot),
+                        ("rustc", "--version"): "rustc 1.100.0 (ab0123456 2026-11-27)",
+                        ("cargo", "--version"): "cargo 1.100.0 (ab0123456 2026-11-27)"}
+            output = root / "metadata"
+            with patch.object(META, "command", side_effect=lambda args, _: commands[tuple(args)]):
+                result = META.generate("windows", output, root=root, nsis_root=nsis)
+            notices = (output / "THIRD_PARTY_NOTICES.txt").read_bytes()
+            self.assertIn("Björn Hoehrmann".encode(), notices)
+            self.assertIn(b"Florian Loitsch", notices)
+            attribution = next(entry for entry in result["license_inventory"] if "nlohmann" in entry["component"])
+            self.assertEqual([entry["name"] for entry in attribution["files"]], ["LICENSE.MIT", "ATTRIBUTIONS.txt"])
+            self.assertEqual(result["notices_sha256"], META.digest(notices))
+            bom = json.loads((output / "SBOM.cdx.json").read_bytes())
+            components = {item["purl"]: item for item in bom["components"]}
+            edges = {item["ref"]: item["dependsOn"] for item in bom["dependencies"]}
+            self.assertEqual({components[ref]["name"] for ref in edges["pkg:generic/nsis@3.13"]}, set(runtime_inputs))
+            for ref in edges["pkg:generic/nsis@3.13"]:
+                nsis_input = components[ref]
+                self.assertEqual(nsis_input["hashes"][0]["content"],
+                                 META.digest((nsis / nsis_input["name"]).read_bytes()))
+                self.assertIn({"name": "flowbridge:binary_linkage", "value": "distribution-file-hash-only"},
+                              nsis_input["properties"])
+            self.assertEqual(result["windows_nsis_distribution_members"], {
+                "compiler_input_selection_verified": False, "installer_embedded_members_verified": False,
+            })
+            for name in roots:
+                self.assertIn("pkg:generic/msvc-static-runtime", edges[f"pkg:cargo/{name}@{version}"])
+            native = result["windows_native_build_inputs"]
+            self.assertEqual(native["msvc_cxx_compiler_version"], "19.44.35207.0")
+            self.assertFalse(native["static_linker_members_verified"])
+            self.assertIn("Windows PowerShell", result["windows_managed_ssh_external_runtimes"][1])
+            self.assertFalse(result["independent_license_review_passed"])
+
+            (build / "FlowBridge.vcxproj").write_text(project.replace("MultiThreaded", "MultiThreadedDLL"))
+            with self.assertRaisesRegex(ValueError, "non-static Windows Release settings"):
+                META.windows_build_inputs(root, build)
+
+            wrong_machine = bytearray((nsis / runtime_inputs[0]).read_bytes())
+            struct.pack_into("<H", wrong_machine, 68, 0x8664)
+            (nsis / runtime_inputs[0]).write_bytes(wrong_machine)
+            with self.assertRaisesRegex(ValueError, "Invalid x86 PE header"):
+                META.nsis_runtime_inputs(nsis, "3.13")
 
 
 if __name__ == "__main__":

@@ -100,7 +100,7 @@ def main() -> None:
     nsis = nsis_compiler()
     nsis_root = nsis.parent.parent if nsis.parent.name.lower() == "bin" else nsis.parent
     metadata_dir = ROOT / "build/explicit-beta-metadata/windows"
-    build_metadata = generate("windows", metadata_dir, nsis_root=nsis_root)
+    build_metadata = generate("windows", metadata_dir, nsis_root=nsis_root, native_build=BUILD_DIR)
     if build_metadata["source_sha"] != source_commit:
         raise RuntimeError("Package and dependency metadata source commits differ")
     files = [
