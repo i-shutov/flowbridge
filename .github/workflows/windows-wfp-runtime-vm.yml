@@ -42,7 +42,7 @@ jobs:
         run: |
           python tests/windows_wfp_userchain_runtime.py --helper build/windows-capture/Release/FlowBridgeCapture.exe --probe build/wfp-scope/Release/FlowBridgeWfpScopeQA.exe --library target/release/flowbridge_ffi.dll --output build/verification/wfp-runtime/userchain.json
       - name: Preserve evidence (including failure)
-        if: always()
+        if: ${{ github.event.repository.private == true && (always()) }}
         uses: actions/upload-artifact@v7.0.0
         with:
           name: FlowBridge-actual-WFP-redirect-evidence

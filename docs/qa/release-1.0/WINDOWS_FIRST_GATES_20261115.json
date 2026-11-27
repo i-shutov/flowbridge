@@ -865,5 +865,7 @@
   "distribution_decision_checkpoint": "docs/qa/release-1.0/checkpoints/INTERNAL_ONLY_DISTRIBUTION_DECISION_20261117.md",
   "public_distribution_authorized": false,
   "public_license_choice_deferred_to_future_external_release": true,
-  "internal_pilot_deployment_approved": false
+  "internal_pilot_deployment_approved": false,
+  "current_execution_registry": "RELEASE_EXECUTION_20261127.json",
+  "historical_candidate_evidence_is_not_beta3_acceptance": true
 }

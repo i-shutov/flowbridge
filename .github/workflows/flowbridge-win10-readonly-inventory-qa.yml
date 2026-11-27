@@ -96,7 +96,7 @@ jobs:
           $r=Get-Content $c[0].FullName -Raw|ConvertFrom-Json
           if($r.gates.W0 -ne 'NOT_ACCEPTED' -or $r.gates.W3 -ne 'NO_GO' -or $r.gates.G2 -ne 'NO_GO'){throw 'PS7 guard failed'}
       - name: Keep only hosted smoke proof, not the user's Windows inventory
-        if: always()
+        if: ${{ github.event.repository.private == true && (always()) }}
         uses: actions/upload-artifact@v4
         with:
           name: FlowBridge-Win10-Inventory-ReadOnly-Hosted-${{ github.run_id }}

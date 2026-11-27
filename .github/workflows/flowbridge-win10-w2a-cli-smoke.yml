@@ -102,7 +102,7 @@ jobs:
              throw 'Hosted W2a non-target test failed'
           }
       - name: Preserve scoped W2a hosted report and log only
-        if: always()
+        if: ${{ github.event.repository.private == true && (always()) }}
         uses: actions/upload-artifact@v4
         with:
           name: FlowBridge-W2a-Hosted-Windows-${{ github.run_id }}

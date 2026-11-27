@@ -159,6 +159,7 @@ jobs:
           }|ConvertTo-Json -Depth 8|Set-Content build/w2b2-qa/bundle-manifest.json -Encoding utf8
       - name: Upload exact-source Win10 QA bundle for independent physical Win10 testing
         uses: actions/upload-artifact@v4
+        if: ${{ github.event.repository.private == true }}
         with:
           name: FlowBridge-W2b2-ExactBeta-GUI-Installer-${{ github.run_id }}
           path: |
@@ -178,7 +179,7 @@ jobs:
           retention-days: 30
           if-no-files-found: error
       - name: Preserve failed build/QA evidence separately (no binaries)
-        if: failure()
+        if: ${{ github.event.repository.private == true && (failure()) }}
         uses: actions/upload-artifact@v4
         with:
           name: FlowBridge-W2b2-Failure-Evidence-${{ github.run_id }}
@@ -228,7 +229,7 @@ jobs:
             throw 'W2b2 hosted target-style PowerShell acceptance failed'
           }
       - name: Upload independent target-style GUI/installer reports, logs and GUI BMP
-        if: always()
+        if: ${{ github.event.repository.private == true && (always()) }}
         uses: actions/upload-artifact@v4
         with:
           name: FlowBridge-W2b2-Hosted-PS5-Independent-${{ github.run_id }}

@@ -52,7 +52,7 @@ jobs:
             throw 'Exact beta uninstall reproducibility failed; inspect uninstall_residue'
           }
       - name: Persist isolated hosted diagnostics and GUI page evidence only
-        if: always()
+        if: ${{ github.event.repository.private == true && (always()) }}
         uses: actions/upload-artifact@v4
         with:
           name: FlowBridge-W2b2-Uninstall-Repro-${{ github.run_id }}

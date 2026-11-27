@@ -69,7 +69,7 @@ jobs:
           python tests/windows_real_ssh_hosted.py --ssh "$env:FLOWBRIDGE_TEST_SSH" --sshd "$env:FLOWBRIDGE_TEST_SSHD" --keygen "$env:FLOWBRIDGE_TEST_KEYGEN" --library target/debug/flowbridge_ffi.dll --output build/verification/windows-real-ssh --churn 10000
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v7.0.0
-        if: always()
+        if: ${{ github.event.repository.private == true && (always()) }}
         with:
           name: FlowBridge-real-Windows-OpenSSH
           path: build/verification/windows-real-ssh/*.json
