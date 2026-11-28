@@ -1,0 +1,141 @@
+--- a/native/windows/main.cpp
++++ b/native/windows/main.cpp
+@@ -535,7 +535,7 @@
+ void refreshApps(){
+     loadingApps=true;HWND list=GetDlgItem(window,AppsTable);ListView_DeleteAllItems(list);int row=0;
+     for(const auto& app:discovered){std::wstring fields[]={wide(app.name),wide(app.path),wide(app.source),wide(std::to_string(app.confidence)+"% • эвристика")};LVITEMW item{};item.mask=LVIF_TEXT;item.iItem=row;item.pszText=fields[0].data();ListView_InsertItem(list,&item);for(int col=1;col<4;++col)ListView_SetItemText(list,row,col,fields[col].data());ListView_SetCheckState(list,row,selectedApps.count(app.path)?TRUE:FALSE);++row;}
+-    loadingApps=false;setText(GetDlgItem(window,AppsSummary),"Найдено: "+std::to_string(discovered.size())+"   •   Выбрано: "+std::to_string(selectedApps.size())+"   •   Сопоставление по имени EXE, без проверки издателя");
++    loadingApps=false;setText(GetDlgItem(window,AppsSummary),"Найдено: "+std::to_string(discovered.size())+"   •   Выбрано: "+std::to_string(selectedApps.size())+"");
+ }
+ void choosePreset(const std::string& preset){captureSelections();selectedPreset=preset;std::set<std::string> ids;
+     for(const auto& p:catalog.value("presets",Json::array()))if(p.value("id",std::string())==preset)for(const auto& id:p.value("app_ids",std::vector<std::string>{}))ids.insert(id);
+@@ -724,9 +724,24 @@
+     for(const auto& event:ssh.value("events",Json::array()))events+="\r\n[SSH / "+event.value("level",std::string("info"))+"] "+event.value("message",std::string());if(events.size()>60000)events.erase(0,events.size()-60000);while(!events.empty()&&(static_cast<unsigned char>(events[0])&0xc0)==0x80)events.erase(0,1);setText(logEdit,events);
+ }
+ 
++LRESULT CALLBACK buttonEnterProc(HWND h,UINT msg,WPARAM w,LPARAM l,UINT_PTR id,DWORD_PTR) {
++    if(msg==WM_GETDLGCODE) {
++        auto code=DefSubclassProc(h,msg,w,l);
++        auto key=reinterpret_cast<const MSG*>(l);
++        if(key && key->message==WM_KEYDOWN && key->wParam==VK_RETURN) code|=DLGC_WANTMESSAGE;
++        return code;
++    }
++    if(msg==WM_KEYDOWN && w==VK_RETURN) {
++        if(!(l & (1LL<<30)) && IsWindowEnabled(h)) SendMessageW(h,BM_CLICK,0,0);
++        return 0;
++    }
++    if(msg==WM_NCDESTROY) RemoveWindowSubclass(h,buttonEnterProc,id);
++    return DefSubclassProc(h,msg,w,l);
++}
+ HWND control(const wchar_t* cls,const wchar_t* label,DWORD style,int id,DWORD ex=0) {
+     if(wcscmp(cls,L"BUTTON")==0 && (style&BS_TYPEMASK)!=BS_AUTOCHECKBOX)style=(style&~BS_TYPEMASK)|BS_OWNERDRAW;
+     auto h=CreateWindowExW(ex,cls,label,WS_CHILD|WS_VISIBLE|style,0,0,0,0,window,reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)),GetModuleHandleW(nullptr),nullptr);
++    if(h && wcscmp(cls,L"BUTTON")==0 && (style&BS_TYPEMASK)==BS_OWNERDRAW) SetWindowSubclass(h,buttonEnterProc,1,0);
+     SendMessageW(h,WM_SETFONT,reinterpret_cast<WPARAM>(bodyFont),TRUE); return h;
+ }
+ void layout() {
+@@ -779,7 +794,7 @@
+         move(labels[i],x+24+i*(unit+24),482,unit,18);
+         move(fields[i],x+24+i*(unit+24),504,unit,28);
+     }
+-    move(SshHelp,x+24,538,w-48,40);
++    move(SshHelp,x+24,533,w-48,38); // Fit both help lines above Save at the compact client height.
+     // DNS scope is deliberately limited to explicit SOCKS hostname input.
+     // Keep the toggle and Save button horizontally separate at 980x680.
+     move(RemoteDns,x+24,height-58,w-290,26);
+@@ -989,7 +1004,7 @@
+             }
+         }catch(const std::exception& e){note(std::string("Ошибка: ")+e.what());}
+         return 0;
+-    case WM_NOTIFY:{auto notification=reinterpret_cast<NMHDR*>(l);if(notification->idFrom==AppsTable&&notification->code==LVN_ITEMCHANGED&&!loadingApps&&((reinterpret_cast<NMLISTVIEW*>(l)->uOldState^reinterpret_cast<NMLISTVIEW*>(l)->uNewState)&LVIS_STATEIMAGEMASK)){captureSelections();setText(GetDlgItem(h,AppsSummary),"Найдено: "+std::to_string(discovered.size())+"   •   Выбрано: "+std::to_string(selectedApps.size())+"   •   Эвристика; проверяйте путь EXE");try{saveDesktop();}catch(const std::exception& e){note(e.what());}}return 0;}
++    case WM_NOTIFY:{auto notification=reinterpret_cast<NMHDR*>(l);if(notification->idFrom==AppsTable&&notification->code==LVN_ITEMCHANGED&&!loadingApps&&((reinterpret_cast<NMLISTVIEW*>(l)->uOldState^reinterpret_cast<NMLISTVIEW*>(l)->uNewState)&LVIS_STATEIMAGEMASK)){captureSelections();setText(GetDlgItem(h,AppsSummary),"Найдено: "+std::to_string(discovered.size())+"   •   Выбрано: "+std::to_string(selectedApps.size())+"");try{saveDesktop();}catch(const std::exception& e){note(e.what());}}return 0;}
+     case WM_TIMER: {
+         DWORD exitCode=0;
+         if(nativeCapture.poll(exitCode)) {
+--- a/tests/windows_native_smoke.cpp
++++ b/tests/windows_native_smoke.cpp
+@@ -85,7 +85,8 @@
+ }
+ static void captureWindow(HWND window,const std::filesystem::path& path) {
+     SetForegroundWindow(window);RedrawWindow(window,nullptr,nullptr,RDW_INVALIDATE|RDW_UPDATENOW|RDW_ALLCHILDREN);std::this_thread::sleep_for(150ms);
+-    RECT client{};GetClientRect(window,&client);HDC source=GetDC(window),target=CreateCompatibleDC(source);
++    RECT client{};GetClientRect(window,&client);
++HDC source=GetDC(window),target=CreateCompatibleDC(source);
+     BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=client.right;info.bmiHeader.biHeight=-client.bottom;info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;info.bmiHeader.biCompression=BI_RGB;
+     void* pixels=nullptr;HBITMAP bitmap=CreateDIBSection(source,&info,DIB_RGB_COLORS,&pixels,nullptr,0);need(bitmap!=nullptr,"screenshot bitmap failed");auto prior=SelectObject(target,bitmap);
+     need(BitBlt(target,0,0,client.right,client.bottom,source,0,0,SRCCOPY|CAPTUREBLT)!=0,"native screenshot copy failed");
+@@ -276,6 +277,7 @@
+          "Long banner text has no visible truncation indicator");
+     std::printf("FB_QA_WINDOW_DPI=%u\n",static_cast<unsigned>(dpi));
+     RECT client{};GetClientRect(window,&client);
++    std::fprintf(stderr,"COMPACT_GEOMETRY dpi=%u outer=[%ld,%ld,%ld,%ld] client=[%ld,%ld,%ld,%ld] physical_px\n",dpi,outer.left,outer.top,outer.right,outer.bottom,client.left,client.top,client.right,client.bottom);
+     need(client.right>=920&&client.bottom>=600,"Compact window minimum client area not reached");
+     auto evidence=[&](const wchar_t* page) {
+         if(!screenshot)return;
+@@ -312,18 +314,25 @@
+     need(IsWindowVisible(GetDlgItem(window,286))&&IsWindowVisible(GetDlgItem(window,287))&&
+          IsWindowVisible(GetDlgItem(window,288)),
+          "OpenSSH executable or worker count control missing on managed SSH page");
+-    need(compression.right+6<=workerLabel.left &&
+-         workerLabel.right<=workerCount.left &&
+-         workerCount.right+6<=sshExe.left &&
+-         sshExe.right+6<=browseSsh.left,
+-         "SSH worker pool, executable and Browse controls overlap at 980x680");
++    auto horizontalGap=[](const char* leftName,const RECT& left,const char* rightName,const RECT& right,int minimum) {
++        const int gap=right.left-left.right;
++        std::fprintf(stderr,"COMPACT_GAP %s=[%ld,%ld,%ld,%ld] %s=[%ld,%ld,%ld,%ld] gap=%d required=%d physical_px\n",
++                     leftName,left.left,left.top,left.right,left.bottom,rightName,right.left,right.top,right.right,right.bottom,gap,minimum);
++        if(gap<minimum)throw std::runtime_error(std::string("Compact horizontal gap failed: ")+leftName+" -> "+rightName+" (gap="+std::to_string(gap)+", required="+std::to_string(minimum)+")");
++    };
++    horizontalGap("compression",compression,"workerLabel",workerLabel,6);
++    horizontalGap("workerLabel",workerLabel,"workerCount",workerCount,0);
++    horizontalGap("workerCount",workerCount,"sshExe",sshExe,6);
++    horizontalGap("sshExe",sshExe,"browseSsh",browseSsh,6);
+     const auto dnsToggle=inside(285);
+     need(IsWindowVisible(GetDlgItem(window,285)),
+          "Remote SSH DNS control was not shown for managed SSH");
+     need(dnsToggle.right+8<=save.left,
+          "Remote SSH DNS checkbox overlaps Save button at compact size");
+     inside(246); // Last managed-SSH timeout field
+-    need(sshHelp.bottom+6<=save.top,"Managed SSH form overlaps Save button");
++    const int helpGap=save.top-sshHelp.bottom;
++    std::fprintf(stderr,"COMPACT_GAP sshHelp=[%ld,%ld,%ld,%ld] save=[%ld,%ld,%ld,%ld] vertical_gap=%d required=6 physical_px\n",sshHelp.left,sshHelp.top,sshHelp.right,sshHelp.bottom,save.left,save.top,save.right,save.bottom,helpGap);
++    need(helpGap>=6,"Managed SSH form overlaps Save button");
+     evidence(L"ssh");
+     SendMessageW(mode,CB_SETCURSEL,0,0);
+     SendMessageW(window,WM_COMMAND,MAKEWPARAM(230,CBN_SELCHANGE),reinterpret_cast<LPARAM>(mode));
+@@ -638,7 +647,17 @@
+         edit(GetDlgItem(window,editorId),profile.dump());
+         actualRuleEditorTest(window,screenshot);
+         click(window,applyId);
+-        waitFor([&]{ return windowText(GetDlgItem(window,statusId)).find(L"Остановлено |")!=std::wstring::npos; },"GUI Apply failed");
++        try { waitFor([&]{ return windowText(GetDlgItem(window,statusId)).find(L"Остановлено |")!=std::wstring::npos; },"GUI Apply failed"); }
++        catch (...) {
++            for(int id:{statusId,280,111}) {
++                const auto value=windowText(GetDlgItem(window,id));
++                const int size=WideCharToMultiByte(CP_UTF8,0,value.c_str(),static_cast<int>(value.size()),nullptr,0,nullptr,nullptr);
++                std::string text(static_cast<size_t>(size),'\0');
++                if(size>0) WideCharToMultiByte(CP_UTF8,0,value.c_str(),static_cast<int>(value.size()),text.data(),size,nullptr,nullptr);
++                std::fprintf(stderr,"APPLY_DIAGNOSTIC id=%d text=%s\n",id,text.c_str());
++            }
++            throw;
++        }
+         need(SendMessageW(GetDlgItem(window,protocolId),CB_GETCURSEL,0,0)==2,"SOCKS4a display changed protocol");
+         edit(GetDlgItem(window,hostId),"192.0.2.1");
+         SendMessageW(GetDlgItem(window,proxyId),CB_SETCURSEL,1,0); SendMessageW(window,WM_COMMAND,MAKEWPARAM(proxyId,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,proxyId)));
+@@ -769,6 +788,15 @@
+     std::puts("PASS owned GUI pool: pause/resume limits, 2->3->4->1->2, stale IDs, managed capture button state");
+ }
+ int wmain(int argc,wchar_t** argv) {
++    // The GUI is system-DPI-aware. Match it before any window or coordinate API
++    // so SetWindowPos and child rectangles use physical pixels at system DPI.
++    SetProcessDPIAware();
++    const auto awareness=GetAwarenessFromDpiAwarenessContext(GetThreadDpiAwarenessContext());
++    if(awareness!=DPI_AWARENESS_SYSTEM_AWARE) {
++        std::fprintf(stderr,"FAIL: harness must run system DPI aware (actual=%d, error=%lu)\n",static_cast<int>(awareness),GetLastError());
++        return 1;
++    }
++    std::printf("FB_QA_HARNESS_DPI_AWARENESS=system\n");
+     WSADATA data{}; if(WSAStartup(MAKEWORD(2,2),&data)) return 1;
+     try { abiTest();nativeOwnedPoolLifecycleTest();nativeTemplateTest();nativeGuiListenerOwnerTest();nativeUnelevatedSshProfileTest();nativeLauncherArgumentTest(); if(argc>=2) guiTest(argv[1],argc>=3?argv[2]:nullptr); WSACleanup(); return 0; }
+     catch(const std::exception& error) { std::fprintf(stderr,"FAIL: %s\n",error.what()); WSACleanup(); return 1; }

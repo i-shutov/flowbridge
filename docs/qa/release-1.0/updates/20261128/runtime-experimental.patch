@@ -1,0 +1,302 @@
+--- a/crates/flowbridge-runtime/src/admission.rs
++++ b/crates/flowbridge-runtime/src/admission.rs
+@@ -109,6 +109,23 @@
+             queued: self.limits.max_queued - self.queued.available_permits(),
+             rejected: self.rejected.load(Ordering::Relaxed),
+         }
++    }
++    /// Never hold a client request in a capacity queue: a TCP FIN can be a
++    /// legitimate write-half-close, so it does not prove the reader is gone.
++    pub fn try_admit(self: &Arc<Self>) -> Result<Admission, String> {
++        let active = self.active.clone().try_acquire_owned().map_err(|_| {
++            self.rejected.fetch_add(1, Ordering::Relaxed);
++            "managed SSH capacity unavailable; retry later".to_string()
++        })?;
++        let opening = self.opening.clone().try_acquire_owned().map_err(|_| {
++            self.rejected.fetch_add(1, Ordering::Relaxed);
++            "managed SSH opening capacity unavailable; retry later".to_string()
++        })?;
++        Ok(Admission {
++            _budget: self.clone(),
++            _active: active,
++            opening: Some(opening),
++        })
+     }
+     pub fn enqueue(self: &Arc<Self>) -> Result<Waiter, String> {
+         match self.queued.clone().try_acquire_owned() {
+@@ -183,6 +200,23 @@
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    #[test]
++    fn immediate_admission_rejects_full_capacity_and_releases_permits() {
++        let budget = Arc::new(Budget::new(Limits {
++            max_flows: 1,
++            max_opening: 1,
++            max_queued: 1,
++            wait_timeout_ms: 100,
++        }));
++        let first = budget.try_admit().unwrap();
++        assert!(budget.try_admit().is_err());
++        assert_eq!(budget.snapshot().queued, 0);
++        drop(first);
++        let mut replacement = budget.try_admit().unwrap();
++        replacement.connected();
++        drop(replacement);
++        assert_eq!(budget.snapshot().active_including_opening, 0);
++    }
+     #[tokio::test]
+     async fn opening_active_queue_and_timeout_are_independently_bounded() {
+         let budget = Arc::new(Budget::new(Limits {
+--- a/crates/flowbridge-runtime/src/lib.rs
++++ b/crates/flowbridge-runtime/src/lib.rs
+@@ -127,7 +127,6 @@
+ struct UpstreamGate {
+     endpoint: Option<Endpoint>,
+     ready: bool,
+-    grace: Duration,
+     budget: Option<Arc<admission::Budget>>,
+     pool: Option<Arc<pool::Pool>>,
+ }
+@@ -189,7 +188,6 @@
+             upstream_gate: watch::channel(UpstreamGate {
+                 endpoint: None,
+                 ready: true,
+-                grace: Duration::ZERO,
+                 budget: None,
+                 pool: None,
+             })
+@@ -231,6 +229,9 @@
+     ) -> Result<Status, RuntimeError> {
+         self.set_upstream_gate_with_limits(endpoint, ready, grace_ms, admission::Limits::default())
+     }
++    /// `grace_ms` is retained and validated for ABI compatibility. New SOCKS
++    /// requests fail immediately while the managed upstream is unavailable;
++    /// callers must retry after recovery instead of relying on a queued request.
+     pub fn set_upstream_gate_with_limits(
+         &self,
+         mut endpoint: Option<Endpoint>,
+@@ -271,7 +272,6 @@
+         self.upstream_gate.send_replace(UpstreamGate {
+             endpoint,
+             ready,
+-            grace: Duration::from_millis(grace_ms),
+             budget,
+             pool: None,
+         });
+@@ -303,7 +303,6 @@
+         self.upstream_gate.send_replace(UpstreamGate {
+             endpoint: None,
+             ready,
+-            grace: Duration::ZERO,
+             budget: None,
+             pool: Some(pool),
+         });
+@@ -549,7 +548,7 @@
+     mut client: TcpStream,
+     config: Arc<Config>,
+     guard: &ConnectionGuard,
+-    mut upstream_gate: watch::Receiver<UpstreamGate>,
++    upstream_gate: watch::Receiver<UpstreamGate>,
+     pool_cursor: Arc<AtomicU64>,
+ ) -> Result<(), String> {
+     let target = accept_socks5(
+@@ -606,17 +605,23 @@
+     } else {
+         None
+     };
+-    let mut waiter = None;
++    let mut admission = None;
+     if let Some(first) = route.first() {
+         let initial = upstream_gate.borrow().clone();
++        if initial.pauses(&first.endpoint) {
++            // A read EOF may be a legitimate write-half-close. Do not retain
++            // requests across recovery; fail now and let clients retry.
++            let _ = reply_socks5(&mut client, 1).await;
++            return Err("managed SSH upstream unavailable; retry after recovery".into());
++        }
+         if selected.is_some() || initial.matches(&first.endpoint) {
+             if let Some(budget) = selected
+                 .as_ref()
+                 .map(|worker| &worker.budget)
+                 .or(initial.budget.as_ref())
+             {
+-                match budget.enqueue() {
+-                    Ok(value) => waiter = Some(value),
++                match budget.try_admit() {
++                    Ok(value) => admission = Some(value),
+                     Err(error) => {
+                         let _ = reply_socks5(&mut client, 1).await;
+                         return Err(error);
+@@ -624,53 +629,7 @@
+                 }
+             }
+         }
+-        if initial.pauses(&first.endpoint) {
+-            {
+-                let mut state = lock(&guard.state);
+-                if let Some(connection) = state.connections.get_mut(&guard.id) {
+-                    connection.state = "waiting_for_tunnel".into();
+-                }
+-            }
+-            // SSH reconnect grace is independent of the per-process capacity
+-            // wait timeout. Queue permits stay held (and bounded) throughout
+-            // this phase, then the capacity deadline is restarted at readiness.
+-            let deadline = Instant::now() + initial.grace;
+-            loop {
+-                if !upstream_gate.borrow().pauses(&first.endpoint) {
+-                    break;
+-                }
+-                tokio::select! {
+-                    changed = upstream_gate.changed() => {
+-                        if changed.is_err() { return Err("managed upstream controller stopped".into()); }
+-                    }
+-                    _ = tokio::time::sleep_until(deadline) => {
+-                        let _ = reply_socks5(&mut client, 1).await;
+-                        return Err("managed SSH upstream did not recover before reconnect deadline".into());
+-                    }
+-                }
+-            }
+-            if let Some(waiter) = &mut waiter {
+-                waiter.reset_capacity_deadline();
+-            }
+-            if let Some(connection) = lock(&guard.state).connections.get_mut(&guard.id) {
+-                connection.state = "connecting".into();
+-            }
+-        }
+-    }
+-    let mut admission = if let Some(waiter) = waiter {
+-        if let Some(connection) = lock(&guard.state).connections.get_mut(&guard.id) {
+-            connection.state = "waiting_for_capacity".into();
+-        }
+-        match waiter.admit().await {
+-            Ok(value) => Some(value),
+-            Err(error) => {
+-                let _ = reply_socks5(&mut client, 1).await;
+-                return Err(error);
+-            }
+-        }
+-    } else {
+-        None
+-    };
++    }
+     let paused = if let Some(selected) = &selected {
+         !upstream_gate
+             .borrow()
+--- a/crates/flowbridge-runtime/tests/lifecycle.rs
++++ b/crates/flowbridge-runtime/tests/lifecycle.rs
+@@ -72,7 +72,7 @@
+ }
+ 
+ #[test]
+-fn managed_reconnect_waits_before_open_and_resumes_new_flow_without_replay() {
++fn managed_reconnect_rejects_pending_request_and_new_flow_recovers() {
+     let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+     proxy.set_nonblocking(true).unwrap();
+     let config = proxied_profile(proxy.local_addr().unwrap());
+@@ -88,8 +88,36 @@
+         .set_upstream_gate_with_limits(Some(endpoint.clone()), false, 2000, limits.clone())
+         .unwrap();
+     engine.start().unwrap();
++    let (_, code) = socks(config.listen, "192.0.2.1:443".parse().unwrap());
++    assert_ne!(code, 0, "paused managed SSH must reject without queuing");
++    wait(|| engine.snapshot().status.active == 0);
++    assert_eq!(
++        proxy.accept().unwrap_err().kind(),
++        std::io::ErrorKind::WouldBlock
++    );
++    // A closed client that pipelined application bytes must not leave a
++    // queued request which creates an upstream connection after recovery.
++    let mut abandoned = connect(config.listen);
++    abandoned.write_all(&[5, 1, 0]).unwrap();
++    let mut greeting = [0; 2];
++    abandoned.read_exact(&mut greeting).unwrap();
++    abandoned
++        .write_all(b"\x05\x01\x00\x01\xc0\x00\x02\x01\x01\xbbqueued-payload")
++        .unwrap();
++    drop(abandoned);
++    wait(|| engine.snapshot().status.active == 0);
++    engine
++        .set_upstream_gate_with_limits(Some(endpoint.clone()), true, 2000, limits.clone())
++        .unwrap();
++    thread::sleep(Duration::from_millis(150));
++    assert_eq!(
++        proxy.accept().unwrap_err().kind(),
++        std::io::ErrorKind::WouldBlock
++    );
++    let target_listen = config.listen;
+     let client = thread::spawn(move || {
+-        let (mut client, code) = socks(config.listen, "192.0.2.1:443".parse().unwrap());
++        thread::sleep(Duration::from_millis(100));
++        let (mut client, code) = socks(target_listen, "192.0.2.1:443".parse().unwrap());
+         assert_eq!(code, 0);
+         client.write_all(b"once").unwrap();
+         client.shutdown(Shutdown::Write).unwrap();
+@@ -97,25 +125,6 @@
+         client.read_to_end(&mut reply).unwrap();
+         assert_eq!(reply, b"received once");
+     });
+-    wait(|| {
+-        engine
+-            .snapshot()
+-            .connections
+-            .iter()
+-            .any(|c| c.state == "waiting_for_tunnel")
+-    });
+-    assert_eq!(
+-        proxy.accept().unwrap_err().kind(),
+-        std::io::ErrorKind::WouldBlock
+-    );
+-    // Regression: while SSH is restarting, the short 50ms *capacity*
+-    // deadline must not override the separate 2s reconnect grace.
+-    thread::sleep(Duration::from_millis(180));
+-    assert!(engine
+-        .snapshot()
+-        .connections
+-        .iter()
+-        .any(|c| c.state == "waiting_for_tunnel"));
+     proxy.set_nonblocking(false).unwrap();
+     let server = thread::spawn(move || {
+         let (mut stream, _) = proxy.accept().unwrap();
+@@ -179,27 +188,11 @@
+     engine
+         .set_upstream_gate(Some(endpoint), false, 120000)
+         .unwrap();
+-    let pending = thread::spawn(move || {
+-        let mut c = connect(config.listen);
+-        c.write_all(&[5, 1, 0]).unwrap();
+-        let mut hello = [0; 2];
+-        c.read_exact(&mut hello).unwrap();
+-        c.write_all(&[5, 1, 0, 1, 192, 0, 2, 1, 1, 187]).unwrap();
+-        let mut b = [0];
+-        c.read(&mut b)
+-    });
+-    wait(|| {
+-        engine
+-            .snapshot()
+-            .connections
+-            .iter()
+-            .any(|c| c.state == "waiting_for_tunnel")
+-    });
+     let start = Instant::now();
+-    engine.stop().unwrap();
++    let (_, code) = socks(config.listen, "192.0.2.1:443".parse().unwrap());
++    assert_ne!(code, 0);
+     assert!(start.elapsed() < Duration::from_secs(1));
+-    let stopped = pending.join().unwrap();
+-    assert!(matches!(stopped, Ok(0)) || stopped.is_err());
++    engine.stop().unwrap();
+     let direct = profile();
+     let target = TcpListener::bind("127.0.0.1:0").unwrap();
+     let engine = Engine::new(direct.clone()).unwrap();
+--- a/crates/flowbridge-tunnel/README.md
++++ b/crates/flowbridge-tunnel/README.md
+@@ -4,7 +4,7 @@
+ uses this process directly; it does not open a terminal or invoke a command shell.
+ A separate FlowBridge Engine supplies the stable application-facing SOCKS entry.
+ Existing TCP sessions cannot survive the loss of their SSH transport; the Engine
+-readiness gate can wait for recovery before opening new matching proxy routes.
++readiness gate rejects new matching proxy routes while the tunnel is unavailable; clients may retry after recovery.
+ 
+ ## Authentication and profile
+ 
